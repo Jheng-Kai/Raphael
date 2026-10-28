@@ -14,6 +14,8 @@ export function installMock(fixture, config = {}, target = window) {
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
   data.settings.skin = config.skin ?? "default";
+  if (variant.ownerVoice) data.conversations.push(structuredClone(data.ownerRound.memberConversation));
+  if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.ownerRound.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
   if (variant.teamBoardRoster) {
     const roster = data.teamBoard;
@@ -327,11 +329,10 @@ export function installMock(fixture, config = {}, target = window) {
       case "conversations.list": mainConversation(p.member_id ?? 0); return { conversations: byMember(data.conversations, p) };
       case "conversations.create": { mainConversation(p.member_id ?? 0); const conversation = { id: nextId(data.conversations), member_id: p.member_id ?? 0, title: p.title ?? "", is_default: false, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now }; data.conversations.push(conversation); return { conversation }; }
       case "conversations.rename": update(data.conversations, p.id, { title: p.title }); return {};
-      case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
+      case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
+      case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
-        // As the core lists them: a member's main conversation also holds what colleagues asked it.
-        const main = data.conversations.find(c => c.member_id === (p.member_id ?? 0) && c.is_default)?.id;
-        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id || (turn.scope === "exchange" && p.conversation_id === main)).slice().reverse() };
+        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).slice().reverse() };
       }
       case "agent.history.search": case "messages.search": return { turns: byMember(data.turns, p).filter(turn => `${turn.question} ${turn.text} ${turn.messages.map(message => message.text).join(" ")}`.includes(p.query)).map(turn => ({ ...turn, conversation_title: data.conversations.find(c => c.id === turn.conversation_id)?.title })) };
       case "agent.history.delete": data.turns = data.turns.filter(item => item.id !== p.id); notify("AgentTurn", { turn_id: p.id, member_id: p.member_id ?? 0 }); return { deleted: true };
@@ -599,6 +600,16 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "overlay_log") return;
       if (command === "main_events") { state.channel = args.channel; return; }
+      if (command === "window_hotkey" && variant.ownerVoice && ["agent_down", "agent_up"].includes(args.kind)) {
+        const member = args.memberId ?? 0;
+        if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
+        notify("Dictation", { phase: args.kind === "agent_down" ? "listening" : "processing", agent: true, member_id: member });
+        if (args.kind === "agent_up" && variant.ownerVoice === "answer") {
+          const turn = { ...copy(data.ownerRound.voiceReply), member_id: member, conversation_id: args.conversationId };
+          data.turns.push(turn); notify("AgentTurn", { turn_id: turn.id, member_id: member });
+        }
+        return;
+      }
       // Escape reaches the native worker even when no capture is active.
       if (command === "window_hotkey" && args.kind === "cancel") {
         if (variant.stopVoice) notify("Dictation", { phase: "cancelled", agent: true, member_id: variant.stopVoiceMember ?? 0 });

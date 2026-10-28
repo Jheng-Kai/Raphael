@@ -184,8 +184,9 @@ export const agentQuestionAnswer = (id: string, approved: boolean, always = fals
  */
 export const agentPageShown = (shown: boolean): Promise<void> => invoke("agent_page_shown", { shown });
 /** A thread's voice button uses the key's recording flow, with its recipient fixed at the press. */
-export const agentVoice = (edge: "down" | "up", memberId = 0): Promise<void> =>
-  invoke("window_hotkey", { kind: edge === "down" ? "agent_down" : "agent_up", ...(memberId === 0 ? {} : { memberId }) });
+export const agentVoice = (edge: "down" | "up", memberId = 0, conversationId?: number, destination?: "quick"): Promise<void> =>
+  invoke("window_hotkey", { kind: edge === "down" ? "agent_down" : "agent_up", memberId,
+    ...(conversationId === undefined ? {} : { conversationId }), ...(destination ? { destination } : {}) });
 
 // ---------- members, their groups and their routines (the 拉斐爾 page) ----------
 

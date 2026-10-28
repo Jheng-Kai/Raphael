@@ -57,6 +57,13 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, ['Save', 'Cancel', 'Raphael']);
     expect(result.productRules.map(item => item.rule)).toEqual(['R-UI-14']);
   });
+  it("keeps an authored conversation title even when it matches an English interface label", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<button class="conversation-trigger" aria-label="Project"><span class="conversation-caption">Project</span></button><button class="conversation-open"><span>Project</span></button><button>Save</button>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
+    const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, ['Project', 'Save']);
+    expect(result.productRules.map(item => item.text)).toEqual(['Save']);
+  });
   const productAudit = html => {
     const window = new Window();
     window.document.body.innerHTML = html;
@@ -149,6 +156,10 @@ describe("rendered look checks", () => {
     const { window, audit } = productAudit('<div class="skin-grid"><div></div><div></div><div></div></div>');
     expect(audit().productRules.map(item => item.rule)).toContain('R-UI-30');
     window.document.querySelector('.skin-grid').lastElementChild.getBoundingClientRect = () => ({ left: 10, top: 50, right: 110, bottom: 80, width: 100, height: 30 });
+    expect(audit().productRules).toEqual([]);
+  });
+  it("lets short dictionary entries add columns instead of treating them as long choices", () => {
+    const { audit } = productAudit('<div class="wgrid"><div class="wrow"></div><div class="wrow"></div><div class="wrow"></div></div>');
     expect(audit().productRules).toEqual([]);
   });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {

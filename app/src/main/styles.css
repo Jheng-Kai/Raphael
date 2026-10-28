@@ -8,6 +8,14 @@
   --sidebar-width: 208px; --window-controls-height: 32px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+  /* Content measures: see the verification feature map's content-width contract. */
+  --layout-word-min: calc(7 * var(--sp-6));
+  --layout-word-max: calc(10 * var(--sp-6));
+  --layout-card-min: calc(9 * var(--sp-6));
+  --layout-card-max: calc(12 * var(--sp-6));
+  --layout-reading-max: calc(20 * var(--sp-6));
+  --layout-page-max: calc(3 * var(--layout-card-max) + 2 * var(--sp-5) + 2 * var(--sp-6));
+  --layout-workspace-max: calc(55 * var(--sp-6));
   --fs-2xs: 12px; --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 18px; --fs-h1: 22px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600;
   --r-sm: 8px; --r-md: 12px; --r-lg: 12px; --r-pill: 999px;
@@ -180,7 +188,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 :root[data-rail="true"] .main { scrollbar-gutter: auto; }
 .main { position: relative; overflow-x: hidden; overflow-y: auto; background: var(--content); border-top-left-radius: var(--r-lg); border-left: 0; border-top: 0; min-height: 0; container: main / inline-size; scrollbar-gutter: stable; }
 /* Each page is a column centred in the window: wide windows get margins, nothing stretches edge to edge. */
-.page { max-width: 1160px; margin: 0 auto; padding: calc(var(--window-controls-height) + 8px) 32px 40px; }
+.page { width: 100%; max-width: var(--layout-page-max); margin: 0 auto; padding: calc(var(--window-controls-height) + 8px) 32px 40px; }
 .page h1 { font: 600 var(--fs-h1)/1.3 var(--display); margin: 0; letter-spacing: -0.015em; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 36px; }
 .lede { margin: var(--sp-2) 0 0; color: var(--text-2); font-size: var(--fs-sm); max-width: 64ch; text-wrap: pretty; }
@@ -194,6 +202,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .group > h3 { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin: 0 0 var(--sp-1); }
 .foot { margin: var(--sp-2) 0 0; font-size: var(--fs-xs); color: var(--text-3); max-width: 70ch; text-wrap: pretty; }
 .row { position: relative; display: flex; align-items: center; gap: var(--sp-4); min-height: var(--h-row); padding: var(--sp-2) 0; }
+.list, .slist, .cs-list, .hist-top, .group.day { width: 100%; max-width: var(--layout-reading-max); }
+.cs-card, .au-occurrence, .page-overview .icard, .page-overview .keys-card { max-width: var(--layout-card-max); }
 .list > .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }
 .row .lbl { flex: 1; min-width: 0; }
 .row .t { font-size: var(--fs-md); line-height: 1.4; }
@@ -366,8 +376,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .chip { display: inline-flex; align-items: center; height: 26px; border-radius: var(--r-lg); border: 1px dashed var(--btn-edge); background: transparent; font-size: var(--fs-xs); color: var(--text); }
 .chip:hover, :where(:root[data-keys]) .chip:focus-within { border-style: solid; border-color: var(--hover-edge); }
 .chip button { display: inline-flex; align-items: center; height: 100%; border: 0; background: transparent; color: inherit; font: inherit; }
-.wgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); margin-top: var(--sp-4); }
-.wchip { position: relative; display: flex; align-items: center; gap: var(--sp-2); min-height: 46px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); border: 1px solid var(--edge); background: var(--panel); min-width: 0; }
+.wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--layout-word-min)), 1fr)); gap: var(--sp-2); margin-top: var(--sp-4); }
+.wchip { position: relative; display: flex; align-items: center; gap: var(--sp-2); width: 100%; max-width: var(--layout-word-max); min-height: 46px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); border: 1px solid var(--edge); background: var(--panel); min-width: 0; }
 .wchip:hover { border-color: var(--hover-edge); }
 .wchip .spark { display: inline-flex; color: var(--accent-text); }
 .wchip .spark .i { fill: currentColor; }
@@ -607,7 +617,7 @@ kbd.ob-cap { white-space: nowrap; }
   .side { padding: var(--sp-2) var(--sp-3) var(--sp-4); }
   .side .nav { min-height: 44px; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-md); }
   .brand { min-height: 52px; margin-bottom: var(--sp-4); font-size: var(--fs-lg); }
-  .page { max-width: 1480px; padding: calc(var(--window-controls-height) + 24px) 40px 48px; font-size: var(--fs-md); }
+  .page { padding: calc(var(--window-controls-height) + 24px) 32px 48px; font-size: var(--fs-md); }
   .page h1 { font-size: var(--fs-h1); }
   .page .lede { font-size: var(--fs-md); }
   .page kbd { height: var(--h-ctl-sm); font-size: var(--fs-md); }

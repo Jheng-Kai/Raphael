@@ -14,8 +14,10 @@ import { createAgent } from "./agent";
 
 const conversations = [
   { id: 1, member_id: 0, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
+  { id: 2, member_id: 0, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
   { id: 4, member_id: 0, is_default: 0, kind: "quick", title: "", created_at_ms: 1, updated_at_ms: 1 },
   { id: 31, member_id: 3, is_default: 1, kind: "main", title: "", created_at_ms: 1, updated_at_ms: 1 },
+  { id: 32, member_id: 3, is_default: 0, kind: "standard", title: "Project", created_at_ms: 1, updated_at_ms: 1 },
 ];
 let turns: AgentTurn[];
 let emit: (event: MainEvent) => void;
@@ -50,6 +52,21 @@ function mount() {
   } as unknown as AppContext);
   document.body.append(agent.el); agent.show();
 }
+
+test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
+  mount(); await flush(); await choose(member, conversation);
+  press(); await flush();
+  expect(api.agentVoice.mock.calls).toEqual([["down", member, conversation], ["up", member, conversation]]);
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: member });
+  await choose(0, 4);
+  emit({ type: "Dictation", phase: "processing", agent: true, member_id: member });
+  expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+  await choose(member, conversation); expectStop("ack");
+  turns = [live({ member_id: member, conversation_id: conversation, source: "voice", status: "done", text: "Report ready" })];
+  await refresh({ type: "AgentTurn", turn_id: 11, member_id: member });
+  expect(document.querySelector('[data-key="hearing"]')).toBeNull();
+  expect(document.body.textContent).toContain("Report ready");
+});
 
 beforeEach(() => {
   vi.useFakeTimers(); document.body.innerHTML = ""; localStorage.clear();

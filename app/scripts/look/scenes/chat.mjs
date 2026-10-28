@@ -150,8 +150,8 @@ export default [
   scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
   scene("empty", "Conversation without turns", [], { turns: [] }),
-  scene("row-menu", "Conversation actions in the details panel", [...details, click(".mb-det [data-conversation-more]"), wait("#app-popover [data-pick]")]),
-  ...["rename", "delete"].map(action => scene(action, `Conversation ${action} dialog`, [...details, click(".mb-det [data-conversation-more]"), click(`[data-pick="${action}"]`), wait(".mb-dialog"), ...(action === "delete" ? [check("delete-confirmation")] : [])])),
+  scene("row-menu", "Conversation actions in the details panel", [...details, click('.mb-det [data-conversation-section="standard"] [data-conversation-more]'), wait("#app-popover [data-pick]")]),
+  ...["rename", "delete"].map(action => scene(action, `Conversation ${action} dialog`, [...details, click('.mb-det [data-conversation-section="standard"] [data-conversation-more]'), click(`[data-pick="${action}"]`), wait(".mb-dialog"), ...(action === "delete" ? [check("delete-confirmation")] : [])])),
   scene("new-conversation", "Create a conversation", [...details, click(".mb-det [data-conversation-new]"), wait(".page-agent:not([hidden]) .ra-empty:not([hidden])")]),
   // The owner's flows of 2026-10-27, each to its end in the real page.
   scene("member-delete", "A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [

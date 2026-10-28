@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType } from "./member-dialogs";
 import type { MemberGroup } from "./types";
+import { setLocale } from "./i18n";
 
 const GROUPS: MemberGroup[] = [
   { id: 1, name: "專案", position: 0, sources: [{ kind: "github", ref: "example/app" }] },
@@ -15,6 +16,15 @@ const flush = async (): Promise<void> => {
 
 beforeEach(() => {
   document.body.innerHTML = "";
+});
+
+test("a language change dismisses a translated confirmation before it can show stale actions", async () => {
+  const result = confirmDelete("Project");
+  expect(document.querySelector(".mb-confirm")).not.toBeNull();
+  setLocale("en");
+  expect(document.querySelector(".mb-confirm")).toBeNull();
+  expect(await result).toBe(false);
+  setLocale("zh-TW");
 });
 
 function open(over: Partial<Parameters<typeof openNewMember>[0]> = {}) {

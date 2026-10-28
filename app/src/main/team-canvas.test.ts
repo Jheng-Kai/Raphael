@@ -5,6 +5,23 @@ import { createTeamCanvas, nearestTeamPosition, type TeamRect } from "./team-can
 const intersects = (a: TeamRect, b: TeamRect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 afterEach(() => { document.body.innerHTML = ""; localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+test("pan and zoom release their raster layer at rest and align pan to whole pixels", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    f.viewport.dispatchEvent(new WheelEvent("wheel", { deltaX: 1.25, deltaY: 2.75 }));
+    expect(f.board.style.willChange).toBe("transform");
+    await vi.advanceTimersByTimeAsync(160);
+    expect(f.board.style.willChange).toBe("");
+    expect(f.board.style.transform).toContain("translate(-1px, -3px)");
+    for (const delta of [-0.5, 0.5, 0.5]) {
+      f.canvas.zoomBy(delta);
+      expect(f.board.style.willChange).toBe("");
+      expect(f.board.style.transform).not.toMatch(/translate\([^)]*\d\.\d/);
+    }
+  } finally { vi.useRealTimers(); }
+});
+
 test("a colliding drop uses the closest free edge, retaining its other coordinate", () => {
   const rect = { x: 85, y: 25, width: 60, height: 40 };
   expect(nearestTeamPosition(rect, [{ x: 0, y: 0, width: 100, height: 100 }])).toEqual({ x: 116, y: 25 });

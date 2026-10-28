@@ -132,13 +132,11 @@ _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
 
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
     """The conditions of a member's thread as its chat lists it, and their params."""
-    where, params = "scope = 'private' AND member_id = ?", [member_id]
+    scopes = f"(scope = 'private' OR ({_EXCHANGES}))" if exchanges else "scope = 'private'"
+    where, params = f"{scopes} AND member_id = ?", [member_id]
     if conversation_id is not None:
         where += " AND conversation_id = ?"
         params.append(conversation_id)
-    if exchanges:
-        where = f"(({where}) OR ({_EXCHANGES} AND member_id = ?))"
-        params.append(member_id)
     return where, params
 
 
@@ -216,7 +214,7 @@ class AgentHistory:
             raise ValueError("room source requires room scope")
         with self._conn:
             conversations = Conversations(self._conn, self._now_ms)
-            conversation_id = conversations.resolve(member_id, conversation_id) if scope == "private" else None
+            conversation_id = conversations.resolve(member_id, conversation_id) if scope in ("private", "exchange") else None
             cursor = self._conn.execute(
                 "INSERT INTO agent_turns (created_at_ms, session_id, question, route, prefix,"
                 " text, detail, status, cost_usd, source, model, attachments, member_id, peer_id, quote, conversation_id, scope, room_id, thread_id, source_turn_id)"
@@ -584,15 +582,15 @@ class AgentHistory:
         return cursor.rowcount > 0
 
     def clear_member(self, member_id: int) -> int:
-        """Clear this member's private thread without deleting room or exchange audit rows."""
+        """Remove all of this member's rows and peer exchanges outside room history."""
         both = (member_id, member_id)
-        ids = "SELECT id FROM agent_turns WHERE scope = 'private' AND (member_id = ? OR peer_id = ?)"
+        ids = "SELECT id FROM agent_turns WHERE scope != 'room' AND (member_id = ? OR peer_id = ?)"
         with self._conn:
             self._conn.execute(f"DELETE FROM agent_messages WHERE turn_id IN ({ids})", both)
             self._conn.execute(f"DELETE FROM agent_steps WHERE turn_id IN ({ids})", both)
             self._conn.execute(f"DELETE FROM agent_turns_fts WHERE rowid IN ({ids})", both)
             cursor = self._conn.execute(
-                "DELETE FROM agent_turns WHERE scope = 'private' AND (member_id = ? OR peer_id = ?)", both
+                "DELETE FROM agent_turns WHERE scope != 'room' AND (member_id = ? OR peer_id = ?)", both
             )
         return cursor.rowcount
 

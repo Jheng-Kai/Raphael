@@ -8,12 +8,11 @@ task needs, and the one resume of that task (see Connecting an app from the chat
 connection needs and a computer card for the owner's turn at a sign-in (see Handing a key or the computer to the owner below);
 a permission card for an action that needs the owner's yes and an editable email card for a draft a member wrote (see Asking
 the owner's yes and writing mail for them below).
-A member's main conversation lists what colleagues asked or handed it where each came, as one closed
-centred line; previews, search, unread state, other conversations and every model read exclude those
-exchanges, and room turns. Room answers stay in their room/thread and have no shortcut into private history.
+A delivered conversation lists what colleagues asked or handed it as one closed centred line;
+previews, search, unread state and every model read exclude those exchanges and room turns. Room answers stay in their room/thread and have no shortcut into private history.
 Raphael's single persistent quick-question conversation is created on the first global
 voice question, pinned above formal conversations as 快速提問 / Quick questions / クイック質問.
-Its fixed title and permanent identity have no rename/delete menu; individual messages
+Its fixed title and permanent identity have a Clear history overflow menu; individual messages
 can still be deleted. Opening it and typing continues with the quick model and effort.
 Alt+Space and a question typed there name the quick destination; nothing reaches quick or
 formal by default (see Quick questions below).
@@ -97,8 +96,8 @@ accessible label. The same target chooses the glyph and cancellation: an outgoin
 then the newest active turn/task, then pre-turn voice. A repeated Stop is disabled until its call
 settles; it never sends a voice key. Request/worker cancellation preserves history.
 
-Voice processing belongs to Raphael's quick conversation or a member's main conversation,
-including navigation into that thread after Alt+Space. Older voice history cannot settle a new
+Composer voice processing belongs to the conversation selected when recording began.
+Desktop hotkey voice belongs to Raphael's quick conversation, including navigation into it after Alt+Space. Older voice history cannot settle a new
 question whose own history boundary was not on screen. Running turns read on a fresh page do not
 need a new send event to show Stop. The happy-dom `pages/agent-stop.test.ts` replays native phases,
 running/final turn announcements, roster changes, navigation and delayed ask RPC completion.
@@ -190,14 +189,14 @@ npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-
 ```
 
 The scenes seed 小森 asking 小晴 through the IPC fixture (`colleagues`, `sharedMemories`); the mock lists
-a member's exchanges in its main conversation as the core does. Model behaviour is covered by Guardian
+a member's exchanges in their recorded delivery conversation as the core does. Model behaviour is covered by Guardian
 S04 and S12: offline with honest fake brains on both brain paths and both ways of asking, live on the API
 brain. Rendered fixtures do not prove a live consult.
 
 ## Quick questions (P19)
 
-The Alt+Space hotkey (and Raphael's own voice button) sends `agent.ask` with
-`destination: "quick"`; a question typed in the quick conversation sends the same destination
+The Alt+Space hotkey sends `agent.ask` with `destination: "quick"`. The composer's voice
+button names its selected conversation, like typing; a question in the quick conversation sends that destination
 with its conversation ID, and a formal thread sends only its ID. The core refuses a spoken
 question to Raphael that names neither, a quick request naming another conversation and a
 formal request naming the quick one. The quick model and effort answer quick turns, CLI quick
@@ -364,3 +363,36 @@ A right click anywhere on one of Raphael's answers opens the menu of its ⋯ (�
 ```powershell
 npm run look -- context-menu-message context-menu-conversation --theme both --width 1120,720,1920x1080
 ```
+
+## Conversation ownership and composer voice (2026-10-28)
+
+The composer fixes the member and the selected conversation before recording. Its voice
+question, waiting line, pending turn and answer remain there through navigation, including
+non-default conversations. Only the desktop question hotkey chooses the quick conversation.
+Quick questions have a separate small section above Conversations, using the existing
+`mb-dh` heading. Members without quick questions show only Conversations. Both kinds
+have the same overflow/context-menu behavior. Quick questions offer Clear history through
+`confirmDelete` with the matching clear wording; their identity remains after clearing.
+Clearing removes every delivered turn, message, step, summary, card and CLI resume ID.
+
+Private and exchange deliveries belong to one conversation. Queries, paging and deletion
+apply that identity to both scopes. Room history remains in its room. Member deletion removes
+all non-room rows owned by or exchanged with the member. Migration 40 deletes ambiguous
+legacy exchange/quarantine records that lost their delivery ID and non-room records of
+removed members; it does not guess a current conversation for a lost delivery. Private
+legacy rows use their existing default or are removed if none exists. Empty finished
+records never create an exchange line or a date separator. Reopening the database is idempotent.
+
+```powershell
+npm run look -- conversation-sections member-conversation-sections quick-clear-confirm quick-cleared new-conversation-empty composer-voice-pending-0 composer-voice-answer-0 composer-voice-pending-1 composer-voice-answer-1 --theme both --width 1120,720,1920x1080
+```
+
+Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
+`pages/agent-stop.test.ts`, `member-voice-api.test.ts`, the native
+`composer_voice_keeps_its_named_conversation_for_raphael_and_members` test, and
+`core/tests/agent/test_conversation_cleanup.py`. These synthetic boundaries do not prove
+native microphone/STT/global hotkeys/provider transport or an actual owner database upgrade.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

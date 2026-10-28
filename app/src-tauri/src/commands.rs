@@ -127,7 +127,7 @@ impl From<HotkeyEvent> for HotkeyKind {
         match event {
             HotkeyEvent::DictationDown => Self::DictationDown,
             HotkeyEvent::DictationUp => Self::DictationUp,
-            HotkeyEvent::AgentDown | HotkeyEvent::MemberDown(_) => Self::AgentDown,
+            HotkeyEvent::AgentDown | HotkeyEvent::ConversationDown { .. } => Self::AgentDown,
             HotkeyEvent::AgentUp => Self::AgentUp,
             HotkeyEvent::PasteLast => Self::PasteLast,
             HotkeyEvent::Cancel => Self::Cancel,
@@ -455,6 +455,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "conversations.create",
     "conversations.rename",
     "conversations.delete",
+    "conversations.clear",
     "agent.history.delete",
     "messages.search",
     "quota.list",
@@ -1480,10 +1481,15 @@ pub fn window_hotkey(
     hotkeys: State<'_, Arc<HotkeyService>>,
     kind: WindowHotkey,
     member_id: Option<u64>,
+    conversation_id: Option<u64>,
+    destination: Option<String>,
 ) -> Result<(), String> {
     require_main(&webview)?;
-    if let (WindowHotkey::AgentDown, Some(member)) = (kind, member_id) {
-        return hotkeys.member_voice(member);
+    if let (WindowHotkey::AgentDown, Some(conversation)) = (kind, conversation_id) {
+        return hotkeys.conversation_voice(member_id.unwrap_or(0), conversation, typed_quick(destination.as_deref())?);
+    }
+    if matches!(kind, WindowHotkey::AgentDown) && member_id.is_some() {
+        return Err("the composer must name its conversation before recording".into());
     }
     hotkeys.window_hotkey(kind)
 }

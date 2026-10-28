@@ -255,3 +255,7 @@ states. connector-many-tools and skill-private-detail run the same footer check;
 the skill scene also checks inline save feedback without a save toast. Happy-dom
 tests cover refusal/denial/timeout/network copy, retry/success/close, stale replies
 after reopening, skill save feedback and the footer check's covered-button failure.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

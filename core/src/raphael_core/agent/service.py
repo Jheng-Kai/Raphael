@@ -801,6 +801,7 @@ class AgentService:
             "conversations.create": self._conversations_create,
             "conversations.rename": self._conversations_rename,
             "conversations.delete": self._conversations_delete,
+            "conversations.clear": self._conversations_clear,
             "brains.cli": self._list_clis,
             "usage.allowances": self._allowances,
             "brains.cli_login": self._login_cli,
@@ -3672,13 +3673,32 @@ class AgentService:
     async def _conversations_delete(self, params: dict) -> dict:
         conversation = self.conversations.get(_opt_int(params, "id"))
         if conversation["kind"] == "quick":
-            raise invalid_params("the quick conversation is permanent; delete individual turns instead")
+            raise invalid_params("the quick conversation is permanent; clear its history instead")
+        await self._clear_conversation(conversation)
+        member = conversation["member_id"]
+        with self._conn:
+            self._conn.execute("DELETE FROM conversations WHERE id = ?", (conversation["id"],))
+        self.conversations.main(member)
+        self._conversations_changed(member)
+        return {"deleted": 1}
+
+    async def _conversations_clear(self, params: dict) -> dict:
+        conversation = self.conversations.get(_opt_int(params, "id"))
+        await self._clear_conversation(conversation)
+        self._conversations_changed(conversation["member_id"])
+        if self._notify:
+            self._notify("agent.turn", {"turn_id": 0, "member_id": conversation["member_id"]})
+        return {"cleared": 1}
+
+    async def _clear_conversation(self, conversation: dict) -> None:
         member = conversation["member_id"]
         conversation_id = conversation["id"]
         # Stop writers before removing their rows, including background reports and pending yeses.
-        while turns := self._history.list(limit=200, member_id=member, conversation_id=conversation_id):
-            for turn in turns:
-                await self._delete_turn(turn)
+        while rows := self._conn.execute("SELECT id FROM agent_turns WHERE conversation_id = ? AND scope IN ('private','exchange') LIMIT 200", (conversation_id,)).fetchall():
+            for row in rows:
+                if turn := self._history.get(row[0]):
+                    await self._delete_turn(turn)
+        self._conversation_of(member, conversation_id).clear_summary()
         cached = self._named_conversations.pop(conversation_id, None)
         if cached:
             cached.clear_summary()
@@ -3686,10 +3706,9 @@ class AgentService:
         with self._conn:
             self._conn.execute("DELETE FROM conversation_context_summaries WHERE conversation_id = ?", (conversation_id,))
             self._conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id = ?", (conversation_id,))
-            self._conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-        self.conversations.main(member)
-        self._conversations_changed(member)
-        return {"deleted": 1}
+            self._conn.execute("DELETE FROM email_draft_versions WHERE draft_id IN (SELECT id FROM email_drafts WHERE conversation_id = ?)", (conversation_id,))
+            for table in ("connect_cards", "secret_cards", "handback_cards", "permission_cards", "email_drafts"):
+                self._conn.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (conversation_id,))
 
     async def _history_retract(self, params: dict) -> dict:
         """Stop one owner's request and permanently remove its turn, including partial lines."""
@@ -3738,8 +3757,8 @@ class AgentService:
         limit = HISTORY_DEFAULT_LIMIT if limit is None else min(max(limit, 1), HISTORY_MAX_LIMIT)
         self._expire(self._confirmations.sweep())
         conversation_id = self.conversations.resolve(member_id, _opt_int(params, "conversation_id"))
-        # Colleagues' questions and hand-offs arrive in the member's main chat, as Grok Bot's do.
-        exchanges = conversation_id == self.conversations.main(member_id)
+        # Every delivery belongs to the conversation that received it, including exchanges.
+        exchanges = True
         turns = self._history.list(limit=limit, before_id=before_id, member_id=member_id,
                                    conversation_id=conversation_id, exchanges=exchanges)
         if around_id is not None:

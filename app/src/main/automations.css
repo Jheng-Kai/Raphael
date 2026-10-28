@@ -1,5 +1,5 @@
 /* Shared team and automation surfaces use the app's theme tokens in both appearances. */
-.au-page { display: flex; flex-direction: column; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
+.au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-page-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-segment { display: flex; padding: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--surface-2); gap: var(--sp-1); }
 .au-segment .btn { border-color: transparent; background: transparent; }
 .au-segment .btn[aria-pressed="true"] { background: var(--panel); border-color: var(--edge); box-shadow: var(--tab-shadow); }
@@ -71,10 +71,11 @@
   .au-occurrence.btn { padding: var(--sp-1); }
 }
 .au-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--err); pointer-events: none; z-index: 2; }
+.team-page { max-width: var(--layout-workspace-max); }
 .team-page > .page-head { padding: 8px 32px 16px; flex-shrink: 0; }
 .team-page > .page-head h1 { margin: 0; font: 600 var(--fs-h1)/1.3 var(--display); letter-spacing: -0.015em; }
 .team-board-scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: none; background-image: radial-gradient(var(--edge) 1px, transparent 1px); background-size: 20px 20px; }
-.team-board { position: relative; transform-origin: 0 0; will-change: transform; padding: var(--sp-5) 32px; min-height: 100%; }
+.team-board { position: relative; transform-origin: 0 0; padding: var(--sp-5) 32px; min-height: 100%; }
 .team-chief { display: flex; justify-content: center; margin-bottom: var(--sp-6); }
 .team-chief .team-member { border-color: var(--accent-text); width: 256px; }
 .team-groups { display: flex; flex-wrap: wrap; gap: var(--sp-5); justify-content: center; align-items: flex-start; }
@@ -153,9 +154,9 @@
 /* Wide boards use the workspace while keeping names and roles readable. */
 @media (min-width: 1400px) {
   .team-board-scroll { container: team-board / size; }
-  .team-board { display: flex; flex-direction: column; gap: clamp(24px, 4cqh, 48px); padding: clamp(24px, 4cqh, 48px) clamp(32px, 4cqw, 72px); max-width: 1760px; margin-inline: auto; }
+  .team-board { display: flex; flex-direction: column; gap: clamp(24px, 4cqh, 48px); padding: clamp(24px, 4cqh, 48px) clamp(32px, 4cqw, 72px); max-width: var(--layout-workspace-max); margin-inline: auto; }
   .team-chief { margin-bottom: 0; }
-  .team-chief .team-member { width: clamp(320px, 28cqw, 440px); }
+  .team-chief .team-member { width: clamp(320px, 28cqw, var(--layout-card-max)); }
   .team-groups { gap: clamp(24px, 3cqw, 48px); }
   .team-group { --team-card-width: 300px; --team-card-gap: var(--sp-5); --team-group-padding: clamp(24px, 2cqw, 36px); }
   .team-member { padding: var(--sp-5); }

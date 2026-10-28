@@ -1,0 +1,39 @@
+import { check, click, member, page, scene, settings, wait } from "./steps.mjs";
+
+const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
+const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
+const voice = [click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'), click('.cmp-voice')];
+const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover [data-value="${locale}"]`), wait(`html[lang="${locale}"]`), check(`locale-${locale}`)];
+const panes = ["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"];
+
+export default [
+  ...[50, 100, 150].map(zoom => scene(`team-crisp-${zoom}`, `Team text at rest at ${zoom}%`, [
+    page("team"), wait('[data-team-card="3"]'),
+    ...Array.from({ length: Math.abs(zoom - 100) / 10 }, () => click(`[data-team="zoom-${zoom < 100 ? "out" : "in"}"]`)),
+    check(`team-crisp-${zoom}`),
+  ], { teamBoardRoster: true })),
+  ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [
+    ...settings("general"), ...language(locale === "zh-TW" ? "en" : locale),
+    ...(locale === "zh-TW" ? language(locale) : []),
+    ...panes.flatMap(pane => [click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), check(`locale-${locale}`)]),
+    click('.modal-scrim [data-act="close"]'),
+    ...["home", "agent", "team", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
+    ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
+    page("home"), click('.ho-today [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-occurrence'), check(`locale-${locale}`),
+    click('#nav .nav-apps'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
+    ...settings("general"), check(`locale-${locale}`),
+  ])),
+  scene("conversation-sections", "Quick questions and named conversations have separate shared headings", [...details, check("conversation-sections")]),
+  scene("member-conversation-sections", "A member has only the ordinary conversation section", [member(1), ...details, check("conversation-sections")]),
+  scene("quick-clear-confirm", "Quick history uses the shared compact destructive confirmation", [...open(4), ...details, click('[data-conversation-more="4"]'), click('[data-pick="clear"]'), check("quick-clear-confirm")]),
+  scene("quick-cleared", "Quick history is empty but keeps its conversation identity", [...open(4), ...details, click('[data-conversation-more="4"]'), click('[data-pick="clear"]'), click('[data-dlg="delete"]'), wait('.ra-empty:not([hidden])'), check("quick-cleared")]),
+  scene("new-conversation-empty", "A new conversation contains no stale exchanges or dates", [...details, click('[data-conversation-new]'), check("conversation-empty")], { ownerEmptyRecords: true }),
+  ...[0, 1].flatMap(id => [
+    scene(`composer-voice-pending-${id}`, "Composer voice waits in the chosen non-default conversation", [
+      member(id), ...open(id ? 12 : 2), ...voice, wait('[data-key="hearing"]'), check("composer-voice-destination"),
+    ], { ownerVoice: "pending" }),
+    scene(`composer-voice-answer-${id}`, "Composer voice answers in the chosen non-default conversation", [
+      member(id), ...open(id ? 12 : 2), ...voice, wait('.tn[data-id="301"]'), check("composer-voice-answer"),
+    ], { ownerVoice: "answer" }),
+  ]),
+];

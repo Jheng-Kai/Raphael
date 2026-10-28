@@ -6,7 +6,7 @@
 // Raphael is his emblem again (`avatar_clear`). A moving picture keeps moving: the copy is the file
 // itself, and the cut is a crop drawn over it (`AvatarCrop`), not a new image.
 
-import { t } from "./i18n";
+import { onLocaleChange, t } from "./i18n";
 import { isTopLayer, registerDismissal } from "./dismissals";
 
 import * as api from "./api";
@@ -55,9 +55,11 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
     const zoom = scrim.querySelector<HTMLInputElement>(".av-crop-zoom")!;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     let stopOutside = (): void => {};
+    let stopLocale = (): void => {};
     const draw = (): void => img.setAttribute("style", cropStyle(crop));
     const close = (result: AvatarCrop | null): void => {
       stopOutside();
+      stopLocale();
       scrim.remove();
       document.removeEventListener("keydown", onKey, true);
       opener?.focus();
@@ -120,6 +122,12 @@ export function cropDialog(url: string): Promise<AvatarCrop | null> {
     document.addEventListener("keydown", onKey, true);
     draw();
     document.body.append(scrim);
+    stopLocale = onLocaleChange(() => {
+      scrim.querySelector("h2")!.textContent = t("settings.avatar");
+      zoom.setAttribute("aria-label", t("settings.avatarZoom"));
+      scrim.querySelector('[data-act="crop-cancel"]')!.textContent = t("common.cancel");
+      scrim.querySelector('[data-act="crop-done"]')!.textContent = t("settings.avatarDone");
+    });
     stopOutside = registerDismissal(scrim.querySelector<HTMLElement>(".av-crop")!, () => close(null));
     scrim.querySelector<HTMLElement>('[data-act="crop-done"]')!.focus();
   });

@@ -52,8 +52,8 @@ pub enum HotkeyEvent {
     /// `DictationDown` first, whichever key went down first: a Space pressed just before Right Alt
     /// is reported again after it (see the hook's patch notes).
     AgentDown,
-    /// A thread's voice button went down. Only the composer supplies a member id.
-    MemberDown(u64),
+    /// A composer fixes both the recipient and the conversation before recording starts.
+    ConversationDown { member: u64, conversation: u64, quick: bool },
     /// An agent key came up. Releasing the modifier of the combination first reports it too, and
     /// it may come before or after the `DictationUp` of the same modifier.
     AgentUp,
@@ -298,9 +298,8 @@ impl HotkeyService {
     }
 
     /// A composer's voice press uses the same worker and pause gate as the global keys.
-    pub fn member_voice(&self, member: u64) -> Result<(), String> {
-        self.commands
-            .send(Command::MemberVoice(member))
+    pub fn conversation_voice(&self, member: u64, conversation: u64, quick: bool) -> Result<(), String> {
+        self.commands.send(Command::ConversationVoice { member, conversation, quick })
             .map_err(|_| NOT_RUNNING.to_string())
     }
 
@@ -338,7 +337,7 @@ impl Drop for HotkeyService {
 
 enum Command {
     WindowHotkey(WindowHotkey),
-    MemberVoice(u64),
+    ConversationVoice { member: u64, conversation: u64, quick: bool },
     Update {
         wanted: Wanted,
         reply: Sender<Result<(), String>>,
@@ -498,9 +497,9 @@ impl<B: Backend> Worker<B> {
         // happened with. Otherwise a pause could swallow the release of a key that was held.
         self.pump();
         match command {
-            Command::MemberVoice(member) => {
+            Command::ConversationVoice { member, conversation, quick } => {
                 if !self.paused {
-                    self.forward(HotkeyEvent::MemberDown(member), EventSource::Window);
+                    self.forward(HotkeyEvent::ConversationDown { member, conversation, quick }, EventSource::Window);
                 }
             }
             Command::WindowHotkey(kind) => {
@@ -1149,14 +1148,14 @@ mod tests {
         ] {
             w.handle(Command::WindowHotkey(kind));
         }
-        w.handle(Command::MemberVoice(3));
+        w.handle(Command::ConversationVoice { member: 3, conversation: 42, quick: false });
         assert!(
             drain(&mut rx).is_empty(),
             "the recorder must receive every key"
         );
         pause(&mut w, false);
-        w.handle(Command::MemberVoice(3));
-        assert_eq!(drain(&mut rx), vec![HotkeyEvent::MemberDown(3)]);
+        w.handle(Command::ConversationVoice { member: 3, conversation: 42, quick: false });
+        assert_eq!(drain(&mut rx), vec![HotkeyEvent::ConversationDown { member: 3, conversation: 42, quick: false }]);
         w.handle(Command::WindowHotkey(WindowHotkey::DictationDown));
         assert_eq!(drain(&mut rx), vec![HotkeyEvent::DictationDown]);
         w.handle(Command::WindowHotkey(WindowHotkey::Cancel));

@@ -37,3 +37,7 @@ gone; Usage retains aggregate summaries and CSV only.
 
 The rendered audit rejects mismatched controls in one schedule column and selected
 mini-calendar dates with insufficient contrast, including while hovered.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

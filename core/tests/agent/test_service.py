@@ -48,6 +48,7 @@ METHODS = [
     "brains.cli",
     "brains.cli_disconnect",
     "brains.cli_login",
+    "conversations.clear",
     "conversations.create",
     "conversations.delete",
     "conversations.list",

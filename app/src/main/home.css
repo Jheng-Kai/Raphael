@@ -1,15 +1,13 @@
-.page-home { max-width: 1360px; margin: 0 auto; padding: var(--sp-6); container: home / inline-size; }
+.page-home { margin: 0 auto; padding: var(--sp-6); display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--layout-card-min)), 1fr)); gap: var(--sp-5); align-items: start; justify-items: center; }
 .page-home .btn { white-space: normal; line-height: inherit; }
 
-/* Raphael: his emblem large and turning, his report beside it. */
-.ho-hero { display: flex; align-items: center; gap: var(--sp-5); padding: var(--sp-5) var(--sp-6); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); margin-bottom: var(--sp-5); }
+/* Raphael leads the page; six capped summaries fill the rows below his report. */
+.ho-hero { grid-column: 1 / -1; width: 100%; display: flex; align-items: center; gap: var(--sp-5); padding: var(--sp-5); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); }
 .ho-hero > .av { flex-shrink: 0; }
-.ho-said { flex: 1; min-width: 0; margin: 0; font: 600 var(--fs-lg)/1.6 var(--voice, var(--ui)); color: var(--text); overflow-wrap: anywhere; }
+.ho-said { flex: 1; min-width: 0; max-width: var(--layout-reading-max); margin: 0; font: 600 var(--fs-lg)/1.6 var(--voice, var(--ui)); color: var(--text); overflow-wrap: anywhere; }
 
-.ho-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--sp-5); align-items: start; }
-.ho-today { grid-column: span 7; align-self: stretch; }
-.ho-side { grid-column: span 5; display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
-.ho-spend, .ho-allowance, .ho-dictation { grid-column: span 4; align-self: stretch; }
+.ho-board, .ho-side { display: contents; }
+.ho-card { width: 100%; max-width: var(--layout-card-max); }
 
 .ho-card { min-width: 0; background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-5) var(--sp-5); }
 .ho-card > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-3); }
@@ -68,23 +66,11 @@
 .ho-meter i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent-icon); }
 .ho-meter.is-low i { background: var(--warn); }
 
-@container home (max-width: 760px) {
-  .ho-today, .ho-side { grid-column: span 12; }
-  .ho-spend, .ho-allowance { grid-column: span 6; }
-  .ho-dictation { grid-column: span 12; }
-}
-@container home (max-width: 560px) {
-  .ho-board, .ho-side { gap: var(--sp-4); }
-  .ho-spend, .ho-allowance, .ho-dictation { grid-column: span 12; }
-  .ho-hero { gap: var(--sp-4); padding: var(--sp-4); }
-  .ho-hero > .av { --av: 64px !important; }
-}
 @media (max-width: 900px) {
-  .page-home { padding: var(--sp-5) var(--sp-4); }
+  .page-home { padding: var(--sp-5) var(--sp-4); gap: var(--sp-4); }
 }
 
 @media (min-width: 1440px) and (min-height: 800px) {
-  .page.page-home { max-width: 1600px; }
   .ho-hero { padding-block: var(--sp-6); }
   .ho-slot.btn { min-height: 64px; }
   .ho-spend, .ho-dictation { display: flex; flex-direction: column; }
