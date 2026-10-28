@@ -11,6 +11,7 @@
     "test": "vitest run",
     "check:contrast": "node scripts/check-palette.mjs",
     "look": "node scripts/look/index.mjs",
+    "native": "node scripts/look/native/index.mjs",
     "verify": "node scripts/verify.mjs",
     "judge": "node scripts/guardian.mjs"
   },

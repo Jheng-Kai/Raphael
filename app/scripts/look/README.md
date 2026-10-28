@@ -1,5 +1,121 @@
 # Look and verify
 
+## Native journeys
+
+`native` extends this workflow with the real debug shell, Python core and SQLite.
+It reuses `driver.mjs`, `options.mjs`, `report.mjs` and `contact-sheet.mjs`; it never
+installs the mock IPC or substitutes page modules. Every owner report and every
+native change must have a native journey that fails before the fix and passes after.
+An expected regression still exits 1; keep the failure and its exact evidence.
+
+Build once after changing Rust or frontend code, offline, with two Cargo jobs:
+
+```powershell
+$env:CARGO_TARGET_DIR = 'D:\Documentation\github_repos\Raphael\.worktrees\.target'
+$env:CARGO_BUILD_JOBS = '2'
+$env:CARGO_NET_OFFLINE = 'true'
+npm run tauri -- build --debug --no-bundle
+npm run native -- --list
+npm run native -- locale-sweep voice-conversation delete-conversation
+```
+
+If that target directory is protected, select `app/.native/cargo-target` in this
+worktree instead. Never use the owner's main-checkout `app/src-tauri/target`.
+Run this Tauri build **after** `verify -- --rust` when using the same target: Cargo
+integration tests can rebuild `app.exe` against the development URL instead of the
+bundled entry. A `localhost:1420` target without a dev server is a build prerequisite
+failure, not a native regression result.
+`RAPHAEL_CORE_PYTHON` can select an existing Python 3.12 interpreter; the runner sets
+`PYTHONPATH` to **this checkout's** `core/src`. No install or network fallback occurs.
+When dependencies are shared read-only via a `node_modules` junction, Vite needs
+`--configLoader runner`: put `{"build":{"beforeBuildCommand":"npm run build -- --configLoader runner"}}`
+in `.native/build.json` and pass `--config .native/build.json` to the build command.
+
+Every journey has fresh `run-*/<journey>/data`, including its own WebView2, device
+settings, logs and real `raphael.db`. `RAPHAEL_TEST_NATIVE=1` works only in debug
+builds and skips single-instance, global hotkeys/hooks, tray, overlay and autostart
+effects. The normal hotkey worker, composer and native dictation controller still run;
+only registration with the global keyboard is replaced by a window-only backend. The owner's
+process is never selected or stopped. All runs use `RAPHAEL_FAKE_LLM=1`; the existing
+EchoClient answers normal agent turns. In native mode only, `[native-consult:Name]`
+scripts its choice of the real `ask_member` tool. The normal tool gate, shared
+AgentService, room scheduler and SQLite stores create the exchanges/reports.
+
+The voice journey copies a short WAV into its run and uses the real local Qwen3 ASR
+and VAD models, read-only. `RAPHAEL_NATIVE_WAV` and `RAPHAEL_MODELS_DIR` override the
+sample and installed model directory. Missing models or audio are failures, never
+cloud fallbacks. Non-speech journeys copy only the installed VAD into their model directory.
+The native model manager refuses all downloads. Only initialization
+writes fixture prerequisites to SQLite; assertions reopen that run's DB with `mode=ro`.
+Conversation deletion reports all tables with `conversation_id`, including turns,
+summaries, CLI sessions and cards. If quick history has no delete affordance, it
+records that UI defect and separately diagnoses the real core's deletion refusal
+through the same allowlisted native IPC; this diagnostic is not a successful UI flow.
+`delete-conversation` also creates two members and a room through the UI. One member
+consults Raphael and the other member; explicit room mentions generate real reports
+for both recipients. It deletes their private conversations and the source member,
+then inspects replacement defaults and explicitly created named conversations.
+Every old row, date separator or exchange summary in a new private timeline fails,
+even if it has no turn id or its deleted member name is empty. `deletionAudit` retains
+before/after SQLite snapshots, NULL conversation audit rows, DOM markup, actual
+`agent.history.list` replies and the exact production `_thread` SQL/parameters
+re-executed read-only; SQL and IPC ids must match. Room rows are checked as isolation
+controls. Current UI cannot create legacy `scope=quarantine` rows; none are fabricated.
+
+Console errors, page exceptions, unhandled rejections and unexpected/error toasts
+fail the journey. Explicit creation/deletion-success toasts are the only toast exemption.
+Locale sweeps inspect visible text/labels against scripts and exact other-language
+catalog phrases, retaining offending elements. Japanese Kanji shared with Chinese
+cannot be distinguished by Unicode script alone; exact catalog checks cover static
+copy while dynamic/backend text still needs review. Every non-loopback URL in the
+run log fails the cost guard, except declared Composio hosts in `gmail-connect`.
+Provider clients are fake; connectors also use offline transport except that journey.
+
+```powershell
+# Owner-only: do not include this in routine regression runs.
+Set-Location 'D:\Documentation\github_repos\Raphael\.worktrees\native\app'
+$env:CARGO_TARGET_DIR = Join-Path (Get-Location) '.native/cargo-target'
+$env:CARGO_BUILD_JOBS = '2'
+$env:RAPHAEL_CORE_PYTHON = Join-Path (Get-Location) '../core/.venv/Scripts/python.exe'
+npm.cmd run native -- gmail-connect --keep
+```
+
+Gmail uses the signed-in Codex CLI brain with fake API clients. With both native
+flags set, only the Composio credential is read by the app from Windows Credential
+Manager; every credential write stays in memory. The harness never reads or logs
+the key. The journey asks for the real `connect_app` card, presses Connect and records
+the card's state/error and nearby core log lines. It never drives or approves Google
+consent. No API brain or paid speech service is permitted. CLI-internal billing and
+transport are not observable through the app log.
+The Gmail model comes from the owner's configured public Codex model id (or
+`RAPHAEL_NATIVE_CODEX_MODEL`), validated against its local model cache when present.
+No model family alias is guessed. Native CLI workspaces/state stay inside the run's
+`data/cli`, separate from the owner's CLI workspace; only the existing login is borrowed.
+Unpackaged native tests record redacted CLI error events and a bounded stderr tail
+in `native.log`/`app.log` and `report.json`'s `cliDiagnosticLog`. This requires
+`RAPHAEL_TEST_NATIVE=1`, fake API clients and a test data directory; packaged cores
+never enable it. Known login/MCP tokens, sensitive fields, token patterns and URLs
+are removed before logging. Normal CLI runs continue to discard stderr.
+CLI failure before a card now fails immediately; after Connect, the journey stops
+at authorizing or a terminal state without following any consent browser.
+The existing packaged debug binary in that target is required. The runner sets
+`RAPHAEL_TEST_NATIVE=1`, `RAPHAEL_TEST_NATIVE_GMAIL=1`, `RAPHAEL_FAKE_LLM=1`,
+`PYTHONPATH` to this checkout and a fresh `RAPHAEL_DATA_DIR` itself. Do not point it
+at the owner's data. It uses the installed `%APPDATA%/Raphael/models/silero-vad`
+(or `RAPHAEL_MODELS_DIR`), a signed-in Codex CLI and the app's existing Composio key;
+no OpenRouter key is required. Missing prerequisites fail without downloading.
+
+Reports, per-step screenshots, contact sheets, SQLite data and app logs stay under
+`.native/run-*`. `--keep` additionally keeps the contact-renderer's temporary profile;
+it never leaves a native process running. Cleanup always closes only the spawned
+PID and its child tree in `finally`, including the Python core and WebView2. A debug-only
+kill-on-close Windows Job contains the complete tree, including when Windows denies
+`taskkill` and cleanup must use the owned spawn handle. `native.log` copies the shell's
+persisted log; `app.log` combines it with stdout/stderr for the cost guard. Run one
+build/app at a time. Unit checks are included in `npm run verify` (two Vitest workers).
+These regression captures do not establish the full look/theme matrix or judge design
+acceptance; no paid judge/live matrix is part of this offline command.
+
 From `app/`:
 
 ```sh

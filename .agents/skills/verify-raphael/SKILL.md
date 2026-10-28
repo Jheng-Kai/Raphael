@@ -167,3 +167,23 @@ The scenario contracts S01–S22, the tool-coverage manifest and the exit codes 
 Use the PR template to record rule IDs, commands/exits, look/judge/live artifacts,
 images inspected and all incomplete/native acceptance. Never infer deployed or native
 acceptance from offline gates. See GUARDIAN-NOTES.md for repository settings and costs.
+
+## Native regression gate
+
+Every owner report and every native change must be reproduced in a native journey
+that fails before its fix and passes after. From app/, build the isolated debug
+binary offline with CARGO_BUILD_JOBS=2, then run:
+
+```powershell
+npm run native -- locale-sweep voice-conversation delete-conversation
+```
+
+See the native section of [look README](../../../app/scripts/look/README.md) for
+CARGO_TARGET_DIR, installed Python/models, debug-only RAPHAEL_TEST_NATIVE isolation,
+WebView2 CDP, cost guards and PID cleanup. Every run uses RAPHAEL_FAKE_LLM=1. Never
+include gmail-connect implicitly: the owner runs it explicitly with a signed-in
+Codex CLI brain and Composio access, stopping before Google consent approval.
+Keep report.json, all screenshots/contact sheets, app logs and SQLite evidence in
+app/.native/run-*. A regression's expected failure exits 1, never PASS. Inspect the
+images and name exact app failures separately from launch/dependency blockers.
+Native regression evidence does not replace the selected look/judge design gate.

@@ -25,7 +25,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   const directory = await mkdtemp(join(output, "verify-"));
   const checks = [
     { name: "tsc", command: process.execPath, args: [join(app, "node_modules/typescript/bin/tsc"), "--noEmit"], cwd: app },
-    { name: "vitest", command: process.execPath, args: [join(app, "node_modules/vitest/vitest.mjs"), "run", "--configLoader", "runner", "--maxWorkers=2", "--no-cache"], cwd: app },
+    { name: "vitest", command: process.execPath, args: [join(app, "node_modules/vitest/vitest.mjs"), "run", "--configLoader", "runner", "--maxWorkers=2", "--no-cache", "--fsModuleCachePath", join(directory, "vitest-cache")], cwd: app },
   ];
   if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   if (args.includes("--core")) {

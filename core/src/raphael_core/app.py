@@ -282,6 +282,12 @@ class EchoClient:
             call = ChatToolCall(id=f"call_{seen}", name=name, arguments=arguments, raw_arguments=raw)
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
+        # Native journeys script the provider's choice, then use the real member tool/store.
+        from .native_journeys import native_consult
+        consult = native_consult(messages, offered, seen)
+        if consult is not None:
+            return calling("ask_member", consult)
+
         if "routine_create" in offered and seen == 0:
             # Exercise the interactive harness offline, including its explicit input tools.
             from .services.urls import urls_in
@@ -753,7 +759,10 @@ class App(Router):
         self._load_kit = _import_kit if load_kit is None else load_kit
         data_dir.mkdir(parents=True, exist_ok=True)
         if manager is None:
-            manager = ModelManager(paths.models_dir(data_dir) if models_dir is None else models_dir)
+            from .native_journeys import OfflineModelManager, native_enabled
+
+            manager_type = OfflineModelManager if native_enabled(fake_llm) else ModelManager
+            manager = manager_type(paths.models_dir(data_dir) if models_dir is None else models_dir)
         self.manager = manager
 
         # The database is opened here, on the thread that runs the loop, and used there only.
@@ -808,7 +817,13 @@ class App(Router):
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
         self.integrations = IntegrationsService(self._conn, data_dir, self.vault, notify=self.notify)
         self.integrations.register(self)
-        self.connectors = ConnectorsService(data_dir, self.vault, self.integrations)
+        from .native_journeys import GmailJourneyVault, gmail_enabled
+
+        native_gmail = gmail_enabled(fake_llm)
+        self.connectors = ConnectorsService(
+            data_dir, GmailJourneyVault() if native_gmail else self.vault, self.integrations,
+            transport=offline_transport() if fake_llm and not native_gmail else None,
+        )
         self.connectors.register(self)
         # The card a chat shows for an app its task needs, and that task's one resume once connected.
         self.cards = ConnectorCards(self._conn, self, self.connectors, notify=self._agent_notice)
