@@ -8,8 +8,23 @@ import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { canvasSize } from "./emblem";
+import { confirmationParts } from "./overlay";
+
+test("confirmation intent and complete details survive clamping and expansion", () => {
+  expect(confirmationParts("Create the weekly report\nRead Notion and GitHub, then save the results.")).toEqual({title:"Create the weekly report",details:"Read Notion and GitHub, then save the results."});
+  const text="Create a project progress tracker using the verified GitHub changes and save the resulting notes into the matching Notion database";
+  const parts=confirmationParts(text),title=parts.title.replace(/…$/u, "");
+  expect(parts.details).not.toContain(title);
+  expect(`${title} ${parts.details}`).toBe(text);
+});
 
 const here = import.meta.dirname;
+test("confirmation details have an opaque card surface and a separate scrollable expansion", () => {
+  const css = readFileSync(path.join(here, "overlay.css"), "utf8");
+  expect(css).toMatch(/\.ask-card\s*\{[^}]*background:\s*var\(--panel\)/);
+  expect(css).toMatch(/\.ask-details[^}]*overflow-y:\s*auto/);
+  expect(readFileSync(path.join(here, "..", "..", "overlay.html"), "utf8")).toContain('id="ask-expand"');
+});
 const rust = (file: string) => readFileSync(path.join(here, "..", "..", "src-tauri", "src", file), "utf8");
 const styles = readFileSync(path.join(here, "overlay.css"), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "")

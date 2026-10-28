@@ -213,7 +213,7 @@ npm run look -- quick-question-result quick-formal-isolation quick-stop quick-mo
 the quick conversation is open and checks its answer and quick model. `quick-formal-isolation`
 sends one formal and one quick question through the real composer and checks the destination
 each names at the native boundary and that neither thread shows the other. `quick-stop` presses
-Stop in the gold slot on a running quick question; only that session stops and the formal turn
+Stop in the composer slot on a running quick question; only that session stops and the formal turn
 is untouched. `quick-model-selection` (Settings › Models) picks a Codex model and High effort for
 quick questions, both inside the model chooser, and checks that Raphael's answer model stays. The
 existing `quick-conversation`, `quick-model-menu` and `quick-effort-menu` scenes cover opening the
@@ -350,7 +350,7 @@ Background narration uses the typed worker.progress status channel and is never 
 agent_messages. Legacy stored progress remains readable. Terminal replies are separately validated
 and published atomically with the task verdict and result outbox. Private Stop calls
 agent.history.stop and preserves completed history and tool evidence; ack, running and owner-question
-waiting all retain Stop in the existing gold slot. Microphone release never follows task Stop.
+waiting all retain Stop in the existing composer slot. Microphone release never follows task Stop.
 The shared composer tests cover IME Enter, Stop acknowledgement races, independent send completion
 and the return to the voice emblem/tooltip at idle. Native microphone/controller behavior remains
 unverified by rendered fixtures.
@@ -396,3 +396,28 @@ native microphone/STT/global hotkeys/provider transport or an actual owner datab
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Two-step cancellation and deletion (owner round 3)
+
+R-UI-46 uses the document-shared `cancelGesture` for pending, running and waiting
+replies, including background jobs and native voice processing. First Escape arms
+only the visible task's Stop for 1500ms, displaying Esc and the current language's
+`common.cancelAgain`. A second Escape cancels once. Typing, other keys, input,
+clicks, pointer presses, blur, target changes and expiry clear the hint. Repeats and
+IME composition do not count. Menus/dialogs consume Escape before this handler.
+Stop and Send use `.task-action` and the same accent-icon/hover tokens; an idle
+voice emblem keeps its own appearance. A pending empty typed request retains its
+existing retract-and-restore behavior after the second Escape.
+
+```powershell
+npm run look -- esc-main-armed esc-member-armed esc-recording-armed composer-stop-pending-result composer-stop-background-result composer-stop-voice-result composer-stop-navigation composer-stop-roster chat --theme both --width 1120,720,1920x1080
+npm run look -- conversation-delete-main delete member-delete --theme both --width 1120,720,1920x1080
+```
+
+R-UI-47: successful conversation deletion invalidates its outstanding history load
+and reloads the member's server-selected default before requesting history. The
+cached list predates default promotion and must not select quick history instead. The
+existing named success toast remains. A removed member returns to Raphael; stale
+roster notifications cannot leave a deleted member selected. Clear-history retains
+the still-existing quick conversation. Deleted reply-source references remain
+unavailable citations, not active deleted-object pages.

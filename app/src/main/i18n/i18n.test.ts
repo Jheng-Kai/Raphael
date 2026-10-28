@@ -151,12 +151,12 @@ describe("main window translations", () => {
     }
   });
 
-  test("every key of the catalogue is used by the main window's source", () => {
+  test("every key of the catalogue is used by the main window or overlay source", () => {
     // A key built at run time comes from a table of literal keys (VARIANT_NAMES, the `exact` list of
     // backend.ts, ...), so each key in use is written out as a string somewhere.
     const root = path.resolve(import.meta.dirname, "..");
     const catalogues = new Set(["zh-TW.ts", "en.ts", "ja.ts"]);
-    const files = [root, path.join(root, "pages"), path.join(root, "onboarding"), path.join(root, "i18n")].flatMap((dir) =>
+    const files = [root, path.join(root, "pages"), path.join(root, "onboarding"), path.join(root, "i18n"), path.join(root, "..", "overlay")].flatMap((dir) =>
       readdirSync(dir)
         .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !(dir.endsWith("i18n") && catalogues.has(f)))
         .map((f) => path.join(dir, f)),

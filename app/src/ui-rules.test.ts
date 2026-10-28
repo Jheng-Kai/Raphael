@@ -95,7 +95,7 @@ describe("buttons", () => {
     expect(styles).toMatch(/\.btn\.icon:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\)/);
     const classes = new Set(["icon", "cmp-attach", "cmp-send", "cmp-voice", "mp-star", "lm-del", "chip-x", "window-button", "window-close"]);
     const composer = strip(read(join(MAIN, "agent.css")));
-    expect(composer).toMatch(/\.composer \.cmp-pair \.btn\.cmp-send \{[^}]*background: transparent; color: var\(--accent-icon\)/);
+    expect(composer).toMatch(/\.composer \.cmp-pair \.btn\.cmp-send[^{}]*\{[^}]*background: transparent; color: var\(--accent-icon\)/);
     // Read the optional class argument of every iconButton/iconBtn call, balancing nested calls.
     for (const file of sources) {
       const source = read(file);

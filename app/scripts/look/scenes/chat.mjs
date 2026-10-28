@@ -36,12 +36,12 @@ export default [
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },
   scene("composer-stop-pending-result", "Stop cancels the pending request once without starting voice", [...pendingReply, click('.cmp-voice'), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-pending-result")], { stopPending: true }),
   scene("composer-stop-voice", "Alt+Space processing remains stoppable after opening quick with older history", voiceReply, { stopVoice: true }),
-  scene("composer-stop-voice-result", "Stop ends native voice processing before a turn exists", [...voiceReply, click('.cmp-voice'), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-voice-result")], { stopVoice: true }),
+  scene("composer-stop-voice-result", "Stop ends native voice processing before a turn exists", [...voiceReply, key("Escape"), check("cancel-armed"), key("Escape"), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-voice-result")], { stopVoice: true }),
   scene("composer-stop-member", "A member voice reply shows Stop before the turn announcement", [member(1),
     { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 1 } }, rosterRefresh, ...stopSlot, check("pending-work")], { stopVoice: true, stopVoiceMember: 1 }),
   scene("composer-stop-navigation", "A running member reply keeps Stop after visiting another thread", [member(1), member(0), member(1), rosterRefresh, ...stopSlot], { running: true, runningMember: 1 }),
   scene("composer-stop-background", "A completed turn's live background task keeps Stop after roster refresh", [rosterRefresh, ...stopSlot], { running: true, stopBackground: true }),
-  scene("composer-stop-background-result", "The slot cancels its background worker and returns to voice", [rosterRefresh, ...stopSlot, click('.cmp-voice'), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-background-result")], { running: true, stopBackground: true }),
+  scene("composer-stop-background-result", "The slot cancels its background worker and returns to voice", [rosterRefresh, ...stopSlot, key("Escape"), check("cancel-armed"), key("Escape"), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-background-result")], { running: true, stopBackground: true }),
   scene("admin-description-draft", "Describe a new member from the conversation creation picker", [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('[data-pick="conversation"]'), wait('.mb-chat-picker'), type('[data-chat-search]', "整理未讀信並準備回覆"), click('[data-dlg="describe"]'), check("admin-description-draft")]),
   scene("admin-cli-draft-edit", "The common draft edits and removes sequential CLI proposals", adminDraftEdits, { adminApproval: "draft" }),
   scene("admin-draft-cancel", "Cancel discards every proposal without changing the roster", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="cancel"]'), wait('.composer:not([hidden])'), check("admin-draft-cancel")], { adminApproval: "draft" }),
@@ -155,7 +155,7 @@ export default [
   scene("new-conversation", "Create a conversation", [...details, click(".mb-det [data-conversation-new]"), wait(".page-agent:not([hidden]) .ra-empty:not([hidden])")]),
   // The owner's flows of 2026-10-27, each to its end in the real page.
   scene("member-delete", "A member is deleted from its ⋯ menu after the confirmation: its row leaves and a notice says so", [
-    { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
+    member(2), { action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="delete"]'), wait(".mb-dialog"),
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-col [data-member="2"]'), wait(".toast"), check("member-deleted")]),
   scene("sidebar-new-conversation", "新對話 in the sidebar's ＋ makes a new conversation with the picked member and opens it, twice, so also from that member's empty one", [
     { action: "member-column", collapsed: false },

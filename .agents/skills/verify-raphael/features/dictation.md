@@ -54,7 +54,7 @@ selected tab, its visible panel and content overflow; the keyboard scene exercis
 check the original percentage caption during transcription and cleanup. Browser
 scenes cannot record/paste. For an authorized
 native test focus a disposable field, press the configured key, speak a known
-harmless sentence, include a pause, and stop explicitly with the key or Esc. Observe
+harmless sentence, include a pause, and stop explicitly with the configured key or two Escapes. Observe
 overlay lifetime, recognized/cleaned text, target paste and matching history. Test
 cancellation separately. For agent voice, check polished composer text / Alt+Space
 question delivery, cleanup spend, no dictation history and no target paste. Keep metadata and consented synthetic text only; never log
@@ -77,7 +77,7 @@ Typed main-window turns have independent request states and never hold the micro
 voice session slot. Dictation and Right Alt+Space must work while any member, including
 Raphael, replies; typing must also work during dictation. Voice owns the overlay first:
 typed YES/NO cards remain answerable in the window and move to the overlay with their
-remaining timeout once voice ends. Esc during dictation cancels only that recording.
+remaining timeout once voice ends. Two Escapes during dictation cancel only that recording.
 The existing `admin-approval` look scene now opens a second member question through the
 native event boundary, visits that member, then returns to Raphael and requires his original
 approval card. Window cards retain independent ids across members and conversations.
@@ -100,3 +100,50 @@ button; focus rings remain reserved for Tab navigation.
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Desktop cancellation and confirmation (owner round 3)
+
+R-UI-46 / R-AG-16: the shared 1500ms two-Escape gesture also targets the visible
+recording, question or processing Stop. First Escape arms its localized hint;
+second cancels once. The configured dictation/question keys continue to stop or
+release recording normally. Raw global Escape exists only during active recording,
+not processing, replies, jobs or speech. Recording release disables it under the
+controller lock. Typed requests never enable it. A focused Raphael window may
+still cancel its visible task through the shared gesture. Confirmed Stop IPC is
+separate from the raw global-key stream. Native interruption markers preserve
+Escape/key/click ordering without retaining typed text or pointer positions.
+
+```powershell
+npm run look -- esc-recording-armed overlay-confirm-short-120 overlay-confirm-long-120 overlay-confirm-short-150 overlay-confirm-long-150 overlay-confirm-short-194 overlay-confirm-long-194 overlay-confirm-expanded overlay-transcribing overlay-cleaning overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
+```
+
+R-UI-48: desktop YES/NO is an opaque shared `--panel` card, with an intent title,
+wrapped five-line details and a localized See all/Show less control. Expanded
+details scroll within nine lines. Actions occupy a separate flex row and never
+cover text. It reuses app `.btn`/`.pri`, spacing, type, edge and radius tokens in
+both themes. This confirmation is a card with plain intent, an explicit exception
+to the ordinary overlay's 14px caption and reply-prefix treatment (R-UI-40/42).
+
+The title and details partition the original text without copying the title back
+into details. Long fixtures use distinct paragraphs, not repeated title/body blocks.
+`overlay-confirmation-content` rejects duplicate intent or details paragraphs in
+these scenes. Desktop Stop includes a visible localized label alongside the shared
+icon; `overlay-stop-content` rejects an ambiguous lone outline square. Arming Escape
+temporarily replaces both children with Esc and retains the shared cancellation hint.
+Unlike the icon-only composer action, this labeled task-action variant uses the
+shared text-button frame/surface required by R-UI-18, keeping its Send/Stop palette.
+
+The native overlay remains 540px wide. Its ordinary canvas + 40px geometry is
+unchanged; a question temporarily uses canvas + 300px, growing upward without
+moving the emblem's bottom/right anchor. Scenes exercise emblem sizes 120/150/194,
+short/long details and expansion. Each requested matrix size is recorded alongside
+the actual native viewport in `report.json`; desktop evidence is intentionally
+540px wide, not a stretched 1920px webpage. Native physical keys, focus switching,
+DPI, click-through and microphone/paste still require manual acceptance.
+
+The consistency comparison uses ordinary app dialogs (`delete`) for the neutral
+opaque surface and `.btn`/`.pri` tokens. The in-app administration approval retains
+its existing gold identity; the desktop uses a neutral surface for reading over
+arbitrary desktop content. Its actions fill a separate row within the narrow 540px
+window rather than a wide dialog's right-aligned pill actions. These size/layout
+differences are intentional; the shared button height, palette and type remain.

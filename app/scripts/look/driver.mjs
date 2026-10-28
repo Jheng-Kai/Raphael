@@ -56,6 +56,7 @@ export async function perform(page, step) {
     });
   }, step);
   switch (step.action) {
+    case "viewport": await page.setViewport({width:step.width,height:step.height,deviceScaleFactor:1}); break;
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;
       if (step.restore) {
@@ -112,6 +113,10 @@ export async function perform(page, step) {
     case "main-event": {
       // Replay only the existing native event boundary; navigation and cards remain real.
       await page.evaluate(event => window.__look.emit(event), step.event);
+      break;
+    }
+    case "overlay-event": {
+      await page.evaluate(event => window.__look.overlayChannel.onmessage(event), step.event);
       break;
     }
     case "dictation-paste": {

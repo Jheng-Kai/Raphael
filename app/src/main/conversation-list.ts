@@ -99,7 +99,9 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
         if (act === "rename") rename(c);
         else void confirmDelete(conversationTitle(c), { clearHistory: quick }).then(async yes => {
           if (!yes) return;
-          await api.core(quick ? "conversations.clear" : "conversations.delete", { id: c.id }); conversationChange(options.memberId);
+          await api.core(quick ? "conversations.clear" : "conversations.delete", { id: c.id });
+          if (!quick) window.dispatchEvent(new CustomEvent("conversation-deleted", {detail:{member:options.memberId,id:c.id}}));
+          conversationChange(options.memberId);
           toaster.info(quick ? t("conversations.cleared", { p0: conversationTitle(c) }) : t("members.deleted", { p0: conversationTitle(c) }));
         }).catch(error => toaster.info(describeError(error)));
       });

@@ -3,6 +3,10 @@ import { homeEn } from "./home-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "common.deleted": "Deleted",
+  "common.showAll": "See all",
+  "common.showLess": "Show less",
+  "common.cancelAgain": "Press again to cancel",
   "handoff.forwarded": "Forwarded to {p0}", "handoff.asked": "Asked {p0}",
   "exchange.from": "Message from {p0}", "exchange.count": "{p0} messages with {p1}",
   "handoff.queued": "Queued", "handoff.running": "Running", "handoff.waiting": "Waiting for results",

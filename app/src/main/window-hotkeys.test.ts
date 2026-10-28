@@ -9,6 +9,16 @@ const defaults = { dictation_keys: ["AltRight"], paste_last_keys: ["AltRight+V"]
 const key = (code: string, type: "keydown" | "keyup" = "keydown", repeat = false): KeyInput =>
   ({ code, type, repeat, altGraph: false });
 
+test("Escape reaches the shared UI gesture without forwarding a native cancel", () => {
+  setWindowHotkeysPaused(false);
+  const target=new EventTarget(),send=vi.fn().mockResolvedValue(undefined);
+  const remove=installWindowHotkeys(()=>defaults,target,send);
+  const event=new Event("keydown",{cancelable:true});
+  Object.assign(event,{code:"Escape",repeat:false,getModifierState:()=>false});
+  target.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);expect(send).not.toHaveBeenCalled();remove();
+});
+
 describe("focused-window hotkeys", () => {
   test("Right Alt down/up reaches dictation without a hook event", () => {
     const down = reduceHotkey(emptyHotkeyState(), key("AltRight"), defaults);

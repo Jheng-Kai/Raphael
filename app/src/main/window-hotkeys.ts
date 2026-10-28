@@ -150,8 +150,8 @@ export function installWindowHotkeys(
       altGraph: event.getModifierState("AltGraph"),
     }, bindings(), recorderPaused);
     state = result.state;
-    if (result.preventDefault) event.preventDefault();
-    result.actions.forEach(forward);
+    if (result.preventDefault && !result.actions.includes("cancel")) event.preventDefault();
+    result.actions.filter(action => action !== "cancel").forEach(forward);
   };
   const blur = (): void => {
     // A hold that loses focus will not necessarily receive its DOM key-up.

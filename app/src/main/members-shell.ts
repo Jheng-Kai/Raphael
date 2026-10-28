@@ -176,7 +176,6 @@ export function createMembers(host: MembersHost): MembersShell {
       details.showMember();
     } else if (refreshOnShow) {
       details.refreshRoutines();
-      details.refreshMemory(current);
     }
     refreshOnShow = false;
     let read: MembersList;
@@ -194,12 +193,13 @@ export function createMembers(host: MembersHost): MembersShell {
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
     known = ids;
     list = read;
-    details.refreshMemory(current);
     if (current !== RAPHAEL_ID && !ids.has(current)) {
       current = RAPHAEL_ID;
       host.onSelect(current);
+      toaster.info(t("common.deleted"));
       details.showMember();
     }
+    details.refreshMemory(current);
     drawAll();
     host.onUpdate?.();
     void readThread();

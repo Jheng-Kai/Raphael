@@ -1,0 +1,5 @@
+/* Send and Stop share the primary task action palette on every surface. */
+.btn.task-action { border-color: transparent; background: transparent; color: var(--accent-icon); }
+.btn.task-action:is(:hover, :active):not(:disabled) { border-color: transparent; background: transparent; color: var(--accent-text); }
+/* A visible text label needs the shared text-button frame and readable surface. */
+.btn.task-action:has(.task-action-label):not(:disabled) { border-color: var(--btn-edge); background: var(--btn); }

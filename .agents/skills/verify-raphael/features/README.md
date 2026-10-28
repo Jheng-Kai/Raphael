@@ -5,7 +5,7 @@ request both themes; local UI handoffs select affected scenes at 720/1120/1920x1
 Reserve the full scene matrix for integration/release acceptance, CI, explicit
 requests or genuinely app-wide changes. Shared components select representative
 affected consumers rather than unrelated features. Scene definitions in `app/scripts/look/scenes/`
-are the executable source: 322 scenes, 1932 combinations across both themes and
+are the executable source: 333 scenes, 1998 combinations across both themes and
 1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
 parser; a plain width retains the default 900px height. Native journeys cover
 behavior the fixture cannot prove.
@@ -114,3 +114,12 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Connections and MCP | gmail-connect (explicit opt-in only): ask/connect card, assert final state/error and redacted CLI event/stderr diagnostics in the run log; configured signed-in Codex model, run-local workspace/state, fake API clients, declared Composio only, stop at authorizing without Google consent approval. Restricted-network failures before a card are not OAuth acceptance. Planned MCP lifecycle/permissions/private skills: assert discovery and real tool gates; local fake server/CLI. |
 | Usage | Planned usage-ledger: complete/cancel local fake turns, open grouping/export and allowances; assert SQLite totals, CSV and CLI status classification; fake brain, signed-in Codex CLI for allowance acceptance. |
 | Onboarding | Planned onboarding-native: empty data, complete profile/ability steps, hotkey practice and speech exercise, restart; assert completion gating and persisted first-run choices; fake brain/local STT. |
+
+## Owner round 3 shared interactions
+
+The conversation, dictation and team/rooms entries map the shared two-step Escape
+contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
+(R-UI-48), and recording-only global Escape (R-AG-16). Desktop scenes record their
+actual native-sized viewport as well as the requested matrix size; see dictation.
+CI's judge request admission limit is 1998 for 333 scenes x six combinations, below
+the unchanged 2000-request hard cap; the monetary limit is unchanged.

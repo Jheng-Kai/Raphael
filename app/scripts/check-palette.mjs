@@ -67,12 +67,8 @@ for (const [theme, palette] of Object.entries({ "default/light": light, "default
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
   report[theme] = { tokens: palette, contrast };
 }
-// White labels on a translucent neutral overlay fill: a white desktop is the worst case.
-const overlayHover = overlayCss.match(/\.ask-btn:hover:not\(:disabled\)\s*\{\s*background:\s*rgba\(([^)]+)\)/)[1].split(",").map(Number);
-const overlayChannels = overlayHover.slice(0, 3);
-if (Math.max(...overlayChannels) - Math.min(...overlayChannels) > 12) throw new Error("Non-neutral overlay hover");
-const overlayOnWhite = "#" + overlayChannels.map(value => Math.round(value * overlayHover[3] + 255 * (1 - overlayHover[3])).toString(16).padStart(2, "0")).join("");
-const overlayContrast = ratio("#ffffff", overlayOnWhite);
-report.overlay = { hover: overlayHover, whiteTextMinimum: +overlayContrast.toFixed(2) };
-if (overlayContrast < 4.5) process.exitCode = 1;
+// Overlay confirmations reuse the app's opaque panel and button palette in both themes.
+if (!/\.ask-card\s*\{[^}]*background:\s*var\(--panel\)/.test(overlayCss)) throw new Error("Overlay confirmation must use the shared opaque panel");
+report.overlay = { surface:"panel", buttons:"btn / pri", contrast:Object.fromEntries(Object.entries(report).filter(([name])=>name!=="overlay").map(([name,value])=>[name,{title:+ratio(value.tokens.text,value.tokens.panel).toFixed(2),details:+ratio(value.tokens["text-2"],value.tokens.panel).toFixed(2),primary:+ratio(value.tokens["on-accent"],value.tokens.accent).toFixed(2)}])) };
+if (Object.values(report.overlay.contrast).some(values=>Object.values(values).some(value=>value<4.5))) process.exitCode=1;
 console.log(JSON.stringify(report, null, 2));

@@ -93,7 +93,7 @@ export function createTeamPage(app: AppContext): Page {
   }
   async function remove(g: MemberGroup): Promise<void> {
     if (!await confirmDelete(g.name)) return;
-    try { await api.groupsDelete(g.id); await load(); } catch (error) { toaster.info(describeError(error)); }
+    try { await api.groupsDelete(g.id); await load(); toaster.info(t("members.deleted",{p0:g.name})); } catch (error) { toaster.info(describeError(error)); }
   }
   async function send(text: string, files: WireAttachment[]): Promise<void> {
     if ((!text && !files.length) || sending) return;

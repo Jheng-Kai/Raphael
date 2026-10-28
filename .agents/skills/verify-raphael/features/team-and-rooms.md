@@ -125,7 +125,7 @@ The chief waits for accepted replies and child work, then concludes once. Stoppe
 discussions with zero deliverables. Its first line says the work was stopped only after the owner's Stop
 or a new owner message; otherwise it says the discussion did not fully finish and names each unfinished
 reply with its reason (rate limit, quota, login, budget, error). New instructions invalidate prior task generations.
-Room, private and Team composers show Stop in the existing gold slot through acknowledgement,
+Room, private and Team composers show Stop in the existing composer slot through acknowledgement,
 running and waiting; task Stop and microphone Stop keep distinct lifecycles.
 
 ```powershell
@@ -207,3 +207,21 @@ prove the selected Chromium rendering only; native WebView rendering needs accep
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Shared Stop and deleted-room fallback (owner round 3)
+
+R-UI-46: the room composer uses the same 1500ms Escape gesture, localized hint and
+primary icon color as private conversations. First Escape arms Stop; the second
+cancels. Clicking Stop remains immediate. Cancelling a room recording discards its
+audio without transcription; clicking the recording Stop normally keeps the
+transcript. Only the visible room owns cancellation, not a hidden private task.
+
+R-UI-47: successful room deletion dispatches invalidation before refreshing the
+roster. The open pane closes to its member/list and shows a localized named toast.
+Refresh checks room existence before loading history, and rechecks a failed
+history request for deletion races. It never strands the pane on a not-found
+error. Deleting a group returns to the existing board and shows the same toast.
+
+```powershell
+npm run look -- esc-room-armed room-stop room-delete team-delete --theme both --width 1120,720,1920x1080
+```

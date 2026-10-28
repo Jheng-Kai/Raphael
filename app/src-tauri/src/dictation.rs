@@ -743,6 +743,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     pub fn on_hotkey(&self, ev: HotkeyEvent, now_ms: u64) -> Option<JoinHandle<()>> {
         let _transition = lock(&self.transitions);
         match ev {
+            HotkeyEvent::CancelKey | HotkeyEvent::CancelReset => None,
             HotkeyEvent::DictationDown => {
                 // An answer that is only being shown does not keep a dictation waiting.
                 self.end_speaking();
@@ -1144,6 +1145,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
             let session = state.session.clone()?;
             state.phase = Phase::Processing;
+            self.set_cancel(false);
             state.media.end();
             (session, stop_timeout(&state, now_ms))
         };
@@ -1640,6 +1642,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
             let session = state.session.clone()?;
             state.phase = Phase::Processing;
+            self.set_cancel(false);
             state.agent = Some(AgentStage::Transcribing);
             state.media.end();
             (session, stop_timeout(&state, now_ms))
@@ -1851,7 +1854,6 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             state.questions = lock(&self.state).questions.clone();
         }
         lock(&self.typed).insert(id.clone(), turn.state.clone());
-        turn.set_cancel(true);
         log::info!("agent: a typed question");
         let (this, text) = (turn, text.to_owned());
         Ok(tokio::spawn(async move {
@@ -2676,6 +2678,9 @@ mod app {
     struct MaybeOverlay(Option<Arc<Overlay>>);
 
     impl OverlayApi for MaybeOverlay {
+        fn cancel_key(&self, reset: bool) {
+            if let Some(overlay) = &self.0 { overlay.cancel_key(reset); }
+        }
         fn show(&self, mode: Mode) {
             if let Some(overlay) = &self.0 {
                 overlay.show(mode);
@@ -2935,6 +2940,17 @@ mod app {
             tokio::select! {
                 event = next(&mut hotkey_events) => match event {
                     Some(event) => {
+                        if matches!(event, HotkeyEvent::CancelKey | HotkeyEvent::CancelReset) {
+                            let reset = event == HotkeyEvent::CancelReset;
+                            if !reset && !controller.as_ref().is_some_and(|c| c.phase() == super::Phase::Recording) { continue; }
+                            if reset || controller.as_ref().is_some_and(|c| c.app_shows_question()) {
+                                crate::commands::report_hotkey(event);
+                            }
+                            if reset || !controller.as_ref().is_some_and(|c| c.app_shows_question()) {
+                                overlay.cancel_key(reset);
+                            }
+                            continue;
+                        }
                         // The guide hears every key; while it practises, only Esc goes on.
                         let acts = crate::commands::report_hotkey(event);
                         match &controller {
@@ -5011,6 +5027,23 @@ mod tests {
     // ---------- the end of a session ----------
 
     #[tokio::test]
+    async fn global_escape_ends_at_recording_release_for_dictation_and_questions() {
+        for key in [HotkeyEvent::DictationDown, HotkeyEvent::AgentDown] {
+            let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"));
+            run(&c, key, 0).await;
+            assert_eq!(c.cancel().last(), Some(true), "recording: {key:?}");
+            let release = if key == HotkeyEvent::DictationDown { HotkeyEvent::DictationUp } else { HotkeyEvent::AgentUp };
+            let task = c.on_hotkey(release, 1000);
+            assert_eq!(c.cancel().last(), Some(false), "processing must never capture global Escape: {key:?}");
+            if let Some(task) = task { task.await.unwrap(); }
+        }
+        let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"));
+        let task = c.ask_typed("Hello").unwrap();
+        assert_ne!(c.cancel().last(), Some(true), "typed replies must never capture global Escape");
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn the_cancel_switch_is_set_under_the_state_lock() {
         let c = controller(
             FakeCore::with(
@@ -5038,7 +5071,7 @@ mod tests {
         let sets = c.cancel().sets();
         assert_eq!(
             sets.iter().map(|(on, _)| *on).collect::<Vec<_>>(),
-            vec![true, false, true, false, true, false, true, false]
+            vec![true, false, false, true, false, true, false, true, false]
         );
         assert!(
             sets.iter().all(|(_, held)| *held),
@@ -5801,7 +5834,7 @@ mod tests {
         tokio::time::advance(Duration::from_secs(30)).await;
         settle().await;
         assert_eq!(c.agent_stage(), Some(AgentStage::Speaking));
-        assert_eq!(c.cancel().last(), Some(true));
+        assert_eq!(c.cancel().last(), Some(false));
         assert_eq!(
             c.overlay().events().last().unwrap(),
             "say-held:Answer|Hello."
@@ -5965,11 +5998,10 @@ mod tests {
         assert!(c.paster().delivered().is_empty());
         assert_eq!(c.core().count("history.latest"), 0);
 
-        // The answer stays on screen for as long as it takes to read, and Esc can still dismiss
-        // it, so the cancel keys stay.
+        // The answer stays readable; only an explicit UI Stop may dismiss it in the background.
         assert_eq!(c.phase(), Phase::Processing);
         assert_eq!(c.agent_stage(), Some(AgentStage::Speaking));
-        assert_eq!(c.cancel().last(), Some(true));
+        assert_eq!(c.cancel().last(), Some(false));
         let hold = Duration::from_millis(agent::say_hold_ms("台北現在二十四度。"));
         tokio::time::advance(hold - Duration::from_millis(1)).await;
         settle().await;
@@ -6571,7 +6603,7 @@ mod tests {
         assert_eq!(c.core().count("dictation.cancel"), 1);
         assert_eq!(c.core().count("agent.cancel"), 0);
         assert_eq!(lock(&c.typed).len(), 1);
-        assert_eq!(c.cancel().last(), Some(true));
+        assert_eq!(c.cancel().last(), Some(false));
         gate.notify_one();
         typed.await.unwrap();
         assert!(
@@ -6854,7 +6886,7 @@ mod tests {
         let c = controller(core, FakePaster::pasting("chrome.exe"));
         let turn = c.ask_typed("你好").unwrap();
         settle().await;
-        assert_eq!(c.cancel().last(), Some(true), "Esc is taken for it");
+        assert_ne!(c.cancel().last(), Some(true), "background replies never capture Escape");
         run(&c, Cancel, 10).await;
         gate.notify_one();
         turn.await.unwrap();
@@ -7136,7 +7168,7 @@ mod tests {
                 vec![GREETING.zh],
                 "{mode:?}"
             );
-            assert!(!c.overlay().mouse(), "{mode:?}: a greeting takes no clicks");
+            assert!(c.overlay().mouse(), "{mode:?}: recording exposes Stop");
             assert_eq!(c.cancel().last(), Some(true), "{mode:?}");
 
             if mode == DictationMode::Hold {
@@ -7801,8 +7833,8 @@ mod tests {
         assert_eq!(c.phase(), Phase::Processing);
         assert_eq!(
             c.cancel().last(),
-            Some(true),
-            "Esc must work while it is asked"
+            Some(false),
+            "a confirmation never captures global Escape"
         );
         assert_eq!(c.core().count("agent.confirm"), 0);
 
@@ -8410,7 +8442,7 @@ mod tests {
         let sets = c.cancel().sets();
         assert_eq!(
             sets.iter().map(|(on, _)| *on).collect::<Vec<_>>(),
-            vec![true, false, true, true, false]
+            vec![true, false, false, true, true, false]
         );
         assert!(
             sets.iter().all(|(_, held)| *held),

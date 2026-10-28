@@ -380,8 +380,8 @@
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
    into a bare send icon (a level paper plane, no background), as Telegram does. */
 .composer .cmp-pair:has(.cmp-send:disabled) .cmp-send, .composer .cmp-pair:has(.cmp-send:not(:disabled)) .cmp-voice { display: none; }
-.composer .cmp-pair .btn.cmp-send { background: transparent; color: var(--accent-icon); animation: cmp-turn 140ms ease-out; }
-.composer .cmp-pair .btn.cmp-send:hover:not(:disabled), .composer .cmp-pair .btn.cmp-send:active:not(:disabled) { background: transparent; color: var(--accent-text); }
+.composer .cmp-pair .btn.cmp-send, .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { background: transparent; color: var(--accent-icon); animation: cmp-turn 140ms ease-out; }
+.composer .cmp-pair .btn.cmp-send:hover:not(:disabled), .composer .cmp-pair .btn.cmp-send:active:not(:disabled), .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice:is(:hover, :active):not(:disabled) { background: transparent; color: var(--accent-text); }
 .composer .cmp-pair .cmp-voice { animation: cmp-turn 140ms ease-out; }
 .cmp-plane { width: 24px; height: 24px; fill: currentColor; stroke: none; }
 @keyframes cmp-turn { from { transform: scale(.7); opacity: 0; } }
@@ -576,7 +576,7 @@
 
 /* Active work owns the existing gold slot, including drafts and acknowledgement. */
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-send { display: none; }
-/* The gold emblem turns into a gold Stop button of the same size, so it still reads as that one control. */
-.composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--r-pill); background: var(--rg-btn); color: var(--rg-on); }
+/* The voice emblem turns into the same primary icon action as Send of the same size, so it still reads as that one control. */
+.composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--r-pill); }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice:disabled { opacity: .6; }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice .i { width: 20px; height: 20px; fill: currentColor; stroke: none; }
