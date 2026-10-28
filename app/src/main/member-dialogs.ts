@@ -8,7 +8,7 @@
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
-import { t } from "./i18n";
+import { onLocaleChange, t } from "./i18n";
 import { openMemberProfile } from "./member-profile";
 export { openEditMemberDialog, openMemberProfile } from "./member-profile";
 export type { MemberProfileHost, ProfileTab } from "./member-profile";
@@ -66,12 +66,14 @@ export function openDialog(o: DialogOptions): Dialog {
   let open = true;
   const mayClose = (): boolean => !o.canClose || o.canClose();
   let stopOutside = (): void => {};
+  let stopLocale = (): void => {};
   const dialog: Dialog = {
     el: scrim.querySelector<HTMLElement>(".mb-dialog")!,
     close() {
       if (!open) return;
       open = false;
       stopOutside();
+      stopLocale();
       closeMenu();
       const keepFocus =
         document.activeElement instanceof HTMLElement &&
@@ -128,21 +130,23 @@ export function openDialog(o: DialogOptions): Dialog {
   });
   document.addEventListener("keydown", onKey, true);
   document.body.append(scrim);
+  // Transient forms have a locale-specific snapshot; reopening rebuilds it from its source.
+  stopLocale = onLocaleChange(() => { if (mayClose()) dialog.close(); });
   stopOutside = registerDismissal(dialog.el, () => dialog.close(), mayClose);
   (dialog.el.querySelector<HTMLElement>("input:not([type=file]), textarea") ?? dialog.el.querySelector<HTMLElement>('[data-dlg="cancel"]') ?? dialog.el.querySelector<HTMLElement>(".mb-dlg-act .btn"))?.focus();
   return dialog;
 }
 
-/** Asks before something is deleted: 「刪除「name」？」 with 「取消」 and 「刪除」. Resolves true for 刪除. */
-export function confirmDelete(name: string): Promise<boolean> {
+/** Confirms deletion or history clearing with the shared compact destructive dialog. */
+export function confirmDelete(name: string, options: { clearHistory?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let answer = false;
     openDialog({
-      title: t("members.deleteConfirm", { p0: name }),
+      title: options.clearHistory ? t("conversations.clearConfirm", { p0: name }) : t("members.deleteConfirm", { p0: name }),
       body: `<p>${esc(t("members.deleteHint"))}</p>`,
       describedByBody: true,
       cls: "mb-confirm",
-      actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("members.delete")), attrs: ' data-dlg="delete"' } },
+      actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(options.clearHistory ? t("conversations.clear") : t("members.delete")), attrs: ' data-dlg="delete"' } },
       onAct(act, _target, dialog) {
         answer = act === "delete";
         dialog.close();

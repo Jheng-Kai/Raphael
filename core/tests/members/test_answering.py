@@ -245,6 +245,27 @@ async def test_raphael_asks_a_member_and_exchange_is_audit_only(setup, client, c
     assert ("ask_member", "ok") in [(s["tool"], s["outcome"]) for s in steps]
 
 
+@pytest.mark.parametrize("raphael", [True, False])
+@pytest.mark.parametrize("named", [True, False])
+async def test_composer_voice_stays_in_the_selected_default_or_named_conversation(setup, client, raphael, named):
+    rig, team = setup
+    person = member(team, name="Researcher")
+    who = 0 if raphael else person.id
+    default = rig.service.conversations.main(who)
+    selected = rig.service.conversations.create(who)["id"] if named else default
+    quick = rig.service.conversations.quick()
+    client.decisions.append(decision("unclear"))
+    client.chats.append(live_said("The selected conversation's answer."))
+    result = await rig.call("agent.ask", {"session_id": "composer-voice", "text": "Review this", "source": "voice",
+        "ui_language": "en", "member_id": who, "conversation_id": selected})
+    assert result["status"] == "done"
+    turns = (await rig.call("agent.history.list", {"member_id": who, "conversation_id": selected}))["turns"]
+    assert [(turn["conversation_id"], turn["source"]) for turn in turns] == [(selected, "voice")]
+    assert (await rig.call("agent.history.list", {"conversation_id": quick}))["turns"] == []
+    if named:
+        assert (await rig.call("agent.history.list", {"member_id": who, "conversation_id": default}))["turns"] == []
+
+
 async def test_member_exchange_returns_to_the_named_conversation_that_asked(setup, client, conn):
     rig, team = setup
     one = member(team, name="Researcher")
@@ -262,7 +283,9 @@ async def test_member_exchange_returns_to_the_named_conversation_that_asked(setu
     assert (await rig.call("agent.history.list"))["turns"] == []
     assert AgentHistory(conn).list(member_id=one.id) == []
     [theirs] = [AgentHistory(conn).get(r[0]) for r in conn.execute("SELECT id FROM agent_turns WHERE member_id=? AND scope='exchange'", (one.id,))]
-    assert theirs.conversation_id is None
+    assert theirs.conversation_id == rig.service.conversations.main(one.id)
+    delivered = (await rig.call("agent.history.list", {"member_id": one.id, "conversation_id": theirs.conversation_id}))["turns"]
+    assert [turn["id"] for turn in delivered] == [theirs.id]
     assert theirs.source_turn_id == selected[0]['id']
 
 

@@ -45,6 +45,15 @@ const NEWEST_FIRST = [
 ];
 
 describe("one thread", () => {
+  test("empty exchanges and empty finished turns leave neither event lines nor date separators", () => {
+    const empty = { question: " ", text: "", detail: null, messages: [] };
+    expect(threadItems([
+      turn(1, "2026-10-19T09:00:00+08:00", { ...empty, source: "member", scope: "exchange", peer_id: 3 }),
+      turn(2, "2026-10-20T09:00:00+08:00", empty),
+      turn(4, "2026-10-21T09:00:00+08:00", { ...empty, source: "member", scope: "exchange", peer_id: 3, text: "Unpublished partial answer", status: "running" }),
+    ], now)).toEqual([]);
+    expect(threadItems([turn(3, "2026-10-20T09:00:00+08:00", { ...empty, status: "running" })], now)).toHaveLength(2);
+  });
   test("every turn in one thread, oldest first, whatever its source; each day under its heading", () => {
     const items = threadItems(
       [

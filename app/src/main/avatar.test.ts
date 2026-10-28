@@ -4,10 +4,25 @@ import { avatarHTML, cleanCrop, cropStyle, currentAvatar, loadAvatar, onAvatarCh
 import { cropDialog, dragCrop } from "./avatar-settings";
 import { openDialog } from "./member-dialogs";
 import { pictureRect } from "../overlay/emblem";
+import { setLocale, t } from "./i18n";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
 afterEach(() => setAvatar(null));
+
+test("a language change translates the open crop dialog without losing its crop", async () => {
+  const result = cropDialog(PNG);
+  const zoom = document.querySelector<HTMLInputElement>(".av-crop-zoom")!;
+  zoom.value = "2";
+  zoom.dispatchEvent(new Event("input"));
+  setLocale("en");
+  expect(document.querySelector("#av-crop-title")!.textContent).toBe(t("settings.avatar"));
+  expect(zoom.getAttribute("aria-label")).toBe(t("settings.avatarZoom"));
+  expect(document.querySelector('[data-act="crop-done"]')!.textContent).toBe(t("settings.avatarDone"));
+  document.querySelector<HTMLElement>('[data-act="crop-done"]')!.click();
+  expect(await result).toEqual({ x: 0.5, y: 0.5, zoom: 2 });
+  setLocale("zh-TW");
+});
 
 describe("Raphael's face", () => {
   test("the emblem of the theme: both pictures, the stylesheet shows one; the larger file for a larger face", () => {

@@ -2,6 +2,83 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("team-crisp-")) {
+    const board = document.querySelector('.team-board');
+    require(visible(board), "the real team board is visible");
+    const style = getComputedStyle(board), matrix = new DOMMatrix(style.transform);
+    const zoom = Number(name.split('-').at(-1));
+    require(Math.abs(matrix.a * 100 - zoom) < .01, `the board is at ${zoom}%`);
+    require(style.willChange === "auto", `the resting board releases its raster layer (${style.willChange})`);
+    require(Number.isInteger(matrix.e) && Number.isInteger(matrix.f), "resting pan uses whole pixels");
+    return { check: name, zoom, willChange: style.willChange, pan: [matrix.e, matrix.f] };
+  }
+  if (name.startsWith("locale-")) return (async () => {
+    const { catalogs, getLocale } = await import('/src/main/i18n/index.ts');
+    const locale = name.slice(7);
+    require(document.documentElement.lang === locale && getLocale() === locale, "the setting is applied to the whole window");
+    const current = new Set(Object.values(catalogs[locale]).map(value => value.trim()));
+    const foreign = new Set(Object.entries(catalogs).filter(([key]) => key !== locale).flatMap(([, messages]) => Object.values(messages))
+      .filter(value => !/[<{}]/.test(value) && !current.has(value.trim())).map(value => value.trim()));
+    // User documents, names and backend prose retain the language in which they were written.
+    const user = new Set();
+    const collect = value => { if (typeof value === "string") user.add(value.trim()); else if (value && typeof value === "object") Object.values(value).forEach(collect); };
+    collect(window.__look.data);
+    const authored = [...user].filter(value => value && /[\u3400-\u9fff\u3040-\u30ff]/.test(value)).sort((a, b) => b.length - a.length);
+    const stale = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+      const element = node.parentElement, text = node.textContent.trim();
+      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .team-member-head b')) continue;
+      if (user.has(text)) continue;
+      const interfaceText = authored.reduce((copy, value) => copy.split(value).join(""), text);
+      if (foreign.has(text) || (locale === "en" && /[\u3400-\u9fff\u3040-\u30ff]/.test(interfaceText))) stale.push(text.slice(0, 90));
+    }
+    require(stale.length === 0, `visible interface copy is in ${locale}: ${JSON.stringify(stale)}`);
+    require(!/Cannot set properties|TypeError|outerHTML/.test(document.querySelector('.toasts')?.textContent ?? ""), "no error toast");
+    const pane = document.querySelector('.modal-scrim:not([hidden]) [data-pane][aria-current="page"]')?.dataset.pane;
+    const page = [...document.querySelectorAll('.page[data-page]')].find(visible)?.dataset.page;
+    const tab = document.querySelector('.page-dictation:not([hidden]) [data-dictation-tab][aria-selected="true"]')?.dataset.dictationTab;
+    return { check: name, locale, surface: pane ? `settings:${pane}` : tab ? `dictation:${tab}` : page, stale };
+  })();
+  if (name === "conversation-sections") {
+    const host = document.querySelector('.mb-det .conversation-list');
+    require(visible(host), "the conversation list is visible");
+    const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
+    require(visible(standard) && standard.querySelector('.mb-dh').textContent === "對話", "ordinary conversations use the existing small heading");
+    if (quick) {
+      require(quick.querySelector('.mb-dh').textContent === "快速提問", "quick questions have their own heading");
+      require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");
+      require(!!quick.querySelector('[data-conversation-more]'), "the quick row has its overflow menu");
+    }
+    return { check: name, quick: !!quick, headings: [...host.querySelectorAll('.mb-dh')].map(node => node.textContent) };
+  }
+  if (name === "quick-clear-confirm") {
+    const dialog = document.querySelector('.mb-confirm');
+    require(visible(dialog) && dialog.querySelector('h2').textContent === '清除「快速提問」的紀錄？', "the shared confirmation names the history");
+    require(dialog.querySelector('[data-dlg="delete"]').textContent === "清除紀錄", "the primary action clears history");
+    require(!window.__look.calls.some(call => call.method === "conversations.clear"), "nothing clears before confirmation");
+    return { check: name, title: dialog.querySelector('h2').textContent };
+  }
+  if (["quick-cleared", "conversation-empty"].includes(name)) {
+    require(visible(document.querySelector('.ra-empty')), "the conversation shows its empty state");
+    require(!document.querySelector('.ra-col .tn, .ra-col .day, .ra-col .exchange-row'), "there are no turns, empty event lines or date separators");
+    if (name === "quick-cleared") {
+      require(window.__look.calls.filter(call => call.method === "conversations.clear" && call.params.id === 4).length === 1, "history is cleared exactly once");
+      require(window.__look.data.conversations.some(c => c.id === 4 && c.kind === "quick"), "the quick identity remains");
+    }
+    return { check: name };
+  }
+  if (["composer-voice-destination", "composer-voice-answer"].includes(name)) {
+    const calls = window.__look.calls.filter(call => call.command === "window_hotkey" && ["agent_down", "agent_up"].includes(call.kind));
+    require(calls.length === 2, "one press and release crossed the native boundary");
+    const args = calls[0], expected = args.memberId === 1 ? 12 : 2;
+    require(args.conversationId === expected && calls[1].conversationId === expected && !args.destination, "voice names the selected non-default conversation");
+    const slot = document.querySelector('.cmp-voice'), box = slot.getBoundingClientRect();
+    require(slot.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)), "the composer's voice or Stop control is unobscured");
+    if (name === "composer-voice-destination") require(visible(document.querySelector('[data-key="hearing"]')) && document.querySelector('.composer').dataset.taskState === "ack", "the original thread has a waiting line and Stop");
+    else require(visible(document.querySelector('.tn[data-id="301"]')) && !document.querySelector('[data-key="hearing"]'), "the answer replaces the pending line in this thread");
+    return { check: name, member: args.memberId, conversation: expected };
+  }
   // R-UI-42: system events are one centred grey line that never shows an internal number.
   const eventLines = expected => {
     const lines = [...document.querySelectorAll('.event-line')].filter(visible);

@@ -6,7 +6,9 @@ process.env.TZ = "Asia/Taipei";
 
 // Kept apart from vite.config.ts so tests do not load the Tauri dev-server settings.
 export default defineConfig({
+  cacheDir: ".look/vitest-cache",
   test: {
+    fsModuleCachePath: ".look/vitest-modules",
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     // Bound process startup and native locale initialization on shared CI runners.
     // Keep per-file isolation and the default test deadline intact.

@@ -45,10 +45,16 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     options.onVisibility?.(!host.hidden);
     input.placeholder = t("conversations.search");
     input.setAttribute("aria-label", t("conversations.search"));
+    host.querySelector("[data-conversation-new] span")!.textContent = t("conversations.new");
     const found = conversations.filter(c => conversationTitle(c).toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
-    rows.innerHTML = found.length ? found.map(c => `<div class="conversation-row">` +
+    const section = (kind: "quick" | "standard", label: string): string => {
+      const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
+      if (kind === "quick" && !items.length) return "";
+      return `<section class="conversation-section" data-conversation-section="${kind}"><div class="mb-dh">${esc(label)}</div>` + (items.length ? items.map(c => `<div class="conversation-row">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}"`) +
-      (c.kind === "quick" ? "" : iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more")) + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`;
+      iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`) + `</section>`;
+    };
+    rows.innerHTML = section("quick", t("conversations.quick")) + section("standard", t("conversations.heading"));
   }
 
   async function refresh(): Promise<void> {
@@ -88,15 +94,16 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     if (more) {
       const c = conversations.find(c => c.id === Number(more.dataset.conversationMore));
       if (!c) return;
-      openActions(more, [{ id: "rename", label: t("conversations.rename"), icon: "pencil" }, { id: "delete", label: t("members.delete"), icon: "trash" }], act => {
+      const quick = c.kind === "quick";
+      openActions(more, quick ? [{ id: "clear", label: t("conversations.clear"), icon: "trash" }] : [{ id: "rename", label: t("conversations.rename"), icon: "pencil" }, { id: "delete", label: t("members.delete"), icon: "trash" }], act => {
         if (act === "rename") rename(c);
-        else void confirmDelete(conversationTitle(c)).then(async yes => {
+        else void confirmDelete(conversationTitle(c), { clearHistory: quick }).then(async yes => {
           if (!yes) return;
-          await api.core("conversations.delete", { id: c.id }); conversationChange(options.memberId);
-          toaster.info(t("members.deleted", { p0: conversationTitle(c) }));
+          await api.core(quick ? "conversations.clear" : "conversations.delete", { id: c.id }); conversationChange(options.memberId);
+          toaster.info(quick ? t("conversations.cleared", { p0: conversationTitle(c) }) : t("members.deleted", { p0: conversationTitle(c) }));
         }).catch(error => toaster.info(describeError(error)));
       });
-      document.querySelector('[data-pick="delete"]')?.classList.add("danger");
+      document.querySelector('[data-pick="delete"], [data-pick="clear"]')?.classList.add("danger");
     } else if (target.closest("[data-conversation-new]")) {
       void api.core<{ conversation: ConversationInfo }>("conversations.create", { member_id: options.memberId }).then(result => {
         conversationChange(options.memberId); closeMenu(); options.onOpen(result.conversation.id);

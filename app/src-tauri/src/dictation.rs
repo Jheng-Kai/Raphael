@@ -200,6 +200,8 @@ struct Session {
     id: String,
     kind: Kind,
     member: u64,
+    conversation_id: Option<u64>,
+    quick: bool,
     started: watch::Receiver<Started>,
 }
 
@@ -774,8 +776,8 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 let action = lock(&self.state).holdtap.on_up();
                 self.act(action, now_ms)
             }
-            HotkeyEvent::AgentDown => self.agent_down(now_ms, 0),
-            HotkeyEvent::MemberDown(member) => self.agent_down(now_ms, member),
+            HotkeyEvent::AgentDown => self.agent_down(now_ms, 0, None),
+            HotkeyEvent::ConversationDown { member, conversation, quick } => self.agent_down(now_ms, member, Some((conversation, quick))),
             HotkeyEvent::AgentUp => {
                 let action = lock(&self.state).agent_holdtap.on_up();
                 match action {
@@ -1025,6 +1027,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// one is dropped, the emblem it showed is kept and greets the question, and the core hears of
     /// the question only after it has cancelled the dictation.
     fn start(&self, kind: Kind, now_ms: u64, member: u64) -> Option<JoinHandle<()>> {
+        self.start_in(kind, now_ms, member, None)
+    }
+
+    fn start_in(&self, kind: Kind, now_ms: u64, member: u64, destination: Option<(u64, bool)>) -> Option<JoinHandle<()>> {
         let id = uuid::Uuid::new_v4().to_string();
         let (answered, started) = watch::channel(Started::Pending);
         let replaced = {
@@ -1044,6 +1050,8 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 id: id.clone(),
                 kind,
                 member,
+                conversation_id: destination.map(|(id, _)| id),
+                quick: destination.map_or(member == 0, |(_, quick)| quick),
                 started,
             });
             state.agent = (kind == Kind::Agent).then_some(AgentStage::Listening);
@@ -1580,7 +1588,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     /// longer is a real one, and the key does nothing. Neither does it while something is being
     /// processed, nor a moment after Right Alt ended a question: that is the Space of a Right
     /// Alt+Space pressed to end it, even if the question is over by then (it heard nothing, say).
-    fn agent_down(&self, now_ms: u64, member: u64) -> Option<JoinHandle<()>> {
+    fn agent_down(&self, now_ms: u64, member: u64, destination: Option<(u64, bool)>) -> Option<JoinHandle<()>> {
         {
             let state = lock(&self.state);
             if state.phase != Phase::Recording
@@ -1613,7 +1621,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         match action {
             Action::StartRecording => {
                 log::info!("agent: listening ({} mode)", mode.as_str());
-                self.start(Kind::Agent, now_ms, member)
+                self.start_in(Kind::Agent, now_ms, member, destination)
             }
             Action::StopRecording => {
                 log::info!("agent: stopping");
@@ -1732,9 +1740,8 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 member: session.member,
                 replace_turn_id: None,
                 quote: None,
-                conversation_id: None,
-                // Raphael's key asks a quick question; a member's goes to its own thread.
-                quick: session.member == 0,
+                conversation_id: session.conversation_id,
+                quick: session.quick,
                 transcript_ms: Some(transcript_ms),
             },
         )
@@ -1836,6 +1843,8 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 id: id.clone(),
                 kind: Kind::Agent,
                 member,
+                conversation_id,
+                quick,
                 started,
             });
             state.agent = Some(AgentStage::Thinking);
@@ -2936,7 +2945,7 @@ mod app {
                                 log::info!("hotkey {event:?} ignored: the core is not running");
                                 if matches!(
                                     event,
-                                    HotkeyEvent::DictationDown | HotkeyEvent::AgentDown | HotkeyEvent::MemberDown(_)
+                                    HotkeyEvent::DictationDown | HotkeyEvent::AgentDown | HotkeyEvent::ConversationDown { .. }
                                 ) && !told_no_core
                                 {
                                     told_no_core = true;
@@ -6384,6 +6393,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn composer_voice_keeps_its_named_conversation_for_raphael_and_members() {
+        for member in [0, 3] {
+            let c = agent(answer("", "A conversation's answer"));
+            run(&c, HotkeyEvent::ConversationDown { member, conversation: 42, quick: false }, 0).await;
+            run(&c, AgentUp, 900).await;
+            let params = c.core().call_params("agent.ask");
+            assert_eq!(params["conversation_id"], 42);
+            assert_eq!(params.get("destination"), None);
+            assert_eq!(params.get("member_id").and_then(Value::as_u64).unwrap_or(0), member);
+        }
+        let c = agent(answer("", "Quick answer"));
+        run(&c, HotkeyEvent::ConversationDown { member: 0, conversation: 4, quick: true }, 0).await;
+        run(&c, AgentUp, 900).await;
+        let params = c.core().call_params("agent.ask");
+        assert_eq!(params["conversation_id"], 4);
+        assert_eq!(params["destination"], QUICK_DESTINATION);
+    }
+
+    #[tokio::test]
     async fn a_members_voice_press_keeps_its_thread_until_the_turn_ends() {
         let phases = Arc::new(Mutex::new(Vec::new()));
         let sink = phases.clone();
@@ -6392,10 +6420,11 @@ mod tests {
                 sink.lock().unwrap().push((phase, agent, member));
             },
         ));
-        run(&c, HotkeyEvent::MemberDown(3), 0).await;
+        run(&c, HotkeyEvent::ConversationDown { member: 3, conversation: 42, quick: false }, 0).await;
         run(&c, AgentUp, 900).await;
         let params = c.core().call_params("agent.ask");
         assert_eq!(params["member_id"], json!(3));
+        assert_eq!(params["conversation_id"], json!(42));
         assert_eq!(params.get("source"), None);
         assert_eq!(
             params.get("destination"),
@@ -6433,7 +6462,7 @@ mod tests {
     #[tokio::test]
     async fn a_members_voice_confirmation_carries_its_recipient_when_reopened() {
         let (c, heard) = questioning(question("c-1", 30_000));
-        run(&c, HotkeyEvent::MemberDown(3), 0).await;
+        run(&c, HotkeyEvent::ConversationDown { member: 3, conversation: 42, quick: false }, 0).await;
         let turn = c.on_hotkey(AgentUp, 900).unwrap();
         until_stage(&c, AgentStage::Asking).await;
         let prompt = c.open_question().unwrap();

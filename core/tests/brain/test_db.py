@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 39
+LATEST = 40
 
 
 def test_v25_preserves_conversations_and_quotas_and_cleans_deleted_run_metrics(tmp_path):
@@ -1322,6 +1322,7 @@ def test_v24_assigns_each_legacy_member_a_stable_default_conversation(tmp_path, 
     for version in range(1, 24):
         step = db._MIGRATIONS[version]
         step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members(id,name,position,created_at_ms) VALUES (7,'Legacy member',0,1)")
     for member, question, stamp in [(0, "First\nquestion", 100), (7, "Member question", 200), (0, "Later", 300)]:
         raw.execute("INSERT INTO agent_turns (session_id, member_id, question, route, prefix, text, status, created_at_ms) VALUES (?, ?, ?, 'chat', '', 'answer', 'done', ?)", (str(stamp), member, question, stamp))
     raw.commit(); raw.close()

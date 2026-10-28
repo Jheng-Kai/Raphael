@@ -134,7 +134,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (footer && visible(footer) && footer.getBoundingClientRect().top - box.bottom < 7)
         violation('R-UI-17', 'Model source action touches the final source row');
     }
-    if (englishUI.length && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt')) {
+    if (englishUI.length && element.closest('button, label, input, textarea, h1, h2, h3, [role="tab"], [role="menuitem"], .nav') && !element.closest('.message-text, .ans, .txt, .conversation-caption, .conversation-open') && !element.matches('.conversation-trigger')) {
       const copy = [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent.trim());
       for (const attribute of ['aria-label', 'placeholder', 'title']) if (element.hasAttribute(attribute)) copy.push(element.getAttribute(attribute).trim());
       const productOrKeyName = /^(?:Raphael|OpenRouter|OpenAI|Codex|Claude|Gemini|Antigravity|GitHub|Telegram|Google|Notion|MCP|PDF|CLI|Right Alt|Alt|Ctrl|Esc)$/;

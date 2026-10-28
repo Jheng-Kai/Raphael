@@ -37,6 +37,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
+from ..agent.conversations import Conversations
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
@@ -216,6 +217,7 @@ class TaskStore:
                 raise Refused('stage_conflict')
             if parent and self.get(parent.id).state not in ('running', 'queued'):
                 raise Refused('cancelled')
+        conversation = None if source.scope == 'room' else Conversations(self._conn, self._now_ms).main(assignee)
         now = self._now_ms()
         with self._conn:
             cursor = self._conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,"
@@ -236,10 +238,10 @@ class TaskStore:
                 raise Refused('stage_conflict')
             self._conn.execute("UPDATE worker_tasks SET root_task_id=COALESCE(root_task_id,id) WHERE id=?", (task_id,))
             cursor = self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,"
-                "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model) "
-                "VALUES (?,?,?,'exchange','','','running','member',?,?,?,?,?,?,?)",
+                "source,member_id,peer_id,scope,room_id,thread_id,source_turn_id,model,conversation_id) "
+                "VALUES (?,?,?,'exchange','','','running','member',?,?,?,?,?,?,?,?)",
                 (now,f'work:{task_id}',request,assignee,source.member_id,'room' if source.scope=='room' else 'exchange',
-                 source.room_id,source.thread_id,source.id,model))
+                 source.room_id,source.thread_id,source.id,model,conversation))
             self._conn.execute("UPDATE worker_tasks SET turn_id=? WHERE id=?", (cursor.lastrowid,task_id))
             self._conn.execute("INSERT INTO task_outbox VALUES (?,?, 'queued',?,?,?,?,NULL,NULL)",
                 (f'{task_id}:queued',task_id,source.id,source.room_id,source.thread_id,now))

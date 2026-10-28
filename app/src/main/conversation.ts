@@ -26,6 +26,17 @@ export type ThreadItem =
 export const exchangeTurn = (turn: AgentTurn): boolean =>
   turn.scope === "exchange" || turn.route === "exchange" || sourceOf(turn) === "member";
 
+/** Empty historical records have nothing to say, including under their date heading. */
+export function visibleTurn(turn: AgentTurn): boolean {
+  if (turn.scope === "room" || turn.scope === "quarantine") return false;
+  if (exchangeTurn(turn)) return !!(turn.question.trim() ||
+    (turn.status !== "running" && turn.status !== "confirm" && (turn.detail || turn.text).trim()));
+  return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
+    turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
+    turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length ||
+    turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
+}
+
 /**
  * The thread: the turns (in any order) oldest first, each day under its heading (「今天」, 「昨天」, the
  * date). A turn's key is its id, so that the page can tell the lines it drew before. What one
@@ -36,6 +47,7 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
   const items: ThreadItem[] = [];
   let day: string | null = null;
   for (const turn of oldestFirst) {
+    if (!visibleTurn(turn)) continue;
     const label = dayLabel(turn.created_at_ms, nowMs);
     const last = items[items.length - 1];
     if (exchangeTurn(turn) && label === day && last?.kind === "exchange" && last.turns[0].peer_id === turn.peer_id) {

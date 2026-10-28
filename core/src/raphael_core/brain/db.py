@@ -1024,6 +1024,9 @@ CREATE UNIQUE INDEX one_primary_contact ON members(primary_contact) WHERE primar
 PRAGMA user_version = 39;
 COMMIT;
 """
+from .conversation_cleanup import migrate as _conversation_cleanup
+
+_MIGRATIONS[40] = _conversation_cleanup
 LATEST_VERSION = max(_MIGRATIONS)
 
 

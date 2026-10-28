@@ -20,6 +20,7 @@ export function exchangeLineHTML(turns: readonly AgentTurn[], look: TurnLook): s
   const name = look.memberName?.(peer) ?? "";
   const own = look.memberName?.(first.member_id ?? 0) ?? "";
   const messages = turns.flatMap((turn) => [[name, turn.question.trim()], [own, answerOf(turn)]]).filter(([, text]) => text);
+  if (!messages.length) return "";
   const words = turns.length > 1 ? t("exchange.count", { p0: messages.length, p1: NAME }) : t("exchange.from", { p0: NAME });
   return `<li class="tn exchange-row" data-id="${esc(first.id)}">` +
     `<details class="handoff-event exchange-event" data-exchange="${esc(first.id)}">` +

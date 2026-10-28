@@ -85,3 +85,24 @@ Appearance choices form exactly two card columns at every matrix width (R-UI-30)
 Settings headings omit repeated purpose subtitles (R-UI-02). Model chooser source
 actions retain an 8px gap below the list, including a scrolled full list. The selected
 source scrolls fully into view when opening or switching sources (R-UI-01).
+
+## Switching the whole window language (2026-10-28, R-UI-14)
+
+Dictionary translates its current template, without touching the removed subtitle.
+Locale listeners are isolated so a broken surface cannot reject the device setting
+or stop settings navigation, sidebar/rail, pages or notices from refreshing. Failures
+are diagnostic warnings, never owner error toasts. Transient menus and closable shared
+dialogs dismiss on a locale change; reopening builds their current-language snapshot.
+Persistent surfaces use their existing locale listener or redraw on entry.
+The avatar crop dialog translates in place and keeps its current crop; an image
+lightbox closes so its translated actions are rebuilt on reopening.
+
+```powershell
+npm run look -- settings-language-en settings-language-ja settings-language-zh-TW --theme both --width 1120,720,1920x1080
+```
+
+Each journey selects the language through Settings, walks every settings pane, main
+page, calendar and dictation subtab, then inspects visible UI strings against all
+three catalogues. Authored names/documents/backend prose stay in their original language.
+A locale-listener warning, console error, error toast or stale interface label fails.
+Regression coverage: `i18n/i18n.test.ts` and `pages/locale-switch.test.ts`.

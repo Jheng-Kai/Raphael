@@ -53,7 +53,7 @@ export async function run(options) {
     const translations = await readFile(join(app, "src/main/i18n/zh-TW.ts"), "utf8");
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
     const dataWords = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(dataWords) : value && typeof value === "object" ? Object.values(value).flatMap(dataWords) : [];
-    const latinFor = scene => options.locale === "zh-TW" ? [...new Set([...dataWords(fixture), ...dataWords(scene.fixture), ...LATIN_NAMES].map(word => word.toLowerCase()))] : null;
+    const latinFor = (scene, locale) => locale === "zh-TW" ? [...new Set([...dataWords(fixture), ...dataWords(scene.fixture), ...LATIN_NAMES].map(word => word.toLowerCase()))] : null;
     const namespaces = [...new Set([...translations.matchAll(/"([a-z][A-Za-z0-9]*)\.[^"\n]+"\s*:/g)].map(match => match[1]))];
     server = await createServer({ configFile: false, root: app, cacheDir: join(directory, "vite-cache"), server: { host: "127.0.0.1", port: 0, hmr: false, watch: null, fs: { allow: [app] } } });
     await server.listen();
@@ -69,7 +69,7 @@ export async function run(options) {
       const error = (kind, message) => runtimeErrors.push({ kind, message });
       page.on("pageerror", value => error("exception", value.message));
       const favicon = url => url && requestDisposition(url, origin) === "empty";
-      page.on("console", message => { if (message.type() === "error" && !favicon(message.location().url)) error("console", message.text()); });
+      page.on("console", message => { if ((message.type() === "error" || (message.type() === "warn" && message.text().includes("A locale listener could not refresh"))) && !favicon(message.location().url)) error("console", message.text()); });
       page.on("requestfailed", request => { if (!favicon(request.url())) error("request", `${request.url()}: ${request.failure()?.errorText}`); });
       page.on("response", response => { if (response.status() >= 400 && !favicon(response.url())) error("http", `${response.status()} ${response.url()}`); });
       try {
@@ -127,7 +127,9 @@ export async function run(options) {
         result.diagnostics = await page.evaluate(() => ({ messages: [...document.querySelectorAll('.message-text, .ans, .ra')].map(el => ({ tag: el.tagName, class: el.className, parent: el.parentElement?.outerHTML.slice(0, 500) })) })).catch(() => null);
       }
       try {
-        const englishUI = options.locale === "zh-TW" && !scene.name.startsWith("overlay-") ? await page.evaluate(async () => {
+        const actualLocale = await page.evaluate(() => document.documentElement.lang || "zh-TW");
+        result.locale = actualLocale;
+        const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") ? await page.evaluate(async () => {
           const [{ en }, { zhTW }] = await Promise.all([import('/src/main/i18n/en.ts'), import('/src/main/i18n/zh-TW.ts')]);
           // Brand/key names and deliberately shared CTA decisions have identical values.
           return [...new Set(Object.entries(en).filter(([key, value]) => typeof value === 'string' && /[A-Za-z]/.test(value) && !/[<{}]/.test(value) && /[\u3400-\u9fff]/.test(zhTW[key] ?? '') && value !== zhTW[key]).map(([, value]) => value.trim()))];
@@ -137,7 +139,7 @@ export async function run(options) {
           const { uncoveredOverflows } = await import('/src/main/context-menu.ts');
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
-        Object.assign(result, await page.evaluate(auditDocument, undefined, { width, height: options.heights[width] ?? 900 }, namespaces, latinFor(scene), englishUI, unreached));
+        Object.assign(result, await page.evaluate(auditDocument, undefined, { width, height: options.heights[width] ?? 900 }, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
         const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);
         const image = `${scene.name}-${theme}-${width}.png`;

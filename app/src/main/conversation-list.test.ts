@@ -20,7 +20,8 @@ test("quick questions stay first with their localized title and open the persist
   const first = host.querySelector<HTMLButtonElement>("[data-conversation-open]")!;
   expect(first.dataset.conversationOpen).toBe("9");
   expect(first.textContent).toContain("快速提問");
-  expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).toBeNull();
+  expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).not.toBeNull();
+  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["快速提問", "對話"]);
   first.click(); expect(onOpen).toHaveBeenCalledWith(9);
   list.destroy();
 });
@@ -87,7 +88,7 @@ test("a right click on a conversation row opens the same rename and delete menu 
     expect(items()).toEqual(["rename", "delete"]);
     expect(document.querySelector<HTMLElement>("#app-popover")!.style.left).toBe("120px");
     closeMenu();
-    host.querySelector<HTMLButtonElement>("[data-conversation-more]")!.click();
+    host.querySelector<HTMLButtonElement>('[data-conversation-more="2"]')!.click();
     expect(items()).toEqual(["rename", "delete"]);
     closeMenu();
     rightClick(row.closest(".conversation-row")!, 40, 40);
@@ -95,10 +96,33 @@ test("a right click on a conversation row opens the same rename and delete menu 
     expect(document.querySelector(".conversation-name")).not.toBeNull();
     expect(onOpen).not.toHaveBeenCalled();
     document.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
-    // a quick conversation has no ⋯, so nothing opens for it; the left button opens it
+    // The permanent quick row offers clearing rather than deleting its identity.
     rightClick(host.querySelector('[data-conversation-open="9"]')!, 10, 10);
-    expect(document.querySelector("#app-popover")).toBeNull();
+    expect(items()).toEqual(["clear"]);
+    closeMenu();
     row.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onOpen).toHaveBeenCalledWith(2);
   } finally { stop(); list.destroy(); }
+});
+
+test("quick history clears only after the shared confirmation and keeps its row", async () => {
+  core.mockResolvedValue({ conversations: [{ id: 9, member_id: 0, kind: "quick", title: "", updated_at_ms: 1 }] });
+  const host = document.createElement("div"); document.body.append(host);
+  const list = mountConversationList(host, { memberId: 0, onOpen() {} }); await flush();
+  host.querySelector<HTMLButtonElement>('[data-conversation-more="9"]')!.click();
+  document.querySelector<HTMLButtonElement>('[data-pick="clear"]')!.click();
+  expect(document.querySelector(".mb-confirm h2")?.textContent).toBe("清除「快速提問」的紀錄？");
+  expect(core).not.toHaveBeenCalledWith("conversations.clear", expect.anything());
+  document.querySelector<HTMLButtonElement>('[data-dlg="delete"]')!.click(); await flush();
+  expect(core).toHaveBeenCalledWith("conversations.clear", { id: 9 });
+  expect(host.querySelector('[data-conversation-open="9"]')).not.toBeNull();
+  list.destroy();
+});
+
+test("a member without quick questions has only the ordinary conversation heading", async () => {
+  core.mockResolvedValue({ conversations: [{ id: 2, member_id: 7, title: "Project", updated_at_ms: 1 }] });
+  const host = document.createElement("div"); document.body.append(host);
+  const list = mountConversationList(host, { memberId: 7, onOpen() {} }); await flush();
+  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
+  list.destroy();
 });

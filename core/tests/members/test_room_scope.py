@@ -98,13 +98,14 @@ async def test_reply_identity_comes_from_source_and_rejects_self_and_cross_scope
     assert message["reply_reference"] == {"message_id":alice["id"],"unavailable":True}
 
 
-def test_legacy_dev_shapes_migrate_losslessly_and_quarantine_ambiguity(tmp_path):
+def test_legacy_dev_shapes_keep_room_history_and_remove_ambiguous_private_rows(tmp_path):
     path = tmp_path / "legacy.db"
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     for version in range(1,29):
         step = db._MIGRATIONS[version]
         step(conn) if callable(step) else conn.executescript(step)
+    conn.execute("INSERT INTO members(id,name,position,created_at_ms) VALUES (1,'Alice',0,1),(2,'Bob',1,1)")
     conversation = conn.execute("INSERT INTO conversations(member_id,title,created_at_ms,updated_at_ms,is_default) VALUES (1,'roomnonce',1,2,1)").lastrowid
     for room in range(1,4):
         conn.execute("INSERT INTO rooms(id,name,created) VALUES (?,?,1)",(room,f"Room {room}"))
@@ -123,11 +124,12 @@ def test_legacy_dev_shapes_migrate_losslessly_and_quarantine_ambiguity(tmp_path)
     conn.commit(); conn.close()
     conn = db.connect(path)
     rows = {r['id']:dict(r) for r in conn.execute("SELECT * FROM agent_turns")}
-    assert [rows[i]['scope'] for i in range(1,7)] == ['room','room','room','quarantine','quarantine','private']
-    assert all(rows[i]['scope'] == 'quarantine' for i in range(7,11))
+    assert set(rows) == {1,2,3,6}
+    assert [rows[i]['scope'] for i in (1,2,3,6)] == ['room','room','room','private']
     assert rows[2]['source_turn_id'] == rows[3]['source_turn_id'] == 1
     assert all(r['text'] == 'original body' for r in rows.values())
-    assert all(rows[i]['conversation_id'] is None for i in range(1,6))
+    assert all(rows[i]['conversation_id'] is None for i in range(1,4))
+    assert rows[6]['conversation_id'] == conversation
     records = conn.execute("SELECT * FROM scope_migrations").fetchall()
     assert len(records) == 9 and all(json.loads(r['original'])['conversation_id'] == conversation for r in records)
     assert [r[0] for r in conn.execute("SELECT member_id FROM room_members WHERE room_id=3")] == list(range(1,7))

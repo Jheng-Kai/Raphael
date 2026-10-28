@@ -188,3 +188,18 @@ The seven canvas scenes above use `fixture.json`'s `teamBoard` roster through th
 ## Primary display exchange (owner, 2026-10-27)
 
 `primary-team-board` uses the one/eight-member CLI fixture with 紫苑 as primary: her card takes the top slot, and Raphael takes her place in 學習 with his emblem, localized chief-of-staff role and protected actions. It checks the exchanged IDs, 100% opening zoom, wrapped content-sized panels, no overlap and top-card visibility, without pressing Fit before capture. `team-fit` independently checks fitting; `team-zoom` checks retained zoom after reopening. `primary-team-mentions` checks member ordering while keeping everyone/groups/apps and mention values unchanged. `primary-room-picker`, `primary-room-members` and `primary-room-chief` cover display order with identity 0 still required/crowned and authoring the single wrap-up. See [Members](members.md) for the shared order and other pickers. No core or routing contract changes.
+
+## Crisp team zoom at rest (2026-10-28)
+
+The board holds `will-change: transform` only during a pan or wheel gesture. Pointer
+release/cancellation or 120 ms without wheel input releases that layer; resting pan
+aligns to whole CSS pixels. Active gestures keep their fractional pointer anchor.
+Zoom buttons produce resting text at the new raster scale. Shared checks assert the
+scale, absent resting `will-change`, and integer pan at 50%, 100% and 150%.
+
+```powershell
+npm run look -- team-crisp-50 team-crisp-100 team-crisp-150 team-panned team-zoom --theme both --width 1120,720,1920x1080
+```
+
+Regression coverage: `team-canvas.test.ts` and `pages/team.test.ts`. Browser images
+prove the selected Chromium rendering only; native WebView rendering needs acceptance.

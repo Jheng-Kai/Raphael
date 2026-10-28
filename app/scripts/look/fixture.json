@@ -1,4 +1,64 @@
 {
+  "ownerRound": {
+    "memberConversation": {
+      "id": 12,
+      "member_id": 1,
+      "title": "Project",
+      "is_default": false,
+      "kind": "standard",
+      "created_at_ms": 1792807200000,
+      "updated_at_ms": 1792807200000
+    },
+    "emptyRecords": [
+      {
+        "id": 300,
+        "session_id": "look-quick",
+        "member_id": 0,
+        "conversation_id": null,
+        "created_at_ms": 1792807154000,
+        "question": "",
+        "route": "exchange",
+        "source": "member",
+        "prefix": "答",
+        "text": "",
+        "detail": null,
+        "status": "done",
+        "cost_usd": 0.001,
+        "model": "openai/gpt-6-luna",
+        "messages": [],
+        "steps": [],
+        "attachments": [],
+        "scope": "exchange",
+        "peer_id": 3
+      }
+    ],
+    "voiceReply": {
+      "id": 301,
+      "session_id": "composer-voice",
+      "member_id": 0,
+      "conversation_id": 2,
+      "created_at_ms": 1792807154000,
+      "question": "Prepare the report",
+      "route": "answer",
+      "source": "voice",
+      "prefix": "答",
+      "text": "",
+      "detail": null,
+      "status": "done",
+      "cost_usd": 0.001,
+      "model": "openai/gpt-6-luna",
+      "messages": [
+        {
+          "seq": 1,
+          "kind": "reply",
+          "text": "Report ready",
+          "at_ms": 1792807200000
+        }
+      ],
+      "steps": [],
+      "attachments": []
+    }
+  },
   "teamBoard": {
     "groups": [
       {
@@ -1207,7 +1267,7 @@
       "session_id": "look-colleague",
       "member_id": 1,
       "peer_id": 2,
-      "conversation_id": null,
+      "conversation_id": 11,
       "scope": "exchange",
       "created_at_ms": 1792807171000,
       "question": "下週上市的新品代號是多少？",
@@ -1226,7 +1286,7 @@
       "session_id": "look-colleague",
       "member_id": 1,
       "peer_id": 2,
-      "conversation_id": null,
+      "conversation_id": 11,
       "scope": "exchange",
       "created_at_ms": 1792807175000,
       "question": "上市日是哪一天？",

@@ -33,9 +33,21 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
   } catch { /* An empty or unavailable store keeps automatic layout. */ }
   let gesture: { id: number; start: Point; pan: Point; group?: HTMLElement; origin?: Point; moved: boolean } | null = null;
   let draggedRight = false;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  function settle(): void {
+    clearTimeout(settleTimer);
+    board.style.willChange = "";
+    pan = { x: Math.round(pan.x), y: Math.round(pan.y) };
+    draw();
+  }
+  function animate(): void {
+    clearTimeout(settleTimer);
+    board.style.willChange = "transform";
+  }
   function save(): void { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(positions)); } catch { /* Keep the layout in memory. */ } }
   function draw(): void {
-    board.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+    const moving = board.style.willChange === "transform";
+    board.style.transform = `translate(${moving ? pan.x : Math.round(pan.x)}px, ${moving ? pan.y : Math.round(pan.y)}px) scale(${zoom})`;
     viewport.style.backgroundPosition = `${pan.x}px ${pan.y}px`;
     viewport.style.backgroundSize = `${20 * zoom}px ${20 * zoom}px`;
     changed(zoom);
@@ -106,6 +118,7 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
     if (!gesture.moved && Math.hypot(dx, dy) <= 4) return;
     if (!gesture.moved) viewport.setPointerCapture?.(event.pointerId);
     gesture.moved = true;
+    animate();
     if (event.buttons & 2) draggedRight = true;
     viewport.classList.add("is-panning");
     if (gesture.group && gesture.origin) {
@@ -117,6 +130,7 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
   const finish = (): void => {
     if (gesture?.group && gesture.moved) save();
     gesture = null; viewport.classList.remove("is-panning");
+    settle();
   };
   viewport.addEventListener("pointerup", finish);
   viewport.addEventListener("pointercancel", finish);
@@ -124,11 +138,13 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
   viewport.addEventListener("contextmenu", event => { if (event.button === 2 && draggedRight) event.preventDefault(); });
   viewport.addEventListener("wheel", event => {
     event.preventDefault();
+    animate();
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1;
     if (event.ctrlKey) {
       const box = viewport.getBoundingClientRect();
       zoomAt(zoom * Math.exp(-event.deltaY * unit * 0.002), event.clientX - box.left, event.clientY - box.top);
     } else { pan.x -= event.deltaX * unit; pan.y -= event.deltaY * unit; draw(); }
+    settleTimer = setTimeout(settle, 120);
   }, { passive: false });
   const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(layout);
   observer?.observe(viewport);
