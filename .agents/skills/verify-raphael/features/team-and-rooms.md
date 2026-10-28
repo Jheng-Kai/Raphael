@@ -203,3 +203,7 @@ npm run look -- team-crisp-50 team-crisp-100 team-crisp-150 team-panned team-zoo
 
 Regression coverage: `team-canvas.test.ts` and `pages/team.test.ts`. Browser images
 prove the selected Chromium rendering only; native WebView rendering needs acceptance.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

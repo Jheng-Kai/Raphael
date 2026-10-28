@@ -183,3 +183,7 @@ Each scene presses the real right button (the `right-click` driver step, which k
 at the pointer, does not cover it, and has the same items as the menu a click on the ⋯ opens. It closes the menu on the way, and the scene presses again so that the picture
 shows it. `context-menu-key` presses Shift+F10 (`key` with `shift`) on the focused member row and asserts that the menu stands under its ⋯. The connection and message
 scenes are in [Connections and MCP](connections-mcp.md) and [Conversation](conversation.md).
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

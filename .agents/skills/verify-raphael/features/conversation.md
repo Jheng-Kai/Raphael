@@ -392,3 +392,7 @@ Regression coverage: `conversation-list.test.ts`, `conversation.test.ts`,
 `composer_voice_keeps_its_named_conversation_for_raphael_and_members` test, and
 `core/tests/agent/test_conversation_cleanup.py`. These synthetic boundaries do not prove
 native microphone/STT/global hotkeys/provider transport or an actual owner database upgrade.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

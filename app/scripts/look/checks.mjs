@@ -2,6 +2,51 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "content-width") {
+    // Keep this measurable on the pre-token stylesheet too: all limits derive from the shared 32px space.
+    const space = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-6'));
+    require(space > 0, "the shared spacing scale is available");
+    const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-5'));
+    require(gap > 0, "the shared grid gap is available");
+    const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
+    const groups = [
+      ['word', '.wrow'],
+      ['card', '.ho-card, .ho-row, .ho-slot, .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
+      ['reading', '.ho-said, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ra-col, .composer, .ask-card, .bgq-card'],
+      ['page', '.page:not(.page-agent), .modal, .ho-hero'],
+      ['workspace', '.team-board, .au-page'],
+    ];
+    const measurements = [];
+    for (const [kind, selector] of groups) for (const element of document.querySelectorAll(selector)) {
+      if (!visible(element) || element.closest('[hidden]')) continue;
+      let scale = 1;
+      const board = element.closest('.team-board');
+      if (board) scale = new DOMMatrix(getComputedStyle(board).transform).a;
+      const width = element.getBoundingClientRect().width / scale;
+      measurements.push({ kind, class: element.className, width: Math.round(width * 100) / 100, max: limits[kind] });
+    }
+    const violations = measurements.filter(item => item.width > item.max + 1);
+    require(violations.length === 0, `stretched content: ${JSON.stringify(violations)}`);
+    const hero = document.querySelector('.page-home:not([hidden]) .ho-hero');
+    let home;
+    if (visible(hero)) {
+      const page = hero.closest('.page-home'), style = getComputedStyle(page);
+      const lead = hero.getBoundingClientRect(), bounds = page.getBoundingClientRect();
+      const cards = [...page.querySelectorAll('.ho-card')].filter(visible).map(card => card.getBoundingClientRect());
+      const available = bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      require(Math.abs(lead.width - available) <= 1, 'Home hero spans the card grid within the page measure');
+      require(cards.length > 0 && cards.every(card => card.top >= lead.bottom - 1 && card.width <= lead.width + 1), 'Home hero leads every summary card');
+      const rows = [];
+      for (const card of cards) {
+        let row = rows.find(row => Math.abs(row.top - card.top) <= 1);
+        if (!row) rows.push(row = { top: card.top, count: 0 });
+        row.count++;
+      }
+      require(rows.every(row => row.count === rows[0].count), `Home summary rows fill their columns: ${JSON.stringify(rows)}`);
+      home = { heroWidth: lead.width, available, columns: rows[0].count, rows: rows.map(row => row.count) };
+    }
+    return { check: name, limits, measurements, ...(home ? { home } : {}) };
+  }
   if (name.startsWith("team-crisp-")) {
     const board = document.querySelector('.team-board');
     require(visible(board), "the real team board is visible");

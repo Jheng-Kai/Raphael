@@ -5,8 +5,8 @@
 Startup and first-run landing, Raphael's status report, pending questions across
 conversations, today's routines, latest unread member reports, today's calendar,
 monthly spend/budget, fourteen-day spend series, subscription allowances and 
-dictation charts. The twelve-column board pairs today's timeline with pending work
-and reports; three chart cards follow. Today contains routine occurrences and connected
+dictation charts. The capped card grid includes today's timeline, pending work,
+reports and three chart cards. Today contains routine occurrences and connected
 calendar events for the current date. Pending contains questions/approvals; unread
 reports belong in Reports.
 
@@ -29,7 +29,12 @@ Scenes run with reduced motion, so every home scene above shows the emblem's sti
 `home-motion` allows motion (`motion: true`, with `freeze-motion` for the CSS animations) and asserts that the page asks for the loop and that the loop is an animation (a WebP of 144 frames over 6 s):
 the loop plays by itself, which a canvas cannot sample, so its screenshot shows whichever frame the clock was at. A refresh of Home does not replace the emblem's node, so his turn is not started over (pages/home.test.ts).
 
-The Today card spans seven columns on desktop, pending/reports span five, and each chart spans four. Compact windows stack the board.
+Raphael's report is the first, widest element, spanning the grid within the shared
+page measure; its prose is capped at the 640px reading measure. The six summary
+cards below add columns from a 288px minimum; each card is at most 384px. The page
+measure permits one, two or three columns, so all summary rows fill their columns
+and Dictation never sits alone in a multi-column last row. This preserves the
+hero's lead without restoring full-width summary bars (owner, 2026-10-28).
 
 Inspect every contact sheet and the full-size home/report images. The home-720
 scene scrolls to the lower usage and dictation area at all three widths. The home-report
@@ -56,3 +61,7 @@ HTTP double; browser fixtures prove rendered navigation, not live
 provider usage, OAuth, native persistence or scheduler execution. For native proof,
 use an authorized isolated data directory, create a harmless routine, receive a
 member report offscreen, then verify its arrival/read state and exact-turn jump.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

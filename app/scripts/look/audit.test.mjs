@@ -158,6 +158,10 @@ describe("rendered look checks", () => {
     window.document.querySelector('.skin-grid').lastElementChild.getBoundingClientRect = () => ({ left: 10, top: 50, right: 110, bottom: 80, width: 100, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
+  it("lets short dictionary entries add columns instead of treating them as long choices", () => {
+    const { audit } = productAudit('<div class="wgrid"><div class="wrow"></div><div class="wrow"></div><div class="wrow"></div></div>');
+    expect(audit().productRules).toEqual([]);
+  });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {
     const { window, audit } = productAudit('<button class="btn icon" style="border:0;background:gray"><svg class="i"></svg></button>');
     const button = window.document.querySelector('button'), glyph = button.firstElementChild;

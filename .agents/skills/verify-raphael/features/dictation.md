@@ -92,6 +92,11 @@ may stop it. Preserve password/elevated-window/field-scope/60-second learning sa
 
 ## UI audit regression coverage
 
-The rendered audit requires two framed Dictionary card columns and aligned
-shortcut labels/keys at every matrix width. Keyboard navigation retains its selected
+The rendered audit requires capped auto-fill Dictionary cards and aligned
+shortcut labels/keys at every matrix width. Short entries add columns as space allows;
+they are not the two-column long choices of R-UI-30. Keyboard navigation retains its selected
 button; focus rings remain reserved for Tab navigation.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

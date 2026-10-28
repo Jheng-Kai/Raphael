@@ -102,7 +102,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (controls.length > 1 && controls.some(child => Math.abs(child.getBoundingClientRect().width - controls[0].getBoundingClientRect().width) > 1))
         violation('R-UI-17', 'Schedule controls in one column have different widths');
     }
-    if (element.matches('.skin-grid, .wgrid')) {
+    if (element.matches('.skin-grid')) {
       const cards = [...element.children].filter(visible);
       if (cards.length > 1) {
         const row = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) <= 1);

@@ -106,3 +106,7 @@ page, calendar and dictation subtab, then inspects visible UI strings against al
 three catalogues. Authored names/documents/backend prose stay in their original language.
 A locale-listener warning, console error, error toast or stale interface label fails.
 Regression coverage: `i18n/i18n.test.ts` and `pages/locale-switch.test.ts`.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.

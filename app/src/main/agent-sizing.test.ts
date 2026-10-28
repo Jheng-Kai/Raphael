@@ -42,10 +42,17 @@ describe("the page's responsive sizes", () => {
   test("the columns and controls retain their responsive geometry", () => {
     const wanted: Record<string, [number, number]> = {
       "pa-tool": [30, 48], "pa-pill-h": [32, 52], "pa-pill-av": [22, 36],
-      "pa-colw": [760, 1010], "pa-cmp-btn": [36, 44], "pa-cmp-fs": [15.5, 17],
+      "pa-cmp-btn": [36, 44], "pa-cmp-fs": [15.5, 17],
       "pa-dclose": [34, 48], "pa-det-av": [64, 96],
     };
     for (const [name, [small, big]] of Object.entries(wanted)) expect(ends(name), name).toEqual([small, big]);
+  });
+
+  test("the conversation's reading measure stops growing with the window", () => {
+    expect(block![2]).toContain("--pa-colw: var(--layout-reading-max);");
+    expect(read("styles.css")).toContain("--layout-reading-max: calc(20 * var(--sp-6));");
+    expect(agent).toMatch(/\.ra-col \{ max-width: var\(--pa-colw\)/);
+    expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-reading-max\)/);
   });
 
   test("every token a rule reads is set, and every token set is read", () => {

@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { installMock } from "./mock-ipc.js";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { perform } from "./driver.mjs";
+import { checkRendered } from "./checks.mjs";
 import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
 
@@ -140,6 +141,10 @@ export async function run(options) {
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
         Object.assign(result, await page.evaluate(auditDocument, undefined, { width, height: options.heights[width] ?? 900 }, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
+        if (scene.entry !== "overlay.html") {
+          try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "content-width")); }
+          catch (value) { error("layout", value.message); }
+        }
         const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);
         const image = `${scene.name}-${theme}-${width}.png`;

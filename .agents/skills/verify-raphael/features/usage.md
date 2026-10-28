@@ -41,3 +41,7 @@ writes. Retained run periods use the requested IANA display zone; bills always u
 sidebar ledger's zone and full calendar boundaries. A real harmless turn/routine and
 sanitized export remain native acceptance if those paths change. No live provider or
 user database access is required for this presentation change.
+
+## Shared content measures (2026-10-28)
+
+Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
