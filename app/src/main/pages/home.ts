@@ -35,11 +35,6 @@ function barsSVG(values: number[], label: string): string {
     values.map((v, i) => { const bh = Math.max(2, (Math.max(0, v) / max) * h); return `<rect class="${i === values.length - 1 ? "is-today" : ""}" x="${i * (w + gap)}" y="${h - bh}" width="${w}" height="${bh}" rx="2"/>`; }).join("") + `</svg>`;
 }
 
-function ringSVG(share: number): string {
-  const r = 26, c = 2 * Math.PI * r;
-  return `<svg class="ho-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="${r}"/><circle class="is-used" cx="32" cy="32" r="${r}" stroke-dasharray="${(share / 100) * c} ${c}"/></svg>`;
-}
-
 function scheduleHTML(data: HomeOverview): string {
   const now = data.generated_at_ms, items = data.calendar.filter(item => sameDay(item.at_ms, now));
   if (!items.length) return `<p class="ho-empty">${ico("calendar")}${esc(t("overview.noSchedule"))}</p>`;
@@ -55,48 +50,54 @@ function scheduleHTML(data: HomeOverview): string {
 
 function rowsHTML(items: HomeItem[], empty: string, report: boolean): string {
   if (!items.length) return `<p class="ho-empty">${ico("check")}${esc(empty)}</p>`;
-  return items.slice(0, 4).map(item => `<button type="button" class="btn ho-row" data-home-item="${esc(item.id)}">${faceHTML(item, 32)}` +
+  return items.slice(0, 4).map(item => `<button type="button" class="btn ho-row" data-home-item="${esc(item.id)}">${faceHTML(item, 28)}` +
     `<span class="ho-row-copy"><strong>${esc(report ? item.name : item.title)}</strong><span>${esc(report ? item.summary : item.name)}</span></span>` +
     `<time datetime="${new Date(item.at_ms).toISOString()}">${esc(clock(item.at_ms))}</time></button>`).join("");
 }
 
 function spendHTML(data: HomeOverview): string {
   const u = data.usage, share = Math.round(Math.max(0, Math.min(100, u.limit_usd > 0 ? u.month_usd / u.limit_usd * 100 : 0)));
-  return `<div class="ho-metric">${ringSVG(share)}<span class="ho-ring-value">${share}<small>%</small></span>` +
-    `<div><strong class="ho-big">US$ ${money(u.month_usd)}</strong><span class="ho-sub">/ ${money(u.limit_usd)}</span></div></div>` +
-    barsSVG(u.daily, t("overview.chart", { p0: u.daily.map(money).join(", ") }));
+  return `<div class="ho-big">US$ ${money(u.month_usd)}<small>/ ${money(u.limit_usd)}</small></div>` +
+    `<div class="ho-sub">${esc(t("overview.used", { p0: share }))}</div><div class="ho-chart">` +
+    barsSVG(u.daily.slice(-14), t("overview.chart", { p0: u.daily.slice(-14).map(money).join(", ") })) + `</div>`;
 }
 
 function allowanceHTML(data: HomeOverview): string {
   const brains = data.usage.allowances.brains;
-  if (!brains.length) return `<p class="ho-empty">${esc(t("overview.emptyAllowances"))}</p>`;
-  return `<div class="ho-allowances">` + brains.map(brain => `<div class="ho-brain"><strong>${esc(brain.name.replace(/\s+CLI$/, ""))}</strong>` +
-    brain.windows.map(w => { const left = w.remaining_percent; const tip = w.resets_at ? t("overview.reset", { p0: new Date(w.resets_at * 1000).toLocaleString(getLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) }) : "";
-      return `<span class="ho-meter-row" title="${esc(tip)}"><small>${esc(t(`overview.${w.period}`))}</small><span class="ho-meter${left !== null && left < 20 ? " is-low" : ""}"><i style="width:${left ?? 0}%"></i></span><b>${left === null ? "—" : `${left}%`}</b></span>`; }).join("") + `</div>`).join("") + `</div>`;
+  const windows = brains.flatMap(brain => brain.windows.filter(w => w.remaining_percent !== null).map(window => ({brain, window, used:100-window.remaining_percent!}))).sort((a,b)=>b.used-a.used);
+  const most = windows[0], next = windows[1];
+  return `<div class="ho-big">${most ? `${most.used}%` : "—"}<small>${most ? esc(`${most.brain.name.replace(/\s+CLI$/, "")} ${t(`overview.${most.window.period}`)}`) : ""}</small></div>` +
+    `<div class="ho-sub">${esc(next ? `${t(`overview.${next.window.period}`)} ${next.used}%` : t("overview.emptyAllowances"))}</div>` +
+    `<div class="ho-chart ho-allowances">` + brains.map(brain => {
+      const window = windows.find(w => w.brain === brain)?.window;
+      const used = window?.remaining_percent == null ? null : 100-window.remaining_percent;
+      const tip = window?.resets_at ? t("overview.reset", { p0: new Date(window.resets_at*1000).toLocaleString(getLocale(), { month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false }) }) : "";
+      return `<div class="ho-meter-row" title="${esc(tip)}"><small>${esc(brain.name.replace(/\s+CLI$/, ""))}</small><span class="ho-meter"><i style="width:${used ?? 0}%"></i></span><b>${used === null ? "—" : `${used}%`}</b></div>`;
+    }).join("") + `</div>`;
 }
 
 function dictationHTML(data: HomeOverview): string {
   const d = data.dictation;
-  return `<div class="ho-metric"><div><strong class="ho-big">${esc(formatCount(d.words))}<small>${esc(t("home.003"))}</small></strong>` +
-    `<span class="ho-sub">${esc(t("home.005"))} ${unitHTML(durationParts(d.time_saved_seconds))}</span></div></div>` +
-    barsSVG(d.daily ?? [], t("overview.wordsChart", { p0: (d.daily ?? []).join(", ") }));
+  return `<div class="ho-big">${esc(formatCount(d.words))}<small>${esc(t("home.003"))}</small></div>` +
+    `<div class="ho-sub">${esc(t("home.005"))} ${unitHTML(durationParts(d.time_saved_seconds))}</div><div class="ho-chart">` +
+    barsSVG((d.daily ?? []).slice(-14), t("overview.wordsChart", { p0: (d.daily ?? []).slice(-14).join(", ") })) + `</div>`;
 }
 
 export function homeHTML(data: HomeOverview): string {
   const report = buildReport(data.report, data.generated_at_ms);
   // His emblem turns while the window allows motion (avatar.ts keeps it still otherwise); nothing sits right of his report but its fix.
-  const hero = `<section class="ho-hero">${avatarHTML({ size: 96, avatar: null, loop: true })}<p class="ho-said">${esc(report.text)}</p>` +
-    (report.action ? iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"') : "") + `</section>`;
   const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "numeric", day: "numeric", weekday: "short" });
+  const hero = `<section class="ho-hero">${avatarHTML({ size: 72, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${esc(report.text)}</h1></div>` +
+    (report.action ? iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"') : "") + `</section>`;
   const pending = data.today.filter(item => item.kind !== "routine");
   return hero + `<div class="ho-board">` +
-    card("today", `${t("overview.today")} · ${date}`, "calendar", scheduleHTML(data)) +
-    `<div class="ho-side">` +
-    card("pending", t("overview.pending"), "agent", rowsHTML(pending, t("overview.nothing"), false), pending.length) +
-    card("reports", t("overview.reports"), "agent", rowsHTML(data.reports, t("overview.noReports"), true), data.counts.reports) + `</div>` +
-    card("spend", t("overview.month"), "usage", spendHTML(data)) +
-    card("allowance", t("overview.allowance"), "usage", allowanceHTML(data)) +
-    card("dictation", t("nav.dictation"), "dictation", dictationHTML(data)) + `</div>`;
+    card("today", t("overview.today"), "calendar", scheduleHTML(data)) +
+    card("inbox", t("overview.needsYou"), "agent",
+      `<section class="ho-pending ho-section"><h3>${esc(t("overview.pending"))}<span class="ho-count">${pending.length}</span></h3>${rowsHTML(pending, t("overview.nothing"), false)}</section>` +
+      `<section class="ho-reports ho-section"><h3>${esc(t("overview.reports"))}<span class="ho-count">${data.counts.reports}</span></h3>${rowsHTML(data.reports, t("overview.noReports"), true)}</section>`, pending.length+data.counts.reports) +
+    card("spend ho-stat", t("overview.month"), "usage", spendHTML(data)) +
+    card("allowance ho-stat", t("overview.allowance"), "usage", allowanceHTML(data)) +
+    card("dictation ho-stat", t("nav.dictation"), "dictation", dictationHTML(data)) + `</div>`;
 }
 
 export function createHome(app: AppContext): Page {

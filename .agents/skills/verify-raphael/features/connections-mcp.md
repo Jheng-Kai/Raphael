@@ -259,3 +259,9 @@ after reopening, skill save feedback and the footer check's covered-button failu
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Owner round 4 settings alignment
+
+Connections uses the shared 640px settings-pane measure, including its header
+actions, toolbar and list/store grids. Search ends at the same content edge;
+capability lists outside Settings retain their own reading cap.

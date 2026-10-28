@@ -6,6 +6,23 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("allows movable canvas wrappers to extend while retaining card and document overflow checks", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<div class="team-board-scroll" style="overflow:hidden"><div class="team-board"><div class="team-groups"><section class="team-group" style="transform:translate(36px,64px)"><span id="label">Long member name</span></section></div></div></div><div id="outside">Other content</div>';
+    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left:10,top:10,right:510,bottom:210,width:500,height:200});
+    for (const element of win.document.querySelectorAll('.team-board,.team-groups,#label,#outside')) {
+      Object.defineProperty(element,'clientWidth',{value:100,configurable:true});
+      Object.defineProperty(element,'scrollWidth',{value:140,configurable:true});
+    }
+    Object.defineProperty(win.document.documentElement,'scrollWidth',{value:1200,configurable:true});
+    try {
+      const result=auditDocument(win.document,{width:1120,height:900});
+      expect(result.horizontalOverflow.elements.map(element=>element.id)).toEqual(['label','outside']);
+      expect(result.horizontalOverflow.document).toBe(true);
+      win.document.querySelector('.team-board-scroll').style.overflow='visible';
+      expect(auditDocument(win.document,{width:1120,height:900}).horizontalOverflow.elements).toHaveLength(4);
+    } finally { win.happyDOM.abort(); }
+  });
   it("checks every dialog footer button and accepts hits on its children", () => {
     const win = new Window();
     win.document.body.innerHTML = '<div class="cs-scrim"><div class="cs-dialog"><div class="action-row"><button><span>Retry</span></button><button>Done</button></div></div></div><div class="toast">Saved</div>';
@@ -89,7 +106,7 @@ describe("rendered look checks", () => {
       expect(() => checkRendered('primary-calendar')).toThrow(/exchange/);
     } finally { vi.unstubAllGlobals(); }
   });
-  it("rejects a small centered team board at full screen", () => {
+  it("rejects ragged team column edges at full screen", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="team-board-scroll"><div class="team-group"></div><div class="team-group"></div></div>';
     const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
@@ -99,13 +116,13 @@ describe("rendered look checks", () => {
     groups[1].getBoundingClientRect = () => rect(1082, 273, 278, 198);
     vi.stubGlobal('document', window.document); vi.stubGlobal('innerWidth', 1920);
     try {
-      expect(() => checkRendered('team-board-space')).toThrow(/R-UI-01/);
+      expect(() => checkRendered('team-board-space')).toThrow(/aligned column/);
       groups[0].getBoundingClientRect = () => rect(300, 340, 742, 400);
-      groups[1].getBoundingClientRect = () => rect(1090, 340, 742, 400);
-      expect(checkRendered('team-board-space').widthShare).toBeGreaterThanOrEqual(0.8);
+      groups[1].getBoundingClientRect = () => rect(300, 780, 742, 400);
+      expect(checkRendered('team-board-space').widthShare).toBeCloseTo(742 / 1688);
       groups[0].getBoundingClientRect = () => rect(300, 340, 742, 120);
-      groups[1].getBoundingClientRect = () => rect(1090, 340, 742, 120);
-      expect(checkRendered('team-board-space').widthShare).toBeGreaterThanOrEqual(0.8);
+      groups[1].getBoundingClientRect = () => rect(300, 480, 742, 120);
+      expect(checkRendered('team-board-space').widthShare).toBeCloseTo(742 / 1688);
       vi.stubGlobal('innerWidth', 1120);
       expect(checkRendered('team-board-space')).toEqual({ check: 'team-board-space', wide: false });
     } finally { vi.unstubAllGlobals(); }

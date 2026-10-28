@@ -336,7 +336,7 @@ export function mountOnboarding(root: HTMLElement, options: GuideOptions, app: A
     const quiet = flow.step === "welcome" && mode === "first";
     root.innerHTML =
       `<div class="ob-top${quiet ? " quiet" : ""}">${topHTMLNow()}</div>` +
-      `<div class="ob-body"><div class="ob-col">${bodyHTML()}</div></div>` +
+      `<div class="ob-body"${flow.step === "welcome" ? " data-welcome" : ""}><div class="ob-col">${bodyHTML()}</div></div>` +
       `<div class="ob-foot">${footHTML()}</div>`;
     enterScreen();
   }

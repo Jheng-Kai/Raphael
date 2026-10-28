@@ -103,6 +103,25 @@ test("sidebar pin and hide update only their target and hiding the open member r
   agent.hide();
 });
 
+test("an unconfigured Raphael is immediately usable before and after history clears", async () => {
+  api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(m=>({...m,profile_ready:false}))});
+  api.agentHistoryList.mockResolvedValue({turns:[]});
+  const agent=mount(); await flush();
+  for (const id of [0,3,0]) {
+    await pick(id);
+    expect(document.querySelector('.first-bot')).toBeNull();
+    expect($('.composer').hidden).toBe(false);
+    expect($('.ra-hi').hidden).toBe(false);
+  }
+  api.core.mockResolvedValue({questions:[]});
+  $('[data-member-more="3"]').click(); $('[data-pick="clear"]').click();
+  $('[data-dlg="clear"]').click(); await flush();
+  expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id:3});
+  expect(document.querySelector('.first-bot')).toBeNull();
+  expect($('.composer').hidden).toBe(false);
+  agent.hide();
+});
+
 test("clearing conversations requires confirmation and scopes the request to that member", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.core.mockResolvedValue({questions: []});
@@ -609,6 +628,24 @@ describe("a member's thread", () => {
     expect($('.thread').textContent).toContain("My member reply");
     await pick(0);
     expect($('.thread').textContent).not.toContain("My spoken question");
+    agent.hide();
+  });
+
+  test.each([0,3])("clicking the recording Stop for member %s ends capture instead of cancelling it", async id => {
+    vi.useFakeTimers();
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount("toggle");await flush();if(id)await pick(id);
+    const button=$(".cmp-voice");
+    button.setPointerCapture=vi.fn();
+    const click=()=>{button.dispatchEvent(new MouseEvent("pointerdown",{button:0,bubbles:true}));button.dispatchEvent(new MouseEvent("pointerup",{button:0,bubbles:true}));};
+    click();
+    send({type:"Dictation",phase:"listening",agent:true,member_id:id});
+    expect(document.querySelector('.is-voice')).not.toBeNull();
+    api.agentVoice.mockClear();
+    click();
+    await flush();
+    expect(api.agentVoice.mock.calls.map(call=>call[0])).toEqual(["down","up"]);
+    expect(api.cancelSession).not.toHaveBeenCalled();
     agent.hide();
   });
 

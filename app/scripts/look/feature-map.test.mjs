@@ -27,8 +27,9 @@ describe("maintained verification feature map", () => {
       for (const [, command] of commands) {
         const options = parseOptions(command.trim().split(/\s+/), scenes);
         expect(options.themes, `${name}: ${command}`).toEqual(["light", "dark"]);
-        const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") || scene.name.startsWith("first-bot-") || scene.name === "admin-draft-onboarding" || scene.name === "bot-renamed-centred");
+        const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
         const allowedWidths = wide ? [[1120, 720, 1920]] : [[1120, 720], [1120, 720, 1920]];
+        allowedWidths.push([1120,720,1920,1180,1280]);
         expect(allowedWidths, `${name}: ${command}`).toContainEqual(options.widths);
         if (options.widths.includes(1920)) expect(options.heights[1920], `${name}: ${command}`).toBe(1080);
       }

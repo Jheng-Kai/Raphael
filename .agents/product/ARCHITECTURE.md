@@ -61,3 +61,12 @@ resizes the existing overlay upward and inherits the main window's resolved them
 it does not create another store or window. Deletion invalidation travels through
 existing UI events before reloading selected objects. See the conversation,
 dictation, team/rooms and automations feature entries for executable journeys.
+
+## Recording release and launch policy (owner round 4)
+
+The recording composer's Stop uses the existing agentVoice down/up native path.
+It is excluded from generic task cancellation; task repaint preserves the voice
+flyer. Escape alone uses cancelSession and the shared two-press gesture.
+First and single-instance manual launches share first_run::opens_at_start(args);
+only explicit --autostart stays hidden. Remembered bounds remain window-state's
+responsibility. Conversation content never depends on profile_ready.

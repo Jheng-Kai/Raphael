@@ -68,7 +68,7 @@ speaks, while the chief frames it, after the first reply, while the wrap-up runs
 is held with HiKari as the primary and requires every room turn to carry that roster.
 
 Keep board/picker/thread/dialog PNGs. Check membership, authors, mention lists,
-composer and overlay clearance. Team journeys assert the header padding and aligned Add action. The default team scene also checks R-UI-01: group panels size to their own members without stretching to a taller sibling. At 1920x1080 their columns span at least 80% of workspace width; there is no minimum panel area. Tall rosters remain reachable by panning, and names and roles keep a readable measure. The team-mentions scene checks line-start, multiline and inline @ positions, requiring the menu's left edge within 24px of the character at all three sizes. Mention items lead with the member's face, the app's connection mark or the team icon in one aligned column, with an app's state quiet on the right; slash items start at the row padding; neither reserves an empty icon/check column. For mutation work extend scenes through create,
+composer and overlay clearance. Team journeys assert the header padding and aligned Add action. The default team scene also checks R-UI-01: group panels size to their own members without stretching to a taller sibling. Chief and groups share a capped column at every width; there is no minimum panel area. Tall rosters remain reachable by panning, and names and roles keep a readable measure. The team-mentions scene checks line-start, multiline and inline @ positions, requiring the menu's left edge within 24px of the character at all three sizes. Mention items lead with the member's face, the app's connection mark or the team icon in one aligned column, with an app's state quiet on the right; slash items start at the row padding; neither reserves an empty icon/check column. For mutation work extend scenes through create,
 send, rename and membership changes; assert UI and mock boundary records. Native
 proof needs a harmless room message, actual recipient responses and persistence
 after reopening the isolated dev instance. Record recipients, states and cleanup.
@@ -150,7 +150,7 @@ npm run look -- team team-panned team-rearranged team-member-menu team-drop-targ
 
 The board pans with a right or middle drag anywhere except an action, or a left drag on empty canvas.
 Wheel movement pans; Ctrl+wheel zooms at the pointer, within 50-150%. Minus/plus zoom about the
-viewport center. Opening starts at 100% and reopening retains the zoom chosen in this page session; opening only pans to reveal the top card. The monitor icon alone fits the chief and all groups in view within the same zoom range.
+viewport center. Opening fits the initial column above the composer; reopening retains the chosen zoom. The monitor icon fits the chief and groups again.
 If a layout is taller than the viewport even at 50%, fit starts at the top instead of clipping the chief. Opening or fitting the board brings the entire chief card into the canvas with a 16px inset; overflowing groups remain reachable by panning. Reset restores the automatic layout.
 The primary occupies the top card above the automatic groups; Raphael exchanges into its original group slot and remains the room chief. The geometry class `team-chief` names the top slot, not a new coordinator identity. Drag a group's header to move that panel independently.
 Device-local positions are keyed by group id in `raphael.team.positions`; missing, invalid or inaccessible
@@ -160,7 +160,7 @@ flow around them. Each drag resolves to the nearest free position with a 16px ga
 an obstacle. Loading, resizing and zooming resolve conflicting saved positions without rewriting the
 saved preference. Drop previews also trigger layout so growing groups do not cover their neighbours.
 
-Within each group, member cards fill the available width in up to three columns, then wrap to another row. A one-member group retains a single card width; groups keep their own content height. Drop previews update this width capacity before resolving collisions, then restore it on leave/end. At 1920 the one/eight-member fixture uses one and three columns; at 720 its large group uses two.
+Within each group, member cards fill the available width in up to three columns, then wrap to another row. A one-member group retains empty card tracks and a compact card; groups keep their own content height. Drop previews update this width capacity before resolving collisions, then restore it on leave/end. At 1920 the one/eight-member fixture uses three tracks in each group; at 720 its large group uses two.
 
 Every ordinary member card, including a primary in the top slot, has the column's shared overflow menu (pin, move, primary, unread,
 read all, edit, duplicate, clear, hide, delete), including the same submenus, confirmations and RPCs.
@@ -187,7 +187,7 @@ The seven canvas scenes above use `fixture.json`'s `teamBoard` roster through th
 
 ## Primary display exchange (owner, 2026-10-27)
 
-`primary-team-board` uses the one/eight-member CLI fixture with 紫苑 as primary: her card takes the top slot, and Raphael takes her place in 學習 with his emblem, localized chief-of-staff role and protected actions. It checks the exchanged IDs, 100% opening zoom, wrapped content-sized panels, no overlap and top-card visibility, without pressing Fit before capture. `team-fit` independently checks fitting; `team-zoom` checks retained zoom after reopening. `primary-team-mentions` checks member ordering while keeping everyone/groups/apps and mention values unchanged. `primary-room-picker`, `primary-room-members` and `primary-room-chief` cover display order with identity 0 still required/crowned and authoring the single wrap-up. See [Members](members.md) for the shared order and other pickers. No core or routing contract changes.
+`primary-team-board` uses the one/eight-member CLI fixture with 紫苑 as primary: her card takes the top slot, and Raphael takes her place in 學習 with his emblem, localized chief-of-staff role and protected actions. It checks the exchanged IDs, initial fitted zoom, wrapped content-sized panels, no overlap and top-card visibility, without pressing Fit before capture. `team-fit` independently checks fitting; `team-zoom` checks retained zoom after reopening. `primary-team-mentions` checks member ordering while keeping everyone/groups/apps and mention values unchanged. `primary-room-picker`, `primary-room-members` and `primary-room-chief` cover display order with identity 0 still required/crowned and authoring the single wrap-up. See [Members](members.md) for the shared order and other pickers. No core or routing contract changes.
 
 ## Crisp team zoom at rest (2026-10-28)
 
@@ -225,3 +225,17 @@ error. Deleting a group returns to the existing board and shows the same toast.
 ```powershell
 npm run look -- esc-room-armed room-stop room-delete team-delete --theme both --width 1120,720,1920x1080
 ```
+
+## Owner round 4 aligned initial board
+
+The chief and groups flow on one shared capped 896px column; the chief is the
+board-level header, while group member cards retain the 384px short-card cap.
+Groups retain empty card tracks instead of stretching a single member. Opening
+fits all initial groups above the composer; later visits retain the chosen zoom.
+Manual pan, zoom and group placement remain available. Room threads/composers
+share the 896px conversation token. Default group heights remain content-sized.
+
+Dragging a group may extend the team-board/team-groups spatial layout wrappers
+inside the clipped, pannable viewport. The general horizontal-overflow audit
+exempts only those two wrappers inside a clipped canvas. Actual member cards,
+text and document overflow remain checked; audit.test.mjs covers both cases.

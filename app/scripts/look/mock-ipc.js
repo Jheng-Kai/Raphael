@@ -31,7 +31,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.problem) data.status.openrouter.state = "no_key";
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
-  if (variant.firstBot) {
+  if (variant.unconfiguredRaphael) {
     data.members = [{ ...data.members[0], profile_ready: false }];
     data.groups = [];
     data.turns = [];
@@ -625,18 +625,6 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "agent_ask_text") {
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));
-        if (variant.firstBot) {
-          const profile = variant.firstBot;
-          if (![profile.name, profile.personality, profile.instructions].every(text => args.text.includes(text))) throw new Error("First Bot answers were lost at the native boundary");
-          adminTurn = { ...copy(fixture.turns[0]), id: 90, member_id: 0, conversation_id: 1, question: args.text,
-            status: "confirm", text: "", detail: null, messages: [] };
-          data.turns.push(adminTurn);
-          adminQuestion = { ...copy(data.adminQuestions.draft), id: "first-bot-profile", turn_id: 90, groups: [],
-            drafts: [{ id: "draft-1", member_id: 0, name: profile.name, personality: profile.personality,
-              instructions: profile.instructions, role: "", blurb: "", group: "", avatar_preset: "" }] };
-          notify("AgentTurn", { turn_id: 90, member_id: 0 });
-          notify("AgentQuestion", copy(adminQuestion));
-        }
         return null;
       }
       if (command === "core_call") return copy(await core(args.method, args.params));
@@ -658,20 +646,6 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "agent_question_answer" && adminQuestion) {
         if (args.id !== adminQuestion.id) throw new Error("Unknown approval question");
-        if (variant.firstBot) {
-          if (args.approved) {
-            Object.assign(data.members[0], args.drafts[0], { id: 0, profile_ready: true });
-            adminTurn.status = "done";
-            adminTurn.text = `已重新命名為 ${data.members[0].name}`;
-            adminTurn.detail = data.members[0].name;
-          } else { adminTurn.status = "denied"; adminTurn.text = "已取消。"; }
-          adminTurn.messages = [{ seq: 1, kind: "reply", text: adminTurn.text, at_ms: data.now }];
-          notify("MembersChanged", { member_id: 0 });
-          notify("AgentQuestionClosed", { id: adminQuestion.id });
-          notify("AgentTurn", { turn_id: adminTurn.id, member_id: 0 });
-          adminQuestion = null;
-          return;
-        }
         if (Array.isArray(args.drafts)) {
           if (args.approved) {
             const groups = args.groups ?? (data.adminGroup ? [data.adminGroup] : []);

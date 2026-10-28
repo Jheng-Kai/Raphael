@@ -2,6 +2,69 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "details-pointer-focus") {
+    const close = document.querySelector('.mb-det [data-det="close"]');
+    require(visible(close), "details opened from the pointer");
+    require(!document.documentElement.hasAttribute('data-keys'), "pointer modality is retained");
+    require(document.activeElement !== close, "opening from a pointer does not move keyboard focus to Close");
+    require(getComputedStyle(close).outlineStyle === 'none', "pointer opening has no focus outline");
+    return {check:name};
+  }
+  if (name === "home-redesign") {
+    const page=document.querySelector('.page-home'), lead=page.querySelector('.ho-hero'), stats=[...page.querySelectorAll('.ho-stat')];
+    require(!!lead.querySelector('h1') && getComputedStyle(lead).backgroundColor === 'rgba(0, 0, 0, 0)', "the report is the page headline without a card");
+    require(page.querySelectorAll('.ho-card').length === 5 && !!page.querySelector('.ho-inbox .ho-pending') && !!page.querySelector('.ho-inbox .ho-reports'), "one inbox combines pending and reports beside Today");
+    require(stats.length === 3, "three stats share one skeleton");
+    require(parseFloat(getComputedStyle(page).maxWidth)===1080,"Home retains the supplied 1080px page measure");
+    const boxes=stats.map(el=>el.getBoundingClientRect());
+    if(innerWidth>760) require(boxes.every(b=>Math.abs(b.top-boxes[0].top)<1 && Math.abs(b.bottom-boxes[0].bottom)<1), "stats fill one complete aligned row");
+    for(const chart of page.querySelectorAll('.ho-chart')) require(Math.abs(chart.getBoundingClientRect().height-48)<1,"charts keep their shared 48px height");
+    return {check:name,stats:boxes.map(b=>({top:b.top,bottom:b.bottom}))};
+  }
+  if(name === "dictation-layout") {
+    const cards=[...document.querySelectorAll('.page-overview .icard')].map(el=>el.getBoundingClientRect()), keys=document.querySelector('.keys-card').getBoundingClientRect(), activity=document.querySelector('.activity').getBoundingClientRect();
+    require(cards.length===4 && Math.abs(cards[0].top-cards[1].top)<1 && cards[2].top>cards[0].bottom && Math.abs(cards[2].top-cards[3].top)<1,"dictation stats form a 2 by 2 grid");
+    require(Math.abs(activity.right-cards[1].right)<1,"activity and the two stats columns share the same right edge");
+    if(keys.left>cards[1].right) require(Math.abs(keys.top-cards[0].top)<1 && activity.top>=cards[2].bottom && Math.abs(activity.left-cards[0].left)<1,"shortcuts align with stats and activity follows in the left column");
+    else require(keys.top>=cards[2].bottom && activity.top>=keys.bottom,"narrow order is stats, shortcuts, activity");
+    return {check:name,columns:keys.left>cards[1].right?2:1};
+  }
+  if(name === "thread-measure") {
+    const composer=[...document.querySelectorAll('.page-agent:not(.team-page) .composer')].find(el=>visible(el)&&!el.closest('[hidden]')), cap=parseFloat(getComputedStyle(composer).maxWidth);
+    require(cap===896,"thread and composer use the shared 28-space 896px measure");
+    require(composer.getBoundingClientRect().width<=cap+1,"composer respects its measure");
+    if(innerWidth<1440) require(!document.querySelector('.page-agent[data-det="open"]'),"details start collapsed before they crowd the thread");
+    return {check:name,width:composer.getBoundingClientRect().width,cap};
+  }
+  if(name === "no-naming") {
+    require(!document.querySelector('.first-bot'),"no first Bot setup exists for an unconfigured empty thread");
+    require(visible(document.querySelector('.page-agent .composer:not([hidden])')),"the ordinary composer is available immediately");
+    return {check:name};
+  }
+  if(name === "settings-alignment") {
+    const host=document.querySelector('.modal-body'), style=getComputedStyle(host), right=host.getBoundingClientRect().left+parseFloat(style.paddingLeft)+Math.min(640,host.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight));
+    const rows=[...host.querySelectorAll('.cs, .cs-list, .skin-grid, .slist, .cs-toolbar, .cs-head')].filter(el=>visible(el)&&!el.closest('[hidden]'));
+    require(rows.length>0,"settings has measurable content");
+    for(const row of rows) require(Math.abs(row.getBoundingClientRect().right-right)<2,`settings content shares one right edge: ${row.className}`);
+    const close=document.querySelector('.modal-x')?.getBoundingClientRect();
+    for(const action of host.querySelectorAll('.set-head > button, .set-head > .sel')) {
+      const box=action.getBoundingClientRect();
+      require(Math.abs(box.right-right)<2,"settings header actions share the content right edge");
+      require(!close || box.right<=close.left || box.left>=close.right || box.bottom<=close.top || box.top>=close.bottom,"settings header actions clear the modal Close button");
+    }
+    return {check:name,right,rows:rows.length};
+  }
+  if(name === "team-alignment") {
+    const nodes=[...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(el=>el.getBoundingClientRect());
+    require(nodes.length>1 && nodes.every(b=>Math.abs(b.left-nodes[0].left)<1 && Math.abs(b.right-nodes[0].right)<1),"team chief and groups share both column edges");
+    require(Math.max(...nodes.map(b=>b.bottom))<=document.querySelector('.team-bottom').getBoundingClientRect().top,"initial team fit clears the composer");
+    return {check:name,groups:nodes.length};
+  }
+  if(name === "welcome-alignment") {
+    const col=document.querySelector('.ob-col').getBoundingClientRect(), foot=document.querySelector('.ob-foot').getBoundingClientRect();
+    require(foot.top-col.bottom<=32 && foot.top>=col.bottom,"welcome content and Start form one centered block");
+    return {check:name,gap:foot.top-col.bottom};
+  }
   if (name === "cancel-armed" || name === "cancel-cleared") {
     const button = document.querySelector('[data-cancel-armed="true"]');
     if(name === "cancel-cleared") { require(!button,"other input clears the gesture");return {check:name}; }
@@ -57,11 +120,13 @@ export function checkRendered(name) {
     require(space > 0, "the shared spacing scale is available");
     const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-5'));
     require(gap > 0, "the shared grid gap is available");
-    const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
+    const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
-      ['card', '.ho-card, .ho-row, .ho-slot, .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
-      ['reading', '.ho-said, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ra-col, .composer, .ask-card, .bgq-card'],
+      ['card', '.ho-card:not(.page-home .ho-card), .team-member:not(.team-chief .team-member), .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
+      ['reading', '.ho-row, .ho-slot, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
+      ['thread', '.ra-col, .composer'],
+      ['thread', '.team-chief .team-member'],
       ['page', '.page:not(.page-agent), .modal, .ho-hero'],
       ['workspace', '.team-board, .au-page'],
     ];
@@ -91,7 +156,7 @@ export function checkRendered(name) {
         if (!row) rows.push(row = { top: card.top, count: 0 });
         row.count++;
       }
-      require(rows.every(row => row.count === rows[0].count), `Home summary rows fill their columns: ${JSON.stringify(rows)}`);
+      require(cards.length === 5 && rows.at(-1).count === (innerWidth > 760 ? 3 : 1), `Home summary rows fill their columns: ${JSON.stringify(rows)}`);
       home = { heroWidth: lead.width, available, columns: rows[0].count, rows: rows.map(row => row.count) };
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
@@ -278,25 +343,6 @@ export function checkRendered(name) {
     require(visible(input) && input.value.includes("整理未讀信並準備回覆"), "description opens the chief's ordinary composer");
     require(input.value.includes("確認後才建立"), "description requests an editable proposal");
     require(!window.__look.calls.some(call => call.method === 'members.create'), "description does not create a member directly");
-    return { check: name };
-  }
-  if (name === "first-bot-choice" || name === "first-bot-free-text") {
-    const card = document.querySelector('.first-bot:not([hidden])');
-    require(visible(card), "first Bot conversation card is visible");
-    require(card.querySelectorAll('[data-first-choice]').length === 2, "two suggested answers");
-    require(visible(card.querySelector('textarea')), "free text answer is available");
-    require(window.__look.data.members.length === 1 && window.__look.data.members[0].id === 0, "one stable first Bot");
-    require(!window.__look.calls.some(call => call.command === 'agent_ask_text'), "choices have no side effects");
-    if (name === "first-bot-free-text") require(card.querySelector('textarea').value === "星河", "Back preserves free text");
-    return { check: name, text: card.querySelector('textarea').value };
-  }
-  if (name === "first-bot-draft") {
-    const draft = document.querySelector('.draft-panel:not([hidden])');
-    require(visible(draft) && draft.querySelectorAll('.draft-card').length === 1, "first Bot uses the shared draft");
-    require(draft.querySelector('[data-draft-field="name"]').value === "晨星", "selected name reaches the draft");
-    require(window.__look.data.members[0].profile_ready === false, "profile is not saved before confirmation");
-    const sent = window.__look.calls.find(call => call.command === 'agent_ask_text');
-    require(sent && !/member_update|member ID|成員 ID|Bot/.test(sent.text), "setup request uses natural window-language words");
     return { check: name };
   }
   if (name === "bot-renamed-centred") {
@@ -758,7 +804,7 @@ export function checkRendered(name) {
     const home = document.querySelector('.page-home:not([hidden])');
     const emblem = home?.querySelector('.ho-hero > .av');
     require(visible(emblem) && emblem.getBoundingClientRect().width >= 60, "Raphael's emblem is large on Home");
-    require(!home.querySelector('h1'), "Home has no headline or slogan");
+    require(!!home.querySelector('h1.ho-said'), "Raphael reports in the page headline");
     require(!home.querySelector('.ho-hero [data-home-go="agent"], .ho-ask'), "the hero has no ask-Raphael icon: Raphael is asked on his own page");
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const pictures = [...emblem.querySelectorAll('img')].map(image => image.getAttribute('src'));
@@ -862,11 +908,11 @@ export function checkRendered(name) {
       const width = parseFloat(getComputedStyle(group).getPropertyValue('--team-card-width'));
       const gap = parseFloat(getComputedStyle(members).columnGap) || 0;
       const available = Math.max(1, Math.floor((members.clientWidth + gap + 1) / (width + gap)));
-      require(columns === Math.min(3, Math.max(1, cards.length), available), 'team cards wrap into all available columns, at most three');
-      if (cards.length === 1) require(members.clientWidth <= width + 1, 'a one-member group keeps one card width');
+      require(columns === Math.min(3, available), 'team cards wrap into all available columns, at most three');
+      if (cards.length === 1) require(cards[0].offsetWidth <= 384, 'a one-member group retains empty tracks and a compact card');
       if (cards.length) {
         const top = cards[0].offsetTop, firstRow = cards.filter(card => Math.abs(card.offsetTop - top) <= 1);
-        require(firstRow.length === columns, 'the group fills its first row before wrapping');
+        require(firstRow.length === Math.min(columns, cards.length), 'the group fills its first row before wrapping');
       }
       return { id: group.dataset.teamGroup, cards: cards.length, columns, width: members.clientWidth };
     });
@@ -874,10 +920,10 @@ export function checkRendered(name) {
     if (chief) require(chief.textContent === '幕僚長', 'Raphael uses the same chief-of-staff role on the board and in the column');
     return { check: name, panels };
   }
-  if (name === "team-chief-visible") {
+  if (name === "team-chief-visible" || name === "team-chief-reachable") {
     const view = document.querySelector('.team-board-scroll').getBoundingClientRect();
     const chief = document.querySelector('.team-chief .team-member').getBoundingClientRect();
-    require(chief.left >= view.left - 1 && chief.right <= view.right + 1 && chief.top >= view.top - 1 && chief.bottom <= view.bottom + 1, 'the whole chief card is inside the canvas');
+    require(chief.left >= view.left - 1 && (name === "team-chief-reachable" || chief.right <= view.right + 1) && chief.top >= view.top - 1 && chief.bottom <= view.bottom + 1, 'the chief stays visible; user zoom may extend its right edge for panning');
     return { check: name, chief: chief.toJSON(), canvas: view.toJSON() };
   }
   if (name === "team-no-overlap") {
@@ -893,9 +939,9 @@ export function checkRendered(name) {
     const viewport = document.querySelector('.team-board-scroll'), board = document.querySelector('.team-board');
     const view = viewport.getBoundingClientRect();
     const matrix = new DOMMatrix(getComputedStyle(board).transform);
-    if (name === 'team-canvas-open') require(Math.abs(matrix.a - 1) < 0.001, 'opening the board keeps 100 percent zoom instead of fitting');
+    if (name === 'team-canvas-open') require(matrix.a >= 0.5 && matrix.a <= 1.5, 'opening fits the board within the supported zoom range');
     if (name === 'team-canvas-reopened') require(Math.abs(matrix.a - 1.1 * Math.exp(0.08)) < 0.001, 'reopening the board preserves the zoom chosen in this session');
-    if (name === 'team-canvas-panned') require(Math.abs(matrix.e - 60) <= 1 && Math.abs(matrix.f + 40) <= 1 && !document.querySelector('#app-popover'), 'right drag moves the canvas without a menu');
+    if (name === 'team-canvas-panned') require(Math.abs(matrix.e - window.__look.teamPan.x - 60) <= 1 && Math.abs(matrix.f - window.__look.teamPan.y + 40) <= 1 && !document.querySelector('#app-popover'), 'right drag moves the canvas without a menu');
     if (name === 'team-canvas-rearranged') {
       const positions = JSON.parse(localStorage.getItem('raphael.team.positions'));
       require(Number.isFinite(positions['1']?.x) && getComputedStyle(document.querySelector('[data-team-group="1"]')).transform !== 'none', 'the moved group has a saved device-local position');
@@ -921,7 +967,7 @@ export function checkRendered(name) {
     if (innerWidth < 1400 || !groups.length) return { check: name, wide: false };
     const left = Math.min(...groups.map(box => box.left)), right = Math.max(...groups.map(box => box.right));
     const widthShare = (right - left) / workspace.width;
-    require(widthShare >= 0.8, "R-UI-01: team groups must use at least 80% of the workspace width");
+    require(groups.every(box => Math.abs(box.left-left)<1 && Math.abs(box.right-right)<1), "team groups share one aligned column");
     require(groups.every(box => box.left >= workspace.left && box.right <= workspace.right), "R-UI-01: the default board's columns fit its workspace width");
     return { check: name, wide: true, widthShare };
   }
@@ -1174,12 +1220,12 @@ export function checkRendered(name) {
     require(cards.length === 4, "four independent totals are visible");
     const boxes = cards.map(card => card.getBoundingClientRect());
     const desktop = document.querySelector('.dictation-content').clientWidth >= 760;
-    require(desktop ? boxes.every(box => box.top === boxes[0].top) : boxes[2].top > boxes[0].bottom, "totals use one desktop row and two compact rows");
+    require(boxes[0].top === boxes[1].top && boxes[2].top > boxes[0].bottom && boxes[2].top === boxes[3].top, "totals keep two by two rows at every width");
     for (const card of cards) require(getComputedStyle(card).borderTopWidth === '1px' && getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)', "each total has its own card surface");
     const activity = document.querySelector('.page-overview .activity').getBoundingClientRect();
     const shortcuts = document.querySelector('.page-overview .keys-card').getBoundingClientRect();
     require(activity.top >= boxes[3].bottom, "activity follows the totals");
-    require(desktop ? shortcuts.left >= activity.right : shortcuts.top >= activity.bottom, "shortcuts sit alongside activity on desktop and below in compact windows");
+    require(desktop ? shortcuts.left >= activity.right : shortcuts.top >= boxes[2].bottom && activity.top >= shortcuts.bottom, "shortcuts sit alongside activity on desktop and below in compact windows");
     require(document.querySelector('.heat rect.h1, .heat rect.h2, .heat rect.h3, .heat rect.h4').getBoundingClientRect().width >= 17, "activity days retain larger readable cells");
     return { check: name, desktop, cardWidth: boxes[0].width };
   }

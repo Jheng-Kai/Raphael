@@ -35,11 +35,9 @@ const MAIN_WINDOW: &str = "main";
 /// Label of the overlay window. It is created in Rust, never by the config.
 const OVERLAY_WINDOW: &str = "overlay";
 
-/// Remember only whether the window was maximized: it always opens, and un-maximizes, at the default
-/// size from `tauri.conf.json`. Saved state never chooses the frame policy either.
+/// Restore remembered bounds; launch policy and the native frame stay under app control.
 fn main_window_state_flags() -> StateFlags {
-    StateFlags::all()
-        & !(StateFlags::VISIBLE | StateFlags::DECORATIONS | StateFlags::SIZE | StateFlags::POSITION)
+    StateFlags::all() & !(StateFlags::VISIBLE | StateFlags::DECORATIONS)
 }
 
 /// Writes a panic to the log. The release build aborts on a panic (`panic = "abort"`) and has no
@@ -113,9 +111,11 @@ pub fn run() {
 
     let builder = startup_plugins(
         tauri::Builder::default(),
-        |app, _args| {
-            log::info!("another launch handed over: showing the main window");
-            show_main_window(app);
+        |app, args| {
+            if first_run::opens_at_start(&args) {
+                log::info!("manual launch handed over: showing the main window");
+                show_main_window(app);
+            }
         },
         data_layout::migrate_at_start,
     );
@@ -549,11 +549,10 @@ mod window_state_tests {
     }
 
     #[test]
-    fn the_window_always_opens_at_its_default_size() {
-        // The owner wants opening and un-maximizing to land on the default size (2026-10-24),
-        // so a size or place from an earlier session is never restored.
+    fn remembered_bounds_win_after_the_first_launch() {
+        // The designed defaults apply before window-state has saved bounds.
         let flags = main_window_state_flags();
-        assert!(!flags.intersects(StateFlags::SIZE | StateFlags::POSITION));
+        assert!(flags.contains(StateFlags::SIZE | StateFlags::POSITION));
     }
 
     #[test]

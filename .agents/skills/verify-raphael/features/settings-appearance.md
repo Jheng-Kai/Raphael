@@ -110,3 +110,15 @@ Regression coverage: `i18n/i18n.test.ts` and `pages/locale-switch.test.ts`.
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Owner round 4 pane alignment
+
+Every settings pane caps its direct content, header, toolbar, lists and grids at
+the same 640px measure. Settings list padding is removed at the pane boundary,
+so theme controls and the skin grid share their edges. The rendered alignment
+check also covers connected-app headers, search tools and rows.
+
+Header actions themselves share that right edge, without the old 32px inset.
+Compact panes with header actions reserve vertical clearance below the corner
+Close button. settings-alignment compares control bounds as well as containers
+and rejects overlap with Close.

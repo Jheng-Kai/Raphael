@@ -56,7 +56,12 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const description = describe(element);
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
-    if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    // Moving a group extends these spatial wrappers; the clipped viewport owns panning.
+    // Actual cards/text and document overflow remain subject to the ordinary checks.
+    const canvas = element.matches('.team-board, .team-groups') && element.closest('.team-board-scroll');
+    const canvasStyle = canvas && win.getComputedStyle(canvas);
+    const spatialWrapper = canvasStyle && /hidden|clip/.test(canvasStyle.overflowX || canvasStyle.overflow);
+    if (!spatialWrapper && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });

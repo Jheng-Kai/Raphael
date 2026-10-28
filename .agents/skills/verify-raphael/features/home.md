@@ -5,8 +5,7 @@
 Startup and first-run landing, Raphael's status report, pending questions across
 conversations, today's routines, latest unread member reports, today's calendar,
 monthly spend/budget, fourteen-day spend series, subscription allowances and 
-dictation charts. The capped card grid includes today's timeline, pending work,
-reports and three chart cards. Today contains routine occurrences and connected
+dictation charts. The twelve-column grid includes Today, a combined inbox and three stat cards. Today contains routine occurrences and connected
 calendar events for the current date. Pending contains questions/approvals; unread
 reports belong in Reports.
 
@@ -29,12 +28,15 @@ Scenes run with reduced motion, so every home scene above shows the emblem's sti
 `home-motion` allows motion (`motion: true`, with `freeze-motion` for the CSS animations) and asserts that the page asks for the loop and that the loop is an animation (a WebP of 144 frames over 6 s):
 the loop plays by itself, which a canvas cannot sample, so its screenshot shows whichever frame the clock was at. A refresh of Home does not replace the emblem's node, so his turn is not started over (pages/home.test.ts).
 
-Raphael's report is the first, widest element, spanning the grid within the shared
-page measure; its prose is capped at the 640px reading measure. The six summary
-cards below add columns from a 288px minimum; each card is at most 384px. The page
-measure permits one, two or three columns, so all summary rows fill their columns
-and Dictation never sits alone in a multi-column last row. This preserves the
-hero's lead without restoring full-width summary bars (owner, 2026-10-28).
+Owner round 4 follows the supplied Home mockup: a borderless 72px emblem/date/headline
+lead, Today (7/12) and one inbox (5/12) with pending/report sections, followed by
+three equal stat cards. The page is capped at 1080px including 56/40/48 padding;
+section/card gaps are 32/24px. At <=1100px the agenda and inbox stack, and at
+<=760px all cards stack. Stats share 28px figures and bottom-aligned 48px charts;
+CLI meters show used percentages, with unknown windows displayed as an em dash.
+Agenda rows use 56px time tracks, a 3px accent tick and 44px row height.
+The report remains the widest first element and the three stats fill their row.
+Cached data redraws on every locale change without replacing the emblem node.
 
 Inspect every contact sheet and the full-size home/report images. The home-720
 scene scrolls to the lower usage and dictation area at all three widths. The home-report

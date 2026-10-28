@@ -26,7 +26,7 @@ export function createTeamPage(app: AppContext): Page {
   el.querySelector(".team-composer")!.append(composer.el);
   const hideTooltip = messageTooltip(el);
   const board = el.querySelector<HTMLElement>(".team-board")!, input = composer.input;
-  let list: MembersList = { members: [], groups: [] }, model = "", zoom = 1, visible = false, loads = 0, sending = false;
+  let list: MembersList = { members: [], groups: [] }, model = "", zoom = 1, fitted = false, visible = false, loads = 0, sending = false;
   let catalog: ModelCatalog | null = null, clis: CliBrain[] = [];
   let requestId: string | undefined, retryText = "", activeRoom: number | undefined, stopPending = false;
   async function stopTask():Promise<void>{stopPending=true;if(activeRoom){await api.roomStop(activeRoom);await syncTask();}}
@@ -79,7 +79,8 @@ export function createTeamPage(app: AppContext): Page {
       const [people, settings, models, brains] = await Promise.all([api.membersList(getLocale()), api.settingsGet(), api.modelsCatalog().catch(() => null), api.brainsCli().catch(() => ({ clis: [] }))]);
       if (!visible || mine !== loads) return;
       list = people; model = settings.settings.agent_model ?? ""; catalog = models; clis = brains.clis; draw();
-      if (opening) canvas.revealChief();
+      if (opening && !fitted) { canvas.fit(); fitted = true; }
+      else if (opening) canvas.revealChief();
     }
     catch (error) { if (visible && mine === loads) toaster.info(describeError(error)); }
   }
@@ -183,5 +184,5 @@ export function createTeamPage(app: AppContext): Page {
   });
   app.onEvent(event => { if(event.type==="RoomsChanged")void syncTask().catch(error=>toaster.info(describeError(error))); if (visible && ["MembersChanged", "ConnectionsChanged", "CoreReady", "ProvidersChanged", "BrainsChanged"].includes(event.type)) void load(); });
   onLocaleChange(() => { if (visible) { draw(); void load(); } });
-  return { id: "team", el, show() { visible = true; draw(); canvas.revealChief(); void load(true); }, hide() { visible = false; loads++; canvas.cancel(); endDrag(); hideTooltip(); } };
+  return { id: "team", el, show() { visible = true; draw(); void load(true); }, hide() { visible = false; loads++; canvas.cancel(); endDrag(); hideTooltip(); } };
 }

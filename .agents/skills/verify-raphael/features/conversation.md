@@ -421,3 +421,17 @@ existing named success toast remains. A removed member returns to Raphael; stale
 roster notifications cannot leave a deleted member selected. Clear-history retains
 the still-existing quick conversation. Deleted reply-source references remain
 unavailable citations, not active deleted-object pages.
+
+## Owner round 4 measures, focus and immediate use
+
+Raphael/member/room threads and composers share --layout-thread-max = 28 * 32 =
+896px; prose retains the 640px reading measure. Details start collapsed below
+1440px (rail + member column + details + a comfortable central track); the explicit
+toggle always works. Opening from a pointer preserves pointer focus; keyboard
+opening focuses Close with the existing keyboard-only focus treatment.
+No empty conversation uses profile_ready to hide its ordinary composer.
+Recording Stop releases/transcribes/sends, while only Escape uses two-press cancel.
+
+The ordinary details scene retains its deliberate keyboard-focus screenshot after
+asserting pointer behavior. Raphael-details also asserts pointer opening and captures
+the ring-free resulting state; its close control shares the same details shell.

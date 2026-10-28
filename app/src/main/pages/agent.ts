@@ -83,7 +83,6 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { AgentDraft, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, SettingsPane, TurnAttachment, WireAttachment } from "../types";
-import { createFirstBot } from "../first-bot";
 import { copyText, esc, ico, iconButton, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { composerHTML, drawTaskSlot, openComposerMenu } from "../chat-composer";
@@ -273,12 +272,6 @@ export function createAgent(app: AppContext): Page {
   const hi = el.querySelector<HTMLElement>(".ra-hi")!;
   const slot = el.querySelector<HTMLElement>(".ra-slot")!;
   const dock = el.querySelector<HTMLElement>(".ra-dock")!;
-  const firstBot = createFirstBot(description => {
-    putDraft(description);
-    void send();
-  });
-  empty.insertBefore(firstBot.el, slot);
-  firstBot.el.addEventListener("change", () => drawDock());
   /** The open thread's questions from the background, above the composer wherever it is. */
   let waiting: BackgroundQuestions | null = null;
   const backgroundSlot = document.createElement("div");
@@ -712,8 +705,7 @@ export function createAgent(app: AppContext): Page {
   function drawDock(): void {
     selectQuestion();
     drawComposerTask();
-    firstBot.sync(inRaphael() && members.member().profile_ready === false && isEmpty() && !question && !pending);
-    hero.hidden = hi.hidden = !firstBot.el.hidden;
+    hero.hidden = hi.hidden = false;
     const home = empty.hidden ? dock : slot;
     if (backgroundSlot.parentElement !== home) home.prepend(backgroundSlot);
     if (composer.parentElement !== home) home.append(composer);
@@ -737,7 +729,7 @@ export function createAgent(app: AppContext): Page {
     if (asking && permissionFor(turns, question!.id)) {
       askCard.hidden = true;
       delete askCard.dataset.id;
-      composer.hidden = !firstBot.el.hidden;
+      composer.hidden = false;
       if (voice.isUp) voice.drop();
       return;
     }
@@ -745,7 +737,7 @@ export function createAgent(app: AppContext): Page {
     askCard.classList.toggle("is-member", !inRaphael());
     if (asking && !askCard.hidden && askCard.dataset.id === question!.id) return;
     askCard.hidden = !asking;
-    composer.hidden = !firstBot.el.hidden;
+    composer.hidden = false;
     if (!asking) {
       delete askCard.dataset.id;
       return;
@@ -1227,7 +1219,8 @@ export function createAgent(app: AppContext): Page {
    */
   let taskStopPressed=false;
   function voiceDown(): void {
-    if(composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
+    // Recording clicks release/send audio through the native key path; only Escape cancels it.
+    if(!(listening && voiceMember === memberId()) && composer.dataset.taskState && composer.dataset.taskState!=="idle"){taskStopPressed=true;void stopComposerTask().catch(error=>toaster.info(describeError(error)));return;}
     if (question) return;
     pressedMember = memberId();
     const starting = !listening;
@@ -1750,7 +1743,7 @@ export function createAgent(app: AppContext): Page {
     voiceButton.innerHTML = avatarHTML({ size: 32, avatar: null });
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     voiceButton.disabled = !task && conversationId() === undefined;
-    if (task) { voice.drop(); voiceButton.classList.remove("vm-away"); }
+    if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
   }
 
@@ -2194,7 +2187,6 @@ export function createAgent(app: AppContext): Page {
 
   onLocaleChange(() => {
     closeLightbox?.();
-    firstBot.redraw();
     void slashMenu.refresh();
     drawWords();
     draftPanel.redraw();

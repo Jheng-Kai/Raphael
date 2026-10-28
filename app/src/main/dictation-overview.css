@@ -1,21 +1,20 @@
-/* Four independent totals above activity, with shortcuts alongside on desktop. */
+/* Two by two totals and activity share the left track; shortcuts start beside them. */
 .page-overview .home { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); align-items: start; }
 .page-overview .home-main, .page-overview .home-main > .usage { display: contents; }
-.page-overview .home-side { min-width: 0; }
+.page-overview .home-side { min-width: 0; grid-row: 2; }
+.page-overview .activity { grid-row: 3; }
 @container dictation (min-width: 760px) {
-  .page-overview .home { grid-template-columns: minmax(0, 1fr) 288px; }
-  .page-overview .home-side { grid-column: 2; grid-row: 2; }
+  .page-overview .home { grid-template-columns: minmax(0, calc(2 * var(--layout-card-max) + var(--sp-3))) 288px; }
+  .page-overview .home-side { grid-column: 2; grid-row: 1 / span 2; }
+  .page-overview .activity { grid-column: 1; grid-row: 2; }
 }
 @container dictation (min-width: 1200px) {
-  .page-overview .home { grid-template-columns: minmax(0, 1fr) 288px; gap: var(--sp-6); }
+  .page-overview .home { grid-template-columns: minmax(0, calc(2 * var(--layout-card-max) + var(--sp-3))) 288px; gap: var(--sp-6); }
 }
 .page-overview .card { min-width: 0; padding: var(--sp-5); border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--panel); }
 .page-overview .card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: var(--h-ctl-sm); margin-bottom: var(--sp-3); }
 .page-overview .card-head h2, .page-overview .activity-head h2 { margin: 0; font: 600 var(--fs-md)/1.4 var(--ui); color: var(--text); }
-.page-overview .icards { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
-@container dictation (min-width: 760px) {
-  .page-overview .icards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
+.page-overview .icards { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .page-overview .icard { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); min-height: 120px; padding: var(--sp-4); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); }
 .page-overview .icard .v { font: 600 var(--fs-h1)/1.3 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .page-overview .icard .v small { margin-inline: var(--sp-1); font: 500 var(--fs-xs)/1.5 var(--ui); letter-spacing: 0; color: var(--text-2); white-space: nowrap; }

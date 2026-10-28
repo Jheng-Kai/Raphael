@@ -34,8 +34,8 @@ import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf }
 import type { AppContext, AvatarPreset, MainEvent, Member, MemberGroup, MemberPatch, MembersList, WireAttachment } from "./types";
 import { type Choice, btn, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
 
-/** Below this window width the details panel lies over the chat instead of taking a column of its own. */
-export const DETAILS_COLUMN_MIN_PX = 1120;
+/** Below this width details start collapsed: rail, member list and details leave too little thread space. */
+export const DETAILS_COLUMN_MIN_PX = 1440;
 /** Events that come together (a task's step and its turn) read the list once. */
 const REFRESH_DELAY_MS = 300;
 
@@ -285,7 +285,7 @@ export function createMembers(host: MembersHost): MembersShell {
       details.draw();
       details.refreshRoutines();
       details.refreshMemory(current);
-      details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
+      if (document.documentElement.hasAttribute("data-keys")) details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });
     } else {
       details.el.classList.remove("is-in");
       stopLeaving = leave(details.el, 160, () => {

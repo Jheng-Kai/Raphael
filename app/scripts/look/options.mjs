@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+const mainWindow = JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8")).app.windows.find(window => window.label === "main");
+
 export function parseOptions(args, scenes) {
-  const options = { names: [], themes: ["light"], widths: [1120], heights: {}, skin: "default", locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
+  const options = { names: [], themes: ["light"], widths: [mainWindow.width], heights: { [mainWindow.width]: mainWindow.height }, skin: "default", locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (["--all", "--list", "--help"].includes(flag)) { options[flag.slice(2)] = true; continue; }

@@ -235,12 +235,21 @@ export async function perform(page, step) {
       } finally { await element.dispose(); }
       break;
     }
+    case "team-zoom": {
+      for (let i = 0; i < 12; i++) {
+        const current = await page.$eval('.team-zoom > span', node => parseInt(node.textContent));
+        if (current === step.percent) break;
+        await click(`[data-team="zoom-${current < step.percent ? "in" : "out"}"]`);
+      }
+      break;
+    }
     case "pointer-drag": {
       const element = await visible(step.selector);
       try {
         const box = await element.boundingBox();
         const x = box.x + box.width * (step.x ?? 0.5), y = box.y + box.height * (step.y ?? 0.5);
         const before = await element.evaluate(node => node.getBoundingClientRect().toJSON());
+        await page.evaluate(() => { const m = new DOMMatrix(getComputedStyle(document.querySelector('.team-board')).transform); window.__look.teamPan = {x:m.e,y:m.f}; });
         await page.mouse.move(x, y); await page.mouse.down({ button: step.button ?? "left" });
         try { await page.mouse.move(x + step.dx, y + step.dy, { steps: 12 }); }
         finally { await page.mouse.up({ button: step.button ?? "left" }); }

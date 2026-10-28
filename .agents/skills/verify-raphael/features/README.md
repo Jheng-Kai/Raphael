@@ -5,7 +5,7 @@ request both themes; local UI handoffs select affected scenes at 720/1120/1920x1
 Reserve the full scene matrix for integration/release acceptance, CI, explicit
 requests or genuinely app-wide changes. Shared components select representative
 affected consumers rather than unrelated features. Scene definitions in `app/scripts/look/scenes/`
-are the executable source: 333 scenes, 1998 combinations across both themes and
+are the executable source: 330 scenes, 1980 combinations across both themes and
 1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
 parser; a plain width retains the default 900px height. Native journeys cover
 behavior the fixture cannot prove.
@@ -21,7 +21,7 @@ behavior the fixture cannot prove.
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, skins, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, the sidebar's connected-apps entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
 | [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
-| [Onboarding](onboarding.md) | First launch, first Bot choices and confirmed profile |
+| [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
 Keep entry points, prerequisites and observable end states current. If data is
 missing, add it at the existing fixture boundary or report the failure; do not drop
@@ -47,8 +47,9 @@ Owner item 9 (2026-10-28), R-UI-45: no page becomes a stripe at any window size.
 | Token | Measure | Consumers |
 | --- | --- | --- |
 | `--layout-word-min/max` | 7 / 10 spaces = 224 / 320px | Dictionary auto-fill grid; a sparse grid keeps empty tracks |
-| `--layout-card-min/max` | 9 / 12 spaces = 288 / 384px | Home auto-fill grid; short cards, totals, store cards and calendar events |
-| `--layout-reading-max` | 20 spaces = 640px | History, shared lists, settings control rows, connected apps, conversation thread/composer and routines |
+| `--layout-card-min/max` | 9 / 12 spaces = 288 / 384px | Short cards, totals, store cards and calendar events |
+| `--layout-reading-max` | 20 spaces = 640px | History, shared lists, aligned settings panes, connected apps and routines |
+| `--layout-thread-max` | 28 spaces = 896px | Raphael/member/room threads and composers; aligned team header/group column |
 | `--layout-page-max` | 3 card maxima + 2 grid gaps + 2 page gutters = 1264px | Ordinary pages and the calendar's own container |
 | `--layout-workspace-max` | 55 spaces = 1760px | Spatial team workspace; its member cards still obey the short-card cap |
 
@@ -59,18 +60,19 @@ characters at the existing 15px body type size. Three capped cards plus
 existing gutters set the ordinary page measure. The spatial workspace keeps its
 previous 1760px capacity, expressed on the same scale.
 
-Available width may shrink any measure. Home's report is the first, widest element,
-spanning its card grid within the page measure; its prose keeps the reading cap.
-The six capped summary cards fill one, two or three columns, with no orphan last
-card in a multi-column row or full-width summary stacking breakpoint.
-The 1200px page interior fits three cards and two gaps; four minimum-width cards
-would need 1224px. Every possible column count therefore divides the six summaries.
-Charts/heatmaps contain multiple data columns rather than short
-list items; their enclosing page is capped, while totals and shortcut cards retain
-the card cap. Team groups are containers of several independently capped member
-cards, not individual short items. The canvas and calendar have their own containers;
-Settings retains its existing 1000px modal, with shared lists/apps capped inside it.
-The shared `.cs-list` cap also covers capability rows reused outside the `.cs` host.
+Available width may shrink any measure. Home follows its supplied mockup: a 1080px
+page (including 40px gutters), a borderless full-grid emblem/date/headline lead,
+Today/inbox tracks of 7/12 and 5/12, then three equal stat tracks. At <=1100px the
+first pair stacks; at <=760px all five cards stack. This composition deliberately
+uses page-level agenda/inbox containers instead of the generic short-card cap.
+Short inbox/agenda rows remain reading-capped; the Home check rejects an orphan
+stat row, a narrow/reordered lead and unequal chart baselines.
+The 896px thread measure is 28 existing 32px spaces, adding room for conversation
+content while prose keeps 20 spaces. Team's chief is a board-level header on that
+same 896px track; groups contain independently capped member cards and empty tracks
+remain when a group has one member. Settings retains its 1000px modal and uses one
+640px content measure for every pane header, toolbar, row and grid. Charts and
+heatmaps contain several data columns inside their capped containers.
 
 The look runner invokes `checkRendered("content-width")` on **every main-entry scene**
 after its interactions (overlay entry is separate). It measures rendered border boxes,
@@ -79,8 +81,8 @@ limits and all measurements in `report.json`. Explicit team pan/zoom is normaliz
 to layout size so 50/100/150% does not masquerade as responsive stretching. Hidden
 pages are excluded. A 1px tolerance covers fractional layout rounding. Limits are
 calculated from the spacing tokens, not copied from a potentially stretched element.
-Home also requires its hero to precede and span the grid, and every summary row to
-fill the same number of columns. The lead is a page-level element, not a short card.
+Home also requires its hero to precede and span the grid, and the final stat row to
+fill all three columns (or one on narrow windows). The lead is a page-level element, not a short card.
 The existing long-choice two-column audit applies to skins, not dictionary entries.
 
 Representative main-page acceptance (all consumers of the shared layout):
@@ -121,5 +123,32 @@ The conversation, dictation and team/rooms entries map the shared two-step Escap
 contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
 (R-UI-48), and recording-only global Escape (R-AG-16). Desktop scenes record their
 actual native-sized viewport as well as the requested matrix size; see dictation.
-CI's judge request admission limit is 1998 for 333 scenes x six combinations, below
+CI's judge request admission limit is 1998 for the 1980 combinations (330 scenes x six), below
 the unchanged 2000-request hard cap; the monetary limit is unchanged.
+
+## Owner round 4 acceptance
+
+The designed default is 1280x800, retaining the 720x480 minimum and remembered
+window-state bounds. The unspecified look viewport reads the main-window size
+from tauri.conf.json. Plain --width entries still use a 900px height. Candidate
+comparison covers every main page at 1180x780, 1280x800, 1280x840 and 1366x860 in
+both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 desktop;
+840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
+
+```powershell
+npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming team dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store skins usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+```
+
+Home, dictation, thread-measure, settings-alignment, team-alignment and welcome
+checks extend the ordinary scenes. Details checks pointer focus before separately
+exercising keyboard focus. The retired first-bot scenarios are replaced by no-naming.
+This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
+
+Evidence for this owner round: main pages run-mIz8sb (280/280), corrected settings/
+dictation edges run-vpwfKi (40/40), interactions run-W6Lm8f (78/90, twelve spatial
+wrapper audit false positives) superseded by run-TPWObt (12/12). All contacts and
+relevant full-size images were inspected, including mockup and component pairs.
+Final verify-uDt0V9 passes 2412 tests. Final native run-ux8wg1 passes locale-sweep,
+voice-conversation and delete-conversation with the worktree debug build; WAV/local
+ASR and fake brain only. Judge was not run under the owner's explicit instruction.
+The complete command/evidence record is OWNER-ROUND-4-NOTES.md in the worktree.

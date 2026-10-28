@@ -9,7 +9,7 @@ const panes = ["general", "appearance", "connections", "models", "dictation", "a
 export default [
   ...[50, 100, 150].map(zoom => scene(`team-crisp-${zoom}`, `Team text at rest at ${zoom}%`, [
     page("team"), wait('[data-team-card="3"]'),
-    ...Array.from({ length: Math.abs(zoom - 100) / 10 }, () => click(`[data-team="zoom-${zoom < 100 ? "out" : "in"}"]`)),
+    { action: "team-zoom", percent: zoom },
     check(`team-crisp-${zoom}`),
   ], { teamBoardRoster: true })),
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [

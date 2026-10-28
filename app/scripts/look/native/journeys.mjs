@@ -50,8 +50,11 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
     if (text.trim() === "Raphael") return;
     // Device names come from the OS, but surrounding application labels must still translate.
     let checked = text;
-    if (element.closest('[data-k="mic"]')) {
-      for (const name of deviceNames) if (name) checked = checked.split(name).join("");
+    if (element.closest('[data-k="mic"], [data-ob="mic"], .mic-ctl')) {
+      // Closed controls abbreviate an OS name to its kind before the device parentheses.
+      // Match only known device text; the application's Automatic/Disconnected wording stays checked.
+      const names = [...new Set(deviceNames.flatMap(name => [name, name.split(" (")[0]]))].filter(Boolean).sort((a,b)=>b.length-a.length);
+      for (const name of names) checked = checked.split(name).join("");
     }
     const wrong = locale === "en" ? /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) :
       locale === "zh-TW" ? /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) : false;

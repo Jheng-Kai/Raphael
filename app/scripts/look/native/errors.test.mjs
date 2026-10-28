@@ -23,6 +23,14 @@ describe("native document error capture", () => {
     } finally { geometry.mockRestore(); visibility.mockRestore(); }
   });
 
+  it("exempts full and shortened OS names in every microphone control, retaining app copy checks", () => {
+    document.body.innerHTML = '<button data-k="mic">Automatic (立體聲混音)</button><button data-ob="mic" title="Automatic (立體聲混音 (Realtek Audio))">Automatic (立體聲混音)</button><span class="mic-ctl"><button>Automatic (立體聲混音)</button></span><button id="stale" data-ob="mic">自動 (立體聲混音)</button><span id="outside">立體聲混音</span>';
+    const geometry=vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockReturnValue({width:10,height:10});
+    const visibility=vi.spyOn(HTMLElement.prototype,"checkVisibility").mockReturnValue(true);
+    try {expect(wrongLanguage("en",[],["立體聲混音 (Realtek Audio)"]).map(issue=>issue.id)).toEqual(["stale","outside"]);}
+    finally {geometry.mockRestore();visibility.mockRestore();}
+  });
+
   it("observes real toast mutations and rejection events without counting success toasts", async () => {
     const page = Object.assign(new EventEmitter(), {
       exposeFunction: async (name, callback) => { window[name] = callback; },

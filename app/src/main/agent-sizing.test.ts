@@ -48,11 +48,11 @@ describe("the page's responsive sizes", () => {
     for (const [name, [small, big]] of Object.entries(wanted)) expect(ends(name), name).toEqual([small, big]);
   });
 
-  test("the conversation's reading measure stops growing with the window", () => {
-    expect(block![2]).toContain("--pa-colw: var(--layout-reading-max);");
-    expect(read("styles.css")).toContain("--layout-reading-max: calc(20 * var(--sp-6));");
+  test("the conversation's thread measure stops growing with the window", () => {
+    expect(block![2]).toContain("--pa-colw: var(--layout-thread-max);");
+    expect(read("styles.css")).toContain("--layout-thread-max: calc(28 * var(--sp-6));");
     expect(agent).toMatch(/\.ra-col \{ max-width: var\(--pa-colw\)/);
-    expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-reading-max\)/);
+    expect(agent).toMatch(/\.composer \{[^}]*max-width: var\(--layout-thread-max\)/);
   });
 
   test("every token a rule reads is set, and every token set is read", () => {

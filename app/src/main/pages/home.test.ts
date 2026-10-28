@@ -88,13 +88,13 @@ describe("the hero", () => {
         // Settings retains the page DOM. Translation must not wait for another RPC or show().
         expect(page.el.querySelector(".ho-today h2")!.textContent).toContain(t("overview.today"));
         for (const [card, key] of [["pending", "overview.pending"], ["reports", "overview.reports"], ["spend", "overview.month"], ["allowance", "overview.allowance"], ["dictation", "nav.dictation"]] as const) {
-          expect(page.el.querySelector(`.ho-${card} h2`)!.textContent).toBe(t(key));
+          expect(page.el.querySelector(`.ho-${card} :is(h2, h3)`)!.textContent).toContain(t(key));
         }
         expect(page.el.querySelector(".ho-said")!.textContent).toBe(buildReport(sample.report, sample.generated_at_ms).text);
         expect(page.el.querySelector(".ho-today .ho-empty")!.textContent).toBe(t("overview.noSchedule"));
         expect(page.el.querySelector(".ho-pending .ho-empty")!.textContent).toBe(t("overview.nothing"));
         expect(page.el.querySelector(".ho-reports .ho-empty")!.textContent).toBe(t("overview.noReports"));
-        expect(page.el.querySelector(".ho-meter-row small")!.textContent).toBe(t("overview.fiveHour"));
+        expect(page.el.querySelector(".ho-meter-row small")!.textContent).toBe("Codex");
         expect(page.el.querySelector(".ho-meter-row")!.getAttribute("title")).toContain(t("overview.reset", { p0: "" }));
         expect(page.el.querySelector(".ho-spend svg[role=img]")!.getAttribute("aria-label")).toBe(t("overview.chart", { p0: "0.00, 5.00" }));
         expect(page.el.querySelector(".ho-dictation .ho-bars")!.getAttribute("aria-label")).toBe(t("overview.wordsChart", { p0: "" }));
@@ -110,7 +110,7 @@ describe("the hero", () => {
   test("is his emblem and his report, and nothing beside the report asks him", async () => {
     const { homeHTML } = await load();
     const well = hero(homeHTML(overview(5)));
-    expect([...well.children].map((child) => child.className)).toEqual(["av", "ho-said"]);
+    expect([...well.children].map((child) => child.className)).toEqual(["av", "ho-lead-copy"]);
     expect(well.querySelector("button")).toBeNull();
     // a report that needs fixing keeps its one icon, and it is not an ask
     const broken = hero(homeHTML(overview(5, "no_key")));

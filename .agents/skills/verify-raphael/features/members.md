@@ -135,7 +135,7 @@ owner changes it; a brain that keeps the old one, never says it or mixes the two
 the work to 信件助理 itself) and S07.meeting (held with a primary that is not Raphael). Live brains and the native shell (the persisted choice
 after a relaunch, the allowlisted `members.set_primary`) need their own acceptance.
 
-## Editable proposals and first Bot setup (P05/P05a)
+## Editable member proposals (P05)
 
 API and sequential authenticated CLI/MCP calls queue the same turn-end proposal.
 Pending tool responses have no created IDs and explicitly prohibit claiming success.
@@ -145,14 +145,13 @@ updates to one target merge their fields into one card. Nested member work canno
 administer the roster; deletion retains its separate held T3 confirmation.
 
 The conversation creation picker offers Create from description for a nonempty
-search. It opens the chief's ordinary composer with a proposal request. First Bot
-setup collects name, personality and first work through choices or free text, then
-uses the same draft. Confirmation saves the profile on identity 0 and renders one
-centered rename line. A personalized name never grants another member admin tools.
+search. It opens the chief's ordinary composer with a proposal request. Raphael's
+conversation no longer has a naming/personality/work setup step. Editable
+proposals and explicit profile updates remain protected by normal confirmation.
 Group proposal names are editable and follow the existing native confirmation route.
 
 ```powershell
-npm run look -- admin-description-draft admin-cli-draft-edit admin-draft-cancel admin-draft-apply-result first-bot-choice first-bot-free-text admin-draft-onboarding bot-renamed-centred --theme both --width 1120,720,1920x1080
+npm run look -- admin-description-draft admin-cli-draft-edit admin-draft-cancel admin-draft-apply-result no-naming --theme both --width 1120,720,1920x1080
 ```
 
 Core evidence: tests/members/test_admin_proposals.py covers both fake API and
@@ -199,3 +198,13 @@ whose conversation is open, not an unrelated roster row.
 ```powershell
 npm run look -- member-delete --theme both --width 1120,720,1920x1080
 ```
+
+## Recording Stop regression (2026-10-29)
+
+While recording, clicking the composer voice/Stop releases recording through the
+native question-key path, transcribes and sends. It never calls cancelSession.
+Only Escape uses the two-press cancellation gesture. The recording flyer/is-voice
+state survives task redraws; pending/member/background tasks still use Stop.
+Pointer regression tests cover Raphael and another member in agent-members.test.ts.
+Native voice-conversation proves local WAV transcription and persisted turns with
+a fake brain; it does not prove a physical microphone or live-provider behavior.

@@ -36,7 +36,7 @@ the short-clean-sentence shortcut, without a history row or target paste.
 
 ## How to get to it (user POV)
 
-Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards sit above the activity heatmap, with shortcuts on the right on desktop. At 720 the totals form two rows and shortcuts follow the activity card. An active heatmap day opens its
+Choose Dictation, then use the compact horizontal Overview/History/Dictionary tabs beside the title. Left/Right/Home/End change the selected tab while retaining keyboard focus; selection and legacy history/dictionary deep links remain available. Four separate stat cards form a 2 by 2 left grid above activity; shortcuts start in the right column. At 720 the order is totals, shortcuts, activity. An active heatmap day opens its
 history. Settings > Dictation configures recognition/shortcuts. Actual dictation
 begins with the configured global key while a target field has focus.
 
@@ -147,3 +147,17 @@ its existing gold identity; the desktop uses a neutral surface for reading over
 arbitrary desktop content. Its actions fill a separate row within the narrow 540px
 window rather than a wide dialog's right-aligned pill actions. These size/layout
 differences are intentional; the shared button height, palette and type remain.
+
+## Owner round 4 layout and microphone locale
+
+Overview totals always use a 2 by 2 grid. At the 760px dictation-container threshold,
+shortcuts occupy the right column starting beside the first total; activity follows
+the totals in the left column. Narrow order is totals, shortcuts, activity. History
+and dictionary CSS are unchanged. Locale sweep excludes known OS microphone device
+names (full or the displayed prefix before a parenthesized driver) only within
+[data-k=mic], [data-ob=mic] or .mic-ctl controls. Automatic and surrounding app copy
+remain checked. Names outside those controls remain checked.
+
+The left desktop track is capped at two short-card measures plus the existing
+12px grid gap, so Activity and the two stats columns share their right edge
+without stretching a stat beyond 384px. dictation-layout asserts those edges.
