@@ -959,7 +959,7 @@ export interface Routine {
   next_run: number | null;
 }
 
-export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "cancel";
+export type HotkeyKind = "dictation_down" | "dictation_up" | "agent_down" | "agent_up" | "paste_last" | "cancel" | "cancel_key" | "cancel_reset";
 export type DictationPhase = "listening" | "processing" | "pasted" | "cancelled" | "failed";
 
 /** What `mic_access` answers: whether the privacy settings of Windows let desktop apps use the microphone. */

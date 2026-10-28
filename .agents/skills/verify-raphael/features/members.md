@@ -187,3 +187,15 @@ scenes are in [Connections and MCP](connections-mcp.md) and [Conversation](conve
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Deleting the selected member or resource (owner round 3)
+
+R-UI-47: deleting the open member selects Raphael before repainting. Missing roster
+entries also fall back to Raphael with the existing success notice. Deleting a
+saved resource or routine refreshes its containing list and uses the shared toast;
+unsaved draft removals stay local. The selected member scene deletes the member
+whose conversation is open, not an unrelated roster row.
+
+```powershell
+npm run look -- member-delete --theme both --width 1120,720,1920x1080
+```

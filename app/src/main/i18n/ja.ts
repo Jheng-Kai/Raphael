@@ -3,6 +3,10 @@ import { homeJa } from "./home-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "common.deleted": "削除しました",
+  "common.showAll": "すべて表示",
+  "common.showLess": "折りたたむ",
+  "common.cancelAgain": "もう一度押すとキャンセル",
   "handoff.forwarded": "{p0} に引き継ぎました", "handoff.asked": "{p0} に確認しました",
   "exchange.from": "{p0} からのメッセージ", "exchange.count": "{p1} との {p0} 件のやりとり",
   "handoff.queued": "待機中", "handoff.running": "実行中", "handoff.waiting": "結果待ち",

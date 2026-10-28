@@ -83,7 +83,7 @@ export function openMemberProfile(host: MemberProfileHost, member?: Member, init
       else if (act === "memory-add") void addMemory();
       else if (act === "memory-menu") openActions(target, [{ id: "delete", label: t("members.profile.delete"), icon: "trash" }], () => void resourceAction(async () => {
         const index = Number(target.dataset.index);
-        if (member) await api.core("memory.delete", { member_id: member.id, space: "own", name: memories[index]!.name });
+        if (member) { await api.core("memory.delete", { member_id: member.id, space: "own", name: memories[index]!.name }); toaster.info(t("common.deleted")); }
         else draft.memories.splice(index, 1);
         await loadMemory();
       }));
@@ -93,7 +93,7 @@ export function openMemberProfile(host: MemberProfileHost, member?: Member, init
         if (routine) openActions(target, [{ id: "edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "delete", label: t("members.profile.delete"), icon: "trash" }], choice => {
           if (choice === "edit") routineForm(routine);
           else void resourceAction(async () => {
-            if (member) await api.routinesDelete(routine.id);
+            if (member) { await api.routinesDelete(routine.id); toaster.info(t("common.deleted")); }
             else draft.routines.splice(draft.routines.findIndex(r => r.id === routine.id), 1);
             await loadRoutines();
           });

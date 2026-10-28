@@ -56,16 +56,29 @@ test("shared composer plus menu preserves attachment picking and the global acti
  document.querySelector<HTMLButtonElement>('#app-popover [data-action="0"]')!.click();
  expect(pick).toHaveBeenCalledOnce();
 });
-test("voice records until manual Escape and learns an edited transcript only on send",async()=>{
+test("voice records until manual Stop and learns an edited transcript only on send",async()=>{
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});
  vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;ondataavailable?:(e:any)=>void;constructor(){recorder=this;}start(){this.state="recording";}stop(){stop();this.state="inactive";this.onstop?.();}});
  vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0,0.5])});close=async()=>{};});
  api.roomTranscribe.mockResolvedValue({text:"Please use Open Mouse Bot"});const {view,send}=mount();view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();
- expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(view.input.value).toBe("Please use Open Mouse Bot");expect(send).not.toHaveBeenCalled();expect(api.roomTranscribe).toHaveBeenCalledOnce();
+ expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(view.input.value).toBe("Please use Open Mouse Bot");expect(send).not.toHaveBeenCalled();expect(api.roomTranscribe).toHaveBeenCalledOnce();
  api.core.mockResolvedValue({learned:["OpenMausBot"]});view.input.value="Please use OpenMausBot";view.input.dispatchEvent(new Event("input"));view.el.requestSubmit();await flush();expect(api.core).toHaveBeenCalledWith("dictionary.learn",{corrections:[{word:"OpenMausBot",misheard:"Open Mouse Bot"}]});vi.unstubAllGlobals();
 });
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{
  const bytes=wavBytes([new Float32Array([-2,0,2])],16000),view=new DataView(bytes.buffer);expect(new TextDecoder().decode(bytes.slice(0,4))).toBe("RIFF");expect(view.getUint32(24,true)).toBe(16000);expect(view.getUint16(22,true)).toBe(1);expect(view.getInt16(44,true)).toBe(-32768);expect(view.getInt16(48,true)).toBe(32767);
+});
+
+test("two Escapes discard a room recording without sending audio for transcription",async()=>{
+ const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});
+ vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;constructor(){recorder=this;}start(){this.state="recording";}stop(){stop();this.state="inactive";this.onstop?.();}});
+ try {
+  const {view,send}=mount();view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();
+  view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+  expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();expect(view.el.querySelector("[data-cancel-armed]")).not.toBeNull();
+  view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));await flush();
+  expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(api.roomTranscribe).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();expect(view.input.value).toBe("");
+ } finally {vi.unstubAllGlobals();}
 });
 
 test("task Stop owns the slot through ack, running and waiting, independently of send completion",async()=>{

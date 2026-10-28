@@ -12,6 +12,23 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("an open room deleted elsewhere closes before its missing history can produce an error", async () => {
+ const view=await pane();
+ api.roomsList.mockResolvedValue({rooms:[]});
+ api.roomMessages.mockRejectedValue(new Error("room not found"));
+ event({type:"RoomsChanged"}); await flush();
+ expect(view.active).toBe(false);
+ expect(document.body.textContent).not.toContain("room not found");
+ expect(document.body.textContent).toContain("This group was deleted");
+});
+test("deletion racing the history request rechecks existence before reporting an error",async()=>{
+ const view=await pane();
+ api.roomsList.mockResolvedValueOnce({rooms:[room]}).mockResolvedValue({rooms:[]});
+ api.roomMessages.mockRejectedValue(new Error("room not found"));
+ event({type:"RoomsChanged"});await flush();
+ expect(view.active).toBe(false);expect(document.body.textContent).not.toContain("room not found");
+});
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
 test("a primary changes room picker order but Raphael remains the required chief", async () => {
  const { members } = await api.membersList();

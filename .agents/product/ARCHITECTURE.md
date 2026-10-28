@@ -43,3 +43,21 @@ mechanical boundaries below.
 | A-12 | Core execution remains independently gated for members, rooms, background work and connectors. | human | Native journeys and service/gate tests |
 | A-13 | Every mechanical architecture and product rule links an existing executable test. | vitest | app/src/architecture.test.ts::mechanical rules link existing named tests |
 | A-14 | Native notifications retain their main/overlay channel contracts and behavior. | human | Native notification journeys |
+
+## Shared cancellation boundary (owner round 3)
+
+Main, room and desktop surfaces register visible task targets with the same
+`src/shared/cancel-gesture.ts` document controller. It owns arming, localization,
+timeout, interruption and target identity; pages supply only the existing Stop
+operation. Native raw Escape/reset notifications are unconfirmed inputs, never
+Stop commands. Windows forwards transient ordered Escape/reset markers only while
+the controller's recording ownership enables the cancel hook. Release clears that
+ownership before processing; typed tasks do not acquire it. Configured hotkeys
+and a confirmed Stop command retain their existing native routing.
+
+The overlay's caller-checked `overlay_cancel` is an explicit shell-only command
+like its existing answer command, not a core RPC client. A question temporarily
+resizes the existing overlay upward and inherits the main window's resolved theme;
+it does not create another store or window. Deletion invalidation travels through
+existing UI events before reloading selected objects. See the conversation,
+dictation, team/rooms and automations feature entries for executable journeys.

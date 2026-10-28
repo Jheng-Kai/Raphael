@@ -138,6 +138,7 @@ pub fn run() {
             overlay::overlay_subscribe,
             overlay::overlay_log,
             overlay::overlay_confirm,
+            overlay::overlay_cancel,
             commands::core_call,
             commands::save_usage_csv,
             commands::schedule_keep_awake_get,

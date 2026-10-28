@@ -4,7 +4,7 @@
 //! [`HotkeyService`] runs a `handy-keys` hotkey manager on its own thread and turns what it
 //! reports into [`HotkeyEvent`]s on a channel. The manager works in blocking mode, so a
 //! registered key never reaches the foreground app: Right Alt does not open a menu bar, and Esc
-//! does not close a dialog while a dictation is active.
+//! does not close a dialog only while recording audio.
 //!
 //! `HotkeyManager` is `Send` but not `Sync`, so one thread owns it. The service talks to that
 //! thread over a channel, and the thread looks for key events every 10 ms between commands. This
@@ -57,9 +57,12 @@ pub enum HotkeyEvent {
     /// An agent key came up. Releasing the modifier of the combination first reports it too, and
     /// it may come before or after the `DictationUp` of the same modifier.
     AgentUp,
-    /// Esc (or the dictation modifiers plus Esc). Only reported while cancel is enabled, see
-    /// [`HotkeyService::set_cancel_enabled`].
+    /// A confirmed UI Stop, independent of global Escape registration.
     Cancel,
+    /// A physical Escape requests the shared UI gesture, never direct cancellation.
+    CancelKey,
+    /// Other physical input disarms that gesture without retaining any input text.
+    CancelReset,
     /// A paste-last key went down. Right Alt+V reports `DictationDown` first, because Right Alt
     /// went down first.
     PasteLast,
@@ -190,7 +193,7 @@ fn handy_name(name: &str) -> String {
     .to_string()
 }
 
-/// Lets the dictation controller turn the cancel keys on while a dictation is active and off
+/// Lets the dictation controller turn the cancel keys on only while recording audio and off
 /// again afterwards. [`HotkeyService`] implements it; tests use a fake.
 pub trait CancelSwitch: Send + Sync + 'static {
     fn set(&self, on: bool);
@@ -268,7 +271,7 @@ impl HotkeyService {
         await_reply(&answer, timeout)
     }
 
-    /// Turns the cancel keys on or off. They are registered only while a dictation is active,
+    /// Turns the cancel keys on or off. They are registered only while recording audio,
     /// because while registered they are swallowed: Esc does nothing else. Esc works with the
     /// dictation modifiers still held (hold mode, or toggle mode before the key is let go) and
     /// without them (toggle mode after it).
@@ -427,10 +430,14 @@ trait Backend {
     fn register(&self, hotkey: Hotkey) -> Result<Self::Id, String>;
     fn unregister(&self, id: Self::Id) -> Result<(), String>;
     fn try_recv(&self) -> Option<(Self::Id, HotkeyState)>;
+    fn uses_cancel_input_stream(&self) -> bool { false }
+    fn take_cancel_input(&self) -> Option<bool> { None }
 }
 
 impl Backend for HotkeyManager {
     type Id = HotkeyId;
+    fn uses_cancel_input_stream(&self) -> bool { true }
+    fn take_cancel_input(&self) -> Option<bool> { handy_keys::take_cancel_input() }
 
     fn register(&self, hotkey: Hotkey) -> Result<HotkeyId, String> {
         HotkeyManager::register(self, hotkey).map_err(|err| err.to_string())
@@ -505,7 +512,7 @@ impl<B: Backend> Worker<B> {
             Command::WindowHotkey(kind) => {
                 let event = HotkeyEvent::from(kind);
                 // Recording a binding must receive every key, including Escape.
-                if self.paused || (event == HotkeyEvent::Cancel && !self.cancel_enabled) {
+                if self.paused {
                     return;
                 }
                 self.forward(event, EventSource::Window);
@@ -536,13 +543,19 @@ impl<B: Backend> Worker<B> {
 
     /// Forwards the key events the backend has queued.
     fn pump(&mut self) {
+        while let Some(reset) = self.backend.take_cancel_input() {
+            if self.cancel_enabled && !self.paused {
+                let _ = self.events.send(if reset { HotkeyEvent::CancelReset } else { HotkeyEvent::CancelKey });
+            }
+        }
         while let Some((id, state)) = self.backend.try_recv() {
             // An event can outlive its key: one queued just before the key was unregistered.
             let Some(role) = self.registered.iter().find(|r| r.id == id).map(|r| r.role) else {
                 continue;
             };
             if let Some(event) = translate(role, state) {
-                self.forward(event, EventSource::Hook);
+                if event == HotkeyEvent::Cancel && self.backend.uses_cancel_input_stream() { continue; }
+                self.forward(if event == HotkeyEvent::Cancel { HotkeyEvent::CancelKey } else { event }, EventSource::Hook);
             }
         }
     }
@@ -1016,6 +1029,8 @@ mod tests {
 
     #[derive(Default)]
     struct FakeState {
+        cancel_inputs: VecDeque<bool>,
+        input_stream: bool,
         next_id: u32,
         registered: Vec<(u32, Hotkey)>,
         queue: VecDeque<(u32, HotkeyState)>,
@@ -1025,6 +1040,8 @@ mod tests {
 
     impl Backend for FakeBackend {
         type Id = u32;
+        fn uses_cancel_input_stream(&self) -> bool { self.0.lock().unwrap().input_stream }
+        fn take_cancel_input(&self) -> Option<bool> { self.0.lock().unwrap().cancel_inputs.pop_front() }
 
         fn register(&self, hotkey: Hotkey) -> Result<u32, String> {
             let mut state = self.0.lock().unwrap();
@@ -1130,12 +1147,12 @@ mod tests {
     }
 
     #[test]
-    fn window_keys_respect_the_recorder_pause_and_the_cancel_switch() {
+    fn confirmed_window_stop_respects_the_recorder_pause_without_global_registration() {
         let fake = FakeBackend::default();
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
         w.sync().unwrap();
         w.handle(Command::WindowHotkey(WindowHotkey::Cancel));
-        assert!(drain(&mut rx).is_empty(), "idle Esc belongs to the UI");
+        assert_eq!(drain(&mut rx), vec![HotkeyEvent::Cancel], "an explicit Stop is independent of the global registration");
         w.handle(Command::SetCancel(true));
         pause(&mut w, true);
         for kind in [
@@ -1163,6 +1180,22 @@ mod tests {
     }
 
     #[test]
+    fn physical_escape_and_other_input_keep_their_order_without_direct_cancellation() {
+        let fake = FakeBackend::default();
+        let (mut worker, mut rx) = worker(&fake, &Bindings::default());
+        worker.handle(Command::SetCancel(true));
+        { let mut state = fake.0.lock().unwrap(); state.input_stream=true; state.cancel_inputs.extend([false,true,false]); }
+        worker.pump();
+        assert_eq!(drain(&mut rx), vec![HotkeyEvent::CancelKey,HotkeyEvent::CancelReset,HotkeyEvent::CancelKey]);
+        worker.handle(Command::SetCancel(false));
+        fake.0.lock().unwrap().cancel_inputs.push_back(false);
+        worker.pump();
+        assert!(drain(&mut rx).is_empty(),"background Escape belongs to the other app");
+        worker.handle(Command::WindowHotkey(WindowHotkey::Cancel));
+        assert_eq!(drain(&mut rx),vec![HotkeyEvent::Cancel],"an explicit Stop remains available");
+    }
+
+    #[test]
     fn window_keys_are_deduplicated_against_queued_hook_events() {
         let fake = FakeBackend::default();
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
@@ -1172,7 +1205,6 @@ mod tests {
             ("AltRight", WindowHotkey::DictationDown),
             ("AltRight+V", WindowHotkey::PasteLast),
             ("AltRight+Space", WindowHotkey::AgentDown),
-            ("Escape", WindowHotkey::Cancel),
         ] {
             fake.press(binding);
             w.handle(Command::WindowHotkey(kind));
@@ -1441,8 +1473,8 @@ mod tests {
                 HotkeyEvent::DictationDown,
                 HotkeyEvent::PasteLast,
                 HotkeyEvent::DictationUp,
-                HotkeyEvent::Cancel,
-                HotkeyEvent::Cancel,
+                HotkeyEvent::CancelKey,
+                HotkeyEvent::CancelKey,
             ]
         );
     }
@@ -1659,7 +1691,7 @@ mod tests {
         switch.set(true);
         settle(&svc, &b);
         fake.press("Escape");
-        assert_eq!(next_event(&mut rx), HotkeyEvent::Cancel);
+        assert_eq!(next_event(&mut rx), HotkeyEvent::CancelKey);
 
         switch.set(false);
         settle(&svc, &b);

@@ -5,7 +5,7 @@ request both themes; local UI handoffs select affected scenes at 720/1120/1920x1
 Reserve the full scene matrix for integration/release acceptance, CI, explicit
 requests or genuinely app-wide changes. Shared components select representative
 affected consumers rather than unrelated features. Scene definitions in `app/scripts/look/scenes/`
-are the executable source: 322 scenes, 1932 combinations across both themes and
+are the executable source: 333 scenes, 1998 combinations across both themes and
 1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
 parser; a plain width retains the default 900px height. Native journeys cover
 behavior the fixture cannot prove.
@@ -96,3 +96,12 @@ between history/conversation/settings. Unit checks reject the measured 97fa61bd
 word (694px) and Home card (618px) geometries; baseline browser evidence must also
 show those failures before CSS changes. Native zoom, live data and design judge
 remain separate acceptance boundaries.
+
+## Owner round 3 shared interactions
+
+The conversation, dictation and team/rooms entries map the shared two-step Escape
+contract (R-UI-46), deleted-object fallback (R-UI-47), opaque desktop confirmation
+(R-UI-48), and recording-only global Escape (R-AG-16). Desktop scenes record their
+actual native-sized viewport as well as the requested matrix size; see dictation.
+CI's judge request admission limit is 1998 for 333 scenes x six combinations, below
+the unchanged 2000-request hard cap; the monetary limit is unchanged.

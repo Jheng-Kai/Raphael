@@ -5,7 +5,7 @@ import { coreCheck } from "./guardian.mjs";
 import { scenes } from "./look/scenes/index.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const read = path => readFileSync(resolve(root, path), "utf8");
+const read = path => readFileSync(resolve(root, existsSync(resolve(root, `.fold/${path}`)) ? `.fold/${path}` : path), "utf8");
 
 it("CI enforces the same offline layers and real three-size UI for every PR", () => {
   const ci = read(".github/workflows/ci.yml");

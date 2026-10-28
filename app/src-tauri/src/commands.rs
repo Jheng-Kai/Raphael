@@ -120,6 +120,8 @@ pub enum HotkeyKind {
     AgentUp,
     PasteLast,
     Cancel,
+    CancelKey,
+    CancelReset,
 }
 
 impl From<HotkeyEvent> for HotkeyKind {
@@ -131,6 +133,8 @@ impl From<HotkeyEvent> for HotkeyKind {
             HotkeyEvent::AgentUp => Self::AgentUp,
             HotkeyEvent::PasteLast => Self::PasteLast,
             HotkeyEvent::Cancel => Self::Cancel,
+            HotkeyEvent::CancelKey => Self::CancelKey,
+            HotkeyEvent::CancelReset => Self::CancelReset,
         }
     }
 }
@@ -1417,6 +1421,10 @@ impl Effects for AppEffects {
         };
         if let Err(err) = window.set_theme(theme) {
             log::warn!("could not set the theme of the main window: {err}");
+        }
+        if let Some(overlay) = self.app.get_webview_window(crate::OVERLAY_WINDOW)
+            && let Err(err) = overlay.set_theme(theme) {
+            log::warn!("could not set the theme of the overlay window: {err}");
         }
     }
 

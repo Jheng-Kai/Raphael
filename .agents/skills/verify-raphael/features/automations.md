@@ -41,3 +41,20 @@ mini-calendar dates with insufficient contrast, including while hovered.
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Leaving a deleted routine (owner round 3)
+
+R-UI-47: confirming deletion in an open routine editor closes it, refreshes the
+calendar/list and shows the existing localized named success toast. The journey
+continues through confirmation to the returned page, instead of ending at the
+confirmation dialog. Saved routines removed in member details also refresh the
+list and show the shared success notice.
+
+The shared toast stays at the bottom-right on the calendar. The existing
+`.page-agent` presentation raises that same notice above the composer, so the
+conversation/member/room and calendar comparisons intentionally differ in vertical
+offset, while retaining the same text pattern, surface, type and spacing.
+
+```powershell
+npm run look -- automation-delete --theme both --width 1120,720,1920x1080
+```

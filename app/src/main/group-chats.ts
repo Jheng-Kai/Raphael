@@ -175,7 +175,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
       if (name) { await api.roomsUpdate(room.id, { name }); changed(); saved(); }
     }).catch(error => toaster.info(describeError(error)));
     else void confirmDelete(room.name).then(async yes => {
-      if (yes) { await api.roomsDelete(room.id); changed(); deleted(); }
+      if (yes) { await api.roomsDelete(room.id); window.dispatchEvent(new CustomEvent("room-deleted",{detail:room.id})); deleted(); changed(); toaster.info(t("members.deleted",{p0:room.name})); }
     }).catch(error => toaster.info(describeError(error)));
   });
 }
@@ -240,9 +240,25 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
     scroll.scrollTop=follow?scroll.scrollHeight:top;composer.draw();onRender();
   }
-  async function refresh():Promise<void>{const mine=++generation,id=room?.id;if(!opened||!id)return;try{const [people,rooms,history]=await Promise.all([api.membersList(getLocale()),api.roomsList(),api.roomMessages(id)]);if(mine!==generation||!opened)return;const found=rooms.rooms.find(r=>r.id===id);if(!found){close();toaster.info(t("rooms.deleted"));return;}list=people;room=found;exchange=history.exchange;handoffs=history.handoffs??[];const first=history.messages[0]?.id??Infinity;messages=[...messages.filter(m=>m.id<first),...history.messages];draw();}catch(error){if(opened&&mine===generation)toaster.info(describeError(error));}}
+  async function refresh():Promise<void>{
+    const mine=++generation,id=room?.id;if(!opened||!id)return;
+    const missing=():void=>{close();toaster.info(t("rooms.deleted"));};
+    try{
+      const [people,rooms]=await Promise.all([api.membersList(getLocale()),api.roomsList()]);
+      if(mine!==generation||!opened)return;
+      const found=rooms.rooms.find(r=>r.id===id);if(!found){missing();return;}
+      const history=await api.roomMessages(id);if(mine!==generation||!opened)return;
+      list=people;room=found;exchange=history.exchange;handoffs=history.handoffs??[];
+      const first=history.messages[0]?.id??Infinity;messages=[...messages.filter(m=>m.id<first),...history.messages];draw();
+    }catch(error){
+      if(!opened||mine!==generation)return;
+      // Deletion may race the history request after the first roster read.
+      try{const rooms=await api.roomsList();if(!opened||mine!==generation)return;if(!rooms.rooms.some(r=>r.id===id)){missing();return;}}catch{/* Keep the original failure when existence cannot be checked. */}
+      if(opened&&mine===generation)toaster.info(describeError(error));
+    }
+  }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(room)drafts.set(room.id,composer.input.value);opened=false;generation++;el.hidden=true;clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;if(room)drafts.set(room.id,composer.input.value);opened=false;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","older"].includes(act??""))e.stopPropagation();
     if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
@@ -254,6 +270,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="attachment-open")void api.openAttachment(target.dataset.id??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}
   });
+  window.addEventListener("room-deleted",event=>{if(opened&&room?.id===(event as CustomEvent<number>).detail)close();});
   const listener=():void=>{if(opened&&el.isConnected)void refresh();};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   return {el,close,async open(id:number){if(room)drafts.set(room.id,composer.input.value);opened=true;generation++;room={id} as Room;messages=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";composer.setDraft(drafts.get(id)??"");el.hidden=false;await refresh();if(opened&&room?.id===id){canOlder=messages.length===100;draw();scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}},get active(){return opened;}};
 }

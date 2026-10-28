@@ -140,7 +140,8 @@ export async function run(options) {
           const { uncoveredOverflows } = await import('/src/main/context-menu.ts');
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
-        Object.assign(result, await page.evaluate(auditDocument, undefined, { width, height: options.heights[width] ?? 900 }, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
+        result.viewport=page.viewport();
+        Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
         if (scene.entry !== "overlay.html") {
           try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "content-width")); }
           catch (value) { error("layout", value.message); }

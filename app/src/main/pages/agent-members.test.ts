@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   agentQuestionOpen: vi.fn(),
   agentQuestionAnswer: vi.fn(),
   agentVoice: vi.fn(),
+  cancelSession: vi.fn(),
   workerCancel: vi.fn(),
   workerRerun: vi.fn(),
   membersList: vi.fn(),
@@ -81,6 +82,7 @@ function mount(mode: "hold" | "toggle" = "hold") {
   } as unknown as AppContext;
   const agent = createAgent(app);
   document.body.append(agent.el);
+  agent.el.hidden=false;
   agent.show();
   return agent;
 }
@@ -111,6 +113,21 @@ test("clearing conversations requires confirmation and scopes the request to tha
   $('[data-dlg="clear"]').click(); await flush();
   expect(api.core).toHaveBeenCalledWith("agent.history.clear", {member_id: 3});
   expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
+});
+
+test("deleting the open default conversation follows the new server default instead of quick history", async () => {
+  let conversations = [
+    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0},
+    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1},
+    {id:2,member_id:0,title:"New default",kind:"standard",is_default:0},
+  ];
+  api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
+  const agent=mount();await flush();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:1}));
+  conversations=conversations.filter(c=>c.id!==1).map(c=>({...c,is_default:c.id===2?1:0}));
+  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:1}}));await flush();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:2}));
+  expect($(".conversation-caption").textContent).toBe("New default");agent.hide();
 });
 
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
@@ -208,6 +225,7 @@ beforeEach(() => {
   api.agentAskText.mockResolvedValue(undefined);
   api.agentRetract.mockResolvedValue(undefined);
   api.agentVoice.mockResolvedValue(undefined);
+  api.cancelSession.mockResolvedValue(undefined);
   api.agentHistoryList.mockImplementation(async (q: { member_id?: number; limit?: number }) => ({ turns: THREADS[q.member_id ?? 0].slice(0, q.limit) }));
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -263,6 +281,10 @@ test("Escape cancels only from an empty composer and restores a running turn", a
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
   expect(api.agentRetract).not.toHaveBeenCalled();
   input.value = "";
+  input.dispatchEvent(new Event("input", {bubbles:true}));
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
+  expect(api.agentRetract).not.toHaveBeenCalled();
+  expect($(".cmp-voice").dataset.cancelArmed).toBe("true");
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await flush();
   expect(api.agentRetract).toHaveBeenCalledWith("running", 0, 8);
   expect(input.value).toBe("問題 8");
@@ -602,42 +624,20 @@ describe("a member's thread", () => {
     agent.hide();
   });
 
-  test.each(["hold", "toggle"] as const)("a member shares the listening emblem in %s mode, while the global key belongs to Raphael", async mode => {
-    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
-    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
-    api.agentHistoryList.mockImplementation(async (q: { member_id?: number }) => ({ turns: q.member_id === 3 ? [] : THREADS[q.member_id ?? 0] }));
-    const agent = mount(mode); await flush(); await pick(3);
-    const button = $(".cmp-voice");
-    button.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
-    send({ type: "Dictation", phase: "listening", agent: true, member_id: 3 });
-    expect(document.querySelector(".ra-flyer .av")).not.toBeNull();
-    expect(button.classList.contains("vm-away")).toBe(true);
-    send({ type: "VoiceLevel", value: 0.6 });
-    expect($(".ra-flyer").style.getPropertyValue("--lvl")).toBe("0.60");
-    await pick(4);
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    await pick(3);
-    expect(document.querySelector(".ra-flyer")).not.toBeNull();
-    agent.hide(); agent.show(); await flush();
-    expect(document.querySelector(".ra-flyer")).not.toBeNull();
-    document.body.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
-    if (mode === "toggle") { $(".ra-flyer").click(); await flush(); }
-    expect(api.agentVoice.mock.calls).toEqual(mode === "toggle" ? [["down", 3], ["up", 3], ["down", 3], ["up", 3]] : [["down", 3], ["up", 3]]);
-    send({ type: "Dictation", phase: "processing", agent: true, member_id: 3 });
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
-    send({ type: "Dictation", phase: "failed", agent: true });
-    expect($(".ra-empty").hidden).toBe(false);
-    // A global press from a member's thread never animates that member's voice button.
-    send({ type: "Dictation", phase: "listening", agent: true });
-    expect(document.querySelector(".ra-flyer")).toBeNull();
-    await pick(0);
-    expect(document.querySelector(".ra-flyer .av")).not.toBeNull();
-    send({ type: "Dictation", phase: "processing", agent: true });
-    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
-    await pick(3);
-    expect(document.querySelector('[data-key="hearing"]')).toBeNull();
-    agent.hide();
+  test.each(["hold", "toggle"] as const)("a member has an accessible Stop during %s recording", async mode => {
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount(mode);await flush();await pick(3);
+    const button=$(".cmp-voice");
+    send({type:"Dictation",phase:"listening",agent:true,member_id:3});
+    expect(button.classList.contains("vm-away")).toBe(false);
+    expect(button.getAttribute("aria-label")).toBe("停止");
+    send({type:"Hotkey",kind:"cancel_key"});
+    expect(button.dataset.cancelArmed).toBe("true");
+    expect(api.cancelSession).not.toHaveBeenCalled();
+    send({type:"Hotkey",kind:"cancel_key"});await flush();
+    expect(api.cancelSession).toHaveBeenCalledOnce();
+    send({type:"Dictation",phase:"cancelled",agent:true,member_id:3});
+    expect(button.dataset.cancelArmed).toBeUndefined();agent.hide();
   });
 
   test("processing first seen after reopening does not settle against an older voice turn", async () => {

@@ -330,6 +330,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   async function deleteRoutine(id: number): Promise<void> {
     try {
       await api.routinesDelete(id);
+      toaster.info(t("common.deleted"));
     } catch (err) {
       toaster.info(describeError(err));
     }

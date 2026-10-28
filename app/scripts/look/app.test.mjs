@@ -69,7 +69,7 @@ describe("real app entry with the shared look fixture", () => {
     document.querySelector('#app-popover [data-pick="delete"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
     await vi.waitFor(() => expect(document.querySelector('#app-popover')).toBeNull());
     expect(document.activeElement).toBe(menu);
-    expect(state.calls).toContainEqual({ command: "window_hotkey", kind: "cancel" });
+    expect(state.calls).not.toContainEqual({ command: "window_hotkey", kind: "cancel" });
     expect(state.errors).toEqual([]);
     menu.click();
     const remove = document.querySelector('#app-popover [data-pick="delete"]');

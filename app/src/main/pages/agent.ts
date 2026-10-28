@@ -31,6 +31,7 @@
 // the closed line of what a colleague asked it (exchange-line.ts).
 
 import { conversationTitle, conversationChange, type ConversationInfo } from "../conversation-list";
+import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { confirmDelete } from "../member-dialogs";
 import { createAttachmentMedia } from "../attachment-media";
@@ -348,6 +349,7 @@ export function createAgent(app: AppContext): Page {
       if (!result.conversations.some(c => c.id === chosen)) {
         const next = result.conversations.find(c => c.is_default) ?? result.conversations[0];
         if (next) chosenConversations.set(member, next.id);
+        else chosenConversations.delete(member);
       }
       if (member === memberId()) drawConversation();
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
@@ -361,6 +363,15 @@ export function createAgent(app: AppContext): Page {
     drawConversation();
   }
 
+  window.addEventListener("conversation-deleted", event => {
+    const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
+    const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
+    conversationCache.set(member,remaining);
+    if(chosenConversations.get(member)!==id)return;
+    // Reload the authoritative default before history: the cached list predates its promotion.
+    chosenConversations.delete(member);
+    if(visible&&member===memberId())switchThread();
+  });
   conversationButton.addEventListener("click", () => members.setDetails(!members.detailsOpen()));
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
@@ -1191,7 +1202,7 @@ export function createAgent(app: AppContext): Page {
 
   let listenTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether the app said it is listening since the voice button last sent the key. */
-  let listening = false;
+  let listening = false, listeningRun = 0;
   let voiceMember = RAPHAEL_ID;
   let voiceConversation: number | undefined;
   let voiceDestination: "quick" | undefined;
@@ -1457,7 +1468,7 @@ export function createAgent(app: AppContext): Page {
     delete askCard.dataset.id;
     drawBackgroundQuestions();
     render();
-    if (listening && voiceMember === memberId() && !question) voice.up();
+    if (listening && voiceMember === memberId() && !question) drawComposerTask();
     if (visible) {
       const generation = loads + 1;
       void load(false).then(() => {
@@ -1722,6 +1733,7 @@ export function createAgent(app: AppContext): Page {
   /** The displayed slot and its action always refer to the same reply in this conversation. */
   function composerTask() {
     const member = memberId();
+    if(listening&&voiceMember===member)return {key:`listening:${listeningRun}`,state:"running" as const,stop:()=>api.cancelSession()};
     const sent = [...outgoing].reverse().find(belongs);
     if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
     const turn = [...own()].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
@@ -2018,12 +2030,16 @@ export function createAgent(app: AppContext): Page {
     void send();
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !input.value.trim() && !files.length && !listening) {
-      e.preventDefault(); e.stopPropagation(); void cancelMessage(); return;
-    }
     if (!sendsOnEnter(e)) return;
     e.preventDefault();
     void send();
+  });
+  cancelGesture().register(() => {
+    const task = composerTask();
+    return visible && !roomPane.active && task ? {
+      key: task.key, button: voiceButton, hint: t("common.cancelAgain"),
+      cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
+    } : null;
   });
   input.addEventListener("input", fit);
   input.addEventListener("input", () => members.mention(input));
@@ -2114,7 +2130,8 @@ export function createAgent(app: AppContext): Page {
   });
 
   app.onEvent((event) => {
-    if (event.type === "Hotkey" && event.kind === "cancel" && visible && document.activeElement === input && !input.value.trim() && !files.length && !listening) void cancelMessage();
+    if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
+    if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
     if (event.type === "ConversationsChanged") conversationChange(event.member_id);
     if (event.type === "AgentTurn") conversationChange(event.member_id ?? RAPHAEL_ID);
@@ -2144,8 +2161,9 @@ export function createAgent(app: AppContext): Page {
         const member = event.member_id ?? RAPHAEL_ID;
         if ((!listening && !voiceRequested) || voiceMember !== member) rememberVoiceBoundary(member);
         voiceMember = member;
+        if(!listening)listeningRun++;
         listening = true;
-        if (visible && !question && voiceMember === memberId()) voice.up();
+        if (visible && !question && voiceMember === memberId()) drawComposerTask();
       } else {
         if (event.phase === "processing") {
           const member = event.member_id ?? RAPHAEL_ID;
@@ -2155,6 +2173,7 @@ export function createAgent(app: AppContext): Page {
         listening = false;
         voiceRequested = false;
         voice.down();
+        drawComposerTask();
         if (event.phase === "processing") {
           startHearing(voiceMember);
           if (visible) render(true);
@@ -2246,7 +2265,7 @@ export function createAgent(app: AppContext): Page {
         .catch(() => {});
       void load(false).then(() => {
         if (visible && !scroller.hidden && (!wasVisible || draft !== null)) scroller.scrollTop = scroller.scrollHeight;
-        if (visible && listening && voiceMember === memberId() && !question) voice.up();
+        if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
         refocus();
       });
       drawBackgroundQuestions();
@@ -2257,6 +2276,7 @@ export function createAgent(app: AppContext): Page {
       pacing.flush();
       loadedThread = false;
       visible = false;
+      cancelGesture().sync();
       problemNotice.hide();
       closeLightbox?.();
       resetDrop();

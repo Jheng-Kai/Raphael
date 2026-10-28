@@ -681,6 +681,12 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
             let is_extended = (kb_struct.flags.0 & LLKHF_EXTENDED.0) != 0;
 
             let is_key_down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
+            if is_key_down && vk_code != 0x1B && kb_struct.flags.0 & 0x10 == 0 {
+                crate::observation::note_cancel_interruption();
+            }
+            if vk_code == 0x1B && kb_struct.flags.0 & 0x10 == 0 {
+                crate::observation::note_escape(is_key_down);
+            }
 
             // Raphael patch: the raw Alt events, before any filtering, for tracking down a hotkey
             // that does not fire (which window is in front, and the flags Windows set).
@@ -793,6 +799,10 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
     let mut needs_mask = false;
 
     super::observation::mouse(&*(lparam.0 as *const MSLLHOOKSTRUCT));
+    if matches!(wparam.0 as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN)
+        && (*(lparam.0 as *const MSLLHOOKSTRUCT)).flags & 1 == 0 {
+        crate::observation::note_cancel_interruption();
+    }
 
     // Process the mouse event
     HOOK_CONTEXT.with(|ctx_cell| {

@@ -97,7 +97,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       else if (act === "end") openMenu(target, endChoices(), ending, value => { ending = value; draw(); });
       else if (act === "delete" && routine) void confirmDelete(routine.title).then(async yes => {
         if (!yes) return;
-        try { if (o.delete) await o.delete(); else await api.routinesDelete(routine.id); dialog.close(); o.onDeleted?.(); } catch (error) { toaster.info(describeError(error)); }
+        try { if (o.delete) await o.delete(); else await api.routinesDelete(routine.id); dialog.close(); o.onDeleted?.(); toaster.info(t("members.deleted", {p0:routine.title})); } catch (error) { toaster.info(describeError(error)); }
       });
     },
   });

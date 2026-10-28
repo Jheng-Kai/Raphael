@@ -599,6 +599,13 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "overlay_log") return;
+      if (command === "overlay_confirm") return;
+      if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }
+      if (command === "agent_retract") {
+        data.turns=data.turns.filter(turn=>turn.session_id!==args.sessionId&&turn.id!==args.turnId);
+        pendingReplies.get(args.sessionId)?.();pendingReplies.delete(args.sessionId);
+        notify("AgentTurn",{member_id:args.memberId,turn_id:args.turnId??0});return;
+      }
       if (command === "main_events") { state.channel = args.channel; return; }
       if (command === "window_hotkey" && variant.ownerVoice && ["agent_down", "agent_up"].includes(args.kind)) {
         const member = args.memberId ?? 0;

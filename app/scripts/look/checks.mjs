@@ -2,6 +2,55 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "cancel-armed" || name === "cancel-cleared") {
+    const button = document.querySelector('[data-cancel-armed="true"]');
+    if(name === "cancel-cleared") { require(!button,"other input clears the gesture");return {check:name}; }
+    require(visible(button),"the targeted Stop is visibly armed");
+    require(button.dataset.cancelHint === "再按一次取消", "the cancellation hint follows the interface language");
+    require(getComputedStyle(button,"::before").content === '"Esc"',"Esc replaces the Stop glyph");
+    require(button.classList.contains("task-action"),"Stop shares the Send action component");
+    const send=button.closest('form')?.querySelector('.cmp-send');
+    if(send)require(getComputedStyle(send).color===getComputedStyle(button).color,"Stop and Send have exactly the same color");
+    require(!window.__look.calls.some(call=>["agent_retract","overlay_cancel"].includes(call.command)||["rooms.stop","worker.cancel","agent.history.stop"].includes(call.method)||call.command==="window_hotkey"&&call.kind==="cancel"),"first Escape performs no cancellation");
+    return {check:name,hint:button.dataset.cancelHint};
+  }
+  if(name === "cancel-native-result" || name === "cancel-overlay-result") {
+    const command=name==="cancel-overlay-result"?"overlay_cancel":"window_hotkey";
+    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind==="cancel")).length===1,"only the second Escape cancels once");
+    require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
+  }
+  if(name === "deleted-view") {
+    require(visible(document.querySelector('.toast')),"a localized success notice is shown");
+    require(![...document.querySelectorAll('.au-room-pane, .au-routine-dialog')].some(el=>visible(el)&&!el.closest('[hidden]')),"the deleted object's view is closed");
+    require(!document.body.textContent.includes('not found'),"deletion never lands on a missing object");return {check:name};
+  }
+  if(name === "overlay-confirmation-content") {
+    const title=document.querySelector('#ask-title').textContent.trim().replace(/…$/u,'');
+    const details=document.querySelector('#ask-details').textContent.trim();
+    require(!!title&&!details.includes(title),"details never repeat the intent title");
+    const paragraphs=details.split(/\n+/u).map(line=>line.trim()).filter(Boolean);
+    require(new Set(paragraphs).size===paragraphs.length,"each details paragraph is presented once");
+    return {check:name,title,paragraphs:paragraphs.length};
+  }
+  if(name === "overlay-stop-content") {
+    const stop=document.querySelector('#overlay-stop'),label=stop?.querySelector('.overlay-stop-label');
+    require(visible(stop)&&visible(label)&&!!label.textContent.trim(),"desktop Stop has a visible localized label instead of a lone empty square");
+    require(label.textContent===stop.getAttribute('aria-label'),"visible Stop wording matches its accessible name");
+    require(getComputedStyle(label).visibility==='visible',"the Stop label is readable before Escape is armed");
+    return {check:name,label:label.textContent};
+  }
+  if(name.startsWith("overlay-confirmation")) {
+    const card=document.querySelector('#ask'),title=document.querySelector('#ask-title'),details=document.querySelector('#ask-details'),actions=document.querySelector('.ask-actions');
+    require(visible(card)&&!!title.textContent.trim(),"the confirmation has a clear intent title");
+    const c=card.getBoundingClientRect(),a=actions.getBoundingClientRect(),d=details.getBoundingClientRect();
+    require(!getComputedStyle(card).backgroundColor.includes('rgba'),"the card surface is opaque");
+    require(c.left>=0&&c.top>=0&&c.right<=innerWidth&&c.bottom<=innerHeight,"the whole card fits the native overlay window");
+    require(d.bottom<=a.top&&title.getBoundingClientRect().bottom<=a.top,"details and title never run underneath buttons");
+    for(const button of actions.querySelectorAll('button:not([hidden])')){const b=button.getBoundingClientRect();require(b.left>=c.left&&b.right<=c.right&&b.bottom<=c.bottom,"every action stays inside its own card");}
+    if(details.scrollHeight>details.clientHeight+1)require(visible(document.querySelector('#ask-expand')),"clamped details always offer See all");
+    if(name.endsWith('expanded'))require(card.dataset.expanded==='true'&&getComputedStyle(details).overflowY==='auto',"expanded details remain scrollable");
+    return {check:name,nativeViewport:{width:innerWidth,height:innerHeight},card:{width:c.width,height:c.height},details:details.textContent.length};
+  }
   if (name === "content-width") {
     // Keep this measurable on the pre-token stylesheet too: all limits derive from the shared 32px space.
     const space = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-6'));
@@ -284,7 +333,8 @@ export function checkRendered(name) {
     require(last.bottom <= answer.top, "events stand between the owner's words and Raphael's answer");
     return { check: name, lines };
   }
-  if (name === "member-deleted") {
+    if (name === "member-deleted") {
+      require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");
     require(window.__look.calls.some(call => call.method === "members.delete" && call.params?.id === 2), "the core is asked to delete that member");
     require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
     require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
@@ -298,7 +348,9 @@ export function checkRendered(name) {
     require(document.querySelector(".conversation-caption")?.textContent === "新對話", "the open conversation is the new one");
     return { check: name, made };
   }
-  if (name === "conversation-deleted") {
+    if (name === "conversation-deleted") {
+      const next=window.__look.data.conversations.find(item=>item.member_id===0&&item.is_default&&item.kind!=="quick");
+      require(next && window.__look.calls.filter(call => call.method === "agent.history.list").at(-1)?.params?.conversation_id === next.id, "deletion opens the new server default instead of cached quick history");
     const rows = [...document.querySelectorAll(".mb-det [data-conversation-open]")].map(row => row.textContent);
     require(!rows.some(text => text.includes("這週的研究與安排")), "the deleted conversation is gone");
     require(!rows.some(text => text.includes("新對話")), "no empty 新對話 takes its place");
