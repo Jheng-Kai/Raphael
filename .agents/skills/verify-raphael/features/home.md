@@ -65,3 +65,15 @@ member report offscreen, then verify its arrival/read state and exact-turn jump.
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Locale changes behind Settings (2026-10-29)
+
+Home immediately redraws its cached overview on every onLocaleChange, including
+while Settings retains it behind the modal. Card titles, Raphael's report, empty
+states, allowance periods/reset labels, dictation units, chart aria labels and
+View all buttons follow en, ja and zh-TW without waiting for another RPC. The
+happy-dom regression is in pages/home.test.ts; native locale-sweep exercises the
+real Settings selector and keeps its screenshots and exact offending elements.
+The sweep accepts the Raphael brand and actual OS microphone names only within
+the microphone selector. Home, home-empty and home-720 cover both themes at
+1120, 720 and 1920x1080; native locale-sweep supplies the language-switch proof.
