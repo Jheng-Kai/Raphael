@@ -71,6 +71,42 @@ async function mount() {
 }
 
 describe("the hero", () => {
+  test("translates the retained Home behind Settings immediately in every locale", async () => {
+    const sample = overview(5);
+    sample.usage.allowances.brains.push({ id: "codex", name: "Codex CLI", windows: [{ period: "fiveHour", remaining_percent: 75, resets_at: 1_800_000_000 }] });
+    queue.splice(0, queue.length, sample);
+    const { page } = await mount();
+    const { setLocale, t } = await import("../i18n");
+    const { homeOverview } = await import("../api");
+    const { buildReport } = await import("../report");
+    const emblem = page.el.querySelector(".ho-hero > .av");
+    page.hide();
+    const calls = vi.mocked(homeOverview).mock.calls.length;
+    try {
+      for (const locale of ["en", "ja", "zh-TW"] as const) {
+        setLocale(locale);
+        // Settings retains the page DOM. Translation must not wait for another RPC or show().
+        expect(page.el.querySelector(".ho-today h2")!.textContent).toContain(t("overview.today"));
+        for (const [card, key] of [["pending", "overview.pending"], ["reports", "overview.reports"], ["spend", "overview.month"], ["allowance", "overview.allowance"], ["dictation", "nav.dictation"]] as const) {
+          expect(page.el.querySelector(`.ho-${card} h2`)!.textContent).toBe(t(key));
+        }
+        expect(page.el.querySelector(".ho-said")!.textContent).toBe(buildReport(sample.report, sample.generated_at_ms).text);
+        expect(page.el.querySelector(".ho-today .ho-empty")!.textContent).toBe(t("overview.noSchedule"));
+        expect(page.el.querySelector(".ho-pending .ho-empty")!.textContent).toBe(t("overview.nothing"));
+        expect(page.el.querySelector(".ho-reports .ho-empty")!.textContent).toBe(t("overview.noReports"));
+        expect(page.el.querySelector(".ho-meter-row small")!.textContent).toBe(t("overview.fiveHour"));
+        expect(page.el.querySelector(".ho-meter-row")!.getAttribute("title")).toContain(t("overview.reset", { p0: "" }));
+        expect(page.el.querySelector(".ho-spend svg[role=img]")!.getAttribute("aria-label")).toBe(t("overview.chart", { p0: "0.00, 5.00" }));
+        expect(page.el.querySelector(".ho-dictation .ho-bars")!.getAttribute("aria-label")).toBe(t("overview.wordsChart", { p0: "" }));
+        expect(page.el.querySelector(".ho-dictation .ho-big small")!.textContent).toBe(t("home.003"));
+        expect(page.el.querySelector(".ho-dictation .ho-sub")!.textContent).toBe(`${t("home.005")} 0${t("unit.seconds")}`);
+        for (const open of page.el.querySelectorAll(".ho-open")) expect(open.getAttribute("aria-label")).toBe(t("overview.all"));
+      }
+      expect(vi.mocked(homeOverview).mock.calls.length).toBe(calls);
+      expect(page.el.querySelector(".ho-hero > .av")).toBe(emblem);
+    } finally { setLocale("zh-TW"); page.el.remove(); }
+  });
+
   test("is his emblem and his report, and nothing beside the report asks him", async () => {
     const { homeHTML } = await load();
     const well = hero(homeHTML(overview(5)));

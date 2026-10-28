@@ -1,6 +1,6 @@
 // Native toasts share one style, including errors. Only explicitly expected success text is exempt.
 export function toastError(text) {
-  return !/^(Deleted |已刪除|削除しました|Created |已建立「|「[^\r\n]+」を作成しました$)/u.test(text.trim());
+  return !/^(Deleted |已刪除|削除しました|Created |已建立「|「[^\r\n]+」を作成しました$|Cleared the history of “[^\r\n]+”$|已清除「[^\r\n]+」的紀錄$|「[^\r\n]+」の履歴を消去しました$)/u.test(text.trim());
 }
 
 export function paidRequests(log, gmail = false) {

@@ -73,13 +73,14 @@ export async function deletionAudit(context, helpers) {
   audit.room = room.id;
   audit.beforeDelete = await snapshot();
   audit.oldTurnIds = audit.beforeDelete.agent_turns.map(row => row.id);
-  audit.nullConversationRows = audit.beforeDelete.agent_turns.filter(row => row.conversation_id === null);
-  if (![0, target].every(member => audit.nullConversationRows.some(row => row.member_id === member && row.scope === "exchange" && row.source === "member") &&
-      audit.nullConversationRows.some(row => row.member_id === member && row.scope === "room" && row.source === "room"))) {
-    throw new Error("Deletion audit prerequisite: exchange/member and room/room NULL conversation rows are required for both recipients");
+  audit.exchangeRows = audit.beforeDelete.agent_turns.filter(row => row.scope === "exchange" && row.source === "member" && row.peer_id === source);
+  audit.roomRows = audit.beforeDelete.agent_turns.filter(row => row.scope === "room" && row.source === "room" && row.room_id === room.id);
+  audit.roomHistoryBefore = await rpc("rooms.messages", { room_id: room.id });
+  if (![0, target].every(member => audit.exchangeRows.some(row => row.member_id === member) && audit.roomRows.some(row => row.member_id === member))) {
+    throw new Error("Deletion audit prerequisite: exchange/member and room/room rows are required for both recipients");
   }
   await capture("room-reports-before-delete");
-  console.log(`Deletion audit: produced ${audit.nullConversationRows.length} NULL conversation audit rows`);
+  console.log(`Deletion audit: produced ${audit.exchangeRows.length} exchange and ${audit.roomRows.length} room audit rows`);
 
   const inspect = async (member, conversation, stage) => {
     await select(member); await details(page);
@@ -98,7 +99,7 @@ export async function deletionAudit(context, helpers) {
     if (stage !== "before-delete" && (query.rows.length || api.turns.length || dom.rows.length || dom.separators.length || dom.exchanges.length)) {
       fail(`Stale private timeline ${stage}: member=${member}, conversation=${conversation}, DB=${checkpoint.staleQueryIds}, API=${checkpoint.staleApiIds}, rows=${dom.rows.length}, separators=${dom.separators.length}, exchangeLines=${JSON.stringify(dom.exchanges)}`);
     }
-    const roomIds = new Set(audit.nullConversationRows.filter(row => ["room", "quarantine"].includes(row.scope)).map(row => row.id));
+    const roomIds = new Set(audit.roomRows.map(row => row.id));
     checkpoint.leakedRoomIds = api.turns.filter(row => roomIds.has(row.id)).map(row => row.id);
     if (checkpoint.leakedRoomIds.length) fail(`Room audit rows leaked into private history: ${checkpoint.leakedRoomIds}`);
     await capture(`member-${member}-${stage}`);
@@ -131,6 +132,7 @@ export async function deletionAudit(context, helpers) {
   await until(async () => !(await snapshot()).members.some(row => row.id === source), "source member deletion");
   audit.afterMemberDelete = await snapshot();
   audit.orphanExchangeRows = audit.afterMemberDelete.agent_turns.filter(row => row.scope === "exchange" && row.peer_id === source);
+  if (audit.orphanExchangeRows.length) fail(`Deleted source member retained exchange rows: ${audit.orphanExchangeRows.map(row => row.id)}`);
   if (audit.afterMemberDelete.agent_turns.some(row => row.scope === "private" && (row.member_id === source || row.peer_id === source))) fail("Deleted member still has private rows");
   for (const member of [0, target]) {
     const main = (await snapshot()).conversations.find(row => row.member_id === member && row.is_default);
@@ -140,5 +142,20 @@ export async function deletionAudit(context, helpers) {
     await inspect(member, named, "new-named-control");
   }
   audit.after = await snapshot();
+  const conversations = new Set(audit.after.conversations.map(row => row.id));
+  const members = new Set([0, ...audit.after.members.map(row => row.id)]);
+  audit.orphanRows = audit.after.agent_turns.filter(row => ["private", "exchange"].includes(row.scope) &&
+    (!members.has(row.member_id) || (row.peer_id !== null && !members.has(row.peer_id)) || !conversations.has(row.conversation_id)));
+  if (audit.orphanRows.length) fail(`Orphan private/exchange rows remain: ${audit.orphanRows.map(row => row.id)}`);
+  audit.roomHistoryAfter = await rpc("rooms.messages", { room_id: room.id });
+  const roomTurns = new Set(audit.after.agent_turns.filter(row => row.scope === "room" && row.room_id === room.id).map(row => row.id));
+  const roomMessages = new Set(audit.after.room_messages.filter(row => row.room_id === room.id).map(row => row.id));
+  const historyMessages = new Set(audit.roomHistoryAfter.messages.map(row => row.id));
+  if (!audit.roomRows.every(row => roomTurns.has(row.id)) ||
+      !audit.beforeDelete.room_messages.filter(row => row.room_id === room.id).every(row => roomMessages.has(row.id)) ||
+      !audit.roomHistoryBefore.messages.every(row => historyMessages.has(row.id))) fail("Deleting private conversations/member damaged room history");
+  await perform(page, { action: "room", id: room.id });
+  await wait(page, ".au-room-pane #room-message");
+  await capture("room-history-after-delete");
   audit.quarantine = "Current real UI writes scope=room; quarantine is a legacy migration scope. No synthetic legacy rows were inserted.";
 }

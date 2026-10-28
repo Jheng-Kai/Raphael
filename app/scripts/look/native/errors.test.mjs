@@ -1,11 +1,28 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { collectErrors } from "./errors.mjs";
+import { collectErrors, toastError } from "./errors.mjs";
 import { wrongLanguage } from "./journeys.mjs";
 import { privateTimeline } from "./deletion-audit.mjs";
 
 describe("native document error capture", () => {
+  it("accepts explicit successful history-clearing notices and rejects clearing errors", () => {
+    for (const text of ['Cleared the history of “Quick questions”', '已清除「快速提問」的紀錄', '「クイック質問」の履歴を消去しました']) expect(toastError(text)).toBe(false);
+    for (const text of ['Could not clear history', '已清除「快速提問」的紀錄失敗', 'Cleared the history of “Quick questions” failed']) expect(toastError(text)).toBe(true);
+  });
+
+  it("accepts Raphael and actual OS microphone names but still rejects stale application labels", () => {
+    document.body.innerHTML = '<strong>Raphael</strong><button data-k="mic" title="Automatic (current: 麥克風 (USB))">USB</button><button id="stale-mic" data-k="mic" title="自動 (麥克風 (USB))"></button><button id="stale">麥克風 (USB)</button><button id="dictation">Dictation</button>';
+    const geometry = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 10, height: 10 });
+    const visibility = vi.spyOn(HTMLElement.prototype, "checkVisibility").mockReturnValue(true);
+    try {
+      const names = ["麥克風 (USB)"];
+      expect(wrongLanguage("en", [], names).map(issue => issue.id)).toEqual(["stale", "stale-mic"]);
+      expect(wrongLanguage("ja", ["Raphael", "Dictation"], names).map(issue => issue.id)).toEqual(["dictation"]);
+      expect(wrongLanguage("en", []).some(issue => issue.text.startsWith("Automatic"))).toBe(true);
+    } finally { geometry.mockRestore(); visibility.mockRestore(); }
+  });
+
   it("observes real toast mutations and rejection events without counting success toasts", async () => {
     const page = Object.assign(new EventEmitter(), {
       exposeFunction: async (name, callback) => { window[name] = callback; },

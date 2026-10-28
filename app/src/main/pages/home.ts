@@ -156,7 +156,8 @@ export function createHome(app: AppContext): Page {
     }
   });
   onAvatarChange(() => { if (visible) paint(); });
-  onLocaleChange(() => { if (visible) void load(); });
+  // Settings retains Home behind its dialog. Translate cached data even while the page is inactive.
+  onLocaleChange(paint);
   app.onEvent(event => {
     if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load();
   });

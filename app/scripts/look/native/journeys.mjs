@@ -1,5 +1,5 @@
 import { perform } from "../driver.mjs";
-import { deletionAudit } from "./deletion-audit.mjs";
+import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
@@ -42,14 +42,20 @@ async function typed(context, text, conversation) {
 }
 
 // Inspect visible UI text nodes and field labels, retaining exact offending elements.
-export function wrongLanguage(locale, otherPhrases) {
+export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
   const violations = [];
   const inspect = (element, text, attribute = "text") => {
     if (!text.trim() || !element.getBoundingClientRect().width || !element.checkVisibility({ checkVisibilityCSS: true })) return;
     if (element.closest('script,style,textarea,.chat-message,.bubble,[contenteditable],.lm-name,.mc-name')) return;
-    const wrong = locale === "en" ? /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text) :
-      locale === "zh-TW" ? /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text) : false;
-    if (wrong || otherPhrases.includes(text.trim())) violations.push({ tag: element.tagName, id: element.id, class: element.className, attribute, text: text.trim() });
+    if (text.trim() === "Raphael") return;
+    // Device names come from the OS, but surrounding application labels must still translate.
+    let checked = text;
+    if (element.closest('[data-k="mic"]')) {
+      for (const name of deviceNames) if (name) checked = checked.split(name).join("");
+    }
+    const wrong = locale === "en" ? /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) :
+      locale === "zh-TW" ? /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) : false;
+    if (wrong || otherPhrases.includes(checked.trim())) violations.push({ tag: element.tagName, id: element.id, class: element.className, attribute, text: text.trim() });
   };
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) inspect(walker.currentNode.parentElement, walker.currentNode.textContent);
@@ -64,6 +70,9 @@ export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
   if (name === "locale-sweep") {
     result.visits = [];
+    const devices = await context.rpc("audio.devices", { refresh: false });
+    const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];
+    result.deviceNames = deviceNames;
     for (const locale of ["en", "ja", "zh-TW"]) {
       await click(page, '#nav [data-go="settings"]');
       await click(page, '.modal-scrim [data-pane="general"]');
@@ -73,7 +82,7 @@ export async function drive(name, context) {
       await pause(250);
       for (const pane of ["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"]) {
         await click(page, `.modal-scrim [data-pane="${pane}"]`); await pause(180);
-        const issues = await page.evaluate(wrongLanguage, locale, phrases[locale]);
+        const issues = await page.evaluate(wrongLanguage, locale, phrases[locale], deviceNames);
         result.visits.push({ locale, page: `settings/${pane}`, issues });
         await capture(`${locale}-settings-${pane}`);
       }
@@ -83,7 +92,7 @@ export async function drive(name, context) {
         const tabs = destination === "dictation" ? ["overview", "history", "dictionary"] : [null];
         for (const tab of tabs) {
           if (tab) { await click(page, `[data-dictation-tab="${tab}"]`); await pause(150); }
-          result.visits.push({ locale, page: `${destination}${tab ? `/${tab}` : ""}`, issues: await page.evaluate(wrongLanguage, locale, phrases[locale]) });
+          result.visits.push({ locale, page: `${destination}${tab ? `/${tab}` : ""}`, issues: await page.evaluate(wrongLanguage, locale, phrases[locale], deviceNames) });
           await capture(`${locale}-${destination}${tab ? `-${tab}` : ""}`);
         }
       }
@@ -137,12 +146,19 @@ export async function drive(name, context) {
     await typed(context, "Native journey quick first turn", quick.id);
     await typed(context, "Native journey quick second turn", quick.id);
     result.quickDeleteUI = !!await page.$(`[data-conversation-more="${quick.id}"]`);
-    if (!result.quickDeleteUI) result.failures.push("Quick conversation has no sidebar delete menu; diagnostic below calls the real core through its allowlisted native IPC");
-    // No synthetic UI: the missing affordance is recorded; probe the real refusal separately.
-    result.quickDeleteReply = await context.rpc("conversations.delete", { id: quick.id }).then(value => ({ value }), error => ({ error: String(error) }));
-    result.quickRemaining = remaining(await snapshot(), quick.id);
-    if (result.quickDeleteReply.error || Object.values(result.quickRemaining).some(rows => rows.length)) result.failures.push(`Quick history delete: ${JSON.stringify(result.quickDeleteReply)}; remaining=${JSON.stringify(result.quickRemaining)}`);
-    await capture("quick-delete-refused");
+    if (!result.quickDeleteUI) throw new Error("Quick conversation has no sidebar clear-history menu");
+    await click(page, `[data-conversation-more="${quick.id}"]`);
+    await click(page, '#app-popover [data-pick="clear"]');
+    await click(page, '.mb-confirm [data-dlg="delete"]');
+    await page.waitForFunction(() => !document.querySelector(".mb-confirm"));
+    await pause(900);
+    result.afterQuickClear = await snapshot();
+    result.quickRemaining = remaining(result.afterQuickClear, quick.id);
+    if (!result.afterQuickClear.conversations.some(row => row.id === quick.id && row.kind === "quick") ||
+        Object.entries(result.quickRemaining).some(([table, rows]) => table !== "conversations" && rows.length)) result.failures.push(`Quick history clear did not retain only its permanent conversation: ${JSON.stringify(result.quickRemaining)}`);
+    result.quickTimeline = await page.evaluate(privateTimeline);
+    if (result.quickTimeline.rows.length) result.failures.push(`Cleared quick history retains timeline rows: ${JSON.stringify(result.quickTimeline)}`);
+    await capture("quick-history-cleared");
   } else if (name === "gmail-connect") {
     await chat(page);
     const conversation = await newConversation(context);

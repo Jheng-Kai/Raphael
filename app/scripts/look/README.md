@@ -48,24 +48,29 @@ cloud fallbacks. Non-speech journeys copy only the installed VAD into their mode
 The native model manager refuses all downloads. Only initialization
 writes fixture prerequisites to SQLite; assertions reopen that run's DB with `mode=ro`.
 Conversation deletion reports all tables with `conversation_id`, including turns,
-summaries, CLI sessions and cards. If quick history has no delete affordance, it
-records that UI defect and separately diagnoses the real core's deletion refusal
-through the same allowlisted native IPC; this diagnostic is not a successful UI flow.
+summaries, CLI sessions and cards. Quick history is cleared through its real sidebar
+menu and confirmation; its permanent conversation must remain with no dependent
+records or timeline rows.
 `delete-conversation` also creates two members and a room through the UI. One member
 consults Raphael and the other member; explicit room mentions generate real reports
 for both recipients. It deletes their private conversations and the source member,
 then inspects replacement defaults and explicitly created named conversations.
 Every old row, date separator or exchange summary in a new private timeline fails,
 even if it has no turn id or its deleted member name is empty. `deletionAudit` retains
-before/after SQLite snapshots, NULL conversation audit rows, DOM markup, actual
+before/after SQLite snapshots, exchange and room audit rows (with their actual
+delivery conversation IDs), DOM markup, actual
 `agent.history.list` replies and the exact production `_thread` SQL/parameters
 re-executed read-only; SQL and IPC ids must match. Room rows are checked as isolation
-controls. Current UI cannot create legacy `scope=quarantine` rows; none are fabricated.
+controls: their turns and messages must survive deletion and remain readable through
+`rooms.messages`. Private/exchange rows with missing members or delivery conversations
+fail as orphans. Current UI cannot create legacy `scope=quarantine` rows; none are fabricated.
 
 Console errors, page exceptions, unhandled rejections and unexpected/error toasts
-fail the journey. Explicit creation/deletion-success toasts are the only toast exemption.
+fail the journey. Explicit creation/deletion/history-clearing success toasts are the only toast exemption.
 Locale sweeps inspect visible text/labels against scripts and exact other-language
-catalog phrases, retaining offending elements. Japanese Kanji shared with Chinese
+catalog phrases, retaining offending elements. The brand `Raphael` is accepted;
+actual OS microphone names from `audio.devices` are exempt only inside the microphone
+selector, while surrounding application labels remain checked. Japanese Kanji shared with Chinese
 cannot be distinguished by Unicode script alone; exact catalog checks cover static
 copy while dynamic/backend text still needs review. Every non-loopback URL in the
 run log fails the cost guard, except declared Composio hosts in `gmail-connect`.
