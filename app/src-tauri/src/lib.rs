@@ -82,6 +82,14 @@ fn panic_report(thread: Option<&str>, location: Option<&std::panic::Location<'_>
 
 pub fn run() {
     log_panics();
+    // A restricted runner can terminate its spawn handle without enumerating processes. Keep
+    // every native-test descendant in the same kill-on-close Job before any webview is created.
+    #[cfg(windows)]
+    let _native_job = if native_journey() {
+        let job = core_process::job::Job::new().expect("native journey Job Object");
+        job.add_current().expect("native journey process containment");
+        Some(job)
+    } else { None };
     let identity = identity::current();
     // Read before `use_own_data` sets it for a development build: only a folder the caller chose
     // keeps the local files (Raphael's picture) away from this build's own local folder.
@@ -91,6 +99,17 @@ pub fn run() {
     let local_dir = identity.local_dir(caller_data_dir, std::env::var_os("LOCALAPPDATA"));
     let mut context = tauri::generate_context!();
     identity.apply(context.config_mut());
+    if native_journey() {
+        let directory = PathBuf::from(std::env::var_os("RAPHAEL_DATA_DIR")
+            .expect("native journeys require RAPHAEL_DATA_DIR"));
+        assert!(directory.is_absolute(), "native journey data must be absolute");
+        context.config_mut().app.app_directories_override = Some(
+            serde_json::from_value(serde_json::json!({
+                "config": directory, "data": directory, "localData": directory,
+                "cache": directory.join("cache"), "log": directory.join("logs")
+            })).expect("native journey directories"),
+        );
+    }
 
     let builder = startup_plugins(
         tauri::Builder::default(),
@@ -124,6 +143,7 @@ pub fn run() {
             // The app lives in the tray, so closing the main window only hides it.
             // "Quit" in the tray menu is the way out.
             if window.label() == MAIN_WINDOW
+                && !native_journey()
                 && let WindowEvent::CloseRequested { api, .. } = event
             {
                 api.prevent_close();
@@ -205,18 +225,22 @@ pub fn run() {
             // ---- Tray ----
             // Its menu starts in the default language with no microphones: it names the one in
             // use and speaks the interface language, which the device settings (below) know.
-            tray::build(app.handle())?;
+            if !native_journey() {
+                tray::build(app.handle())?;
+            }
 
             // ---- Overlay ----
             // Raphael's emblem in the bottom-right corner, 150 px with subtitles in Traditional
             // Chinese until the settings say otherwise (`Overlay::apply_settings`). The dictation
             // controller takes it from the app state as `Arc<Overlay>`. Without the overlay the
             // app still works, so a failure is only logged.
-            match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
-                Ok(overlay) => {
-                    app.manage(overlay);
+            if !native_journey() {
+                match overlay::Overlay::create(app.handle(), 150, "on", "zh-TW") {
+                    Ok(overlay) => {
+                        app.manage(overlay);
+                    }
+                    Err(err) => log::error!("could not create the overlay window: {err}"),
                 }
-                Err(err) => log::error!("could not create the overlay window: {err}"),
             }
 
             // ---- Python core ----
@@ -254,7 +278,7 @@ pub fn run() {
                 log::warn!("hotkeys: injected key presses count (RAPHAEL_TEST_INJECTED_KEYS=1)");
                 handy_keys::accept_injected_input(true);
             }
-            let hotkey_event_rx =
+            let hotkey_event_rx = {
                 match hotkey::HotkeyService::start(&hotkey::Bindings::default(), hotkey_events) {
                     Ok(service) => {
                         app.manage(std::sync::Arc::new(service));
@@ -264,7 +288,8 @@ pub fn run() {
                         log::error!("global hotkeys are off: {err}");
                         None
                     }
-                };
+                }
+            };
 
             // ---- Dictation controller ----
             // Ties the hotkeys, the core, the overlay and pasting together. It takes whatever of
@@ -282,7 +307,7 @@ pub fn run() {
             // UI Automation, the 「操作中」 overlay, the watch on the owner's own input. It takes
             // the core and the overlay from the app state; without the core there is no run.
             #[cfg(windows)]
-            computer::spawn(app.handle());
+            if !native_journey() { computer::spawn(app.handle()); }
 
             // ---- Device settings ----
             // `device.json`: loads it, puts it in force (hotkeys, overlay size and subtitles,
@@ -296,7 +321,8 @@ pub fn run() {
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.
             // It reads the device settings, so it comes after them.
-            first_run::start(app.handle());
+            if native_journey() { show_main_window(app.handle()); }
+            else { first_run::start(app.handle()); }
 
             Ok(())
         })
@@ -306,6 +332,12 @@ pub fn run() {
 
 /// What the data migration did, from its plugin to `setup`, which logs it and starts the copy.
 struct Migration(std::sync::Mutex<Option<data_layout::Outcome>>);
+
+/// Isolated debug instances never claim the owner's single-instance lock or desktop hooks.
+pub(crate) fn native_journey() -> bool {
+    cfg!(debug_assertions)
+        && std::env::var_os("RAPHAEL_TEST_NATIVE").is_some_and(|value| value == "1")
+}
 
 /// The first plugins, which decide whether this launch runs at all and prepare what everything
 /// else opens. Plugins start in the order they are added, all of them before `setup`.
@@ -322,9 +354,9 @@ fn startup_plugins<R: Runtime>(
     migrate: impl FnOnce() -> data_layout::Outcome + Send + 'static,
 ) -> tauri::Builder<R> {
     #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(
+    let builder = if native_journey() { builder } else { builder.plugin(tauri_plugin_single_instance::init(
         move |app, args, _cwd| on_second_launch(app, args),
-    ));
+    )) };
     #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = on_second_launch;
     builder.plugin(

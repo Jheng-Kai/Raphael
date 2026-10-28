@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .process import Child, PrivateFiles, secure_directory
+from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
 from ...clock import wall_clock_ms
 
@@ -64,6 +65,10 @@ class Driver:
         self.turn = None
         self.quota = quota
         self.exhausted = False
+        self._diagnostic_secrets = []
+
+    def native_diagnostic(self, stage, value):
+        native_capture(stage, value, self._diagnostic_secrets)
 
     def _event(self, kind, text):
         # Only normalized quota metadata crosses this boundary, never provider diagnostics.
@@ -87,6 +92,7 @@ class Driver:
     async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=()):
         files = PrivateFiles()
         codex_auth = None
+        self._diagnostic_secrets = [token] if native_enabled() else []
         try:
             await files.secure()
             prompt_file = files.write("system.txt", system)
@@ -112,6 +118,8 @@ class Driver:
                 # The thread's `config` is not applied to MCP servers: they are set when the server
                 # starts, the token passed through the environment, never on the command line.
                 home, environ, auth = await codex_home(child_cwd, environ, owner=self.home)
+                if auth and native_enabled():
+                    self._diagnostic_secrets.extend(auth.get("tokens", {}).values())
                 codex_auth = home / "auth.json"
                 if auth is not None:
                     descriptor = os.open(codex_auth, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -143,6 +151,9 @@ class Driver:
             elif self.name == "gemini":
                 environ["USERPROFILE"] = environ["HOME"] = str(home)
             self.child = Child(command, environ=environ, cwd=child_cwd)
+            self.native_diagnostic("launch", {"brain": self.name, "executable": self.command[0], "model": self.model,
+                "cwd": child_cwd, "home": environ.get("HOME"), "profile": environ.get("USERPROFILE"),
+                "appdata": environ.get("APPDATA"), "sandbox": "read-only" if self.name == "codex" else None})
             await self.child.start()
             if self.name == "claude":
                 content = ([{"type": "text", "text": user}] + [
@@ -169,12 +180,15 @@ class Driver:
                 async for event in self._rpc(user, system, endpoint, token, session, permission, image_paths):
                     yield Event("session", CODEX_SESSION_PREFIX + event.text) if event.kind == "session" else event
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
+            self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
             yield self._event("error", "protocol_or_process_error")
         finally:
             try:
                 await self.interrupt()
             finally:
+                if self.child and self.child.stderr_tail is not None:
+                    self.native_diagnostic("stderr-tail", self.child.stderr_tail.decode("utf-8", errors="replace"))
                 if codex_auth is not None:
                     codex_auth.unlink(missing_ok=True)
                 await files.aclose()
@@ -189,6 +203,13 @@ class Driver:
         if not isinstance(value, dict):
             raise ValueError("invalid_packet")
         self._observe_quota(value)
+        if native_enabled():
+            params = value.get("params") or {}
+            error = value.get("error") or (params.get("error") if value.get("method") == "error" else None)
+            if value.get("method") == "turn/completed":
+                error = (params.get("turn") or {}).get("error") or error
+            if error:
+                self.native_diagnostic("codex-error-event", error)
         return value
 
     def _observe_quota(self, packet):
@@ -423,7 +444,7 @@ async def codex_home(workspace, environ, *, owner=None):
     owner = Path(owner or environ.get("USERPROFILE") or environ.get("HOME") or Path.home())
     source = Path(environ.get("CODEX_HOME") or owner / ".codex") / "auth.json"
     identity = hashlib.sha256(os.path.normcase(str(Path(workspace).resolve())).encode()).hexdigest()[:24]
-    home = owner / ".raphael" / "codex-brains" / identity
+    home = (native_directory("codex-brains") or owner / ".raphael" / "codex-brains") / identity
     home.mkdir(parents=True, exist_ok=True)
     await secure_directory(home)
     (home / "auth.json").unlink(missing_ok=True)

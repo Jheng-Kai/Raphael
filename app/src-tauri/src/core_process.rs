@@ -256,7 +256,7 @@ impl RestartBudget {
 
 /// The Job Object that the core runs in.
 #[cfg(windows)]
-mod job {
+pub(crate) mod job {
     use std::os::windows::io::AsRawHandle;
     use std::process::Child;
 
@@ -313,6 +313,13 @@ mod job {
         pub fn add(&self, child: &Child) -> Result<(), String> {
             // SAFETY: both handles are valid; `child` keeps its process handle open.
             unsafe { AssignProcessToJobObject(self.0, HANDLE(child.as_raw_handle())) }
+                .map_err(|err| err.to_string())
+        }
+
+        /// Contains an isolated debug app and all children it will create, including WebView2.
+        pub fn add_current(&self) -> Result<(), String> {
+            // SAFETY: the job is owned and GetCurrentProcess returns a valid pseudo-handle.
+            unsafe { AssignProcessToJobObject(self.0, windows::Win32::System::Threading::GetCurrentProcess()) }
                 .map_err(|err| err.to_string())
         }
 

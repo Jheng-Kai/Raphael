@@ -220,6 +220,10 @@ impl HotkeyService {
         events: UnboundedSender<HotkeyEvent>,
     ) -> Result<Self, String> {
         let wanted = Wanted::from_bindings(bindings)?;
+        #[cfg(debug_assertions)]
+        if crate::native_journey() {
+            return Self::start_with(WindowOnlyBackend::default(), wanted, events);
+        }
         // Blocking mode: a plain `HotkeyManager::new()` would watch the keys without swallowing
         // them.
         let manager = HotkeyManager::new_with_blocking()
@@ -430,6 +434,23 @@ trait Backend {
     fn try_recv(&self) -> Option<(Self::Id, HotkeyState)>;
 }
 
+/// Native journeys keep the real worker, duplicate gate and focused-window event channel;
+/// only registration with the owner's global keyboard is omitted.
+#[cfg(debug_assertions)]
+#[derive(Default)]
+struct WindowOnlyBackend(std::cell::Cell<u64>);
+
+#[cfg(debug_assertions)]
+impl Backend for WindowOnlyBackend {
+    type Id = u64;
+    fn register(&self, _hotkey: Hotkey) -> Result<u64, String> {
+        self.0.set(self.0.get() + 1);
+        Ok(self.0.get())
+    }
+    fn unregister(&self, _id: u64) -> Result<(), String> { Ok(()) }
+    fn try_recv(&self) -> Option<(u64, HotkeyState)> { None }
+}
+
 impl Backend for HotkeyManager {
     type Id = HotkeyId;
 
@@ -635,6 +656,19 @@ mod tests {
     use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
     use super::*;
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn native_composer_keeps_the_real_worker_without_registering_a_keyboard_hook() {
+        let (events, mut received) = tokio::sync::mpsc::unbounded_channel();
+        let service = HotkeyService::start_with(
+            WindowOnlyBackend::default(), Wanted::from_bindings(&Bindings::default()).unwrap(), events,
+        ).unwrap();
+        service.window_hotkey(WindowHotkey::AgentDown).unwrap();
+        service.window_hotkey(WindowHotkey::AgentUp).unwrap();
+        assert_eq!(received.blocking_recv(), Some(HotkeyEvent::AgentDown));
+        assert_eq!(received.blocking_recv(), Some(HotkeyEvent::AgentUp));
+    }
 
     fn hk(binding: &str) -> Hotkey {
         parse_binding(binding).unwrap_or_else(|err| panic!("{err}"))

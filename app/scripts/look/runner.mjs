@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -8,19 +8,20 @@ import { auditDocument, failedChecks } from "./audit.mjs";
 import { perform } from "./driver.mjs";
 import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
+import { saveReport } from "./report.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 export const LATIN_NAMES = ["Raphael", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "Catppuccin", "Latte", "Mocha", "KEY=value", "Settings → Project Settings → API Keys"];
 
 // Agents run inside their own sandbox, where the browser cannot start a second one; the page is our
 // own app on loopback only.
-const BROWSER_ARGS = ["--no-sandbox", "--disable-gpu", "--disable-crash-reporter", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-component-update"];
+export const BROWSER_ARGS = ["--no-sandbox", "--disable-gpu", "--disable-crash-reporter", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-component-update"];
 
 const app = resolve(import.meta.dirname, "../..");
 const requireFromApp = createRequire(join(app, "package.json"));
 export const REQUIRED_PUPPETEER = "puppeteer-core@25.13.0";
 
-function browserPath() {
+export function browserPath() {
   const candidates = [process.env.LOOK_BROWSER,
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
@@ -37,7 +38,7 @@ export async function run(options) {
   const directory = await mkdtemp(join(options.out, "run-"));
   const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, skin: options.skin, locale: options.locale }, results: [], contactSheets: [], errors: [] };
   let server, browser;
-  const save = () => writeFile(join(directory, "report.json"), JSON.stringify(report, null, 2) + "\n");
+  const save = () => saveReport(directory, report);
   try {
     let puppeteer;
     try { puppeteer = (await import(pathToFileURL(requireFromApp.resolve("puppeteer-core")).href)).default; }

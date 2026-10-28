@@ -1381,6 +1381,7 @@ impl Effects for AppEffects {
     }
 
     fn autostart(&self, on: bool) -> Result<(), String> {
+        if crate::native_journey() { return Ok(()); }
         let launcher = self.app.autolaunch();
         let result = if on {
             // Always: it writes the path of the exe that is running, which may have moved.

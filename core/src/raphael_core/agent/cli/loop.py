@@ -20,6 +20,7 @@ from ..policy import CONFIRM_TIMEOUT_S
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .process import secure_directory
+from .native_diagnostics import capture as native_capture, directory as native_directory
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +310,8 @@ class CliLoop:
             began = time.perf_counter()
             try:
                 # A stable, empty workspace keeps native CLI resume independent of turn temp files.
-                workspace = self.brains.home / ".raphael" / "cli-workspaces" / str(self.member_id) / str(self.conversation_id) / name
+                workspace_root = native_directory("workspaces") or self.brains.home / ".raphael" / "cli-workspaces"
+                workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
                 async with asyncio.timeout(1800), RaphaelMcp(lambda: self.tools, self._tool) as server:
@@ -327,6 +329,7 @@ class CliLoop:
             except asyncio.CancelledError:
                 raise
             except Exception as error:
+                native_capture("loop-exception", {"type": type(error).__name__, "message": str(error)})
                 # Protocol errors never publish provider diagnostics or private packet contents.
                 frame = traceback.extract_tb(error.__traceback__)[-1]
                 logger.warning("CLI turn failed: %s at %s:%d", type(error).__name__, frame.name, frame.lineno)
@@ -370,6 +373,7 @@ class CliLoop:
                 elif event.kind == "tool_end" and event.data.get("effect") and event.data.get("ok"):
                     self.event("CLI 回報檔案已變更" if self.language == "zh-TW" else "CLI reported a file change")
                 elif event.kind == "error":
+                    native_capture("normalized-error", event.text)
                     if self._handed_off():
                         return None
                     return event.text if event.text in ("quota", "rate_limited") else "error"
