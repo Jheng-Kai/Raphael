@@ -308,3 +308,27 @@ test("a profile routine draft can be edited and deleted without sending a negati
   expect(api.routinesCreate).not.toHaveBeenCalled(); expect(api.routinesUpdate).not.toHaveBeenCalled(); expect(api.routinesDelete).not.toHaveBeenCalled();
   dialog.close();
 });
+
+
+test("learned skills show their date and reading the editor never writes or notifies", async () => {
+  const skill = { id: 12, name: "research-summary", description: "Check sources", source: "learned", provenance: "learned" as const, learned_at: "2026-10-29T12:00:00", enabled: true };
+  vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [skill], undo: "revision-1" });
+  vi.mocked(api.core).mockResolvedValue({ skill: { ...skill, revision: "document-hash" }, text: "Instructions" });
+  const root = document.createElement("div"); document.body.append(root);
+  const changed = vi.fn();
+  const editor = mountMemberResources(root, { memberId: 7, tab: "skills", standalone: true, changed });
+  await flush();
+  expect(root.textContent).toContain("自行學會");
+  click(root, '[data-res="skill-menu"]');
+  document.querySelector<HTMLButtonElement>('#app-popover [data-pick="skill-edit"]')!.click();
+  await flush();
+  expect(root.querySelector<HTMLTextAreaElement>("#mp-skill-text")!.value).toBe("Instructions");
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("members.skills.read", { member_id: 7, id: 12 });
+  expect(changed).not.toHaveBeenCalled();
+  fill(root, "#mp-skill-text", "Updated instructions");
+  click(root, '[data-res="skill-save"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, id: 12, text: "Updated instructions", expected_hash: "document-hash" });
+  click(root, '[data-res="skill-undo"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, undo: "revision-1" });
+  editor.destroy();
+});

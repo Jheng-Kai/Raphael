@@ -1,5 +1,6 @@
 import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, waitScrollEnd } from "./steps.mjs";
 
+const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 const details = [member(1), { action: "open-details" }, check("member-details")];
 const composer = [click(".cmp-attach"), wait("#app-popover")];
 const dictationText = { before: "Please use Open Mouse Bot", after: "Please use OpenMausBot" };
@@ -167,12 +168,12 @@ export default [
   scene("details", "Title opens member details", [...details, { action: "icon-interactions", selector: '.mb-det [data-det="close"]' }, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
   scene("member-brain-saved", "Choose a member CLI brain and reopen its shared chooser", [...details, click('[data-member-brain] .mp-trigger'), wait('.model-chooser'), click('[data-source="cli:codex"]'), click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), { action: "close-details" }, { action: "open-details" }, check("member-brain-saved"), click('[data-member-brain] .mp-trigger'), wait('.model-chooser [data-model="cli:codex:gpt-6.1"]'), check("member-brain-saved")]),
-  scene("raphael-skills", "Raphael uses the same skills pane as every member", [{ action: "open-details" }, click('[data-det="tab"][data-tab="skills"]'), wait('#mp-skill-source')]),
+  scene("raphael-skills", "Raphael uses the same skills pane as every member", [{ action: "open-details" }, click('[data-det="tab"][data-tab="skills"]'), wait('#mp-skill-source'), click('[data-res="skill-menu"][data-id="31"]'), click('#app-popover [data-pick="skill-delete"]'), wait('[data-res="skill-undo"]'), click('[data-res="skill-undo"]'), wait('[data-res="skill-menu"][data-id="31"]'), click('[data-res="skill-menu"][data-id="31"]'), click('#app-popover [data-pick="skill-edit"]'), wait('#mp-skill-text'), check("growing-skills")], { skills: [learnedSkill(0)] }),
   scene("details-closed", "Scrim or title closes details after expanding the member column", [{ action: "member-column", collapsed: false }, ...details, { action: "close-details" }, wait('.conversation-trigger[aria-expanded="false"]')]),
   scene("conversation-filter", "Search conversations in details", [...details, type(".mb-det .conversation-tools input", "no matching conversation"), wait(".mb-det .conversation-empty")]),
   ...["routines", "memory", "skills", "commands", "voice"].map(tab => scene(`details-${tab}`, `Member ${tab} pane`, [...details, click(`[data-det="tab"][data-tab="${tab}"]`), ...(tab === "memory" ? [
     click('[data-name="reference-pending-aabbccddeeff001122334455"]'), click('#app-popover [data-mem-edit]'), wait('[data-mem-editor] textarea[readonly]'), check("pending-memory"),
-  ] : [])])),
+  ] : tab === "skills" ? [click('[data-res="skill-menu"][data-id="31"]'), click('#app-popover [data-pick="skill-edit"]'), wait('#mp-skill-text'), check("growing-skills")] : [])], tab === "skills" ? { skills: [learnedSkill(1)] } : {})),
   scene("member-avatar", "Member avatar picker above details", [...details, click('[data-det="avatar"]'), wait("#app-popover")]),
   scene("member-edit", "Edit member dialog", [...details, click('[data-det="edit"]'), wait(".mb-dialog")]),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
@@ -191,7 +192,7 @@ export default [
       { action: "dictation-paste", selector: `${form} textarea`, text: dictationText.before },
       type(`${form} textarea`, dictationText.after), check("composer-pair"), click(`${form} .cmp-send`), wait(".toast"), check("composer-learn"), check("composer-pair")], { dictationText }),
       scene(`${context}-composer-empty`, `${context} empty composer`, [...base, check("composer-pair")], { ...(context === "room" ? { messages: [] } : {}), turns: [] }),
-      scene(`${context}-text`, `${context} composer draft`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), check("composer-pair")]),
+      scene(`${context}-text`, `${context} composer draft`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), check("composer-pair"), ...(context === "member" ? [check("skill-learned-notice")] : [])], context === "member" ? { turns: [{ id: 501, member_id: 1, conversation_id: 11, session_id: "look-skill", created_at_ms: 1792807154000, question: "整理研究摘要", route: "answer", source: "app", prefix: "", text: "研究摘要已整理完成。", status: "done", cost_usd: 0, messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: 1792807155000 }], steps: [], attachments: [] }] } : {}),
       scene(`${context}-composer-hover`, `${context} composer send hover`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), hover(`${form} .cmp-send`), wait('.message-tooltip:not([hidden])'), check("composer-pair")])];
   }),
 ];

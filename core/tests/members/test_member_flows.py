@@ -46,7 +46,7 @@ async def test_skills_are_scoped_enabled_metadata_and_lazy_untrusted_document(se
     body = "a" * 5000 + "MIDDLE-SKILL-CONTENT" + "b" * 5000
     skill = team.members.capabilities.keep_skill(one.id, "owner/repo", "---\nname: verbs\ndescription: Practice verbs\n---\nPRIVATE-SKILL-BODY" + body)
     assert "skill_read" in team_tools_for(team.members, one.speaker(), always=True)
-    assert "skill_read" not in team_tools_for(team.members, other.speaker(), always=True)
+    assert "skill_read" in team_tools_for(team.members, other.speaker(), always=True)
     prompt = roster_prompt(team.members, one.speaker(), "en")
     assert "Practice verbs" in prompt and "conversational" in prompt
     assert "Usually use one message" in prompt
@@ -61,7 +61,7 @@ async def test_skills_are_scoped_enabled_metadata_and_lazy_untrusted_document(se
     assert "MIDDLE-SKILL-CONTENT" in str(client.chat_calls[1]["messages"])
     team.members.capabilities.update_skill(one.id, skill["id"], False)
     assert team.members.skill_read(one.id, "verbs") is None
-    assert "skill_read" not in team_tools_for(team.members, one.speaker(), always=True)
+    assert "skill_read" in team_tools_for(team.members, one.speaker(), always=True)
 
 
 async def test_clear_member_history_preserves_other_threads_and_own_notes(setup):

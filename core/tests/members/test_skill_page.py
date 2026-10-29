@@ -111,8 +111,8 @@ async def test_deleting_a_skill_stops_its_trigger(rig):
     assert rig.service.skill_read(member, "writing") == WRITING
     document = rig.service.capabilities._path(member, skill["id"])
     assert (await rig.call("members.skills.delete", {"member_id": member, "id": skill["id"]}))["deleted"] is True
-    # Without it: not offered, not told of, not readable by a name a model remembers, and its file is gone.
-    assert SKILL_READ not in team_tools_for(rig.service, speaker, always=True)
+    # The reader stays available, but the deleted skill is not indexed or readable and its file is gone.
+    assert SKILL_READ in team_tools_for(rig.service, speaker, always=True)
     assert "Use when the owner asks" not in roster_prompt(rig.service, speaker, "en")
     assert rig.service.skill_read(member, "writing") is None and not document.exists()
     assert (await rig.call("members.skills.delete", {"member_id": member, "id": skill["id"]}))["deleted"] is False

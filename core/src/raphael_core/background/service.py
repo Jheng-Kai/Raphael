@@ -1778,6 +1778,14 @@ class BackgroundService:
             return
         if self._has_linked_turn(task):
             self._notify("agent.turn", {"turn_id":task.turn_id,"member_id":task.member_id})
+            if state == "done" and self._memory is not None:
+                turn = self._history.get(task.turn_id)
+                after_turn = getattr(self._memory, "after_turn", None)
+                if after_turn and turn and turn.scope == "private" and turn.route not in ("routine", "exchange"):
+                    try:
+                        after_turn(task.member_id)
+                    except Exception as exc:
+                        logger.warning("Memory could not follow completed work: %s", type(exc).__name__)
         logger.info(
             "Background task %d ended: state=%s reason=%s model_calls=%s tool_calls=%s cost=%.5f",
             task.id,

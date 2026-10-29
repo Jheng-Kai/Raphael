@@ -111,6 +111,39 @@ def native_memory(messages, offered, seen):
     return "reply", "Work step recorded."
 
 
+def native_skill_review(user):
+    """The offline provider proposes a skill; the real reviewer validates and persists it."""
+    if not native_enabled(True) or "[native-skills:learn]" not in user:
+        return {"changes": []}
+    return {"changes": [{"text": "---\nname: clock-audit\ndescription: Audit repeated clock observations\n---\n"
+                        "## When to use\nUse for a clock audit.\n## Procedure\nRead and compare ten observations.\n"
+                        "## Pitfalls\nKeep time zones consistent.\n## Verification\nCheck all observations."}]}
+
+
+def native_skills(messages, offered, seen):
+    if not native_enabled(True):
+        return None
+    latest = next((str(m.get("content", "")) for m in reversed(messages) if m.get("role") == "user"), "")
+    questions = re.findall(r"<question>\s*(.*?)\s*</question>", latest, re.S)
+    latest = questions[-1] if questions else latest
+    if "[native-skills:" not in latest:
+        return None
+    if "[native-skills:learn]" in latest:
+        if not seen:
+            return "local_time", {}
+        if seen < 10:
+            return "history_search", {"query": f"Clock audit observation {seen}"}
+        return "reply", "Clock audit completed."
+    if not seen:
+        if "skill_read" not in offered:
+            raise ValueError("Native skills reader is missing")
+        return "skill_read", {"name": "clock-audit"}
+    tool_data = " ".join(str(m.get("content", "")) for m in messages if m.get("role") == "tool")
+    if "Read and compare ten observations" not in tool_data:
+        raise ValueError("The next task did not read the learned procedure")
+    return "reply", "The learned clock audit procedure was read."
+
+
 def native_codex_model(environ=None):
     """Use the owner's public model selection, never a guessed CLI model alias."""
     environ = os.environ if environ is None else environ

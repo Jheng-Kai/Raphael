@@ -1142,6 +1142,6 @@ export interface McpCandidate {
 export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
-export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string }
+export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
 export interface MemberVoice { id: string; name: string }

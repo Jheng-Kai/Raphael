@@ -251,6 +251,8 @@ export function installMock(fixture, config = {}, target = window) {
   };
   // A skill's document: its frontmatter says its name and when to use it, as the core reads them (members/capabilities.py `skill_metadata`).
   const skillText = skill => skill.text ?? `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n`;
+  const skillUndo = new Map();
+  const saveSkills = member => skillUndo.set(member, { revision: `skill-${Date.now()}`, skills: structuredClone(data.skills.filter(s => s.member_id === member)) });
   const skillRow = ({ text, ...skill }) => skill;
   const skillOf = p => {
     const skill = data.skills.find(item => item.id === p.id && item.member_id === p.member_id);
@@ -305,9 +307,19 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "members.create": { const member = { ...data.members[1], ...p, id: nextId(data.members) }; data.members.push(member); notify("MembersChanged", { member_id: member.id }); return { member, routine_offer: null }; }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
-      case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow) };
+      case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow), undo: skillUndo.get(p.member_id)?.revision ?? null };
       case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }
       case "members.skills.update": {
+        if (p.undo) {
+          const previous = skillUndo.get(p.member_id);
+          if (!previous || previous.revision !== p.undo) throw new Error("Invalid params: skill revision is no longer current");
+          const current = structuredClone(data.skills.filter(s => s.member_id === p.member_id));
+          data.skills = [...data.skills.filter(s => s.member_id !== p.member_id), ...previous.skills];
+          skillUndo.set(p.member_id, { revision: `skill-${Date.now()}`, skills: current });
+          notify("MembersChanged", { member_id: p.member_id });
+          return { skills: byMember(data.skills, p).map(skillRow) };
+        }
+        saveSkills(p.member_id);
         const skill = skillOf(p);
         if (p.text !== undefined) {
           // as the core refuses a document it cannot keep: nothing changes
@@ -322,6 +334,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { skill: skillRow(skill) };
       }
       case "members.skills.delete": {
+        saveSkills(p.member_id);
         const deleted = data.skills.some(item => item.id === p.id && item.member_id === p.member_id);
         data.skills = data.skills.filter(item => !(item.id === p.id && item.member_id === p.member_id));
         notify("MembersChanged", { member_id: p.member_id });

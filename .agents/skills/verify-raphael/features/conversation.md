@@ -520,3 +520,12 @@ See the phase-2 section of [Members](members.md) for memory tools, owner pending
 review, selected look scenes and the `memory-growth` native journey. Conversation
 context contracts live in `core/tests/memory/test_conversation.py`; shared harness
 wiring and recall order in `core/tests/agent/test_memory_turns.py`.
+
+
+## Learned skill notices (phase 3, 2026-10-29)
+
+A skill_learned event is persisted on the originating member turn, rendered once as a
+localized conversation-event-line using the shared eventLineHTML (quiet text and a small
+icon), and excluded from public work narration. member-text
+asserts the notice and absence of internal event data. Native skill-growth verifies the
+notice after production background review, then reads that skill in the next task.

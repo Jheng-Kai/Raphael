@@ -227,6 +227,9 @@ class EchoClient:
             data = {"app": ""}
         elif schema_name == "raphael_summary":  # the conversation folded into its summary
             data = {"summary": "(the fake LLM keeps no summary)"}
+        elif schema_name == "raphael_skill_review":
+            from .native_journeys import native_skill_review
+            data = native_skill_review(user)
         elif schema_name == "raphael_memory":  # the reflection pass: nothing to change
             data = {"actions": []}
         else:  # the cleanup
@@ -283,8 +286,8 @@ class EchoClient:
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_consult, native_diagnosis, native_memory
-        diagnosis = native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen)
+        from .native_journeys import native_consult, native_diagnosis, native_memory, native_skills
+        diagnosis = native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen)
         if diagnosis is not None:
             name, value = diagnosis
             if name == "reply":

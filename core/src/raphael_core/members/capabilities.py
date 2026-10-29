@@ -185,7 +185,10 @@ def skill_metadata(text: str) -> tuple[str, str]:
     return name, description
 
 
-class MemberCapabilities:
+from .skills import GrowingSkills
+
+
+class MemberCapabilities(GrowingSkills):
     def __init__(self, conn: sqlite3.Connection, folder: Path, members: MemberStore):
         self.conn = conn
         self.folder = folder
@@ -200,20 +203,18 @@ class MemberCapabilities:
     def skills(self, member_id: int) -> list[dict]:
         self.check(member_id)
         rows = self.conn.execute("SELECT id, name, description, enabled, source FROM member_skills WHERE member_id = ? ORDER BY id", (member_id,))
-        return [{**dict(row), "enabled": bool(row["enabled"])} for row in rows]
+        return [self.skill_details(member_id, {**dict(row), "enabled": bool(row["enabled"])}) for row in rows]
 
     def _path(self, member_id: int, skill_id: int) -> Path:
         return self.homes.path(member_id, f"skills/{skill_id}/SKILL.md")
 
-    def _mirror(self, member_id: int) -> None:
+    def _mirror(self, member_id: int, overrides=None) -> None:
         skills = []
         for skill in self.skills(member_id):
-            path = self._path(member_id, skill["id"])
-            skills.append({**skill, "provenance": "owner" if skill["source"] == "owner" else "imported",
-                           "revision": digest(path.read_bytes()) if path.exists() else None})
+            skills.append({**skill, **(overrides or {}).get(skill["id"], {}), "references": self.reference_hashes(member_id, skill["id"])})
         self.homes.mirror(member_id, "skills.json", json.dumps(skills, ensure_ascii=False, indent=2) + "\n")
 
-    def keep_skill(self, member_id: int, source: str, text: str) -> dict:
+    def keep_skill(self, member_id: int, source: str, text: str, *, mirror=True) -> dict:
         self.check(member_id)
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES:
             raise MemberError("size", "skill document is too large")
@@ -234,7 +235,8 @@ class MemberCapabilities:
             if path is not None:
                 path.unlink(missing_ok=True)
             raise MemberError("io", "could not keep the skill document") from None
-        self._mirror(member_id)
+        if mirror:
+            self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == cursor.lastrowid)
 
     def revert_state(self, member_id: int, revision: str, *, expected_hash: str) -> None:
@@ -255,7 +257,7 @@ class MemberCapabilities:
             self.conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
             self.conn.executemany("INSERT INTO member_skills (id, member_id, name, description, enabled, source) VALUES (?, ?, ?, ?, ?, ?)",
                                  [(skill["id"], member_id, skill["name"], skill["description"], skill["enabled"], skill["source"]) for skill in restored])
-        self._mirror(member_id)
+        self._mirror(member_id, {s["id"]: {key: s.get(key) for key in ("provenance", "learned_at")} for s in restored})
 
     def update_skill(self, member_id: int, skill_id: int, enabled: object) -> dict:
         self.check(member_id)
@@ -289,7 +291,7 @@ class MemberCapabilities:
         except (OSError, UnicodeError):
             raise MemberError("io", "could not read the skill document") from None
 
-    def rewrite_skill(self, member_id: int, skill_id: int, text: object) -> dict:
+    def rewrite_skill(self, member_id: int, skill_id: int, text: object, *, mirror=True) -> dict:
         """Replace the document of a skill with what the owner edited it to. Its name and description, which
         are what the model is shown of it and say when to use it, are read from the new document, so they
         change with it; the next `read_skill` gives the new text at once. The old document stays when the new
@@ -313,7 +315,8 @@ class MemberCapabilities:
                 self.homes.keep(member_id, f"skills/{skill_id}/SKILL.md", text)
         except OSError:
             raise MemberError("io", "could not keep the skill document") from None
-        self._mirror(member_id)
+        if mirror:
+            self._mirror(member_id)
         return self._skill(member_id, skill_id)
 
     def delete_skill(self, member_id: int, skill_id: int) -> bool:
@@ -338,7 +341,10 @@ class MemberCapabilities:
                 path = self._path(member_id, skill["id"])
                 if path.stat().st_size > MAX_SKILL_BYTES:
                     return None
-                return path.read_text(encoding="utf-8")
+                text = path.read_text(encoding="utf-8")
+                for relative in self.reference_hashes(member_id, skill["id"]):
+                    text += "\n\n<reference name=" + json.dumps(relative) + ">\n" + self.homes.path(member_id, relative).read_text(encoding="utf-8")[:8000] + "\n</reference>"
+                return text
         return None
 
     def commands(self, member_id: int) -> list[dict]:

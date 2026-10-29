@@ -10,6 +10,31 @@ from .test_answering import client, setup, member, typed, live_said  # noqa: F40
 from computer.test_operate import shell, PRESS_SEVEN  # noqa: F401
 
 
+async def test_a_member_creates_lists_and_reads_a_skill_through_the_shared_harness(setup, client):
+    from .test_skill_growth import DOCUMENT
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("skill_manage", {"text": DOCUMENT})),
+                   chat("", ("skills_list", {})), chat("", ("skill_read", {"name": "research-summary"})), live_said("Skill learned.")]
+    result = await typed(rig, "Keep the reusable research procedure as a skill", teacher.id)
+    assert result["status"] == "done"
+    assert team.members.skill_read(teacher.id, "research-summary") == DOCUMENT
+    assert team.members.enabled_skills(0) == []
+    assert {"skill_manage", "skills_list", "skill_read"} <= {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
+
+
+async def test_ten_local_tool_calls_are_persisted_for_skill_review(setup, client):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("local_time", {})),
+                   *[chat("", ("history_search", {"query": f"Clock audit observation {i}"})) for i in range(9)],
+                   live_said("Clock audit completed.")]
+    result = await typed(rig, "Audit ten clock observations", teacher.id)
+    assert result["status"] == "done"
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert [step["tool"] for step in turn["steps"]] == ["local_time", *["history_search"] * 9]
+
+
 async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_routine(setup, client, monkeypatch):
     rig, team = setup
     teacher = member(team, name="紫苑", tools=[])

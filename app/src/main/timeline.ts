@@ -657,7 +657,7 @@ const plainLine = (text: string): string => plainReplies([text])[0];
 
 /** Keep all work behind one closed chip; running turns show their latest public update. */
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false): string {
-  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && m.text.trim())
+  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && !learnedSkillEvent(m.text) && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
   if (!messages.length && !(turn.steps?.length) && turn.status !== "running" && !isLive(turn.task) && !revealing) return "";
   const live = turn.status === "running" || isLive(turn.task);
@@ -769,10 +769,16 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
  * what the owner asked), what it asked colleagues (each opens on the question sent and the answer)
  * and the meetings it opened, whose line opens the room.
  */
+function learnedSkillEvent(text: string): string | null {
+  try { const event = JSON.parse(text); return event?.type === "skill_learned" && typeof event.name === "string" ? event.name : null; }
+  catch { return null; }
+}
+
 function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
   const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
   const meetings = (turn.messages ?? []).filter(m => m.kind === "event").map(m => meetingEvent(m.text)).filter(event => event !== null);
-  return (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
+  const learned = (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null);
+  return learned.map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
     task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
     look.memberName?.(task.member_id) || task.member_name)).join("") +
     meetings.map(event => `<div class="conversation-event-line">${btn(eventLineHTML(t("rooms.meetingOpened", { p0: NAME }), ico("chat"), event.name), "event-open", ` data-meeting-room="${event.room_id}"`)}</div>`).join("");

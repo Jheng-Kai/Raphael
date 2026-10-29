@@ -253,6 +253,9 @@ class MembersService:
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
         self._ticking: asyncio.Task[None] | None = None
         self.sync_homes()
+        if memory is not None:
+            from .skill_review import SkillReview
+            memory.skill_review = SkillReview(self, memory)
 
     def sync_homes(self) -> None:
         """Refresh derived mirrors from the database, including the built-in member."""
@@ -629,6 +632,16 @@ class MembersService:
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
 
+    def skill_learned(self, member_id, skill, turn_id=None):
+        self._changed("members.skills.changed", member_id)
+        self._changed()
+        if turn_id and skill["provenance"] == "learned":
+            turn = self._history.get(turn_id)
+            if turn is not None and turn.member_id == member_id:
+                self._history.add_message(turn_id, "event", json.dumps({"type": "skill_learned", "name": skill["name"]}, ensure_ascii=False))
+                if self._notify:
+                    self._notify("agent.turn", {"turn_id": turn_id, "member_id": member_id})
+
     def skill_read(self, member_id: int, name: object) -> str | None:
         try:
             return self.capabilities.read_skill(member_id, name)
@@ -650,7 +663,8 @@ class MembersService:
         return member_id
 
     async def _skills_list(self, params: dict) -> dict:
-        return {"skills": self._cap(self.capabilities.skills, self._cap_member(params))}
+        member_id = self._cap_member(params)
+        return {"skills": self._cap(self.capabilities.skills, member_id), "undo": self.capabilities.undo_revision(member_id)}
 
     async def _skills_import(self, params: dict) -> dict:
         member_id = self._cap_member(params)
@@ -676,11 +690,20 @@ class MembersService:
         """The skill switched on or off (`enabled`), its document edited (`text`), or both: the switch is
         checked first, so that a refused edit changes nothing."""
         member_id = self._cap_member(params)
+        if "undo" in params:
+            self._cap(self.capabilities.undo_skills, member_id, params["undo"])
+            self._changed("members.skills.changed", member_id)
+            self._changed()
+            return {"skills": self.capabilities.skills(member_id), "undo": self.capabilities.undo_revision(member_id)}
         skill_id = _whole(params, "id", least=1)
         enabled = params.get("enabled")
         if "text" in params:
             if "enabled" in params and type(enabled) is not bool:
                 raise _rpc_error(MemberError("enabled", "enabled must be true or false"))
+            if "expected_hash" in params:
+                current = self._cap(self.capabilities.document, member_id, skill_id)[0]
+                if params["expected_hash"] != current["revision"]:
+                    raise invalid_params("skill changed; read it again before writing")
             skill = self._cap(self.capabilities.rewrite_skill, member_id, skill_id, params["text"])
             if "enabled" in params:
                 skill = self._cap(self.capabilities.update_skill, member_id, skill_id, enabled)

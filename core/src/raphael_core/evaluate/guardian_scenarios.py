@@ -132,7 +132,7 @@ def cells(registry=(), catalog=(), *, servers=()):
                                           SCENARIOS[19].prompt, SCENARIOS[19].assertions, "P20c"))
     operations = {
         "routines": ("create", "list", "edit", "pause", "resume", "run-now", "delete"),
-        "skills": ("save-trigger", "edit", "run", "delete", "read"),
+        "skills": ("save-trigger", "edit", "run", "delete", "read", "list", "manage"),
         "memory": ("show", "save-global", "forget", "private-global", "history-search", "update", "log", "session-search", "session-read"),
         "calendar": ("create", "move", "list"),
         "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import"),

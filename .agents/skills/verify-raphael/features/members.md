@@ -307,3 +307,46 @@ retrieval on turn 25, member-brain capture and tool-less CLI capture. The native
 fake-brain journey sends 25 real app turns and checks the member-written home and
 zero spend. It proves host plumbing, not real-provider inference or design-judge
 acceptance. Learned skills remain phase 3.
+
+
+## Skills that grow, phase 3 (2026-10-29)
+
+Every member, including Raphael, receives skills_list, skill_read and skill_manage through
+one shared team-tool definition and the production API/CLI paths. Skill indexes contain
+only names/descriptions; complete documents and bounded references are read on demand as
+untrusted guidance. Generated documents require When to use / Procedure / Pitfalls /
+Verification sections, name/description frontmatter, <=128 KiB and <=8 references of
+<=8000 UTF-8 bytes each. Updates check the current document SHA-256. Bot tools never
+change enable switches or another member's skills.
+
+The existing memory background scheduler serializes tool-less review with capture/tidy.
+Each private conversation has its own watermark and persisted failure count. At >=10 tool
+steps since review, the selected member brain proposes <=3 reusable class-level changes,
+preferring updates. Three consecutive failures stop that thread's review across restarts.
+Cleared/deleted work and stale document revisions are rechecked after the brain returns.
+No tools, provider fallback or normal CLI resume session are used for review.
+
+The existing member Skills pane shows provenance and learning date, opens an editable
+document, deletes and undoes the latest change (including deletion) through existing RPCs.
+The owner editor supplies its read revision to prevent overwriting a background update.
+The host journal/mirror records revisions outside bot-writable homes; read/list/index and
+undo discovery never mutate or notify. A learned skill adds one localized conversation
+event line without exposing its internal event payload. zh-TW and Japanese memory headings
+join the member name directly to the possessive particle.
+
+```powershell
+npm run verify -- --core
+npm run look -- details-skills raphael-skills member-text details-memory global-private-memory details-commands --theme both --width 1120,720,1920x1080
+npm run native -- skill-growth
+```
+
+The selected scenes cover learned provenance, silent reading, delete/undo, conversation
+notices and the ordinary memory/command editor comparisons. The native journey checks the real
+heading, ten persisted tool calls, a background-generated home skill, and a successful
+skill_read on the next similar request, with zero fake-provider spend. This proves host
+plumbing, not real-provider inference. Core behavior tests are in
+core/tests/members/test_skill_growth.py and test_harness.py. Guardian S21.skills.list and
+S21.skills.manage are explicitly mapped; live coverage remains unverified until authorized.
+
+When changing the learning notice, also capture member-text and centred-system-events
+at the same themes/widths to compare the shared eventLineHTML treatment.
