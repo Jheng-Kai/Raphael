@@ -31,6 +31,7 @@ def required_files() -> list[str]:
         "_internal/_sounddevice_data/portaudio-binaries/libportaudio64bit.dll",
         "_internal/_soundfile_data/libsndfile_x64.dll",
         "_internal/raphael_core/brain/prompts/cleanup_system.md",
+        "_internal/raphael_core/connectors/finder-data.json",
         "_internal/licenses/python/LICENSE.txt",
         "_internal/licenses/pyinstaller/pyinstaller-6.22.3.dist-info/licenses/COPYING.txt",
         "_internal/opencc/clib/share/opencc/s2twp.json",

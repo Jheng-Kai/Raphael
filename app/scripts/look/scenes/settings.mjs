@@ -4,7 +4,7 @@ const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
 const custom = [...add, click('.menu [data-value="custom"]')];
 const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]')];
-const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250 } }, wait('.cs-card')];
+const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card')];
 const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
@@ -34,18 +34,33 @@ export default [
   ...["default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"].map(skin => scene(`skin-${skin}`, `${skin} appearance previews`, [...settings("appearance"), click(`[data-skin-choice="${skin}"]`)])),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
   scene("plugins-detail", "Managed tools grouped by write and read", [...connections, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
-  scene("plugins-store", "Built-in services followed by deduplicated Composio apps", [
-    ...store, wait('.cs-composio-section .cs-card'), check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
-    scroll('.cs-composio-category:last-child .cs-card:last-child'), check("plugins-store-scrolled"),
+  scene("plugins-store", "Search-first catalog with connected and popular apps before bounded results", [
+    ...store, check("plugins-store"), check("plugins-store-rows"), check("plugins-store-groups"),
+    type('#conn-search', '360'), wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"),
     click('[data-conn="open-store"][data-id$="-359"]'), wait('.cs-page'), check("plugins-store-last-detail"),
-    click('[data-conn="back"]'), wait('.cs-composio-category'), scroll('.cs-bar'),
+    click('[data-conn="back"]'), wait('.cs-store-groups'), type('#conn-search', ''), wait('[data-conn="store-page"]'),
   ], { pluginsMany: true }),
-  scene("plugins-store-category", "Filter the complete grouped catalog locally, then open its category menu", [
-    ...store, wait('.cs-composio-section .cs-card'), check("plugins-store-groups"),
-    { ...type('#conn-search', '360'), measure: { name: "store-search-paint", budgetMs: 250 } }, check("plugins-store-search"),
-    type('#conn-search', ''), click('[data-k="conn-category"]'), click('#app-popover [data-value="productivity"]'), check("plugins-store-category"),
-    check("plugins-store-rows"), click('[data-k="conn-category"]'), wait('#app-popover [data-value="productivity"]'),
+  scene("plugins-store-category", "Broad category chips filter the complete local index", [
+    ...store, check("plugins-store-groups"), { action: "focus", selector: '[data-conn="store-group"][data-id=""]' },
+    ...Array.from({ length: 9 }, () => key("Tab")), key("Enter"), check("store-group-end"),
+    click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ], { pluginsMany: true }),
+  scene("plugins-store-search", "Search reaches a late catalog result by keyboard", [
+    ...store, { ...type('#conn-search', '360'), measure: { name: "store-search-paint", budgetMs: 250, maxLongTaskMs: 50, readySelector: '[data-conn="open-store"][data-id$="-359"]' } },
+    wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"), check("plugins-store-rows"),
+  ], { pluginsMany: true }),
+  scene("plugins-store-all", "All apps use bounded pages without omitting late entries", [
+    ...store, { ...click('[data-conn="store-group"][data-id=""]'), measure: { name: "store-all-paint", budgetMs: 250, maxLongTaskMs: 50 } }, check("plugins-store-groups"),
+    scroll('.cs-store-pages'), check("store-toolbar-visible"),
+    click('[data-conn="store-page"][data-id="1"]'), check("plugins-store-groups"), check("plugins-store-rows"),
+    scroll('.cs-store-pages'), check("store-toolbar-visible"),
+  ], { pluginsMany: true }),
+  scene("plugins-store-empty", "An unmatched query keeps search and category navigation", [
+    ...store, type('#conn-search', 'no-such-catalog-app-xyz'), wait('.cs-none'), check("plugins-store-empty"),
+  ], { pluginsMany: true }),
+  { ...scene("plugins-store-motion", "All popular rows finish entering before the native-style capture, without a blank band", [
+    ...store, { action: "settle-motion" }, check("plugins-store-settled"), check("plugins-store-groups"),
+  ], { pluginsMany: true }), motion: true },
   scene("plugins-store-key", "Built-in services with optional Composio setup", [...store, wait('[data-conn="configure-composio"]'), check("plugins-store"), check("plugins-store-rows"), scroll('.cs-composio-setup')], { composioConfigured: false }),
   scene("plugins-store-key-openrouter", "An OpenRouter key gets an actionable, value-free Composio error", [
     ...connections, click('[data-conn="tab"][data-id="store"]'), wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
@@ -59,7 +74,7 @@ export default [
   scene("connections-hover", "MCP server hover", [...connections, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),
   scene("connections-add-menu", "Add a connection menu", add),
-  scene("connections-command", "Command MCP form", custom),
+  scene("connections-command", "Command MCP form keeps its last fields above aligned footer actions", [...custom, check("connections-form-edges"), scroll('#conn-limit'), check("connections-form-end")]),
   scene("connections-test", "MCP test result", [...custom, type("#conn-name", "專案筆記"), type("#conn-command", "npx"), type("#conn-args", "-y\nnotes-server\nC:/Work/Team notes"), click('[data-conn="test-draft"]'), scroll(".add-grid [role=status]")]),
   scene("connections-url", "HTTP MCP form", [...custom, click('[data-k="conn-type"]'), click('.menu [data-value="http"]')]),
   scene("connections-edit", "Edit MCP server", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]'), click('[data-conn="edit-server"]')]),

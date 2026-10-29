@@ -1,9 +1,4 @@
-"""The apps a chat can ask the owner to connect from an inline card, and how each is reached.
-
-Each is one Google product, reached through the owner's own Google authorization (the private
-connector's tools whose names start with `prefix`) or through Composio's toolkit of the same app.
-An app counts as connected when its read tools can be called now.
-"""
+"""Validated public catalog apps and the provider used by their inline connection cards."""
 
 from dataclasses import dataclass
 
@@ -16,10 +11,12 @@ class App:
     name: str
     prefix: str
     composio: str
+    provider: str = "composio"
+    logo: str = ""
 
     @property
     def google_tools(self) -> tuple[str, ...]:
-        return tuple(name for name in TOOLS if name.startswith(self.prefix))
+        return tuple(name for name in TOOLS if self.prefix and name.startswith(self.prefix))
 
     @property
     def reads(self) -> tuple[str, ...]:
@@ -27,6 +24,30 @@ class App:
 
 
 APPS: dict[str, App] = {app.id: app for app in (
-    App("gmail", "Gmail", "gmail_", "gmail"),
-    App("googlecalendar", "Google Calendar", "calendar_", "googlecalendar"),
+    App("gmail", "Gmail", "gmail_", "gmail", "google"),
+    App("googlecalendar", "Google Calendar", "calendar_", "googlecalendar", "google"),
 )}
+
+
+async def catalog_apps(connectors):
+    """The same deduplicated public catalog as the store; built-in services win."""
+    from ..integrations.catalog import SERVICES
+    from .composio import KEY
+    from .finder import search_text
+    import re
+    catalog = (await connectors.catalog({}))["items"] if connectors.vault.get(KEY) else []
+    before = getattr(connectors, "_finder_index", None)
+    if before is not None and before[0] is catalog:
+        return before[1]
+    identity = lambda value: re.sub(r"[^a-z0-9]", "", value.lower())
+    apps = [(App(s.id, s.name, "", s.id, "builtin"), search_text(s.id, s.name, " ".join([*s.summary.values(), *s.about.values()]))) for s in SERVICES]
+    identities = {identity(s.id) for s in SERVICES} | {identity(s.name) for s in SERVICES}
+    descriptions = {row["slug"]: row["description"] for row in catalog}
+    apps += [(app, search_text(app.id, app.name, descriptions.get(app.id, ""))) for app in APPS.values()]
+    identities.update(identity(app.id) for app in APPS.values())
+    for row in catalog:
+        if identity(row["slug"]) not in identities and identity(row["name"]) not in identities:
+            apps.append((App(row["slug"], row["name"], "", row["slug"], logo=row.get("logo", "")), search_text(row["slug"], row["name"], row["description"])))
+            identities.add(identity(row["slug"]))
+    connectors._finder_index = (catalog, apps)
+    return apps

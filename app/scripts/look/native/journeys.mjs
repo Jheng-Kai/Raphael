@@ -11,6 +11,8 @@ export const journeys = [
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
   { name: "self-diagnosis", description: "Force an offline connection card failure; the same member checks and explains the real reason" },
+  { name: "store-finder", description: "Real Composio catalog: measure all-app paint, DOM size and long tasks" },
+  { name: "catalog-connect", description: "Raphael and member find/connect a non-Gmail catalog app; stop before consent" },
 ];
 const click = (page, selector) => perform(page, { action: "click", selector });
 const wait = (page, selector) => perform(page, { action: "wait", selector });
@@ -49,6 +51,7 @@ async function typed(context, text, conversation) {
 // Inspect visible UI text nodes and field labels, retaining exact offending elements.
 export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
   const violations = [];
+  const knownNames = [...new Set(deviceNames.flatMap(name => [name, name.split(" (")[0]]))].sort((a, b) => b.length - a.length);
   const inspect = (element, text, attribute = "text") => {
     if (!text.trim() || !element.getBoundingClientRect().width || !element.checkVisibility({ checkVisibilityCSS: true })) return;
     if (element.closest('script,style,textarea,.chat-message,.bubble,[contenteditable],.lm-name,.mc-name')) return;
@@ -58,8 +61,7 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
     if (element.closest('[data-k="mic"], [data-ob="mic"], .mic-ctl')) {
       // Closed controls abbreviate an OS name to its kind before the device parentheses.
       // Match only known device text; the application's Automatic/Disconnected wording stays checked.
-      const names = [...new Set(deviceNames.flatMap(name => [name, name.split(" (")[0]]))].filter(Boolean).sort((a,b)=>b.length-a.length);
-      for (const name of names) checked = checked.split(name).join("");
+      for (const name of knownNames) checked = checked.split(name).join("");
     }
     const wrong = locale === "en" ? /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) :
       locale === "zh-TW" ? /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(checked) : false;
@@ -76,6 +78,74 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "catalog-connect") {
+    const app = context.catalogApp;
+    if (!/^[a-z0-9_-]{1,100}$/.test(app) || app === "gmail") throw new Error("Select a non-Gmail catalog slug with RAPHAEL_NATIVE_APP");
+    const catalog = await context.rpc("connectors.catalog", {});
+    if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
+    if (!catalog.items.some(item => item.slug === app && item.can_connect)) throw new Error(`Catalog app ${app} is absent or has no managed sign-in`);
+    result.providerChoice = "Deterministic native fake brain; production find_app, connect_app, policy, persistence and Composio login";
+    result.cards = [];
+    await chat(page);
+    await perform(page, { action: "member-column", collapsed: false });
+    await click(page, '.mb-col [data-col="add"]');
+    await click(page, '#app-popover [data-pick="member"]');
+    await type(page, '#mb-new-name', 'NativeConnector');
+    await type(page, '#mb-new-role', 'Catalog connection audit');
+    await click(page, '.mp-dialog [data-dlg="create"]');
+    await page.waitForSelector('.mp-dialog', { hidden: true });
+    const member = (await snapshot()).members.find(item => item.name === 'NativeConnector');
+    if (!member) throw new Error("Native member did not persist");
+    for (const memberId of [0, member.id]) {
+      await perform(page, { action: "member", id: memberId });
+      await wait(page, '.composer .cmp-input');
+      await type(page, '.composer .cmp-input', `Find and connect ${app}. Do not read any account data. [native-connect:${app}]`);
+      await click(page, '.cmp-send');
+      await page.waitForSelector('[data-connector] [data-act="card-connect"]', { timeout: 30000 });
+      const before = (await snapshot()).connect_cards.filter(card => card.member_id === memberId && card.app === app).at(-1);
+      if (!before || before.state !== 'pending' || before.resumed_at_ms) throw new Error("Catalog card must start pending and unresumed");
+      let steps = [];
+      for (let attempt = 0; attempt < 100; attempt++) {
+        steps = (await snapshot()).agent_steps.filter(step => step.turn_id === before.turn_id);
+        if (steps.some(step => step.tool === 'connect_app')) break;
+        await pause(100);
+      }
+      if (JSON.stringify(steps.map(step => step.tool)) !== JSON.stringify(['find_app', 'connect_app']) || steps.some(step => step.outcome !== 'ok'))
+        throw new Error(`Expected only successful discovery and card tools before authorization: ${JSON.stringify(steps)}`);
+      await capture(`member-${memberId}-pending`);
+      await click(page, '[data-connector] [data-act="card-connect"]');
+      await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="authorizing"]'), { timeout: 30000 });
+      const authorized = (await snapshot()).connect_cards.find(card => card.id === before.id);
+      if (authorized.state !== 'authorizing' || authorized.resumed_at_ms) throw new Error("Expected authorizing without resumption or account access");
+      result.cards.push({ ...authorized, steps });
+      await capture(`member-${memberId}-authorizing`);
+      if (memberId === 0) {
+        await click(page, '[data-connector] [data-act="card-cancel"]');
+        await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
+      }
+    }
+    result.stop = "Stopped at authorizing; no external consent page was driven or approved";
+    return;
+  }
+  if (name === "store-finder") {
+    await click(page, '#nav [data-go="settings"]');
+    await click(page, '.modal-scrim [data-pane="connections"]');
+    await click(page, '[data-conn="tab"][data-id="store"]');
+    const catalog = await context.rpc("connectors.catalog", {});
+    result.catalog = catalog;
+    if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
+    if (catalog.truncated) throw new Error("Real catalog is truncated; performance cannot prove complete availability");
+    if (catalog.items.length < 100) throw new Error("Real catalog prerequisite: at least 100 toolkits");
+    await page.waitForFunction(() => document.querySelectorAll('.cs-card').length > 10, { timeout: 90000 });
+    const oldMenu = await page.$('[data-k="conn-category"]');
+    if (oldMenu) await click(page, '[data-k="conn-category"]');
+    const selector = oldMenu ? '#app-popover [data-value=""]' : '[data-conn="store-group"][data-id=""]';
+    result.performance = await perform(page, { action: "click", selector, measure: { name: "store-all-paint", budgetMs: 250, maxLongTaskMs: 50, enforce: false } });
+    await capture("all-apps");
+    if (result.performance.durationMs > 250 || result.performance.longTasks.some(task => task.duration > 50))
+      throw new Error(`Store exceeds paint/long-task budget: ${JSON.stringify(result.performance)}`);
+    return;
+  }
   if (name === "memory-growth") {
     const { member: colleague } = await context.rpc("members.create", { name: "Memory reviewer", role: "Reviewer" });
     await chat(page);
@@ -203,7 +273,7 @@ export async function drive(name, context) {
     if (failedCard.error !== "not_configured") throw new Error("Connection card did not preserve the real failure reason");
     await perform(page, { action: "wait-text", selector: `.mb-col [data-member="${member.id}"] .mb-row-p`, text: "Gmail 還沒登入" });
     result.ownerCopy = await page.evaluate(checkRendered, "failure-owner-copy");
-    result.assertions = { failure_kind: "auth_expired", reason: failedCard.error, self_check: true,
+    result.assertions = { failure_kind: failedCard.error, reason: failedCard.error, self_check: true,
       same_member: continuation.member_id === failedCard.member_id,
       same_conversation: continuation.conversation_id === failedCard.conversation_id, card_count: 1 };
     await capture("continued");

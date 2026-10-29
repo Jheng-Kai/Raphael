@@ -321,6 +321,9 @@ export interface AgentTurn {
   connectors?: ConnectorCard[];
   /** For a turn that resumed a task once its cards were connected (`source` "connector"): those apps. */
   resumed_apps?: string[];
+  /** Persisted catalog display names, aligned with resumed_apps. */
+  resumed_app_names?: string[];
+  resumed_app_logos?: string[];
   /** The cards of the keys this turn's task waits for (`connectors.secret_cards`). */
   secrets?: SecretCard[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
@@ -405,6 +408,7 @@ export interface ConnectorCard {
   id: string;
   app: string;
   name: string;
+  logo?: string;
   state: "pending" | "authorizing" | "connected" | "failed" | "cancelled" | "expired";
   error: string | null;
   /** The app was connected and its sign-in ran out: the card reconnects it. */

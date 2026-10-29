@@ -1,6 +1,5 @@
 """Tool descriptions shared by the interactive harness and the safety gate."""
 
-from ..connectors.apps import APPS
 from .commands import COMMANDS
 from .plugins import PluginTool
 from .policy import Tier
@@ -8,6 +7,7 @@ from .team_admin import DEFINITIONS as ADMIN_TOOLS, TIERS as ADMIN_TIERS
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS, WRITE_TOOLS as GROWTH_WRITES
 
 CONNECT_APP = "connect_app"
+FIND_APP = "find_app"
 REQUEST_SECRET = "request_secret"
 EMAIL_DRAFT = "email_draft"
 
@@ -36,7 +36,8 @@ DEFINITIONS = {
     "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),
     "computer": definition("Operate the computer for the owner at the keyboard, using the guarded desktop loop and its permission questions. For an explicitly requested desktop task only; prefer showing web content in this chat. When the task reaches a sign-in, a password or a payment it is the owner's to do: a card in this chat hands the computer over, this call returns at once saying it is paused, and the task carries on by itself, once, when the owner gives the computer back. Then end your turn with one short sentence, and never claim the task's result before it is done.", {"request": {"type": "string"}}, ["request"]),
-    CONNECT_APP: definition("Show the owner a card in this chat to connect an app this request needs that is not connected, or whose sign-in expired (see the apps in the TeamContextSnapshot). The owner connects from the card; then this request resumes by itself, once, with the app's tools. After calling it, end your turn with one short sentence, and never claim the app's data before it is connected.", {"app": {"type": "string", "enum": list(APPS)}}, ["app"]),
+    FIND_APP: definition("Search the public app catalog by name, slug, description or alias. Read-only: returns id, name, provider and connected state, never account data. Use its exact id with connect_app when the request needs an unconnected app.", {"query": {"type": "string", "maxLength": 200}}, ["query"]),
+    CONNECT_APP: definition("Show the owner a card in this chat to connect an app this request needs that is not connected, or whose sign-in expired. Use an exact catalog id returned by find_app or listed in TeamContextSnapshot. The owner connects from the card; then this request resumes by itself, once, with the app's tools. After calling it, end your turn with one short sentence, and never claim the app's data before it is connected.", {"app": {"type": "string"}}, ["app"]),
     REQUEST_SECRET: definition("Show the owner a card in this chat to save a key or token that a connection needs and does not have: a tool of it failed with missing_secret, or its state in the TeamContextSnapshot is needs_secret. Give the connection's id or name as listed there, and the secret's name only when it declares several. The owner types the key into the card and it goes straight to the secure vault: you never see it. Then this request resumes by itself, once, with the connection's tools. After calling it, end your turn with one short sentence, and never claim the connection's data before the key is saved.", {"connection": {"type": "string"}, "secret": {"type": "string"}}, ["connection"]),
     EMAIL_DRAFT: definition(
         "Write an email for the owner to review: it is shown in this chat as an editable card, and only the owner sends it (the card's 傳送), once, "
@@ -64,7 +65,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)

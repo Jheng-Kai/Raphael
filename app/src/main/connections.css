@@ -13,6 +13,19 @@
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-find .field { width: 220px; height: 32px; }
+.cs:has([data-conn="store-group"]) .cs-find { order: -1; width: 100%; margin: 0; }
+.cs:has([data-conn="store-group"]) .cs-find .field { width: 100%; height: 40px; }
+.cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; margin-bottom: var(--sp-3); padding-right: var(--sp-5); mask-image: linear-gradient(to right, var(--text) calc(100% - var(--sp-5)), transparent); }
+.cs-store-groups::-webkit-scrollbar { display: none; }
+.cs-store-groups .btn { flex: 0 0 auto; border-radius: var(--r-pill); font-size: var(--fs-xs); }
+.cs-store-groups [aria-pressed="true"] { color: var(--text); background: var(--selected); border-color: var(--accent-text); }
+.cs-store-pages { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); margin: var(--sp-3) 0; }
+/* Keep search and groups outside the results scrollport, including after a page change. */
+.modal-body:has(.cs-store) { display: flex; flex-direction: column; overflow: hidden; }
+.modal-body:has(.cs-store) > .set-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cs-store, .cs-store > .cs-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.cs-store > .cs-bar, .cs-store .cs-store-groups, .cs-store > .cs-device { flex: none; }
+.cs-results { flex: 1; min-height: 0; contain: strict; overflow-y: auto; overflow-x: hidden; scroll-padding-block: var(--sp-4); }
 .cs-find .field .i { color: var(--text-3); }
 .cs-none { margin: var(--sp-5) var(--sp-1); font-size: var(--fs-sm); line-height: 1.6; color: var(--text-3); text-align: center; text-wrap: pretty; }
 
@@ -136,10 +149,8 @@
 
 /* Store rows share the detail button, action slot and divider across both catalogs. */
 .cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
-.cs-card { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 64px; padding-right: var(--sp-3); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.cs-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 64px; padding-right: var(--sp-3); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .cs-card:hover { background: var(--hover); }
-/* Keep every app in the grid while deferring off-screen row contents to the browser. */
-.cs-composio-category .cs-card { content-visibility: auto; contain-intrinsic-block-size: auto 64px; }
 .cs-card .btn.cs-main { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--sp-3); align-self: stretch; min-height: 62px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-lg); background: transparent; text-align: left; white-space: normal; }
 .cs-card .btn.cs-main:hover:not(:disabled), .cs-card .btn.cs-main:active:not(:disabled) { background: transparent; }
 .cs-card .btn.cs-main:focus-visible { outline: none; }
@@ -156,11 +167,6 @@
 .cs-composio-setup > button { flex: none; }
 .cs-composio-mark { color: var(--text-2); }
 .cs-composio-mark svg { width: 20px; height: 20px; }
-.cs-store-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
-.cs-composio-category { margin-top: var(--sp-4); }
-.cs-composio-category h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-xs); color: var(--text-2); font-weight: 600; }
-.cs-store-heading h2 { margin-bottom: 0; }
-.cs-store-heading .sel { max-width: 180px; }
 .cs-key-form label { font-size: var(--fs-sm); font-weight: 600; }
 .cs-key-form > p { margin: 0; font-size: var(--fs-xs); color: var(--err); }
 
@@ -182,8 +188,12 @@
 .trust > .i { color: var(--warn); margin-top: var(--sp-1); }
 .trust b { color: var(--text); font-weight: 600; }
 
-@media (max-width: 720px) {
+/* A single track stays within the short-card cap; wider panes fill two tracks. */
+@container connections (max-width: 384px) {
   .cs-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
   .cs-find { margin-left: 0; width: 100%; }
   .cs-find .field { flex: 1; width: auto; }
   .add-grid .two { grid-template-columns: minmax(0, 1fr); }
@@ -202,11 +212,15 @@
 .mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: ui-monospace, monospace; white-space: pre; }
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }
 .modal-body:has(.cs-form) { display:flex; flex-direction:column; overflow:hidden; }
+.modal-body:has(.cs-form) > .set-content { display:flex; flex-direction:column; flex:1; min-height:0; }
+.modal-body:has(.cs-form) .set-head { padding-right:var(--sp-2); }
 .cs-form { display:flex; flex-direction:column; flex:1; min-height:0; }
 .cs-form > h2,.cs-form > .cd-help { flex:none; }
-.cs-form > .trust { flex:none; margin-top:var(--sp-3); }
-.cs-form .add-grid { overflow-y:auto; min-height:0; padding:0 var(--sp-1) 72px 0; scrollbar-gutter:stable; }
-.cs-form .add-acts.is-sticky { flex:none; position:relative; background:var(--content); margin-top:0; }
+.cs-form > .trust { flex:none; margin-top:var(--sp-3); margin-right:var(--sp-2); }
+/* Header, fields and footer reserve the same 8px scrollbar gutter inside their shared measure. */
+.cs-form .add-grid { overflow-y:auto; min-height:0; padding:0 0 var(--sp-6); scroll-padding-block:var(--sp-4); scrollbar-gutter:stable; scrollbar-width:auto; scrollbar-color:auto; }
+.cs-form .add-grid::-webkit-scrollbar { width:var(--sp-2); }
+.cs-form .add-acts.is-sticky { flex:none; position:relative; background:var(--content); margin-top:0; padding-right:var(--sp-2); }
 .mcp-import-label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mcp-import-label textarea { width: 100%; min-height: 170px; padding: var(--sp-2); font-family: ui-monospace, monospace; }
 .mcp-candidates { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-3); }

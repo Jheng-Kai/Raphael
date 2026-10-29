@@ -109,7 +109,7 @@ def test_failure_continuation_never_claims_connection_or_secret_success(make_rig
     from raphael_core.agent.history import Turn
     rig = make_rig()
     # Even a later successful owner action must not rewrite the earlier failure's event line.
-    rig.service._cards = SimpleNamespace(views=lambda ids: {1: [{"app": "gmail", "state": "connected"}]})
+    rig.service._cards = SimpleNamespace(views=lambda ids: {1: [{"app": "gmail", "name": "Gmail", "logo": "", "state": "connected"}]})
     rig.service._secret_cards = SimpleNamespace(views=lambda ids: {1: [{"name": "Weather", "state": "saved"}]})
     turn = Turn(2, 1000, "failure-1", "Continue", "answer", "", "auth_expired", None,
                 "done", source="connector", source_turn_id=1)
@@ -118,6 +118,7 @@ def test_failure_continuation_never_claims_connection_or_secret_success(make_rig
     turn.session_id = "connect-1"
     view = rig.service._turn_views([turn])[0]
     assert view["resumed_apps"] == ["gmail"] and view["resumed_secrets"] == ["Weather"]
+    assert view["resumed_app_names"] == ["Gmail"] and view["resumed_app_logos"] == [""]
 
 
 async def test_late_card_failure_does_not_restart_a_cancelled_request(make_rig, client):

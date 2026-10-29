@@ -110,7 +110,7 @@ async def test_budget_stops_and_writes_incomplete_report(tmp_path):
     reference = tmp_path / "reference.png"
     reference.write_bytes(b"\x89PNGreference")
     client = FakeVision(cost=.10)
-    assert await run_judge(run, root=tmp_path, references=[reference], client=client, max_cost_usd=.10, request_ceiling=.10) == 1
+    assert await run_judge(run, brain="openrouter", root=tmp_path, references=[reference], client=client, max_cost_usd=.10, request_ceiling=.10) == 1
     assert len(client.calls) == 1
     report = json.loads(next(tmp_path.glob("app/.look/judge-*/report.json")).read_text())
     assert report["status"] == "failed" and report["errors"]

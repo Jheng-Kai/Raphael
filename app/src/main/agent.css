@@ -237,6 +237,7 @@
 .cc-name { font-size: var(--pa-fs-d); font-weight: 600; line-height: 1.35; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-state { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; font-size: var(--pa-sys); line-height: 1.4; color: var(--text-2); }
 .cc-state > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.connector-card[data-connector] .cc-state > span:last-child { flex: 1; }
 .cc-done { display: inline-flex; flex: none; color: var(--ok); }
 .cc-done .i { width: 16px; height: 16px; }
 .connector-card[data-card-state="failed"] .cc-state, .connector-card[data-card-state="expired"] .cc-state { color: var(--text-3); }

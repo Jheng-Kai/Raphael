@@ -419,7 +419,7 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  const row = `<div class="cs-card" style="display:flex;border-radius:0px;border-bottom:1px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
+  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:0px;border-bottom:1px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
   browser.document.body.innerHTML = row + row;
   const previous = { document: globalThis.document, window: globalThis.window };
   globalThis.document = browser.document; globalThis.window = browser;
@@ -434,7 +434,9 @@ it("rejects divergent store add classes, row markup and card styling", () => {
     const oldMain = browser.document.createElement('div'); oldMain.className = 'cs-main';
     oldMain.innerHTML = main.innerHTML; main.replaceWith(oldMain);
     expect(() => checkRendered("plugins-store-rows")).toThrow("same detail button");
-    oldMain.replaceWith(main); second.style.display = 'grid';
+    oldMain.replaceWith(main); second.style.display = 'flex';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
+    second.style.display = 'grid'; second.style.gridTemplateColumns = '304px';
     expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
 });

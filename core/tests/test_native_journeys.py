@@ -5,7 +5,7 @@ import pytest
 from raphael_core.device.models import ModelDownloadError, REGISTRY
 from raphael_core.native_journeys import GmailJourneyVault, OfflineModelManager, gmail_enabled
 from raphael_core.app import EchoClient
-from raphael_core.native_journeys import native_codex_model
+from raphael_core.native_journeys import native_codex_model, catalog_enabled, native_connect
 import json
 
 
@@ -25,6 +25,22 @@ def test_gmail_requires_fake_llm_and_both_explicit_native_flags(monkeypatch):
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     assert gmail_enabled(True)
     assert not gmail_enabled(False)
+
+
+def test_catalog_journeys_require_explicit_native_opt_in_and_script_only_discovery_then_card(monkeypatch):
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_CATALOG", "1")
+    assert not catalog_enabled(True)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    assert catalog_enabled(True) and not catalog_enabled(False)
+    messages = [{"role": "user", "content": "Connect Spotify [native-connect:spotify]"}]
+    offered = {"find_app", "connect_app"}
+    assert native_connect(messages, offered, 0) == ("find_app", {"query": "spotify"})
+    assert native_connect(messages, offered, 1) == ("connect_app", {"app": "spotify"})
+    assert native_connect(messages, offered, 2) is None
+    assert native_connect(messages, set(), 0) is None
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE_CATALOG")
+    assert native_connect(messages, offered, 0) is None
 
 
 def test_gmail_vault_reads_only_composio_and_never_changes_owner_credentials(monkeypatch):

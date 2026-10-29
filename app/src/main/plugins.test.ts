@@ -143,25 +143,27 @@ test("failed tool reads remain visible and can be retried", async () => {
   expect(root.querySelectorAll('[data-conn="tool"]')).toHaveLength(3); c.reset();
 });
 
-test("the whole store groups in provider order, deduplicates, and searches and filters locally", async () => {
+test("the store deduplicates and filters broad groups locally", async () => {
   api.connectorsCatalog.mockResolvedValue({ items: [toolkit, toolkit,
     { ...toolkit, slug: "github", name: "GitHub", categories: [{ id: "other", name: "Other" }, "docs"] },
     { ...toolkit, slug: "uncategorized", name: "Uncategorized", categories: [] }],
     categories: [{ id: "other", name: "Other" }, { id: "docs", name: "Documents" }] });
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
-  expect([...root.querySelectorAll(".cs-composio-category h3")].map(e => e.textContent)).toEqual(["Other", "Documents", "Other"]);
+  expect(root.querySelectorAll('[data-conn="store-group"]')).toHaveLength(10);
   expect(root.querySelectorAll(".cs-card")).toHaveLength(3);
-  expect(root.querySelector('[data-category="docs"] [data-id="notion"]')).not.toBeNull();
-  expect(root.querySelector('[data-category="other"] [data-id="notion"]')).toBeNull();
+  expect(root.querySelector('[data-conn="open-store"][data-id="notion"]')).not.toBeNull();
+  expect(root.querySelectorAll('[data-conn="open-store"][data-id="notion"]')).toHaveLength(1);
   expect(root.querySelector('[data-conn="load-more"]')).toBeNull();
   const requests = api.connectorsCatalog.mock.calls.length;
-  c.menuFor("conn-category")!.pick("other");
-  expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
+  click("store-group", "other");
+  expect(root.querySelectorAll(".cs-card")).toHaveLength(2);
   expect(root.querySelector('[data-id="github"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "GitHub" } as HTMLInputElement);
+  await new Promise(resolve => setTimeout(resolve, 100));
   expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
-  c.menuFor("conn-category")!.pick("");
+  click("store-group", "");
   c.input({ id: "conn-search", value: "Workspace" } as HTMLInputElement);
+  await new Promise(resolve => setTimeout(resolve, 100));
   expect(root.querySelectorAll(".cs-card")).toHaveLength(3);
   expect(api.connectorsCatalog).toHaveBeenCalledTimes(requests);
   expect(api.connectorsCategories).not.toHaveBeenCalled(); c.reset();
@@ -172,8 +174,9 @@ test("local filters apply to an in-flight full catalog, and reset ignores a late
   api.connectorsCatalog.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
   const { c, root, click } = setup(); const loaded = c.load(); await settle(); click("tab", "store");
   // Starting a newer full read supersedes the first; neither filter needs a request.
-  await settle(); c.menuFor("conn-category")!.pick("other");
+  await settle(); click("store-group", "other");
   c.input({ id: "conn-search", value: "GitHub" } as HTMLInputElement);
+  await new Promise(resolve => setTimeout(resolve, 100));
   finish({ items: [], categories: [] }); await loaded;
   expect(root.querySelectorAll(".cs-card")).toHaveLength(0);
   expect(c.view().composioCatalog).toHaveLength(2);
@@ -293,23 +296,25 @@ test("built-in services work without a key, search locally, and use their existi
   expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("1");
   expect(root.querySelector('[data-conn="configure-composio"]')).not.toBeNull();
   c.input({ id: "conn-search", value: "unmatched" } as HTMLInputElement);
+  await new Promise(resolve => setTimeout(resolve, 100));
   expect(root.querySelectorAll(".cs-card")).toHaveLength(0);
   expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("0");
   c.input({ id: "conn-search", value: "Sentry" } as HTMLInputElement);
+  await new Promise(resolve => setTimeout(resolve, 100));
   click("join", "sentry");
   expect(api.integrationsConnect).toHaveBeenCalledWith({ catalog_id: "sentry" });
   expect(api.connectorsConnect).not.toHaveBeenCalled();
   expect(api.connectorsCatalog).not.toHaveBeenCalled(); c.reset();
 });
 
-test("own services win across slugs and names, and Composio categories leave them visible", async () => {
+test("own services win across slugs and names, and broad groups filter both sources", async () => {
   api.integrationsCatalog.mockResolvedValue({ services: [{ ...storePlugin(toolkit, []), source: undefined, popular: true }] });
-  api.connectorsCatalog.mockResolvedValue({ items: [toolkit, { ...toolkit, slug: "notion-alt" }, { ...toolkit, slug: "github", name: "GitHub" }], categories: [{ id: "docs", name: "Documents" }, { id: "other", name: "Other" }] });
+  api.connectorsCatalog.mockResolvedValue({ items: [toolkit, { ...toolkit, slug: "notion-alt" }, { ...toolkit, slug: "github", name: "GitHub", categories: ["developer"] }], categories: [{ id: "docs", name: "Documents" }, { id: "other", name: "Other" }] });
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
   expect(root.querySelectorAll(".cs-card")).toHaveLength(2);
   expect(root.querySelectorAll('[data-conn="join"][data-id="notion"]')).toHaveLength(1);
   expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("2");
-  c.menuFor("conn-category")!.pick("other"); await settle();
+  click("store-group", "documents"); await settle();
   expect(root.querySelectorAll(".cs-card")).toHaveLength(1);
   expect(root.querySelector('[data-conn="join"][data-id="notion"]')).not.toBeNull();
   expect(root.querySelector('[data-k="conn-tab:store"] .n')?.textContent).toBe("1"); c.reset();
@@ -320,7 +325,7 @@ test("a managed catalog failure leaves built-ins available and a late key reply 
   api.connectorsCatalog.mockRejectedValue(new Error("offline"));
   const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
   expect(root.querySelector('[data-conn="join"][data-id="notion"]')).not.toBeNull();
-  expect(root.querySelector('.cs-composio-section [role="alert"]')).not.toBeNull();
+  expect(root.querySelector('[data-cs-body] [role="alert"]')).not.toBeNull();
   api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false }); await c.load();
   let reject!: (error: Error) => void;
   api.connectorsSetKey.mockReturnValue(new Promise((_, no) => { reject = no; }));

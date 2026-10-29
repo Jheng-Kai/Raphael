@@ -78,7 +78,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         SCENARIOS[7].assertions, 'P03a/P04', 'meeting-actions'))
     # S14's two halves: Gmail (P08a) and Instagram publishing (P08d), which keeps the parent open until it has a driver.
     result.append(ScenarioCell('S14.gmail', 'Connect Gmail in chat (P08a scope)',
-        '請用 Gmail 找出主旨含本次代號的測試信，告訴我信裡的確認碼。',
+        '先用 find_app 尋找 Gmail，再連結並找出主旨含本次代號的測試信，告訴我信裡的確認碼。',
         SCENARIOS[13].assertions, 'P08a', 'connect-gmail'))
     result.append(ScenarioCell('S14.instagram', 'Connect Instagram in chat (P08d scope)', SCENARIOS[13].prompt,
         SCENARIOS[13].assertions, 'P08d'))

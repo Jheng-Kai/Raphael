@@ -54,6 +54,22 @@ for line in sys.stdin:
                      commands={"codex": [sys.executable, str(child), str(home / "receipt.json")]})
 
 
+def catalog_enabled(fake_llm: bool) -> bool:
+    return native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_CATALOG") == "1"
+
+
+def native_connect(messages, offered, seen):
+    """Script only the provider's choice; catalog, card, policy and login remain production code."""
+    if not catalog_enabled(True):
+        return None
+    latest = next((str(message.get("content", "")) for message in reversed(messages) if message.get("role") == "user"), "")
+    match = re.search(r"\[native-connect:([a-z0-9_-]{1,100})\]", latest)
+    if not match:
+        return None
+    name = "find_app" if seen == 0 else "connect_app" if seen == 1 else ""
+    return (name, {"query" if seen == 0 else "app": match[1]}) if name in offered else None
+
+
 def native_consult(messages: list[dict], offered: set[str], seen: int) -> dict | None:
     if not native_enabled(True) or "ask_member" not in offered or seen:
         return None

@@ -1,9 +1,19 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findVisibleElement, perform } from "./driver.mjs";
+import { finiteMotionSettled, findVisibleElement, perform } from "./driver.mjs";
 import { requestDisposition } from "./requests.mjs";
 
 describe("look browser interaction contracts", () => {
+  it("waits through delayed row entrances but never waits for an infinite activity indicator", () => {
+    const running = { playState: "running", effect: { getTiming: () => ({ iterations: 1 }) } };
+    const spin = { playState: "running", effect: { getTiming: () => ({ iterations: Infinity }) } };
+    document.getAnimations = () => [running, spin];
+    try {
+      expect(finiteMotionSettled()).toBe(false);
+      running.playState = "finished";
+      expect(finiteMotionSettled()).toBe(true);
+    } finally { delete document.getAnimations; }
+  });
   afterEach(() => { document.body.innerHTML = ""; });
   it("requeries a replaced click target without replaying application errors", async () => {
     const stale = { click: vi.fn().mockRejectedValue(new Error("Node is either not clickable or not an Element")), dispose: vi.fn() };
@@ -81,5 +91,29 @@ describe("look browser interaction contracts", () => {
     expect(requestDisposition(`${origin}/missing.js`, origin)).toBe("continue");
     expect(requestDisposition("https://outside.example/image.png", origin)).toBe("block");
     expect(requestDisposition("data:image/png;base64,AA==", origin)).toBe("continue");
+  });
+  it("counts a long click task that starts before the event listener and rejects its budget", async () => {
+    document.body.innerHTML = '<button class="target">All</button>';
+    vi.spyOn(performance, "now").mockReturnValue(10);
+    vi.stubGlobal("requestAnimationFrame", callback => { callback(); return 1; });
+    vi.stubGlobal("PerformanceObserver", class {
+      observe() {}
+      disconnect() {}
+      takeRecords() { return [{ startTime: 0, duration: 5 }, { startTime: 5, duration: 75 }]; }
+    });
+    const page = {
+      evaluate: async (fn, argument) => fn(argument),
+      waitForFunction: async () => ({ asElement: () => ({
+        click: async () => document.querySelector("button").click(), dispose() {},
+      }) }),
+    };
+    try {
+      const step = { action: "click", selector: ".target", measure: { name: "all", budgetMs: 250, maxLongTaskMs: 50 } };
+      const measured = await perform(page, { ...step, measure: { ...step.measure, enforce: false } });
+      expect(measured.longTasks).toEqual([{ start: 5, duration: 75 }]);
+      await expect(perform(page, step)).rejects.toThrow("long task exceeds 50ms");
+    } finally {
+      vi.unstubAllGlobals(); vi.restoreAllMocks();
+    }
   });
 });

@@ -11,6 +11,7 @@ import { BROWSER_ARGS, browserPath } from "../runner.mjs";
 import { launch, stopOwned, connectWebView, freePort } from "./process.mjs";
 import { collectErrors, paidRequests } from "./errors.mjs";
 import { drive, journeys, pause } from "./journeys.mjs";
+import { decodeVisibleImages, settleMotion } from "../driver.mjs";
 
 const execute = promisify(execFile);
 const app = resolve(import.meta.dirname, "../../.."), root = resolve(app, "..");
@@ -56,6 +57,8 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
+      delete env.RAPHAEL_TEST_NATIVE_CATALOG;
+      if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {
         await database("init", journey.name);
@@ -98,13 +101,15 @@ async function run(options) {
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
         const capture = async label => {
+          await settleMotion(page);
+          await page.evaluate(decodeVisibleImages);
           const image = `${journey.name}-${label}.png`;
           await page.screenshot({ path: join(directory, image) });
           result.image = image;
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });
+        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack" });
         await capture("final");
       } catch (error) {
         result.failures.push(error.message);
@@ -134,7 +139,7 @@ async function run(options) {
         }
         await writeFile(join(journeyDir, "app.log"), log);
         result.cliDiagnosticLog = log.split(/\r?\n/).filter(line => line.includes("Native CLI diagnostic "));
-        const costs = paidRequests(log, journey.name === "gmail-connect");
+        const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name));
         if (costs.length) result.failures.push(`Undeclared paid/Composio requests: ${JSON.stringify(costs)}`);
         if (journey.name === "gmail-connect") result.connectorLog = log.split(/\r?\n/).flatMap((line, index, lines) => /connect|composio|card/i.test(line) ? lines.slice(Math.max(0, index - 2), index + 3) : []);
         result.failed = !!(result.failures.length || result.runtimeErrors.length);

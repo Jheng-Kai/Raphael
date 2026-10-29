@@ -30,8 +30,10 @@ describe("maintained verification feature map", () => {
         const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
         const allowedWidths = wide ? [[1120, 720, 1920]] : [[1120, 720], [1120, 720, 1920]];
         allowedWidths.push([1120,720,1920,1180,1280]);
+        if (name === "connections-mcp") allowedWidths.push([1120, 720, 1920, 1180]);
         expect(allowedWidths, `${name}: ${command}`).toContainEqual(options.widths);
         if (options.widths.includes(1920)) expect(options.heights[1920], `${name}: ${command}`).toBe(1080);
+        if (options.widths.includes(1180)) expect(options.heights[1180], `${name}: ${command}`).toBe(780);
       }
     }
     const staged = resolve(root, ".fold/.agents/skills/verify-raphael/features");

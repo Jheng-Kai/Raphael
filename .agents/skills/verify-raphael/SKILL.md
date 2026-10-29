@@ -139,17 +139,21 @@ feature entry, and fails scores below 4, hard violations, malformed reviews and
 budget exhaustion. Reports and summaries live in app/.look/judge-*/; cache identity
 includes candidate bytes, model, rules, feature and reference bytes.
 
-Judge uses Windows Credential Manager locally; hosted GitHub Actions alone accepts
-OPENROUTER_API_KEY. No secret is ever logged. Its default vision model is configurable
-with RAPHAEL_JUDGE_MODEL or --model. Costs vary by model and image size; --max-cost-usd,
---request-ceiling and --max-requests bound admission. Unknown/over-ceiling reported
-costs stop the run. The provider controls final billing; the configured per-request
-ceiling is a conservative reservation, not a provider-enforced credit limit.
-Use an account/key spending limit as the billing backstop. Cache hits cost zero.
-Reference images stay outside git; CI downloads public HTTPS images using a pinned
-URL/hash manifest in the repository variable RAPHAEL_JUDGE_REFERENCE_MANIFEST.
-Missing configuration fails when judge is enabled. No maintainer-specific path is
-required. Missing fork secrets produce an explicit SKIP notice, never design PASS.
+Judge defaults to the signed-in Claude Code subscription (`--brain claude`).
+Select `--brain codex` for the signed-in Codex subscription. Both use read-only,
+isolated CLI turns and remove API keys and endpoint overrides. Claude reads the
+attached image paths; Codex receives `-i` images. Three candidates share a request
+by default (`--batch-size 1..4`); `--max-requests` bounds submitted batches. Reports
+record CLI version, requested/actual model, redacted diagnostics and per-image
+scores; cache hits submit no review request. Login and external reference images
+are required. Missing prerequisites are blocked/SKIP, never design PASS.
+
+Testing never spends OpenRouter. Do not run its judge without an explicit owner
+request. The retained API implementation is accessible only through explicit
+`--brain openrouter`, with its existing dollar/request admission checks. The CLI
+paths never construct the OpenRouter client. Reference images stay outside git;
+CI downloads pinned public reference images and explicitly skips when no subscription
+CLI is installed. Enabled reviews fail closed on missing login or references.
 
 For brain/tool-path hand-off, the maintainer runs `npm run verify -- --live` with
 installed/logged-in subscriptions and the OS key. RAPHAEL_LIVE_CONFIG can select a
