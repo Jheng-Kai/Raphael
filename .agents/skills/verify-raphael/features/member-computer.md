@@ -52,6 +52,10 @@ store. Guest directory traversal and symlinks are refused with openat/no-follow.
 Screenshot blocks reach CLI and API brains, are treated as untrusted screen
 data, and are omitted from saved background continuations and public steps.
 
+New containers reuse the last validated IANA zone sent by the UI to `home.overview`
+as `TZ`, falling back to UTC until one is known. The zone stays in memory; no
+setting or platform-specific lookup is added. Existing containers are not recreated.
+
 Container reuse checks ownership, image ID/labels, bind mount, loopback publishing
 and resource/security limits. Idle shutdown defaults to 480 minutes (5-1440),
 preserves the workspace and skips owner-held or active desktops. Startup recovers

@@ -113,6 +113,7 @@ class HomeOverview:
                  calendar_events: Callable[[int, int], Awaitable[list[HomeItem]]] = no_calendar_events):
         self.conn, self.router, self.members = conn, router, members
         self.now_ms, self.tz, self.calendar_events = now_ms, tz, calendar_events
+        self.timezone_name = getattr(tz, "key", None)
         self._allowance_task = None
 
     def register(self):
@@ -136,6 +137,7 @@ class HomeOverview:
                 zone = ZoneInfo(params["tz"])
             except (ValueError, ZoneInfoNotFoundError):
                 raise invalid_params("tz must be an IANA time zone") from None
+            self.timezone_name = zone.key
         now = self.now_ms()
         day = datetime.fromtimestamp(now / 1000, zone).replace(hour=0, minute=0, second=0, microsecond=0)
         start, tomorrow, end = [int((day + timedelta(days=n)).timestamp() * 1000) for n in (0, 1, 7)]

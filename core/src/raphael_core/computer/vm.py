@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
@@ -79,7 +80,11 @@ def mount_arg(path):
     return stream.getvalue()
 
 
-def run_args(target, owner, password):
+def run_args(target, owner, password, *, tz=None):
+    try:
+        zone = ZoneInfo(tz).key
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        zone = "UTC"
     args = ["run", "-d", "--name", target.name, "--hostname", target.name]
     for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.key}.items():
         args += ["--label", f"{key}={value}"]
@@ -88,6 +93,7 @@ def run_args(target, owner, password):
         "--pids-limit", "4096", "--ipc", "private", "--cgroupns", "private",
         "--cap-drop", "ALL", "--cap-add", "SETUID", "--cap-add", "SETGID", "--shm-size", "512m",
         "--mount", mount_arg(target.workspace), "-e", f"VNC_PW={password}",
+        "-e", f"TZ={zone}",
         "-p", "127.0.0.1::6901", IMAGE,
     ]
 
@@ -154,6 +160,7 @@ class LocalVm:
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
+        self.timezone = lambda: None
 
     def target(self, member_id=0):
         mode = "shared" if self.settings is None else self.settings.get("computer_vm_mode")
@@ -236,7 +243,7 @@ class LocalVm:
                 if not state.get("image"):
                     raise VmError("image_missing")
                 target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
-                result = await self.run(run_args(target, self.owner, secrets.token_urlsafe(24)), timeout=60)
+                result = await self.run(run_args(target, self.owner, secrets.token_urlsafe(24), tz=self.timezone()), timeout=60)
             elif state["state"] == "stopped":
                 result = await self.run(["start", target.name], timeout=60)
             else:

@@ -86,6 +86,34 @@ def test_args_are_hardened_loopback_only_and_host_agnostic(tmp_path):
     assert exec_args(target, [DRIVER, "mcp"], interactive=True)[:3] == ["exec", "-i", "-u"]
 
 
+@pytest.mark.parametrize("zone,expected", [
+    ("Asia/Taipei", "Asia/Taipei"), ("Europe/Paris", "Europe/Paris"),
+    (None, "UTC"), ("", "UTC"), ("invalid/timezone", "UTC"), (8, "UTC"),
+])
+def test_run_args_use_known_iana_zone_or_utc(tmp_path, zone, expected):
+    vm = LocalVm(tmp_path)
+    args = run_args(vm.target(), vm.owner, "secret", tz=zone)
+    assert [args[index + 1] for index, arg in enumerate(args) if arg == "-e"] == ["VNC_PW=secret", f"TZ={expected}"]
+    assert args[-1] == IMAGE
+
+
+async def test_start_reads_latest_owner_timezone_when_creating_container(desktop):
+    vm, target, runtime = desktop
+    runtime.raw = None
+    original = runtime.__call__
+
+    async def run(args, **kwargs):
+        if args[0] == "run":
+            runtime.raw = container(vm, target, runtime)
+        return await original(args, **kwargs)
+
+    owner = SimpleNamespace(zone=None)
+    vm.run, vm.timezone = run, lambda: owner.zone
+    owner.zone = "Asia/Taipei"
+    assert (await vm.start(target))["ready"]
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
+
+
 def test_targets_share_by_default_and_are_isolated_per_bot(conn, tmp_path):
     settings = SettingsStore(conn)
     vm = LocalVm(tmp_path, settings=settings)

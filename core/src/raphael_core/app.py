@@ -950,6 +950,7 @@ class App(Router):
         self.tool_hub.scope_busy = computer_scope_busy
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
+        self.vm.timezone = lambda: self.home.timezone_name
         self.background.use_team(self.members, self.agent.team_tool)
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member

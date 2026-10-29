@@ -1961,7 +1961,14 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
 
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
     app = make_app()
+    assert app.vm.timezone() is None
     value = await app.call("home.overview", {"tz": "Asia/Taipei", "ui_language": "en"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    with pytest.raises(RpcError):
+        await app.call("home.overview", {"tz": "invalid/timezone"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    await app.call("home.overview", {"tz": "Europe/Paris"})
+    assert app.vm.timezone() == "Europe/Paris"
     assert value["today"] == value["reports"] == value["calendar"] == []
     assert len(value["usage"]["daily"]) == 14
     assert value["dictation"]["words"] == 0

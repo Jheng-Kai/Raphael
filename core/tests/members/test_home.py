@@ -112,6 +112,17 @@ async def test_calendar_seam_and_invalid_timezone(home, rig):
     assert caught.value.code == INVALID_PARAMS
 
 
+async def test_browser_timezone_is_remembered_without_storage_or_default_zone_changes(home, rig):
+    before = rig.conn.total_changes
+    default_zone = home.tz
+    assert home.timezone_name is None
+    await rig.call("home.overview", {"tz": "Asia/Taipei"})
+    await rig.call("home.overview")
+    assert home.timezone_name == "Asia/Taipei"
+    assert home.tz is default_zone
+    assert rig.conn.total_changes == before
+
+
 async def test_occurrences_stop_at_maximum_runs_and_calendar_is_bounded(home, rig):
     await rig.call("routines.create", {"member_id": 0, "title": "One remaining", "prompt": "Report",
                                       "schedule": {"kind": "daily", "time": "09:00", "max_runs": 1}})
