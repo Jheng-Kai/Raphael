@@ -41,7 +41,7 @@ async function run(options) {
   try {
     report.executable = executable;
     if (process.platform !== "win32") throw new Error("Native journeys require Windows WebView2");
-    if (!existsSync(executable)) throw new Error(`Missing debug app: ${executable}; build offline with CARGO_BUILD_JOBS=2`);
+    if (options.selected.some(journey => journey.name !== "member-computer") && !existsSync(executable)) throw new Error(`Missing debug app: ${executable}; build offline with CARGO_BUILD_JOBS=2`);
     if (!existsSync(python)) throw new Error(`Missing core Python: ${python}; set RAPHAEL_CORE_PYTHON to an installed interpreter`);
     const phrases = await translationPhrases();
     for (const journey of options.selected) {
@@ -60,6 +60,36 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;
       if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
+      if (journey.name === "member-computer") {
+        let viewer, viewerUrl;
+        try {
+          const smoke = await database("vm-smoke");
+          viewerUrl = smoke.state.viewer_url;
+          delete smoke.state.viewer_url;
+          result.computer = smoke;
+          const image = "member-computer-tool.png";
+          await copyFile(join(journeyDir, "vm-tool-screenshot.png"), join(directory, image));
+          const png = await readFile(join(directory, image));
+          report.captures.push({ scene: "member-computer/tool", theme: "native", width: png.readUInt32BE(16), height: png.readUInt32BE(20), image, failed: false });
+          viewer = await puppeteer.launch({ executablePath: browserPath(), headless: true, userDataDir: join(journeyDir, "viewer-profile"), args: BROWSER_ARGS });
+          const page = await viewer.newPage();
+          await page.setViewport({ width: 1120, height: 900 });
+          await page.goto(viewerUrl, { waitUntil: "domcontentloaded" });
+          await page.waitForSelector("#noVNC_container canvas", { visible: true, timeout: 60000 });
+          await page.waitForFunction(() => document.documentElement.classList.contains("noVNC_connected") && document.querySelector("#noVNC_container canvas")?.width > 100, { timeout: 60000 });
+          await page.screenshot({ path: join(directory, "member-computer-viewer.png") });
+          report.captures.push({ scene: "member-computer/viewer", theme: "native", width: 1120, height: 900, image: "member-computer-viewer.png", failed: false });
+        } catch (error) {
+          result.failures.push(viewerUrl ? error.message.replaceAll(viewerUrl, "[local desktop viewer]") : error.message);
+        } finally {
+          try { await viewer?.close(); } catch (error) { result.failures.push(`Viewer cleanup: ${error.message}`); }
+          try { await database("vm-stop"); result.cleanup = "Journey-owned container stopped; workspace retained"; } catch (error) { result.failures.push(`VM cleanup: ${error.message}`); }
+          result.failed = result.failures.length > 0;
+          console.log(`${result.failed ? "FAIL" : "PASS"} ${journey.name}: ${result.failures[0] || "assertions passed"}`);
+          await save();
+        }
+        continue;
+      }
       try {
         await database("init", journey.name);
         await writeFile(join(data, "device.json"), JSON.stringify({ onboarded: true, ui_language: "zh-TW", appearance: "light", autostart: false }));

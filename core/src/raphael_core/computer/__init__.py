@@ -1,6 +1,7 @@
 """Raphael operates the owner's own PC: the apps on the real desktop, through UI Automation.
 
-There is no virtual machine: what Raphael clicks is what the owner sees, on the computer the owner
+This own-PC route is separate from the optional Docker desktop in `vm.py`.
+What Raphael clicks here is what the owner sees, on the computer the owner
 sits at. So this is a foreground task, never a background one, and it has rules of its own:
 
 - **Presence.** Only a request made at this computer (spoken, or typed in the app) can start a run

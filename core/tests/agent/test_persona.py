@@ -20,6 +20,24 @@ from raphael_core.brain.textnorm import convert_leftover_simplified
 # --- the languages -------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_all_system_contracts_require_owner_approval_for_outward_vm_actions(language):
+    member = dict(name="Member", role="Assistant", instructions="", personality="")
+    prompts = [
+        persona.system_prompt(language, "answer"),
+        persona.cli_system_prompt(language),
+        persona.cli_system_prompt(language, **member),
+        persona.member_system_prompt(language, "answer", **member),
+        persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
+        persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10),
+    ]
+    for prompt in prompts:
+        for clause in ("no per-action approval", "owner holds control", "sending a message or email",
+                       "publishing or posting", "outside the workspace", "paying or buying",
+                       "approve on CLI brains", "API harness", "owner's yes", "unavailable, denied"):
+            assert clause in prompt, clause
+
+
 def test_raphael_speaks_traditional_chinese_english_and_japanese():
     assert LANGUAGES == ("zh-TW", "en", "ja")
     assert DEFAULT_LANGUAGE == "zh-TW"

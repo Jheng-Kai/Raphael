@@ -3,6 +3,7 @@
 Nothing here spends money: the model is the fake OpenRouter of the agent tests."""
 
 import pytest
+from dataclasses import replace
 
 from raphael_core.agent.ledger import Ledger
 from raphael_core.agent.plugins import (
@@ -160,6 +161,27 @@ async def test_a_few_tools_need_no_extra_call(make_rig, client):
     client.replies.append(spoken("答", "好。"))
     await rig.ask(QUESTION)
     assert len(client.plan_calls) == 1 and len(tools_offered(client)) == 5
+
+
+@pytest.mark.parametrize("count", [MAX_OFFERED, 65])
+async def test_fast_tier_pins_computer_tools_without_using_plugin_slots(make_rig, client, count):
+    computer = [replace(tool, key=f"mcp:computer-shared/{name}", server="computer", name=name, pinned=True)
+                for tool, name in zip(notion_tools(2), ["click", "get_desktop_state"])]
+    hub = Hub([*notion_tools(count), *computer])
+    rig = make_rig(plugins=hub)
+    route(client)
+    if count > MAX_OFFERED:
+        client.plans.append(choosing("Notion__notion-search"))
+    client.plans.append(tool_plan())
+    client.replies.append(spoken("答", "好。"))
+    await rig.ask(QUESTION)
+    offered = tools_offered(client)
+    assert {"computer__click", "computer__get_desktop_state"} <= set(offered)
+    assert len(client.plan_calls) == (1 if count == MAX_OFFERED else 2)
+    if count == MAX_OFFERED:
+        assert len(offered) == MAX_OFFERED + 2
+    else:
+        assert "computer__" not in client.plan_calls[0]["user"]
 
 
 # --- the arguments -------------------------------------------------------------------------

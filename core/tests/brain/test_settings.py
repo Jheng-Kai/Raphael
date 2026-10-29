@@ -77,6 +77,8 @@ def test_the_defaults_are_the_documented_ones():
         "tts_fish_voice": "",
         "tts_fish_model": "s2.1-pro-free",
         "tts_language": "ja",
+        "computer_vm_mode": "shared",
+        "computer_vm_idle_minutes": 480,
     }
 
 

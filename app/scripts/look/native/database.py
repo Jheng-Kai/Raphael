@@ -7,7 +7,17 @@ from pathlib import Path
 directory = Path(sys.argv[1]).resolve()
 database = directory / "raphael.db"
 operation = sys.argv[2]
-if operation == "init":
+if operation == "vm-smoke":
+    import asyncio
+    from raphael_core.native_journeys import vm_smoke
+    print(json.dumps(asyncio.run(vm_smoke(directory))))
+elif operation == "vm-stop":
+    import asyncio
+    from raphael_core.computer.vm import LocalVm
+    vm = LocalVm(directory)
+    asyncio.run(vm.stop(vm.target()))
+    print("{}")
+elif operation == "init":
     from raphael_core.brain.db import connect
 
     if database.exists():
