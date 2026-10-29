@@ -188,3 +188,7 @@ Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280
 checks turn-one recall on turn 25 and a member-written memory in only that
 member home. Its implementation and selected memory-pane scenes are mapped in
 [Members](members.md). This is separate from live provider and design-judge acceptance.
+
+## Owner round 7 contracts
+
+Owner round 7 extends the existing affected journeys with sidebar-count-alignment, home-lead-width, team-card-lines, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800. Judge is intentionally left to the owner for this handoff.

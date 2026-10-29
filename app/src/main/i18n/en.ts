@@ -381,7 +381,6 @@ export const en = {
   "onboarding.welcomeTitle": "Set up Raphael",
   "onboarding.rerunTitle": "Take the tour again",
   "onboarding.abilitiesTitle": "What will you use Raphael for?",
-  "onboarding.abilitiesLine": "Anything you skip still works, it just has no setup or practice",
   "onboarding.abilityDictate": "Dictation",
   "onboarding.abilityDictateDesc": "Talk instead of typing",
   "onboarding.abilityCleanup": "Clean-up",

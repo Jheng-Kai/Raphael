@@ -12,6 +12,62 @@ export function checkRendered(name) {
     require(!window.__look.calls.some(call => call.method === "memory.update"), "opening and reading never applies the pending change");
     return { check: name };
   }
+  if (name === "sidebar-count-alignment") {
+    const count = document.querySelector('.side .nav-count'), row = count?.closest('.nav');
+    require(visible(count), "the connected-app count is visible");
+    const rail = document.documentElement.dataset.rail === 'true';
+    if (!rail) {
+      const badge = count.getBoundingClientRect(), label = row.querySelector('.nav-t').getBoundingClientRect();
+      require(getComputedStyle(count).position !== 'absolute' && badge.left >= label.right - 1 && Math.abs(badge.top + badge.height / 2 - label.top - label.height / 2) < 1, "expanded sidebar count follows and centres with its label");
+      const peer = document.querySelector('.side [data-go="settings"] .nav-t');
+      require(Math.abs(label.left - peer.getBoundingClientRect().left) < 1, "counted sidebar row shares the other labels' left inset");
+    } else require(getComputedStyle(count).position === 'absolute', "icon rail keeps its icon badge");
+    return { check: name, rail };
+  }
+  if (name === "home-lead-width") {
+    const lead = document.querySelector('.ho-hero'), copy = lead.querySelector('h1').parentElement;
+    require(Math.abs(copy.getBoundingClientRect().right - lead.getBoundingClientRect().right) < 1, "Home report uses all width beside its emblem");
+    require(getComputedStyle(lead.querySelector('h1')).textWrapStyle !== 'balance', "Home report fills its lines rather than balancing a narrow text column");
+    return { check: name, width: copy.getBoundingClientRect().width };
+  }
+  if (name === "team-card-lines") {
+    const cards = [...document.querySelectorAll('.team-member')];
+    for (const card of cards) {
+      const action = card.querySelector('[data-team="chat"]');
+      require(action.classList.contains('icon') && !action.textContent.trim() && action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "team chat is a named icon with a tooltip");
+      const label = card.querySelector('.team-model > span:last-child'), source = label.querySelector('.team-model-source');
+      require(source && !source.textContent.trim().startsWith('·'), "model source has no leading separator");
+      for (const line of [label.firstElementChild, source]) {
+        require(visible(line), "model name and source each have a line");
+        const range = document.createRange(); range.selectNodeContents(line);
+        const rects = [...range.getClientRects()];
+        require(rects.length === 1 && rects[0].width <= line.getBoundingClientRect().width + 1, `model line never wraps or clips: ${line.textContent}`);
+      }
+      const box = card.getBoundingClientRect();
+      for (const peer of cards.filter(node => node.parentElement === card.parentElement && Math.abs(node.getBoundingClientRect().top - box.top) < 1)) {
+        require(Math.abs(peer.querySelector('footer').getBoundingClientRect().top - card.querySelector('footer').getBoundingClientRect().top) < 1, "cards in one row align their dividers and actions");
+      }
+    }
+    const chief = document.querySelector('.team-chief').getBoundingClientRect(), groups = document.querySelector('.team-groups').getBoundingClientRect();
+    require(Math.abs(chief.left - groups.left) < 1 && Math.abs(chief.right - groups.right) < 1, "chief and groups share one capped column at every zoom");
+    return { check: name, cards: cards.length };
+  }
+  if (name === "onboarding-abilities-hero") {
+    const title = document.querySelector('.ob-col h2');
+    require(parseFloat(getComputedStyle(title).fontSize) >= 40, "abilities use the welcome hero headline size");
+    require(!document.querySelector('.ob-sub'), "abilities have no optional-setup helper paragraph");
+    return { check: name, fontSize: getComputedStyle(title).fontSize };
+  }
+  if (name === "details-quick-once") {
+    const section = document.querySelector('[data-conversation-section="quick"]');
+    require(visible(section) && !section.querySelector('.mb-dh') && section.querySelectorAll('[data-conversation-open]').length === 1, "quick questions appear once as the accessible conversation item");
+    return { check: name };
+  }
+  if (name === "conversation-scroll-edge") {
+    const scroller = document.querySelector('.mb-chat .ra-scroll');
+    require(getComputedStyle(scroller).maskImage !== 'none', "conversation top fades partially scrolled message fragments");
+    return { check: name, scrollTop: scroller.scrollTop };
+  }
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
@@ -55,7 +111,7 @@ export function checkRendered(name) {
     const pane = document.querySelector('.modal-scrim [data-pane][aria-current="page"]')?.dataset.pane;
     const labels = pane === 'general' ? ['[data-k="subtitles"]'] : pane === 'dictation' ? ['[data-k="languages"]'] : [];
     for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
-    require(!host.querySelector('.skin-card small, .models-purpose-note, .run-retained'), "skin, model and usage helpers are absent");
+    require(!host.querySelector('.skin-card small, .models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
     if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
     if (pane === 'messaging') require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
     return { check: name, pane };
@@ -336,7 +392,7 @@ export function checkRendered(name) {
     const quick = host.querySelector('[data-conversation-section="quick"]'), standard = host.querySelector('[data-conversation-section="standard"]');
     require(visible(standard) && standard.querySelector('.mb-dh').textContent === "對話", "ordinary conversations use the existing small heading");
     if (quick) {
-      require(quick.querySelector('.mb-dh').textContent === "快速提問", "quick questions have their own heading");
+      require(!quick.querySelector('.mb-dh') && quick.querySelector('[data-conversation-open]').textContent.includes("快速提問"), "quick questions are named once on their row");
       require(standard.getBoundingClientRect().top - quick.getBoundingClientRect().bottom >= 8, "the two sections have breathing room");
       require(!!quick.querySelector('[data-conversation-more]'), "the quick row has its overflow menu");
     }
@@ -1694,7 +1750,7 @@ export function checkRendered(name) {
     for (const chip of chips) {
       const time = chip.querySelector("time, small"), face = chip.querySelector(".av"), label = chip.querySelector("b");
       const bounds = chip.getBoundingClientRect();
-      if (bounds.width >= 110) require(visible(face), "member face is visible in a wide chip");
+      require(visible(face), "member face is visible in every event chip");
       if (visible(face)) {
         const picture = face.getBoundingClientRect();
         require(Math.abs(picture.width - 20) < 1 && Math.abs(picture.height - 20) < 1, "event faces retain their 20px square rather than flexing with the copy");
@@ -1704,9 +1760,11 @@ export function checkRendered(name) {
       const text = range.getBoundingClientRect();
       require(text.left >= bounds.left + 1 && text.right <= bounds.right - 1 && text.top >= bounds.top && text.bottom <= bounds.bottom,
         `time ${time.textContent} fits chip (${Math.round(text.width)}px text, ${Math.round(bounds.width)}px chip)`);
+      require(text.right <= face.getBoundingClientRect().left - 1, "event time and fixed avatar do not overlap");
       require(chip.title.includes(label.textContent) && chip.title.includes(time.textContent), "tooltip preserves full title and time");
-      if (visible(label)) require(getComputedStyle(label).textOverflow === "ellipsis", "long visible title uses ellipsis");
-      if (bounds.width <= 92) require(getComputedStyle(label).whiteSpace === "nowrap", "narrow calendar titles truncate on one line");
+      require(getComputedStyle(label).whiteSpace === "normal" && getComputedStyle(label).webkitLineClamp === '2', "calendar titles allow two recognisable lines");
+      const titleBox = label.getBoundingClientRect();
+      require(titleBox.bottom <= bounds.bottom + 1 && titleBox.height <= parseFloat(getComputedStyle(label).lineHeight) * 2 + 1, "two title lines fit inside the event");
     }
     return { check: name, chips: chips.length };
   }

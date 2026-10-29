@@ -143,8 +143,10 @@ test("CLI cards share the picker's cached model names and subscription sources, 
     { id: "claude", available: true, models: [{ id: "haiku", name: "Haiku" }] },
   ] });
   await mount();
-  expect(query('[data-team-card="0"] .team-model').textContent).toContain('GPT-6.1 Sol · Codex Subscription');
-  expect(query('[data-team-card="1"] .team-model').textContent).toContain('Haiku · Claude Code Subscription');
+  expect(query('[data-team-card="0"] .team-model-name').textContent).toBe('GPT-6.1 Sol');
+  expect(query('[data-team-card="0"] .team-model-source').textContent).toBe('Codex Subscription');
+  expect(query('[data-team-card="1"] .team-model-name').textContent).toBe('Haiku');
+  expect(query('[data-team-card="1"] .team-model-source').textContent).toBe('Claude Code Subscription');
   expect(query('[data-team-card="2"] .team-model').textContent).toContain('GPT-6.1 Sol');
   for (const node of document.querySelectorAll<HTMLElement>('.team-model')) expect(node.textContent + node.title).not.toMatch(/cli:|\?effort=/);
   page.hide(); page.el.remove(); api.modelsCatalog.mockRejectedValue(Error('offline')); api.brainsCli.mockRejectedValue(Error('offline'));

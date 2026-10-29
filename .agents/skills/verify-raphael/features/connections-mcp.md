@@ -14,7 +14,7 @@ The rows sit under three headings: 應用程式 (their tools can be called now),
 (waiting for sign-in, failed, a duplicate of another connection, all tools off or
 unreadable, each with its reason) and 私人技能. An app is connected only when its tools
 can be called now, and the core defines that once (`integrations/inventory.py`); the
-sidebar's 連結應用程式 entry (a badge on its icon in the rail and the narrow sidebar), the tab's number, the rows
+sidebar's 連結應用程式 entry (a count beside its label, or a badge on its icon only in the rail), the tab's number, the rows
 under 應用程式 and the roster every model is given (`TeamContextSnapshot.connected`)
 all show that one count. An unreadable inventory shows 「—」 instead of a number (the
 entry's accessible name says it cannot be read), and an app whose state cannot be read
@@ -265,3 +265,7 @@ Follow the [content-width contract](README.md#content-width), including its toke
 Connections uses the shared 640px settings-pane measure, including its header
 actions, toolbar and list/store grids. Search ends at the same content edge;
 capability lists outside Settings retain their own reading cap.
+
+## Owner round 7 contracts
+
+The connected-app count stays at the row end beside the label in every expanded sidebar, including 720px. Only the icon-only rail places the count over the plug icon. sidebar-count-alignment checks both modes using representative Home, Team, calendar, dictation and conversation scenes; inventory semantics remain unchanged.

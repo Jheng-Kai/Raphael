@@ -15,7 +15,7 @@ Launch the app, complete onboarding, click Home (first in the rail), or click th
 Raphael brand. A report opens its member's conversation at that exact turn;
 routines open Automations. Spend and allowance buttons open Usage, and the dictation card icon opens Dictation. The Today icon and timeline items open the calendar. The status report keeps Raphael's emblem visible and turning: it plays his loop (the one of the 拉斐爾 page) while the window allows motion and is the still picture under reduced motion, following the preference as it changes. Nothing sits right of the report except its one fixing icon when something is wrong: asking Raphael is done on his own page (owner, 2026-10-25), so the hero has no ask icon.
 The bottom of the sidebar holds 連結應用程式, above Settings, with the number of connected apps
-(a badge on its icon in the 拉斐爾 page's rail and in the sidebar at 880px and narrower); it opens
+(at the row end beside its label; a badge on its icon only in the 拉斐爾 page's rail); it opens
 Settings > Connections (see [Connections and MCP](connections-mcp.md)).
 
 ## Driving it with look
@@ -43,7 +43,7 @@ scene scrolls to the lower usage and dictation area at all three widths. The hom
 assertion checks member history, conversation 11, around_id 2 and the rendered turn.
 The after-onboarding scene also asserts that Home is selected and first in the rail.
 Every home scene's `home-overview` check also asserts that each page is named on one line in the
-sidebar; at 720px 連結應用程式 shows its number as a badge on its icon so that its name fits.
+sidebar; at 720px 連結應用程式 keeps its number centred after its label.
 
 Timeline actions keep visible token-based frames (R-UI-18), including calendar events.
 
@@ -83,3 +83,7 @@ the microphone selector. Home, home-empty and home-720 cover both themes at
 ## Owner round 6 contracts
 
 Owner round 6: home/home-empty/home-many keep the emblem and report copy side by side at 720. home-redesign checks both boxes rather than only the outer grid. Empty charts retain their owner-approved axis-free state.
+
+## Owner round 7 contracts
+
+The expanded sidebar keeps its connected-app count after the label, vertically centred with the same label inset as other rows, including at 720px; only the icon rail overlays the icon. Home uses pretty line wrapping and two hero columns when no fixing action exists, giving the report all remaining width beside the emblem. A fixing action retains its own third column. home/home-empty/home-many assert the report right edge; home/team/automations-calendar/dictation-overview/chat cover the shared count in expanded and icon-only navigation.

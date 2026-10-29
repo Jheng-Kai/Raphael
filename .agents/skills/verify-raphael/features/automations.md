@@ -62,3 +62,7 @@ npm run look -- automation-delete --theme both --width 1120,720,1920x1080
 ## Owner round 6 contracts
 
 Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member side panel at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller content areas use the existing compact view. calendar-shell asserts both modes.
+
+## Owner round 7 contracts
+
+Every event keeps a fixed visible 20px avatar at the top right. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Event height is 62px within the 64px hour; narrow-day horizontal padding is reduced so time and avatar fit at their existing sizes. calendar-chips asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.

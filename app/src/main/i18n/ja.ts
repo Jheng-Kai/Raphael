@@ -381,7 +381,6 @@ export const ja = {
   "onboarding.welcomeTitle": "セットアップを始めましょう",
   "onboarding.rerunTitle": "ガイドをもう一度",
   "onboarding.abilitiesTitle": "ラファエルで何をしますか？",
-  "onboarding.abilitiesLine": "選ばなかった機能も使えます。設定と練習がないだけです",
   "onboarding.abilityDictate": "音声入力",
   "onboarding.abilityDictateDesc": "話すだけで入力",
   "onboarding.abilityCleanup": "文章の整理",

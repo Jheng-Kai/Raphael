@@ -1,10 +1,11 @@
 /* The owner's Home composition: a plain lead, agenda/inbox, and three equal stats. */
 .page.page-home { max-width: 1080px; margin: 0 auto; padding: 56px 40px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); align-content: start; }
 .page-home .btn { line-height: inherit; }
-.ho-hero { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-5); }
+.ho-hero { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--sp-5); }
+.ho-hero:has(> button) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ho-hero > .av { flex-shrink: 0; }
 .ho-date { margin: 0 0 var(--sp-1); font-size: var(--fs-sm); color: var(--text-3); }
-.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: balance; overflow-wrap: anywhere; }
+.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: anywhere; }
 .ho-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--sp-5); align-items: stretch; }
 .ho-card { min-width: 0; background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
 .ho-today { grid-column: span 7; }

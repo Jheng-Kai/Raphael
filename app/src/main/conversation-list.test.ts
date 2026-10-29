@@ -21,7 +21,8 @@ test("quick questions stay first with their localized title and open the persist
   expect(first.dataset.conversationOpen).toBe("9");
   expect(first.textContent).toContain("快速提問");
   expect(first.closest(".conversation-row")!.querySelector("[data-conversation-more]")).not.toBeNull();
-  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["快速提問", "對話"]);
+  expect([...host.querySelectorAll(".conversation-section > .mb-dh")].map(node => node.textContent)).toEqual(["對話"]);
+  expect(host.querySelector('[data-conversation-section="quick"]')!.textContent!.match(/快速提問/g)).toHaveLength(1);
   first.click(); expect(onOpen).toHaveBeenCalledWith(9);
   list.destroy();
 });
