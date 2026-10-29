@@ -6,6 +6,7 @@ export const journeys = [
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
+  { name: "member-computer", description: "Docker desktop with fake brain, real MCP screenshot, exec, attachment and noVNC; no host desktop actions" },
   { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },

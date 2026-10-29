@@ -238,6 +238,10 @@ class ToolGate:
         except Exception:
             return False
 
+    def is_vm_tool(self, key: str) -> bool:
+        """Sandbox steps use their own control lease, not per-click safety classification."""
+        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key))
+
     # --- the plugins' tools ---------------------------------------------------------------------
 
     async def call_plugin(

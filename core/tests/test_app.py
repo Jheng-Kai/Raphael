@@ -1961,7 +1961,14 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
 
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
     app = make_app()
+    assert app.vm.timezone() is None
     value = await app.call("home.overview", {"tz": "Asia/Taipei", "ui_language": "en"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    with pytest.raises(RpcError):
+        await app.call("home.overview", {"tz": "invalid/timezone"})
+    assert app.vm.timezone() == "Asia/Taipei"
+    await app.call("home.overview", {"tz": "Europe/Paris"})
+    assert app.vm.timezone() == "Europe/Paris"
     assert value["today"] == value["reports"] == value["calendar"] == []
     assert len(value["usage"]["daily"]) == 14
     assert value["dictation"]["words"] == 0
@@ -2116,7 +2123,8 @@ async def test_the_workers_methods_are_on_the_app_from_the_start(make_app):
 async def test_the_assistant_and_the_worker_go_through_the_one_gate(make_app):
     app = make_app()
     assert app.agent._gate is app.gate and app.background._gate is app.gate
-    assert app.gate.plugins is app.integrations
+    assert app.gate.plugins is app.tool_hub and app.tool_hub.delegate is app.integrations
+    assert app.agent._plugins is app.tool_hub
 
 
 async def test_a_task_for_the_background_goes_through_the_whole_app_with_the_fake_llm(make_app):

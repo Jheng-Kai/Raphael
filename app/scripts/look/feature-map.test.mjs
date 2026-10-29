@@ -38,7 +38,14 @@ describe("maintained verification feature map", () => {
     }
     const staged = resolve(root, ".fold/.agents/skills/verify-raphael/features");
     const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(existsSync(staged) ? readdirSync(staged) : [])])];
-    expect(files.filter(file => file !== "README.md").sort()).toEqual(names.map(name => `${name}.md`).sort());
+    expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer"].map(name => `${name}.md`).sort());
+  });
+  it("documents the Docker-only foundation through the native journey before its UI phase", () => {
+    expect(readMap("features/README.md")).toContain("](member-computer.md)");
+    const content = readMap("features/member-computer.md");
+    expect(content).toContain("npm.cmd run native -- member-computer");
+    expect(content).toContain("Phase A adds no application UI");
+    expect(content).toContain("Phase B");
   });
   it("retires deliberately removed owner controls", () => {
     for (const name of ["owner-menu", "owner-keyboard-menu", "owner-photo", "home-expand", "automations-list", "automation-example"])

@@ -96,7 +96,7 @@ class Driver:
         if self.child:
             await self.child.kill()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=()):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -105,6 +105,10 @@ class Driver:
             prompt_file = files.write("system.txt", system)
             mcp = {"mcpServers": {"raphael": {"type": "http", "url": endpoint,
                                               "headers": {"Authorization": f"Bearer {token}"}}}}
+            self.computer_endpoint = computer_endpoint
+            if computer_endpoint:
+                mcp["mcpServers"]["computer"] = {"type": "http", "url": computer_endpoint,
+                    "headers": {"Authorization": f"Bearer {token}"}}
             config = files.write("mcp.json", json.dumps(mcp))
             command = list(self.command)
             environ = dict(os.environ if self.environ is None else self.environ)
@@ -113,7 +117,7 @@ class Driver:
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
                             "--mcp-config", config, "--strict-mcp-config", "--tools", "",
-                            "--allowedTools", "mcp__raphael__*",
+                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*",
                             "--permission-prompt-tool", "mcp__raphael__approve"]
                 if session:
                     command += ["--resume", session]
@@ -137,6 +141,11 @@ class Driver:
                 session = session.removeprefix(CODEX_SESSION_PREFIX) if session and session.startswith(CODEX_SESSION_PREFIX) else None
                 overrides = {**CODEX_ISOLATION, "mcp_servers.raphael.url": endpoint,
                              "mcp_servers.raphael.bearer_token_env_var": "RAPHAEL_MCP_TOKEN"}
+                if computer_endpoint:
+                    overrides.update({"mcp_servers.computer.url": computer_endpoint,
+                        "mcp_servers.computer.bearer_token_env_var": "RAPHAEL_MCP_TOKEN",
+                        "mcp_servers.computer.required": True, "mcp_servers.computer.startup_readiness": "catalog",
+                        "mcp_servers.computer.omit_tools_from": ["deferred", "code_mode"]})
                 command += ["app-server", "--strict-config"]
                 for key, value in overrides.items():
                     command += ["-c", f"{key}={json.dumps(value)}"]
@@ -145,7 +154,7 @@ class Driver:
                 # rules only from its home folder, so it runs with a private home inside the
                 # member's workspace: Raphael's server and the persona are there, the owner's own
                 # agy settings are never touched, and the login (in the OS store) still applies.
-                home = antigravity_home(cwd or str(files.path), endpoint, token, system)
+                home = antigravity_home(cwd or str(files.path), endpoint, token, system, computer_endpoint=computer_endpoint)
                 command += ["--input-format", "stream-json", "--output-format", "stream-json", "-p="]
                 if self.model:
                     command += ["--model", self.model]
@@ -374,7 +383,7 @@ class Driver:
                     # Codex asks before it calls an MCP tool. Raphael's own server screens every call
                     # through the safety gate (and asks the owner when the rules say so), so a call to
                     # it is accepted here; any other server is declined.
-                    await response(packet["id"], {"action": "accept", "content": {}} if params.get("serverName") == "raphael"
+                    await response(packet["id"], {"action": "accept", "content": {}} if params.get("serverName") == "raphael" or (params.get("serverName") == "computer" and getattr(self, "computer_endpoint", None))
                                    else {"action": "decline"})
                 else:
                     # No filesystem, terminal or arbitrary client-side RPC outside our gate.
@@ -481,7 +490,7 @@ async def codex_home(workspace, environ, *, owner=None):
     return home, environ, auth
 
 
-def antigravity_home(workspace, endpoint, token, system):
+def antigravity_home(workspace, endpoint, token, system, *, computer_endpoint=None):
     """The private home Antigravity runs with, inside the member's private workspace: Raphael's MCP
     server (its tools allowed and nothing else, since print mode denies every other permission),
     and the persona as the home's global rules."""
@@ -490,10 +499,13 @@ def antigravity_home(workspace, endpoint, token, system):
     (gemini / "config").mkdir(parents=True, exist_ok=True)
     (gemini / "antigravity-cli").mkdir(parents=True, exist_ok=True)
     server = {"serverUrl": endpoint, "headers": {"Authorization": f"Bearer {token}"}, "disabled": False}
+    servers = {"raphael": server}
+    if computer_endpoint:
+        servers["computer"] = {**server, "serverUrl": computer_endpoint}
     (gemini / "config" / "mcp_config.json").write_text(
-        json.dumps({"mcpServers": {"raphael": server}}), encoding="utf-8")
+        json.dumps({"mcpServers": servers}), encoding="utf-8")
     (gemini / "antigravity-cli" / "settings.json").write_text(
-        json.dumps({"permissions": {"allow": ["mcp(raphael/*)"]}}), encoding="utf-8")
+        json.dumps({"permissions": {"allow": ["mcp(raphael/*)", *(["mcp(computer/*)"] if computer_endpoint else [])]}}), encoding="utf-8")
     (gemini / "GEMINI.md").write_text(system, encoding="utf-8")
     return home
 

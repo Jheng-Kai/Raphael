@@ -848,9 +848,15 @@ class App(Router):
         # changes something, with their judge (Jev).
         self.safety_rules = SafetyRules(self._conn)
         self.safety_rules.register(self)
+        from .computer.vm import LocalVm
+        from .computer.vm_tools import VmTools
+
+        from .native_journeys import native_enabled
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), enabled=not fake_llm or native_enabled(fake_llm))
+        self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
-            self.integrations,
+            self.tool_hub,
             conn=self._conn,
             safety=SafetyGuard(self.safety_rules, SafetyJudge(self.client)),
         )
@@ -909,7 +915,7 @@ class App(Router):
             self.client,
             self.keys,
             actions=agent_actions,
-            plugins=self.integrations,
+            plugins=self.tool_hub,
             models=self.brain.known_models,
             gate=self.gate,
             background=self.background,
@@ -934,8 +940,17 @@ class App(Router):
         if native_brain is not None:
             self.agent._cli_brains = native_brain
             self.memory._cli_brains = native_brain
+        def computer_scope_busy(scope):
+            if scope[0] == "task":
+                task = self.background.task(scope[1])
+                return task is not None and task.state in ("running", "waiting")
+            if scope[0] == "turn":
+                return self.agent.computer_scope_busy(*scope[1:])
+            return scope[0] == "async" and not scope[1].done()
+        self.tool_hub.scope_busy = computer_scope_busy
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
+        self.vm.timezone = lambda: self.home.timezone_name
         self.background.use_team(self.members, self.agent.team_tool)
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member
@@ -1142,6 +1157,7 @@ class App(Router):
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),
             ("end the assistant's requests", self.agent.aclose),
+            ("stop the computer idle monitor", self.vm.aclose),
             ("end Raphael's voice", self.speaker.aclose),
             ("end the memory's background pass", self.memory.aclose),
             ("close the services' HTTP client", self.services.aclose),
@@ -1385,6 +1401,7 @@ class App(Router):
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     async def _hello(self, params: dict) -> dict:
+        self.vm.start_monitor()
         self.messaging.start()  # a Telegram bot that was left on polls again
         self.agent.prewarm()  # the app is up: read the Start menu now, not at the first "open"
         self.memory.start()  # and look for turns the reflection pass has not read, soon

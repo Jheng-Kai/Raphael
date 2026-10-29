@@ -18,6 +18,16 @@ if operation == "voice-models":
         if files:
             missing.append({"name": name, "folder": str(folder), "files": files})
     print(json.dumps({"missing": missing}))
+elif operation == "vm-smoke":
+    import asyncio
+    from raphael_core.native_journeys import vm_smoke
+    print(json.dumps(asyncio.run(vm_smoke(directory))))
+elif operation == "vm-stop":
+    import asyncio
+    from raphael_core.computer.vm import LocalVm
+    vm = LocalVm(directory)
+    asyncio.run(vm.stop(vm.target()))
+    print("{}")
 elif operation == "init":
     from raphael_core.brain.db import connect
 

@@ -948,6 +948,11 @@ class BackgroundService:
                 self._executing = False
 
     async def _execute(self, task: Task, files: Sequence[Attachment] = ()) -> None:
+        from ..computer.vm_tools import vm_scope
+        with vm_scope(("task", task.id)):
+            await self._execute_scoped(task, files)
+
+    async def _execute_scoped(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         language = task.language
         if task.id in self._discarded:
             return
@@ -1018,6 +1023,9 @@ class BackgroundService:
         private = task.scope == "private" or task.mode == "consult"
         memory = self._memory_of(task.member_id) if private else self._shared_memory()
         team = team_tools_for(self._team, speaker, always=True) if self._team_tool else []
+        prepare = getattr(self._gate.plugins, "prepare", None)
+        if prepare is not None:
+            await prepare(speaker.id)
         snapshot = take_snapshot(
             self._gate.plugins,
             task.text,

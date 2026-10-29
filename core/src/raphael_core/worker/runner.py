@@ -84,6 +84,7 @@ class CoreHost:
             truncated=reply.get("truncated") is True,
             tools=[t for t in (reply.get("tools") or []) if _is_tool(t)],
             instruction=instruction if isinstance(instruction, str) else "",
+            blocks=reply.get("blocks") or [],
         )
 
 
