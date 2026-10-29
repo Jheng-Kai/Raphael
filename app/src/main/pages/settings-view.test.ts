@@ -295,8 +295,8 @@ describe("the rules for every tab, in every language", () => {
   });
 
   test("a line under a row's name only where the setting would otherwise be set wrong", () => {
-    expect(described(tab("general"))).toEqual(["字幕"]);
-    expect(described(tab("dictation"))).toEqual(["你說的語言"]);
+    expect(described(tab("general"))).toEqual([]);
+    expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
     expect(described(tab("models"))).toEqual(["拉斐爾的回答", "快速提問", "整理文字", "語音轉文字"]);
     expect(described(tab("usage"))).toEqual(["金鑰"]);
@@ -515,7 +515,7 @@ describe("Models", () => {
       expect(row).toMatch(new RegExp(`data-k="${k}">.*<strong class="mp-tname">${chosen}</strong>.*<svg`));
       expect(row).not.toContain("mp-tprice");
       expect(buttons(row).filter((tag) => tag.includes('class="sel mp-trigger"'))).toHaveLength(1);
-      expect(row).toContain('class="models-purpose-note"');
+      expect(row).not.toContain('class="models-purpose-note"');
       expect(row).not.toContain('data-fallback');
     }
     expect(priceTexts(view()).note).toBe("價格來自 OpenRouter，今天更新。實際花費依 OpenRouter 選用的供應商而定。");
@@ -593,7 +593,7 @@ describe("資料", () => {
     expect(groups(html)).toEqual(["聽寫紀錄", "拉斐爾的對話"]);
     expect(names(html)).toEqual(["保留聽寫紀錄", "清除聽寫紀錄", "清除拉斐爾的對話"]);
     expect(described(html)).toEqual([]);
-    expect(html).toContain("歷史紀錄只存在這台電腦上");
+    expect(html).not.toContain('class="foot"');
   });
 
   test("keeps the dictation history for a choice of days, a dropdown that shows the one in force", () => {

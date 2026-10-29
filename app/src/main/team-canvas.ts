@@ -88,6 +88,8 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
     draw();
   }
   function fit(): void {
+    // Fit restores the shared column before framing it; free placement remains available by dragging.
+    positions = {}; save();
     layout();
     const nodes = [...board.querySelectorAll<HTMLElement>(".team-chief, [data-team-group]")].filter(node => !node.hidden);
     if (!nodes.length) return;
@@ -148,7 +150,7 @@ export function createTeamCanvas(viewport: HTMLElement, board: HTMLElement, chan
   }, { passive: false });
   const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(layout);
   observer?.observe(viewport);
-  return { layout, zoomBy: (delta: number) => zoomAt(Math.round((zoom + delta) * 10) / 10), fit, revealChief,
+  return { layout, zoomBy: (delta: number) => { zoomAt(Math.round((zoom + delta) * 10) / 10); revealChief(); }, fit, revealChief,
     reset() { positions = {}; save(); pan = { x: 0, y: 0 }; zoom = 1; layout(); },
     cancel: finish };
 }

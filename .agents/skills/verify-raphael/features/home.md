@@ -79,3 +79,7 @@ real Settings selector and keeps its screenshots and exact offending elements.
 The sweep accepts the Raphael brand and actual OS microphone names only within
 the microphone selector. Home, home-empty and home-720 cover both themes at
 1120, 720 and 1920x1080; native locale-sweep supplies the language-switch proof.
+
+## Owner round 6 contracts
+
+Owner round 6: home/home-empty/home-many keep the emblem and report copy side by side at 720. home-redesign checks both boxes rather than only the outer grid. Empty charts retain their owner-approved axis-free state.

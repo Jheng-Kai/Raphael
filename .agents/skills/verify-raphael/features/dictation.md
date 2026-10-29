@@ -161,3 +161,7 @@ remain checked. Names outside those controls remain checked.
 The left desktop track is capped at two short-card measures plus the existing
 12px grid gap, so Activity and the two stats columns share their right edge
 without stretching a stat beyond 384px. dictation-layout asserts those edges.
+
+## Owner round 6 contracts
+
+Owner round 6: dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.

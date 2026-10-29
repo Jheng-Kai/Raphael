@@ -15,6 +15,12 @@ export function withOwnerRound4(scenes) {
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
     ...(original.name === "team" ? [check("team-readable")] : []),
+    ...(original.name === "team-fit" ? [check("team-column-edges")] : []),
+    ...(["team", "team-fit", "team-crisp-100", "team-crisp-150", "primary-team-board"].includes(original.name) ? [check("team-model-readable"), check("team-content-size")] : []),
+    ...(["details", "raphael-details", "details-routines", "details-memory"].includes(original.name) ? [check("details-sheet")] : []),
+    ...(["profile", "dictation", "data", "messaging", "appearance", "skins", "models", "usage"].includes(original.name) ? [check("settings-concise")] : []),
+    ...(original.name === "models" ? [check("models-responsive")] : []),
+    ...(["usage", "dictation-overview"].includes(original.name) ? [check("compact-action")] : []),
     ...(["chat", "details", "details-closed", "member-text", "raphael-details"].includes(original.name) ? [check("conversation-header"), check("details-alignment")] : []),
   ]}));
 }

@@ -45,3 +45,7 @@ user database access is required for this presentation change.
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Owner round 6 contracts
+
+Owner round 6: usage/usage-bill-breakdown display the zh-TW glossary term 權杖數 and remove the breakdown helper paragraph. CSV export uses the shared download icon button with an accessible localized name and tooltip. compact-action asserts the icon-only control and localized heading.

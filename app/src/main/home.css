@@ -55,4 +55,4 @@
 .ho-meter i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent-icon); }
 @media (max-width: 1100px) { .ho-today, .ho-inbox { grid-column: span 12; } }
 @media (max-width: 960px) { .page.page-home { padding: 48px 24px 32px; gap: var(--sp-5); } }
-@media (max-width: 760px) { .ho-stat { grid-column: span 12; } .ho-hero { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .ho-stat { grid-column: span 12; } .ho-hero { gap: var(--sp-3); } }

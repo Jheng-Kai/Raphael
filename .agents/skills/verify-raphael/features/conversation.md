@@ -496,3 +496,7 @@ screenshots and SQLite assertions are separate from provider/OAuth acceptance.
 The October 28 quota regression uses a synthetic protocol fixture because the
 original packet is unavailable. Live checks and judge require an authorized
 provider; offline results never establish live or design acceptance.
+
+## Owner round 6 contracts
+
+Owner round 6: details/details-closed/raphael-details/details-routines/details-memory assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine/memory cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.

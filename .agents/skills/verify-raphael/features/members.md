@@ -208,3 +208,7 @@ state survives task redraws; pending/member/background tasks still use Stop.
 Pointer regression tests cover Raphael and another member in agent-members.test.ts.
 Native voice-conversation proves local WAV transcription and persisted turns with
 a fake brain; it does not prove a physical microphone or live-provider behavior.
+
+## Owner round 6 contracts
+
+Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain owner-approved.

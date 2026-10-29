@@ -119,7 +119,7 @@ export function messagingHTML(v: MessagingView): string {
     return group([row(headName("Telegram", ""), "", `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>`, { cls: "msg-head" })]);
   }
   if (v.status === "failed") return group([row(headName("Telegram", ""), "", "", { cls: "msg-head" }), note(st("err", t("msg.loadFailed")), ' role="alert"')]);
-  if (!v.status.connected) return group(setupRows(v), `<p class="foot">${esc(t("msg.tg.setupLine"))}</p>`);
+  if (!v.status.connected) return group(setupRows(v));
   const s = v.status;
   const { dot, label, fault } = state(s);
   const open = isExpanded(v, s);

@@ -22,7 +22,7 @@ it("separates the ledger bill from retained work and only shows applicable exclu
   expect(host.querySelector(".run-bill-total")?.textContent).toBe("US$1.24");
   expect(host.querySelector(".run-bill h3")?.textContent).toBe("本月花費");
   expect(host.querySelector(".run-work h3")?.textContent).toBe("對話與工作的明細");
-  expect(host.querySelector(".run-retained")?.textContent).toContain("刪除紀錄");
+  expect(host.querySelector(".run-retained")).toBeNull();
   expect(host.querySelector(".run-exclusions")).toBeNull();
   expect(host.querySelector('[data-bill-purpose="stt"]')?.textContent).toContain("40%");
   expect(host.querySelector('[data-bill-purpose="future-purpose"]')?.textContent).toContain("其他");

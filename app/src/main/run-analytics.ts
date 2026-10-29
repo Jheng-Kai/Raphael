@@ -8,7 +8,7 @@ import { modelsFor } from "./model-picker";
 import type { CatalogModel } from "./types";
 import { formatUsd, describeError } from "./format";
 import { faceHTML } from "./members";
-import { btn as uiBtn, esc, openMenu, sel, tabs, toaster } from "./ui";
+import { btn as uiBtn, esc, iconButton, openMenu, sel, tabs, toaster } from "./ui";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { CliAllowances, RunAnalyticsApi, RunGrouping, RunPeriod, RunReport, RunSummary } from "./run-analytics-types";
 
@@ -88,8 +88,8 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     if (disposed) return;
     const focus = root.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.runAct : undefined;
     root.setAttribute("aria-busy", String(busy));
-    let html = `<header class="run-header"><h2>${t("runs.overview")}</h2><div>${sel(Object.entries(periodKey).map(([value, key]) => ({ value, label: t(key) })), range, t("usage.period"), ' data-run-act="period"')}${btn(t("runs.export"), ` data-run-act="export"${busy || exportBusy ? " disabled" : ""}`)}</div></header>`;
-    if (report) html += billHTML() + `<section class="run-work"><h3>${t("runs.workDetail")}</h3><p class="run-retained">${t("runs.retained")}</p>` + tiles(report.summary) + `<h4>${t("runs.where")}</h4><div class="run-groups"><section class="run-members"><h4>${t("runs.member")}</h4>${bars("member")}</section><section><div class="run-segments">` +
+    let html = `<header class="run-header"><h2>${t("runs.overview")}</h2><div>${sel(Object.entries(periodKey).map(([value, key]) => ({ value, label: t(key) })), range, t("usage.period"), ' data-run-act="period"')}${iconButton("download", t("runs.export"), ` data-run-act="export"${busy || exportBusy ? " disabled" : ""}`)}</div></header>`;
+    if (report) html += billHTML() + `<section class="run-work"><h3>${t("runs.workDetail")}</h3>` + tiles(report.summary) + `<h4>${t("runs.where")}</h4><div class="run-groups"><section class="run-members"><h4>${t("runs.member")}</h4>${bars("member")}</section><section><div class="run-segments">` +
       tabs((["model", "day", "provider", "routine"] as RunGrouping[]).map(g => ({id:g,label:t(groupKey[g]),attrs:` data-run-group="${g}" tabindex="${grouping === g ? 0 : -1}"`})),grouping,{label:t("runs.where"),kind:"nav"}) + `</div>${bars(grouping)}</section></div></section>`;
     if (busy) html += `<p role="status" class="ua-status">${t("usage.loading")}</p>`;
     if (error) html += `<p role="alert">${esc(error)}</p>${btn(t("usage.retry"), ' data-run-act="retry"')}`;

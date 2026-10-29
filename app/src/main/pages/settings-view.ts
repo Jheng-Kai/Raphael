@@ -344,7 +344,7 @@ export const quickPickerLook = (v: SettingsView): ModelPickerLook => ({
   lead: { id: "", name: t("services.sameAsAnswer") },
 });
 const quickRow = (v: SettingsView): string =>
-  row(t("conversations.quick"), `<span class="models-purpose-note">${esc(t("models.quickNote"))}</span>${priceSpan(v, "quick-model", "price num")}`,
+  row(t("conversations.quick"), priceSpan(v, "quick-model", "price num"),
     modelPickerHTML(quickPickerLook(v)), { cls: "row-model", attrs: ' data-row="quick-model"' });
 export const agentCity = (v: SettingsView): string => v.brain?.agent_city ?? "";
 /** What one background task may spend, as the value of its dropdown (the core's default is 0.2). */
@@ -393,10 +393,10 @@ const priceSpan = (v: SettingsView, k: string, cls = ""): string =>
 // draws the picker's button here; settings.ts makes it work. `k` names the control and its price.
 
 /** The three model rows, in order: what each is for, the `k` of its control and its price, and its name. */
-export const MODEL_ROWS: readonly { role: ModelRole; k: string; label: () => string; note: () => string }[] = [
-  { role: "answer", k: "agent-model", label: () => t("settings.agentModel"), note: () => t("models.answerNote") },
-  { role: "cleanup", k: "model", label: () => t("settings.035"), note: () => t("models.cleanupNote") },
-  { role: "stt", k: "stt-model", label: () => t("settings.031"), note: () => t("models.sttNote") },
+export const MODEL_ROWS: readonly { role: ModelRole; k: string; label: () => string }[] = [
+  { role: "answer", k: "agent-model", label: () => t("settings.agentModel") },
+  { role: "cleanup", k: "model", label: () => t("settings.035") },
+  { role: "stt", k: "stt-model", label: () => t("settings.031") },
 ];
 
 /**
@@ -443,9 +443,9 @@ export function visionPickerLook(v: SettingsView): ModelPickerLook {
   };
 }
 
-/** A model row: the purpose, its note and price, and the primary picker. */
-const modelRow = (v: SettingsView, { role, k, label, note }: (typeof MODEL_ROWS)[number]): string =>
-  row(label(), `<span class="models-purpose-note">${esc(note())}</span>${priceSpan(v, k, "price num")}`, modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
+/** A model row: the purpose, its price and the primary picker. */
+const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>
+  row(label(), priceSpan(v, k, "price num"), modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
 // ---------- the OpenRouter rows ----------
 
@@ -577,7 +577,7 @@ function generalHTML(v: SettingsView): string {
     section(t("settings.groupAppearance"), [
       row(t("settings.059"), "", sel(UI_LANGUAGES, d.ui_language, t("settings.059"), ' data-k="ui-language"')),
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
-      row(t("settings.071"), t("settings.072"), tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
+      row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
     ]) +
     section(t("settings.groupStartup"), [
       row(t("settings.073"), "", tg(d.autostart, t("settings.073"), ' data-k="autostart"')),
@@ -602,7 +602,7 @@ function dictationHTML(v: SettingsView): string {
     section(t("settings.groupListen"), [
       row(
         t("transcription.title"),
-        esc(t("settings.spokenLanguagesDesc")),
+        "",
         languageSelectHTML(v.languageGroups ?? [], languagesOf(v), ` data-k="languages"${v.brain ? "" : " disabled"}`),
         { cls: "row-lang" },
       ),
@@ -709,7 +709,7 @@ function dataHTML(v: SettingsView): string {
       row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)),
       row(t("data.clearDictation"), "", clearButton(v, "dictation")),
     ]) +
-    section(t("data.groupConversation"), [row(t("data.clearConversation"), "", clearButton(v, "conversation"))], esc(t("history.019")))
+    section(t("data.groupConversation"), [row(t("data.clearConversation"), "", clearButton(v, "conversation"))])
   );
 }
 

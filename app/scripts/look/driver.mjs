@@ -189,6 +189,14 @@ export async function perform(page, step) {
       await click(".conversation-trigger");
       await visible('.mb-det:not([hidden])');
       break;
+    case "close-details": {
+      const scrim = await page.$('.mb-det-scrim');
+      const box = await scrim?.boundingBox();
+      if (box) await page.mouse.click(box.x + 4, box.y + 80);
+      else await click('.conversation-trigger');
+      await scrim?.dispose();
+      break;
+    }
     case "check": return page.evaluate(checkRendered, step.name);
     case "click": await click(step.selector); break;
     case "type": await fill(step.selector, step.text); break;
