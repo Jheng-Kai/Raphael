@@ -1,4 +1,5 @@
 import { perform } from "../driver.mjs";
+import { checkRendered } from "../checks.mjs";
 
 // Inspect the actual private timeline, including empty chrome without a turn id.
 export function privateTimeline() {
@@ -103,6 +104,8 @@ export async function deletionAudit(context, helpers) {
     checkpoint.leakedRoomIds = api.turns.filter(row => roomIds.has(row.id)).map(row => row.id);
     if (checkpoint.leakedRoomIds.length) fail(`Room audit rows leaked into private history: ${checkpoint.leakedRoomIds}`);
     await capture(`member-${member}-${stage}`);
+    try { checkpoint.toastClearance = await page.evaluate(checkRendered, "toast-clearance"); }
+    catch (error) { fail(`Toast clearance ${stage}, member=${member}: ${error.message}`); }
   };
 
   for (const member of [0, target]) {

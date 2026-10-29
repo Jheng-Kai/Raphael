@@ -1,8 +1,9 @@
 /* Two by two totals and activity share the left track; shortcuts start beside them. */
 .page-overview .home { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); align-items: start; }
 .page-overview .home-main, .page-overview .home-main > .usage { display: contents; }
-.page-overview .home-side { min-width: 0; grid-row: 2; }
-.page-overview .activity { grid-row: 3; }
+.page-overview .home-side { min-width: 0; grid-row: 3; }
+.page-overview .home-side .keys-card { max-width: none; }
+.page-overview .activity { grid-row: 2; }
 @container dictation (min-width: 760px) {
   .page-overview .home { grid-template-columns: minmax(0, calc(2 * var(--layout-card-max) + var(--sp-3))) 288px; }
   .page-overview .home-side { grid-column: 2; grid-row: 1 / span 2; }

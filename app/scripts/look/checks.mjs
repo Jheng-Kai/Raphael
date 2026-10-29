@@ -3,12 +3,15 @@ export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   if (name === "skill-learned-notice") {
+    const notice = document.querySelector('.conversation-event-line'), reply = notice?.closest('.tn')?.querySelector('.ra');
+    require(reply && !!(reply.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING), "learning review notices follow the reply that produced them");
     require([...document.querySelectorAll('.conversation-event-line')].some(el => visible(el) && el.textContent.includes("學會了：research-summary")), "a learned skill has one localized conversation line");
     require(visible(document.querySelector('.conversation-event-line .sys.event-line > .i')), "learned notices use the shared quiet system event with its small icon");
     require(!document.querySelector('.work-section')?.textContent.includes('skill_learned'), "internal skill payload never enters public work");
     return { check: name };
   }
   if (name === "growing-skills") {
+    require(document.querySelector('.mb-det').textContent.includes("2026/10/29"), "skill dates follow the Chinese UI rather than the browser locale");
     const editor = document.querySelector('#mp-skill-text');
     require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
     require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
@@ -43,7 +46,18 @@ export function checkRendered(name) {
   if (name === "home-lead-width") {
     const lead = document.querySelector('.ho-hero'), copy = lead.querySelector('h1').parentElement;
     require(Math.abs(copy.getBoundingClientRect().right - lead.getBoundingClientRect().right) < 1, "Home report uses all width beside its emblem");
-    require(getComputedStyle(lead.querySelector('h1')).textWrapStyle !== 'balance', "Home report fills its lines rather than balancing a narrow text column");
+    const title = lead.querySelector('h1'), lines = new Map();
+    const walker = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      for (let i = 0; i < node.length; i++) {
+        const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 1);
+        const box = range.getBoundingClientRect(), key = Math.round(box.top);
+        lines.set(key, (lines.get(key) ?? '') + node.data[i]);
+      }
+    }
+    require(![...lines.values()].some(line => /^用\s*\d|^\d+%。?》/.test(line)), "the report never splits the budget phrase into a short tail");
+    if (innerWidth === 1280 && innerHeight === 800) require([...document.querySelectorAll('.ho-stat')].every(card => card.getBoundingClientRect().bottom <= innerHeight), "all three stats and charts fit the default first screen");
     return { check: name, width: copy.getBoundingClientRect().width };
   }
   if (name === "team-card-lines") {
@@ -82,7 +96,17 @@ export function checkRendered(name) {
   if (name === "conversation-scroll-edge") {
     const scroller = document.querySelector('.mb-chat .ra-scroll');
     require(getComputedStyle(scroller).maskImage !== 'none', "conversation top fades partially scrolled message fragments");
+    require(/rgba\(0, 0, 0, 0\) (?:1[2-9]|[2-9]\d)px/.test(getComputedStyle(scroller).maskImage), "the top edge has a fully transparent band in both themes before the fade");
     return { check: name, scrollTop: scroller.scrollTop };
+  }
+  if (name === "toast-clearance") {
+    const toasts = [...document.querySelectorAll('.toast')].filter(visible);
+    const targets = [...document.querySelectorAll('.mb-det .mb-panel-row, .conversation-row, .composer')].filter(visible);
+    for (const toast of toasts) for (const target of targets) {
+      const a = toast.getBoundingClientRect(), b = target.getBoundingClientRect();
+      require(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom, "shared success notices never cover list rows or the composer");
+    }
+    return { check: name, toasts: toasts.length, targets: targets.length };
   }
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
@@ -159,7 +183,7 @@ export function checkRendered(name) {
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
     if (!visible(panel)) return {check:name,open:false};
-    const blocks=[...panel.querySelectorAll('.conversation-new, .conversation-tools, .mb-panel-pages')].filter(visible);
+    const blocks=[...panel.querySelectorAll('.conversation-new, .conversation-tools, .mb-panel-pages, .mb-field > .sel, [data-member-brain] .mp-trigger')].filter(visible);
     const reference=panel.querySelector('.conversation-new').getBoundingClientRect();
     for (const block of blocks) {
       const box=block.getBoundingClientRect();
@@ -218,7 +242,7 @@ export function checkRendered(name) {
     require(cards.length===4 && Math.abs(cards[0].top-cards[1].top)<1 && cards[2].top>cards[0].bottom && Math.abs(cards[2].top-cards[3].top)<1,"dictation stats form a 2 by 2 grid");
     require(Math.abs(activity.right-cards[1].right)<1,"activity and the two stats columns share the same right edge");
     if(keys.left>cards[1].right) require(Math.abs(keys.top-cards[0].top)<1 && activity.top>=cards[2].bottom && Math.abs(activity.left-cards[0].left)<1,"shortcuts align with stats and activity follows in the left column");
-    else require(keys.top>=cards[2].bottom && activity.top>=keys.bottom,"narrow order is stats, shortcuts, activity");
+    else require(activity.top>=cards[2].bottom && keys.top>=activity.bottom,"narrow order is stats, activity, shortcuts");
     return {check:name,columns:keys.left>cards[1].right?2:1};
   }
   if(name === "thread-measure") {
@@ -346,10 +370,10 @@ export function checkRendered(name) {
     const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
-      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card, .mb-panel-pages, .mb-det .mb-rt, .mb-det .mem'],
+      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card:not(.page-overview .keys-card), .mb-panel-pages, .mb-det .mb-rt, .mb-det .mem'],
       ['reading', '.ho-row, .ho-slot, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
-      ['page', '.page:not(.page-agent), .modal, .ho-hero'],
+      ['page', '.page:not(.page-agent), .modal, .ho-hero, .page-overview .keys-card'],
       ['workspace', '.team-board, .au-page'],
     ];
     const measurements = [];
@@ -1451,7 +1475,7 @@ export function checkRendered(name) {
     const activity = document.querySelector('.page-overview .activity').getBoundingClientRect();
     const shortcuts = document.querySelector('.page-overview .keys-card').getBoundingClientRect();
     require(activity.top >= boxes[3].bottom, "activity follows the totals");
-    require(desktop ? shortcuts.left >= activity.right : shortcuts.top >= boxes[2].bottom && activity.top >= shortcuts.bottom, "shortcuts sit alongside activity on desktop and below in compact windows");
+    require(desktop ? shortcuts.left >= activity.right : shortcuts.top >= activity.bottom && Math.abs(shortcuts.width - activity.width) < 1, "compact windows order totals, full-width activity, then full-width shortcuts");
     require(document.querySelector('.heat rect.h1, .heat rect.h2, .heat rect.h3, .heat rect.h4').getBoundingClientRect().width >= 17, "activity days retain larger readable cells");
     return { check: name, desktop, cardWidth: boxes[0].width };
   }
@@ -1876,7 +1900,7 @@ export function checkRendered(name) {
   if (name === "global-private-memory") {
     const shared = document.querySelector('.mb-det [data-mem-space="shared"]'), own = document.querySelector('.mb-det [data-mem-space="own"]');
     require(visible(shared) && visible(own), "the shared and the member's own memory are both on screen");
-    require(shared.textContent.includes("品牌主色是金色") && shared.querySelector('.mem-from')?.textContent === "拉斐爾 · 10/27", "the shared note says whom the owner told it to and when");
+    require(shared.textContent.includes("品牌主色是金色") && shared.querySelector('.mem-from')?.textContent === "拉斐爾 · 2026/10/27", "the shared note says whom the owner told it to and when in the UI date format");
     require(own.textContent.includes("專案每週三檢查原型") && !shared.textContent.includes("專案每週三檢查原型"), "the member's own note stays in its own memory");
     return { check: name };
   }

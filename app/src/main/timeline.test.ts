@@ -39,6 +39,7 @@ test("a learned skill renders one localized event without exposing its internal 
   expect(lines[0]).toContain(ico("check"));
   expect(visible(lines[0]).replace(/\s/g, "")).toContain("學會了：research-summary");
   expect(html).not.toContain("skill_learned");
+  expect(html.indexOf('class="conversation-event-line"')).toBeGreaterThan(html.indexOf('class="ra"'));
 });
 
 const at = (iso: string): number => Date.parse(iso);

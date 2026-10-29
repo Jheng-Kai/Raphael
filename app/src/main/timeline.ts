@@ -777,8 +777,7 @@ function learnedSkillEvent(text: string): string | null {
 function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
   const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
   const meetings = (turn.messages ?? []).filter(m => m.kind === "event").map(m => meetingEvent(m.text)).filter(event => event !== null);
-  const learned = (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null);
-  return learned.map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
+  return (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
     task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
     look.memberName?.(task.member_id) || task.member_name)).join("") +
     meetings.map(event => `<div class="conversation-event-line">${btn(eventLineHTML(t("rooms.meetingOpened", { p0: NAME }), ico("chat"), event.name), "event-open", ` data-meeting-room="${event.room_id}"`)}</div>`).join("");
@@ -831,7 +830,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +
     taskActionsHTML(turn, state) +
-    `</div></div></li>`
+    `</div></div>` +
+    (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null)
+      .map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + `</li>`
   );
 }
 

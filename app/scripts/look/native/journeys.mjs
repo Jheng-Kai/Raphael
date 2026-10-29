@@ -23,6 +23,8 @@ export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
+  const back = await page.$('.mb-det [data-det="tab"][data-tab="details"]');
+  if (back) { await back.click(); await back.dispose(); }
   await wait(page, "[data-conversation-new]");
 }
 async function chat(page) {
@@ -114,6 +116,11 @@ export async function drive(name, context) {
     }
     await page.waitForFunction(() => document.querySelector('.conversation-event-line')?.textContent.includes("clock-audit"));
     await capture("skill-learned-notice");
+    result.noticeOrder = await page.$eval('.conversation-event-line', notice => {
+      const reply = notice.closest('.tn')?.querySelector('.ra');
+      return !!reply && !!(reply.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    if (!result.noticeOrder) throw new Error("The learned-skill notice precedes the reply that produced it");
     result.second = await send("[native-skills:reuse] Repeat the clock audit using your learned procedure.", "The learned clock audit procedure was read.");
     const audit = await snapshot();
     result.steps = audit.agent_steps.filter(s => s.turn_id === result.first.id || s.turn_id === result.second.id);
@@ -121,6 +128,12 @@ export async function drive(name, context) {
         !result.steps.some(s => s.turn_id === result.second.id && s.tool === "skill_read" && s.outcome === "ok")) throw new Error("Persisted tool evidence does not prove learning and reuse");
     if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
     await capture("learned-skill-reused");
+    await details(page);
+    await click(page, '[data-det="tab"][data-tab="skills"]');
+    await page.waitForSelector('.mp-resource');
+    result.skillDate = await page.$eval('.mp-resource', el => el.textContent);
+    await capture("learned-skill-date");
+    if (!/自行學會 · \d{4}\/\d{2}\/\d{2}/.test(result.skillDate)) throw new Error("The learned-skill date does not follow the Chinese UI");
   }
   if (name === "catalog-connect") {
     const app = context.catalogApp;

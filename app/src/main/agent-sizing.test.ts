@@ -23,7 +23,7 @@ describe("the page's responsive sizes", () => {
   test("the tokens are on the page and what it opens at the body, never on :root", () => {
     expect(block).not.toBeNull();
     const selectors = block![1].split(",").map((s) => s.trim());
-    expect(selectors).toEqual([".page-agent", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop"]);
+    expect(selectors).toEqual([".page-agent", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop", ".toasts"]);
     expect(/(^|[\s,])(:root|html|body|\*)([\s,{]|$)/.test(block![1])).toBe(false);
   });
 

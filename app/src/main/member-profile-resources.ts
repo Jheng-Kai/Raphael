@@ -2,8 +2,8 @@
 // keep these in a draft; existing members write each explicit resource action immediately.
 import * as api from "./api";
 import { openActions } from "./member-column";
-import { describeError } from "./format";
-import { t } from "./i18n";
+import { describeError, formatDate } from "./format";
+import { onLocaleChange, t } from "./i18n";
 import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, Routine, WireAttachment } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
@@ -96,7 +96,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const off = busy ? " disabled" : "";
     const skillHTML = `<section class="mp-card"><h3>${esc(t("members.profile.skillsTitle"))}</h3>` +
       `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>` +
-      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? new Date(s.learned_at).toLocaleDateString() : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
+      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? formatDate(s.learned_at) : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (skills.length ? "" : empty(t("members.profile.noSkills"))) +
       (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
       (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
@@ -243,6 +243,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     else choose(action, id, target);
   };
   container.addEventListener("click", click);
+  const stopLocale = onLocaleChange(draw);
   draw();
   void refresh();
   return {
@@ -254,7 +255,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
       container.innerHTML = "";
       draw();
     },
-    destroy() { alive = false; generation++; container.removeEventListener("click", click); },
+    destroy() { alive = false; generation++; stopLocale(); container.removeEventListener("click", click); },
   };
 }
 
