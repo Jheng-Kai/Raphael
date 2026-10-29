@@ -34,10 +34,11 @@ async def rig(conn, plugins, memory):
     await made.meteo.http.aclose()
 
 
-def test_a_task_is_offered_the_memory_tools_that_read_and_none_that_write():
+def test_a_private_task_gets_growth_tools_but_not_legacy_write_aliases():
     names = [d["function"]["name"] for d in take_snapshot(None, memory=True).definitions]
     assert names == [
         "weather", "web_search", "local_time", "web_read", "memory_read", "history_search", "self_check", "raphael_help",
+        "memory_update", "memory_log", "session_search", "session_read",
     ]  # fmt: skip
     assert "memory_write" not in names and "memory_delete" not in names
     assert "memory_read" not in [d["function"]["name"] for d in take_snapshot(None).definitions]
@@ -56,6 +57,18 @@ async def test_a_task_searches_the_past_turns(rig, conn):
     AgentHistory(conn).add(session_id="s", question="上次的會議", route="chat", prefix="答", text="三樓。", status="done")
     reply = await rig.tool("history_search", {"query": "會議"})
     assert reply["ok"] and "三樓。" in reply["content"]
+
+
+async def test_retrieved_external_history_keeps_background_writes_pending(rig, memory, conn):
+    from raphael_core.agent.history import Step
+    history = AgentHistory(conn)
+    identifier = history.add(session_id="s", question="Read amber report", route="chat", prefix="", text="Amber result", status="done")
+    history.add_steps(identifier, [Step(kind="tool", tool="web_read", server="Raphael", outcome="ok", ms=1)])
+    assert (await rig.tool("session_search", {"query": "amber"}))["ok"]
+    result = await rig.tool("memory_update", {"op": "add", "name": "reference-result", "body": "The review is ready."})
+    assert result["ok"] and json.loads(result["content"])["applied"] is False
+    assert memory.store.get("reference-result") is None and len(memory.pending(0)) == 1
+    assert rig.steps()[0].detail == "external_content"
 
 
 @pytest.mark.parametrize(

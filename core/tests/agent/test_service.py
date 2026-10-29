@@ -834,20 +834,20 @@ async def test_an_answer_is_worded_in_the_ui_language(rig, client):
     assert "Reply ONLY in English" in client.json_calls[0]["system"]
 
 
-async def test_an_answer_is_given_the_last_six_turns_as_context(rig, client):
+async def test_an_answer_keeps_complete_history_below_half_window(rig, client):
     for n in range(8):
         rig.seed(f"question {n}", f"answer {n}")
     client.decisions.append(decision("answer"))
     client.replies.append(spoken())
     await rig.ask("那明天呢")
     user = client.json_calls[0]["user"]
-    assert "question 2" in user and "question 7" in user and "question 1" not in user
+    assert all(f"question {n}" in user for n in range(8))
 
 
 # --- discussion and small talk -----------------------------------------------------------------------
 
 
-async def test_a_quick_discussion_is_given_only_recent_turns_as_context(rig, client):
+async def test_a_quick_discussion_keeps_complete_history_below_half_window(rig, client):
     for n in range(32):
         rig.seed(f"question {n}", f"answer {n}")
     client.decisions.append(decision("discuss"))
@@ -857,9 +857,8 @@ async def test_a_quick_discussion_is_given_only_recent_turns_as_context(rig, cli
     call = client.json_calls[0]
     assert "think something through" in call["system"]
     user = call["user"]
-    # Quick questions keep only the last six turns, even for a discussion.
-    assert "question 26\n" in user and "question 31" in user and "question 25\n" not in user
-    assert user.index("question 26\n") < user.index("question 31")
+    assert all(f"question {n}\n" in user for n in range(32))
+    assert user.index("question 0\n") < user.index("question 31")
     assert client.text_calls == [] and rig.meteo.requests == []
     assert (await rig.turns())[0]["route"] == "discuss"
 

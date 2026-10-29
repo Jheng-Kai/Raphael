@@ -47,6 +47,7 @@ from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
 from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
 from ..agent.harness_tools import DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import (
     PICK_MAX,
@@ -267,6 +268,11 @@ def take_snapshot(
         for name, item in definitions_for(speaker):
             if name in ("self_check", "raphael_help"):
                 continue
+            native = harness_tool(name)
+            refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
+            definitions.append({"type": "function", "function": {"name": name, **item}})
+    elif memory and history:
+        for name, item in MEMORY_DEFINITIONS.items():
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})

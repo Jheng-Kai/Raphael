@@ -108,7 +108,7 @@ def test_quick_kind_survives_reopen_and_cannot_be_renamed(tmp_path):
             store.rename(quick, "A different purpose")
 
 
-async def test_overlay_uses_only_recent_quick_turns(make_rig, client):
+async def test_overlay_retains_full_quick_history_below_half_window(make_rig, client):
     rig = make_rig()
     quick = rig.service.conversations.quick()
     for n in range(12):
@@ -117,8 +117,8 @@ async def test_overlay_uses_only_recent_quick_turns(make_rig, client):
     await rig.call("agent.ask", {"session_id": "overlay", "text": "Hello", "ui_language": "en", "source": "overlay",
                                  "destination": "quick"})
     prompt = json.dumps(client.chat_calls[-1])
-    assert "quick-seed-00" not in prompt
-    assert "quick-seed-05" not in prompt
+    assert "quick-seed-00" in prompt
+    assert "quick-seed-05" in prompt
     assert "quick-seed-06" in prompt and "quick-seed-11" in prompt
     assert client.chat_calls[-1]["reasoning_effort"] == "low"
 
@@ -158,7 +158,7 @@ async def test_latency_logs_only_timings_and_waits_for_actual_sound(make_rig, cl
 
 
 @pytest.mark.parametrize("source", ["voice", "app"])
-async def test_quick_cli_passes_effort_without_resuming_unbounded_native_history(make_rig, client, tmp_path, monkeypatch, source):
+async def test_quick_cli_passes_effort_and_resumes_its_native_session(make_rig, client, tmp_path, monkeypatch, source):
     from raphael_core.agent.cli.discovery import CliBrains
     from raphael_core.agent.cli.drivers import Event
     from raphael_core.agent.cli import loop as production
@@ -192,10 +192,10 @@ async def test_quick_cli_passes_effort_without_resuming_unbounded_native_history
     result = await rig.call("agent.ask", {"session_id": "cli", "text": "Hello", "ui_language": "en", "source": source,
         "destination": "quick", "conversation_id": quick})
     assert result["text"] == "Quick answer."
-    assert calls[0]["session"] is None and calls[0]["effort"] == "low"
-    assert "FORMAL_SENTINEL" not in calls[0]["user"] and "quick-seed-00" not in calls[0]["user"]
+    assert calls[0]["session"] == "unbounded-native-history" and calls[0]["effort"] == "low"
+    assert "FORMAL_SENTINEL" not in calls[0]["user"] and "quick-seed-00" in calls[0]["user"]
     assert "quick-seed-11" in calls[0]["user"]
-    assert rig.service._cli_sessions.get(0, model, quick) == "unbounded-native-history"
+    assert rig.service._cli_sessions.get(0, model, quick) == "new-native-session"
     assert not client.decide_calls and not client.json_calls
 
 
@@ -233,10 +233,10 @@ async def test_cli_turns_record_the_model_that_answered_and_keep_separate_sessio
     for n in range(2):
         await rig.call("agent.ask", asking(session=f"quick-{n}", destination="quick"))
         await rig.call("agent.ask", asking(session=f"formal-{n}", source="app", conversation_id=formal))
-    assert runs == [("fast", "low", None), ("deep", "high", None), ("fast", "low", None), ("deep", "high", "thread-2")]
+    assert runs == [("fast", "low", None), ("deep", "high", None), ("fast", "low", "thread-1"), ("deep", "high", "thread-2")]
     assert {turn.model for turn in rig.history.list(conversation_id=quick)} == {"cli:codex:fast-2026?effort=low"}
     assert {turn.model for turn in rig.history.list(conversation_id=formal)} == {"cli:codex:deep?effort=high"}
-    assert rig.service._cli_sessions.get(0, "cli:codex:fast?effort=low", quick) is None
+    assert rig.service._cli_sessions.get(0, "cli:codex:fast?effort=low", quick) == "thread-1"
     assert rig.service._cli_sessions.get(0, "cli:codex:deep?effort=high", formal) == "thread-2"
 
 

@@ -434,14 +434,14 @@ def test_only_claude_code_is_offered_the_permission_prompt_tool(model, offered):
 
 
 @pytest.mark.parametrize("remember", [True, False])
-async def test_mcp_memory_write_requires_owner_request_and_is_scoped(setup, tmp_path, remember):
+async def test_mcp_memory_write_is_autonomous_and_member_scoped(setup, tmp_path, remember):
     rig, team = setup
     teacher = member(team, model="cli:claude")
     args = {"name": "preference-examples", "type": "preference", "description": "Learning style", "body": "The owner prefers examples.", "space": "own"}
-    fake_mcp(rig, tmp_path, [("memory_write", args)], allowed=remember)
+    fake_mcp(rig, tmp_path, [("memory_write", args)])
     result = await typed(rig, "Remember that I prefer examples" if remember else "Give an example", teacher.id)
     assert result["text"] == "Finished."
-    assert bool(team.memory.store_for(teacher.id).get("preference-examples")) is remember
+    assert team.memory.store_for(teacher.id).get("preference-examples") is not None
     assert team.memory.store_for(0).get("preference-examples") is None
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
     assert any(step["tool"] == "memory_write" for step in turn["steps"])

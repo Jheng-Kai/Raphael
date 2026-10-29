@@ -882,7 +882,7 @@ class RpcDriver:
         if ({turn['model'] for turn in formal_turns} != {self.contrast} or formal_code not in answer(recalled)
                 or quick_code in answer(recalled) + answer(guessed) or formal_code in answer(probed)
                 or quick_id is None or self.app._conn.execute(
-                    'SELECT COUNT(*) FROM agent_conversation_cli_sessions WHERE conversation_id=?', (quick_id,)).fetchone()[0]):
+                    'SELECT COUNT(*) FROM agent_conversation_cli_sessions q JOIN agent_conversation_cli_sessions f ON q.session_id=f.session_id WHERE q.conversation_id=? AND f.conversation_id=?', (quick_id, formal)).fetchone()[0]):
             reasons.append('concurrent_scope')
         for reply in (asked, probed):
             reasons += check_reply(answer(reply), Scenario('quick-question', ''))

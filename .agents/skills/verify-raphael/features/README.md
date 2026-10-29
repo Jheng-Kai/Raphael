@@ -180,3 +180,11 @@ images and the replay script are recorded in OWNER-ROUND-5-NOTES.md.
 ## Owner round 6 contracts
 
 Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column. See OWNER-ROUND-6-NOTES.md for commands, evidence and native/judge limits.
+
+
+## Memory growth native acceptance (phase 2, 2026-10-29)
+
+`memory-growth` sends 25 turns in the real isolated app with the fake brain,
+checks turn-one recall on turn 25 and a member-written memory in only that
+member home. Its implementation and selected memory-pane scenes are mapped in
+[Members](members.md). This is separate from live provider and design-judge acceptance.

@@ -105,4 +105,5 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     assert turn["id"] == asked["turn_id"] and turn["status"] == "done"
     assert "PRIVATE-INSTRUCTIONS" in str(client.chat_calls[1]["messages"])
     assert team.memory.store_for(teacher.id).get("user-screen") is None
-    assert any(s["tool"] == "memory_write" and s["outcome"] == "blocked" for s in turn["steps"])
+    assert len(team.memory.pending(teacher.id)) == 1
+    assert any(s["tool"] == "memory_update" and s["outcome"] == "ok" for s in turn["steps"])

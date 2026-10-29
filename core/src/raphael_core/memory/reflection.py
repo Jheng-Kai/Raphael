@@ -1,4 +1,4 @@
-"""The reflection pass and the weekly consolidation: the cheap model looks back and proposes changes
+"""The reflection pass and the daily consolidation: the member's own brain looks back and proposes changes
 to the memory, and code decides what is written.
 
 The reflection pass (the main way memories are made, like Hermes's background review, Letta's
@@ -9,7 +9,7 @@ questions and Raphael's lines: never what a tool returned, a web page, a file, a
 from anybody else, so nothing from outside can plant a memory. Of a run on the owner's desktop
 (`operate`) it reads only the question: Raphael's line there tells what the screen showed.
 
-The weekly consolidation first deletes, by code, the `ongoing` memories whose date has passed, then
+The daily consolidation first deletes, by code, the `ongoing` memories whose date has passed, then
 asks the model once to merge the memories that say the same thing (UPDATE one, DELETE the others).
 
 What the model returns is checked here before anything is written (`validate`): an operation that
@@ -26,16 +26,11 @@ taken for an ADD here (it may be one the owner deleted). The consolidation's ans
 (`apply_merge`): it is dropped whole when any memory it names changed, and its DELETEs run only
 once every UPDATE was written, so a merge whose kept memory is refused deletes nothing.
 
-Two spaces. Every assistant of the owner's (Raphael, and each member of the team) has a memory of
-its own, about its own work, and they all share one more (`shared`): what every one of them should
-know about the owner, and nothing else. Each action names its space (`space`: "shared" or "own").
-The shared space holds only macro knowledge about the owner (who they are, their stable
-preferences, the people in their life, their life and work, how they like to be spoken to): never
-what was decided or discussed with one assistant, a task, a plan made in one thread, or anything a
-tool or the web said. The rules the model is given say so, and code holds to it
-(`about_the_owner`): a write to the shared space that is not of a type that can be such knowledge,
-or that speaks of a conversation rather than of the owner, is written to the assistant's own memory
-instead. A reflection pass reads only the turns of the assistant it is for.
+Private capture, including owner facts and member work outcomes, always stays in that member's
+home. Shared notes hold the shared owner profile, owner words from rooms/groups and explicitly
+shared facts. A model's space choice cannot publish private capture. The legacy two-space
+helpers remain for owner-authorized writes; production private reflection receives only its own
+store. A reflection pass reads only the turns of the assistant it is for.
 
 The consolidation runs for each space by itself. The shared space's never deletes a memory: the
 memories there came from the conversations of every assistant, which no pass may read, so nobody
@@ -103,9 +98,10 @@ ACTIONS_SCHEMA = {
                     "expires": {"type": "string"},
                     "origin": {"type": "string", "enum": ["said", "inferred"]},
                     "space": {"type": "string", "enum": list(SPACES)},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 },
                 "required": [
-                    "op", "name", "type", "description", "body", "expires", "origin", "space",
+                    "op", "name", "type", "description", "body", "expires", "origin", "space", "confidence",
                 ],
                 "additionalProperties": False,
             },
@@ -135,20 +131,18 @@ turn carries its date and time), never from today: "明天有面試" said on 202
 2026-10-22, and "下星期六" becomes a date the same way.
 - "name" is an ASCII slug that starts with the type: preference-answer-length, person-amy.
 - "origin" is "said" when the user stated it outright, "inferred" when you deduced it.
-- "space" is where it goes. "shared" is the memory every assistant of the user reads: only macro \
-knowledge about the user (who they are, their stable preferences, the people in their life, their \
-life and work, how they like to be spoken to), or a fact the user said every assistant or the whole \
-team should know, written as a statement about the user. "own" is \
-this assistant's own memory, about its own work: its role, what its routines found, how the user \
-wants this assistant to work, its character, speaking style or form of address, and anything tied \
-to this conversation. These are never shared. What was decided or \
-discussed, a task, a plan made here: always "own". When unsure, "own".
+- "space" is host-authorized. Private owner conversations, including facts about the owner and \
+background capture, ALWAYS stay in this member's own home. A private profile fact is not permission \
+to share it. Shared memory holds the owner's shared profile, owner words from rooms/group chats, \
+and facts the owner explicitly asked to share with everyone. Never read another member's private \
+threads or memory; ask_member lets that member decide what to answer.
+- Also keep useful decisions and outcomes from this member's own work. Private capture uses "own".
 
 What is never a memory
 - Passwords, keys, tokens, codes, card or ID numbers: never, in any form.
 - Health, religion, politics, sexuality or money troubles, unless the user stated it and asked you \
 to remember it.
-- Trivia, a one-off task, what was done today, anything stale within a week, a failure of a tool \
+- Trivia, a one-off task without a reusable result, anything stale within a week, a failure of a tool \
 or an app ("X does not work"), and anything a web page, a file or a tool said.
 - Anything already in the memory: update it instead of adding a second one."""
 
@@ -235,7 +229,7 @@ def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def parse_actions(data: object) -> list[Action]:
+def parse_actions(data: object, *, require_confidence: bool = False) -> list[Action]:
     """The actions of the model's answer, the NOOPs left out; BadAnswer when it is not
     `{"actions": [...]}`. An action that is not well formed is dropped, not the answer."""
     if not isinstance(data, dict) or not isinstance(data.get("actions"), list):
@@ -246,6 +240,9 @@ def parse_actions(data: object) -> list[Action]:
             continue
         op = _text(item.get("op")).upper()
         if op not in OPS or op == "NOOP":
+            continue
+        confidence = item.get("confidence", 0.0 if require_confidence else 1.0)
+        if type(confidence) not in (float, int) or not 0.6 <= confidence <= 1:
             continue
         kind = _text(item.get("type"))
         origin = _text(item.get("origin"))
@@ -561,7 +558,7 @@ class Reflector:
                 completion_tokens=completion.completion_tokens,
             )
             try:
-                return parse_actions(completion.data)
+                return parse_actions(completion.data, require_confidence=True)
             except BadAnswer:
                 if attempt:
                     raise
@@ -579,6 +576,8 @@ class Reflector:
         shared: MemoryStore | None = None,
         agent: str = "Raphael",
         member: int | None = None,
+        stage: Callable | None = None,
+        untrusted: bool = False,
     ) -> Applied:
         """One reflection pass over `turns` (oldest first), the turns of the assistant `agent`
         (`member`), whose own memory is `store`; `shared` is the shared memory. Never raises for the model: a
@@ -600,13 +599,28 @@ class Reflector:
             index = store.index()
         user = reflection_message(store.today(), index, related, turns, store.fill(), agent)
         try:
-            actions = await self._ask(_REFLECT_SYSTEM.format(agent=agent), user, model, ledger)
+            system = _REFLECT_SYSTEM.format(agent=agent) + "\nCapture preferences, facts, decisions and outcomes about the owner AND your own work. At most eight items; confidence must be at least 0.6. Private capture always stays in your own home."
+            actions = await self._ask(system, user, model, ledger)
         except (OpenRouterError, TimeoutError, BadAnswer) as error:
             logger.warning("The reflection pass failed: %s", type(error).__name__)
             return Applied(failed=True)
         if not current():
             logger.info("Reflection pass: the conversation was cleared meanwhile, nothing applied")
             return Applied()
+        # Code dedupes exact facts even when a model suggests a different slug.
+        bodies = {" ".join(note.body.split()).casefold() for note in store.all()}
+        unique = []
+        for action in actions:
+            body = " ".join(action.body.split()).casefold()
+            if action.op == "ADD":
+                if body in bodies:
+                    continue
+                bodies.add(body)
+            unique.append(action)
+        actions = unique
+        from .growth import tainted_turn
+        if stage is not None and (untrusted or any(tainted_turn(turn) for turn in turns)):
+            return stage(actions)
         ids = [turn.id for turn in turns if turn.id is not None]
         if shared is None or shared_since is None:
             own_only = [replace(action, space="own") for action in actions]
@@ -626,23 +640,39 @@ class Reflector:
         return applied
 
     async def consolidate(
-        self, store: MemoryStore, *, model: str, ledger: Ledger, shared: bool = False
+        self, store: MemoryStore, *, model: str, ledger: Ledger, shared: bool = False, split: bool = False
     ) -> Applied:
-        """The weekly tidy of one space: the expired memories go (no model), then the model merges
+        """The daily tidy of one space: the expired memories go (no model), then the model merges
         the ones that overlap. The `shared` space's never deletes a memory (`apply_merge`'s
         `deletes`). Never raises for the model."""
         applied = Applied(deleted=store.drop_expired())
         since = store.mark()
         memories = store.all()
-        if len(memories) < 2:
+        if not memories or (len(memories) < 2 and not split):
             return applied
         user = consolidation_message(store.today(), memories)
         try:
-            actions = await self._ask(_CONSOLIDATE_SYSTEM, user, model, ledger)
+            system = _CONSOLIDATE_SYSTEM
+            if split:
+                system = system.replace("Never ADD.", "ADD is allowed only to split a long mixed topic.")
+                system += "\nFor a long mixed topic, ADD separate named topics first, then UPDATE or DELETE its source only when every fact is preserved. You may ADD for topic splitting."
+            actions = await self._ask(system, user, model, ledger)
         except (OpenRouterError, TimeoutError, BadAnswer) as error:
             logger.warning("The memory could not be consolidated: %s", type(error).__name__)
             applied.failed = True
             return applied
+        if split:
+            additions = [action for action in actions if action.op == "ADD"]
+            if any(store.get(action.name) is not None for action in additions):
+                return Applied(refused=["exists"])
+            if _stale(actions, store, since):
+                return Applied(refused=["changed"])
+            added = apply_actions(additions, store, since=since, update_adds=False)
+            applied.written += added.written
+            applied.refused += added.refused
+            if added.refused:
+                return applied
+            actions = [action for action in actions if action.op != "ADD"]
         merged = apply_merge(actions, store, since=since, deletes=not shared)
         applied.written += merged.written
         applied.deleted += merged.deleted

@@ -60,6 +60,14 @@ else:
         verified = all(hashlib.sha256((directory / item["to"]).read_bytes()).hexdigest() == item["sha256"] for item in manifest["files"] if not item["to"].endswith("MEMORY.md"))
         receipt = directory / "native-cli/receipt.json"
         print(json.dumps({"files": files, "verified": verified, "receipt": json.loads(receipt.read_text()) if receipt.exists() else None}))
+    elif operation == "memory-home":
+        member_id = int(sys.argv[3])
+        relative = f"bots/{member_id}/memory/reference-project-colour.md"
+        path = directory / relative
+        others = [str(found.relative_to(directory)) for found in directory.glob("bots/*/memory/reference-project-colour.md") if found != path]
+        if (directory / "shared/memory/reference-project-colour.md").exists():
+            others.append("shared/memory/reference-project-colour.md")
+        print(json.dumps({"path": relative, "exists": path.exists(), "body": path.read_text(encoding="utf-8") if path.exists() else "", "otherHomes": others}))
     elif operation == "snapshot":
         tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]
         result = {}

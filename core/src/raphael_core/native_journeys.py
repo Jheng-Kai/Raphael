@@ -86,6 +86,31 @@ def native_diagnosis(messages, offered, seen):
     return "reply", "請從卡片連線 Gmail，完成後我會繼續。"
 
 
+def native_memory(messages, offered, seen):
+    """Script only provider choices; production recall, tools and homes do the work."""
+    if not native_enabled(True):
+        return None
+    latest = next((str(message.get("content", "")) for message in reversed(messages)
+                   if message.get("role") == "user"), "")
+    questions = re.findall(r"<question>\s*(.*?)\s*</question>", latest, re.S)
+    question = questions[-1] if questions else latest
+    if "[native-memory:" not in question:
+        return None
+    if "[native-memory:record]" in question:
+        if not seen:
+            if "memory_update" not in offered:
+                raise ValueError("Native memory tool is absent")
+            return "memory_update", {"op": "add", "name": "reference-project-colour",
+                                     "body": "The project colour is heliotrope."}
+        return "reply", "The member saved the project colour."
+    if "[native-memory:recall]" in question:
+        recall = re.findall(r'<tool_result [^>]*tool="auto_recall"[^>]*>(.*?)</tool_result>', latest, re.S)
+        if not any("heliotrope" in block for block in recall):
+            raise ValueError("Turn one was not automatically recalled at turn twenty-five")
+        return "reply", "The project colour is heliotrope."
+    return "reply", "Work step recorded."
+
+
 def native_codex_model(environ=None):
     """Use the owner's public model selection, never a guessed CLI model alias."""
     environ = os.environ if environ is None else environ

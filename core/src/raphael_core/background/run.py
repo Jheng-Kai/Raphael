@@ -222,6 +222,10 @@ class TaskRun:
         diagnostics: Callable[[], dict] | None = None,
     ) -> None:
         self._memory = memory
+        self._memory_untrusted = bool(attachments) or any(
+            step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
+            or step.server not in (None, "", "Raphael") or step.detail == "external_content"
+            for step in store.steps(task_id))
         self._diagnostics = diagnostics
         # The team tools (`agent.team`), made for this task's speaker on this task's ledger.
         self._team = team
@@ -502,6 +506,7 @@ class TaskRun:
         detail: str | None = None
         if ref.kind == MCP:
             reply, outcome, tier, sent = await self._plugin(ref, arguments, name, call_id)
+            self._memory_untrusted = True
         elif ref.kind == FIND:
             reply, outcome, tier = self._find(arguments)
         else:
@@ -669,6 +674,7 @@ class TaskRun:
             tier=None if now is None else now.name, outcome="in_progress", ms=0,
         )  # fmt: skip
         self._in_plugin_call = True
+        self._memory_untrusted = True
         try:
             result = await self._guarded(
                 self._gate.call_plugin(
@@ -738,6 +744,7 @@ class TaskRun:
                 gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
                 return _refused(), "blocked", tier.name, None
         result = await self._lookup(ref.name, arguments)
+        self._memory_untrusted = self._memory_untrusted or result.untrusted
         if result.error == "url_not_seen":
             outcome = "blocked"
         else:
@@ -752,11 +759,20 @@ class TaskRun:
             reply = {"ok": False, "kind": result.error or "error", "content": "", "truncated": False}
             if result.instruction:
                 reply["instruction"] = result.instruction
-        return reply, outcome, None if tier is None else tier.name, result.detail
+        return reply, outcome, None if tier is None else tier.name, "external_content" if result.untrusted and ref.name in ("session_search", "session_read", "history_search") else result.detail
 
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
+            from ..memory.growth import TOOLS as GROWTH_TOOLS
+            if name in GROWTH_TOOLS:
+                if self._memory is None or not hasattr(self._memory, "growth"):
+                    return ToolResult(name, False, None, "blocked")
+                result = self._memory.growth(name, arguments, untrusted=self._memory_untrusted)
+                self._memory_untrusted = self._memory_untrusted or result.untrusted
+                return result
+            if name in ("web_search", "web_read", "read_attachment", "ask_member"):
+                self._memory_untrusted = True
             if name in ("self_check", "raphael_help"):
                 from ..agent.self_check import ABOUT
                 data = ({"reference": ABOUT} if name == "raphael_help" else

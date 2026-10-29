@@ -30,6 +30,9 @@ export interface MemoryItem {
   expires: string | null;
   /** A shared note's provenance: the agent the owner told it to (0 is Raphael). */
   member?: number | null;
+  operation?: string;
+  target?: string;
+  space?: string;
 }
 
 export interface MemoryList {
@@ -100,12 +103,16 @@ function editorHTML(v: MemoryView, item: MemoryItem): string {
   const e = v.editing!;
   if (e.body === null) return `<div class="mem-edit" data-mem-editor><span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span></div>`;
   const off = e.saving ? " disabled" : "";
+  const pending = item.origin === "pending";
+  const readOnly = pending ? " readonly" : "";
+  const operation = item.operation === "remove" ? t("mem.removeChange") : item.operation === "replace" || item.operation === "supersede" ? t("mem.replaceChange") : item.operation === "log" ? t("mem.logChange") : t("mem.addChange");
   return (
     `<div class="mem-edit" data-mem-editor>` +
-    `<input id="${memoryFieldId("mem-title", v.space)}" class="mem-title" type="text" maxlength="${MEMORY_DESCRIPTION_MAX}" aria-label="${esc(t("mem.descLabel", { p0: item.description }))}" value="${esc(e.descDraft)}"${off}>` +
-    `<textarea id="${memoryFieldId("mem-body", v.space)}" class="mem-body" rows="5" maxlength="${MEMORY_BODY_MAX}" aria-label="${esc(t("mem.body", { p0: item.description }))}"${off}>${esc(e.draft)}</textarea>` +
+    (pending ? note(esc(t("mem.pendingInfo")) + ` ${esc(operation)} · ${esc(item.target ?? "")} · ${esc(t(item.space === "shared" ? "mem.shared" : "mem.private"))}`) : "") +
+    `<input id="${memoryFieldId("mem-title", v.space)}" class="mem-title" type="text" maxlength="${MEMORY_DESCRIPTION_MAX}" aria-label="${esc(t("mem.descLabel", { p0: item.description }))}" value="${esc(e.descDraft)}"${off}${readOnly}>` +
+    `<textarea id="${memoryFieldId("mem-body", v.space)}" class="mem-body" rows="5" maxlength="${MEMORY_BODY_MAX}" aria-label="${esc(t("mem.body", { p0: item.description }))}"${off}${readOnly}>${esc(e.draft)}</textarea>` +
     (e.error ? note(st("err", esc(e.error)), ' role="alert"') : "") +
-    actionRow({ cls: "mem-edit-actions", sticky: true, secondary: btn(esc(t("common.cancel")), "sm", ` data-mem="cancel"${off}`), primary: { label: esc(t("mem.save")), kind: "sm", attrs: ` data-mem="save"${off}` } }) +
+    actionRow({ cls: "mem-edit-actions", sticky: true, secondary: btn(esc(t("common.cancel")), "sm", ` data-mem="cancel"${off}`), primary: { label: esc(t(pending ? "mem.approve" : "mem.save")), kind: "sm", attrs: ` data-mem="save"${off}` } }) +
     `</div>`
   );
 }
@@ -114,7 +121,7 @@ function itemRows(v: MemoryView, list: MemoryList): string[] {
   const off = v.busy ? " disabled" : "";
   return shown(v, list).flatMap((m) => {
     const open = v.editing?.name === m.name;
-    const inferred = m.origin === "inferred" ? `<span class="mem-tag">${esc(t("mem.inferred"))}</span>` : "";
+    const inferred = m.origin === "pending" ? `<span class="mem-tag">${esc(t("mem.pending"))}</span>` : m.origin === "inferred" ? `<span class="mem-tag">${esc(t("mem.inferred"))}</span>` : "";
     // who the owner told it to and when, as every agent's prompt reads it
     const told = m.member != null && v.nameOf ? `<span class="mem-from">${esc(`${v.nameOf(m.member)} · ${m.updated.slice(5, 10).replace("-", "/")}`)}</span>` : "";
     const line = row(
@@ -285,7 +292,8 @@ export function createMemory(host: MemoryHost): MemoryPanel {
       return;
     }
     const titled = description !== e.description;
-    if (e.draft === e.body && !titled) {
+    const pending = typeof status === "object" && status.memories.some(item => item.name === e.name && item.origin === "pending");
+    if (e.draft === e.body && !titled && !pending) {
       editing = null;
       redraw();
       return;
@@ -370,7 +378,8 @@ export function createMemory(host: MemoryHost): MemoryPanel {
 
   /** Keep editing, deletion and optional space moves in the note's menu. */
   function moreMenu(anchor: HTMLElement, name: string): void {
-    const label = view().moveTo ?? "";
+    const pending = typeof status === "object" && status.memories.some(item => item.name === name && item.origin === "pending");
+    const label = pending ? "" : view().moveTo ?? "";
     const description = status !== "loading" && status !== "failed" ? status.memories.find(note => note.name === name)?.description ?? name : name;
     const el = openPopover(
       anchor,

@@ -291,6 +291,12 @@ class MemoryStore:
     # --- reading -----------------------------------------------------------------------------------
 
     def _files(self) -> list[Path]:
+        homes = self.homes or getattr(self, "shared_homes", None)
+        if homes is not None:
+            try:
+                homes.safe(self.root)
+            except ValueError:
+                return []
         try:
             entries = list(os.scandir(self.root))
         except OSError:  # no folder yet, or one that cannot be read
@@ -299,8 +305,10 @@ class MemoryStore:
             Path(entry.path)
             for entry in entries
             if entry.is_file()
+            and not entry.is_symlink()
             and entry.name.endswith(".md")
             and entry.name.lower() != INDEX_FILE.lower()
+            and valid_name(Path(entry.name).stem)
         )
 
     def _signature(self, files: Sequence[Path]) -> tuple:
@@ -467,7 +475,7 @@ class MemoryStore:
         )
         existing = {m.name: m for m in self.all()}
         old = existing.get(name)
-        if old is None and len(existing) >= MAX_MEMORIES:
+        if self.homes is None and old is None and len(existing) >= MAX_MEMORIES:
             raise MemoryRefused(
                 "full",
                 f"The memory is full ({MAX_MEMORIES} memories): update or delete one first.",
@@ -492,7 +500,7 @@ class MemoryStore:
         existing[name] = memory
         gone = set(leaving) - {name}
         kept = [m for m in existing.values() if m.name not in gone]
-        if not _fits(index_of(kept, self.today())):
+        if self.homes is None and not _fits(index_of(kept, self.today())):
             raise MemoryRefused(
                 "full",
                 "The index of memories is full: merge or delete memories, or shorten descriptions.",
@@ -570,9 +578,17 @@ class MemoryStore:
         if not self.root.exists():
             return
         try:
-            index = self.index()
-            header = "# Raphael's memory (made from the files; edits here are not kept)\n\n"
-            self._write_file(self.root / INDEX_FILE, header + (index + "\n" if index else ""))
+            if self.homes is not None:
+                from .growth import archive_document, prompt_document
+                document = prompt_document(self)
+                archive = archive_document(self)
+                # Overflow topics remain intact; the archive is a derived searchable view.
+                self._write_file(self.root / "archive.md", archive)
+                self._write_file(self.root / INDEX_FILE, document)
+            else:
+                index = self.index()
+                header = "# Raphael's memory (made from the files; edits here are not kept)\n\n"
+                self._write_file(self.root / INDEX_FILE, header + (index + "\n" if index else ""))
         except OSError as exc:
             logger.warning("Could not write the index of the memory: %s", type(exc).__name__)
         if self._on_change is not None:
@@ -603,7 +619,6 @@ class SharedMemoryStore(MemoryStore):
     def __init__(self, homes, **kwargs):
         self.shared_homes = homes
         super().__init__(homes.root / "shared/memory", **kwargs)
-        self._after_change()
 
     def _write_file(self, path: Path, text: str) -> None:
         self.shared_homes.shared_keep("memory/" + path.name, text)
@@ -615,8 +630,9 @@ class SharedMemoryStore(MemoryStore):
 
     def _after_change(self) -> None:
         super()._after_change()
-        for filename, notes in (("USER.md", [m for m in self.all() if m.type != "ongoing"]),
-                                ("team.md", [m for m in self.all() if m.type == "ongoing"])):
+        active = [m for m in self.all() if not m.expired(self.today())]
+        for filename, notes in (("USER.md", [m for m in active if m.type != "ongoing"]),
+                                ("team.md", [m for m in active if m.type == "ongoing"])):
             text = "\n\n".join(f"## {m.name}\n{m.description}\n\n{m.body}" for m in notes)
             self.shared_homes.shared_keep(filename, text + ("\n" if text else ""))
 
@@ -631,6 +647,7 @@ class MemoryIndex:
 
     shared: str = ""
     own: str | None = ""
+    topics: str = ""
 
     def __bool__(self) -> bool:
         return bool(self.shared or self.own)
@@ -638,7 +655,8 @@ class MemoryIndex:
     def __str__(self) -> str:
         """The indexes, each in its tags, for a prompt that shows them as data."""
         shared = f"<shared_memory>\n{self.shared or '(no notes yet)'}\n</shared_memory>"
-        return shared if self.own is None else f"{shared}\n<own_memory>\n{self.own or '(no notes yet)'}\n</own_memory>"
+        notes = shared if self.own is None else f"{shared}\n<own_memory>\n{self.own or '(no notes yet)'}\n</own_memory>"
+        return notes + (f"\n<topic_index>\n{self.topics}\n</topic_index>" if self.topics else "")
 
 
 def _is_turn_id(turn: object) -> bool:

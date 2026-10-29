@@ -250,4 +250,60 @@ native `bot-homes` journey migrates
 three copied notes plus a skill, checks hashes, then answers through a fake Codex
 child using the production CLI loop/MCP boundary. It borrows no owner login and makes
 no provider calls. Fixture/native/real-provider/judge evidence remain separate.
-Automatic capture, recall/folding changes, learned skills and their UI are later phases.
+Phase 2 adds automatic capture, recall/folding and owner pending review below. Learned skills remain phase 3.
+
+
+## Memory that grows, phase 2 (owner decision 2026-10-29)
+
+Every API/CLI brain receives the same `memory_update`, `memory_log`,
+`session_search` and `session_read` definitions through the production harness and
+RaphaelMcp. Tool writes are limited to 1000 characters. Useful private facts and
+work outcomes may be recorded without a remember phrase. After external ingestion
+(including external history retrieved later), writes stay outside the home under
+`bot-state/<id>/pending/` until the owner approves them. Pending entries appear in
+the existing member Memory pane; View shows a read-only proposal, operation,
+target and destination, Approve applies it, Delete rejects it. Approval rechecks
+the target revision; conflicting proposals remain pending. Pending data never
+enters prompts, recall or member-visible search.
+
+Private owner conversations, including owner facts and background capture, write
+only to that member's own home. Shared notes contain the shared owner profile,
+owner words in rooms/group chats and facts explicitly shared with everyone.
+Search/read/recall never inspect another member's private thread or home. Room
+turns cannot retrieve a member's private sources. `ask_member` lets the target
+member choose what to answer. All read paths, including cold index construction,
+recall and history reads, remain silent: they never emit change notifications.
+
+The prompt includes the bounded main memory (200 lines / 24000 UTF-8 bytes), a
+topic index of at most 40 lines / 2000 characters, shared owner/team facts and the
+existing skills index. Overflow is archived; canonical topic files remain intact
+and searchable even when the archive must use references to stay within the home
+file limit. FTS5 is built in memory from permitted sources only, without disk or
+state writes. Automatic recall stays in the current thread; explicit session_search can find
+the member's other own threads and joined rooms. Auto-recall precedes the user question, never the system prompt,
+and is capped at 6000 characters with at most four memory and four conversation
+hits. Logs stay out of the system prompt.
+
+After quiet time or six answered owner turns, a tool-less pass on the member's
+own selected brain (including CLI subscriptions) captures up to eight preferences,
+facts, decisions or outcomes with confidence >=0.6, deduplicating exact facts.
+Daily tidy removes expiry, merges duplicates/corrects contradictions and permits
+topic splitting while preserving sources after refused replacements. Capture
+skips exchange/routine turns; room capture is optional and remains disabled.
+
+```powershell
+npm run verify -- --core
+npm run look -- details-memory global-private-memory --theme both --width 1120,720,1920x1080
+npm run native -- memory-growth
+```
+
+`details-memory` opens the pending proposal; `pending-memory` checks read-only
+controls, the owner action, contextual external-content notice and zero writes
+on opening. `global-private-memory` checks shared provenance/private separation,
+then opens an ordinary editable note for same-component comparison. No new scene
+is added to the Guardian matrix. `core/tests/memory/test_growth.py` covers silent
+reads, own-home isolation, pending review/conflicts, bounded tools/recall, turn-one
+retrieval on turn 25, member-brain capture and tool-less CLI capture. The native
+fake-brain journey sends 25 real app turns and checks the member-written home and
+zero spend. It proves host plumbing, not real-provider inference or design-judge
+acceptance. Learned skills remain phase 3.
