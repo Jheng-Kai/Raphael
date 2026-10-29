@@ -77,11 +77,14 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let command: Omit<MemberCommand, "id"> & { id?: number } = { name: "", description: "", template: "" };
   let suggested = false;
   let source = "";
+  let undo: string | null = null;
+  let editing: { id: number; text: string; revision?: string } | null = null;
   const counts = (): void => { if (host.tab !== "voice") host.onCount?.({ skills: skills.length, commands: commands.length }); };
   const empty = (text: string): string => `<p class="mp-empty">${esc(text)}</p>`;
   const label = (text: string, content: string): string => `<label class="mp-label"><span>${esc(text)}</span>${content}</label>`;
   const input = (id: string, value: string, placeholder: string, max = 200): string => `<input id="${id}" class="mb-fin" maxlength="${max}" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" autocomplete="off">`;
   const capture = (): void => {
+    if (editing) editing.text = container.querySelector<HTMLTextAreaElement>("#mp-skill-text")?.value ?? editing.text;
     source = container.querySelector<HTMLInputElement>("#mp-skill-source")?.value ?? source;
     command.name = container.querySelector<HTMLInputElement>("#mp-command-name")?.value ?? command.name;
     command.description = container.querySelector<HTMLInputElement>("#mp-command-description")?.value ?? command.description;
@@ -93,8 +96,10 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const off = busy ? " disabled" : "";
     const skillHTML = `<section class="mp-card"><h3>${esc(t("members.profile.skillsTitle"))}</h3>` +
       `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>` +
-      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
-      (skills.length ? "" : empty(t("members.profile.noSkills"))) + `</section>`;
+      skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? new Date(s.learned_at).toLocaleDateString() : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
+      (skills.length ? "" : empty(t("members.profile.noSkills"))) +
+      (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
+      (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
     const commandsHTML = `<section class="mp-card"><h3>${esc(t("members.profile.commands"))}</h3>` +
       commands.map(c => `<div class="mp-resource"><div><b>/${esc(c.name)}</b><p>${esc(c.description)}</p></div>${iconButton("more", t("members.more", { p0: c.name }), ` data-res="command-menu" data-id="${c.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
       (commands.length ? "" : empty(t("members.profile.noCommands"))) +
@@ -120,6 +125,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
         const [s, c] = await Promise.all([api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
         if (!alive || mine !== generation) return;
         skills = s.skills;
+        undo = s.undo ?? null;
         commands = c.commands;
         if (suggested && command.id === undefined && command.name) command.id = commands.find(saved => saved.name === command.name)?.id;
         counts();
@@ -148,6 +154,16 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     Object.assign(voiceState, next);
   }
   function choose(action: string | undefined, id: number, target: HTMLButtonElement): void {
+    if (action === "skill-cancel") { editing = null; draw(); return; }
+    if (action === "skill-edit" && host.memberId !== null) {
+      void (async () => {
+        try {
+          const answer = await api.core<{ skill: MemberSkill; text: string }>("members.skills.read", { member_id: host.memberId, id });
+          if (alive) { editing = { id, text: answer.text, revision: answer.skill?.revision ?? undefined }; draw(); }
+        } catch (error) { toaster.info(describeError(error)); }
+      })();
+      return;
+    }
     if (action === "retry") { void refresh(); return; }
     if (action === "voice") {
       openMenu(target, [{ value: "", label: t("members.profile.defaultVoice") }, ...voices.map(v => ({ value: v.id, label: v.name }))], voiceState.voice, value => void run(() => patch({ voice: value })));
@@ -157,7 +173,15 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     if (action === "command-edit") { suggested = false; command = { ...commands.find(c => c.id === id)! }; container.innerHTML = ""; draw(); container.querySelector<HTMLInputElement>("#mp-command-name")?.focus(); return; }
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {
-      if (action === "import") {
+      if (action === "skill-save" && editing && host.memberId !== null) {
+        await api.core("members.skills.update", { member_id: host.memberId, id: editing.id, text: editing.text, expected_hash: editing.revision });
+        editing = null;
+        await refresh();
+      } else if (action === "skill-undo" && undo && host.memberId !== null) {
+        await api.core("members.skills.update", { member_id: host.memberId, undo });
+        editing = null;
+        await refresh();
+      } else if (action === "import") {
         const value = source.trim();
         if (!value) return;
         if (host.memberId === null) {
@@ -180,6 +204,8 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
         if (host.memberId !== null) await api.membersSkillsDelete(host.memberId, id);
         const index = skills.findIndex(s => s.id === id);
         if (index >= 0) skills.splice(index, 1);
+        editing = null;
+        if (host.memberId !== null) await refresh();
       } else if (action === "command-delete") {
         if (host.memberId !== null) await api.membersCommandsDelete(host.memberId, id);
         const index = commands.findIndex(c => c.id === id);
@@ -212,7 +238,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const action = target.dataset.res;
     const id = Number(target.dataset.id);
 
-    if (action === "skill-menu") openActions(target, [{ id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
+    if (action === "skill-menu") openActions(target, [...(host.memberId !== null ? [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" as const }] : []), { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else if (action === "command-menu") openActions(target, [{ id: "command-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "command-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else choose(action, id, target);
   };

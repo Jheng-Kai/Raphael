@@ -524,3 +524,12 @@ wiring and recall order in `core/tests/agent/test_memory_turns.py`.
 ## Owner round 7 contracts
 
 Quick questions is named once by its actionable persistent conversation row; its duplicate section heading is removed. Ordinary conversations retain their heading, overflow actions, search and quick-history clearing. conversation-sections and details-quick-once enforce that distinction. The shared private and room conversation scrollport fades its top 24px to soften partial message fragments beneath the fixed header; connector-reconnected, chat/member-text/room-text and details consumers cover this boundary. The compact sheet/scrim behavior remains unchanged.
+
+
+## Learned skill notices (phase 3, 2026-10-29)
+
+A skill_learned event is persisted on the originating member turn, rendered once as a
+localized conversation-event-line using the shared eventLineHTML (quiet text and a small
+icon), and excluded from public work narration. member-text
+asserts the notice and absence of internal event data. Native skill-growth verifies the
+notice after production background review, then reads that skill in the next task.

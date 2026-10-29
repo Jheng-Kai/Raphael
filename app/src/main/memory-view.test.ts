@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
@@ -371,4 +371,14 @@ test("reset invalidates a memory list still loading for the previous member", as
   resolve(LIST);
   await old;
   expect(memory.view().status).toBe("loading");
+});
+
+
+test("Chinese and Japanese memory headings join the owner name without a space", () => {
+  setLocale("zh-TW");
+  expect(t("mem.own", { p0: "小晴" })).toBe("小晴的記憶");
+  expect(t("mem.moveToOwn", { p0: "小晴" })).toBe("移到小晴的記憶");
+  setLocale("ja");
+  expect(t("mem.own", { p0: "小晴" })).toBe("小晴のメモリ");
+  expect(t("mem.moveToOwn", { p0: "小晴" })).toBe("小晴のメモリへ移動");
 });

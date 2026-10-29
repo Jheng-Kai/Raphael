@@ -238,6 +238,7 @@ from .team import (
     TEAM_SERVER,
     TEAM_TOOLS,
     SKILL_READ,
+    SKILL_TOOLS,
     Team,
     asks_to_create_member,
     handoff_refused,
@@ -1884,7 +1885,9 @@ class AgentService:
                 else:
                     self._gate.check(Action(ref.key, args), None)
                     if name == "local_time":
+                        began = time.perf_counter()
                         result = self._tools.local_time()
+                        ask.steps.append(self._step("tool", name, BUILTIN_SERVER, "ok" if result.ok else "error", began, result.error))
                     elif name == "weather":
                         result = await self._tool(ask, self._tools.weather(str(args.get("city") or settings.city), ask.language), name)
                     elif name == "web_search":
@@ -2881,7 +2884,7 @@ class AgentService:
         for a failure of the world: "blocked" when the speaker may not, "bad_arguments" for
         arguments it cannot take, "not_found" for nobody of that name."""
         team = self._team
-        if team is None or name not in TEAM_TOOLS or (name not in (SKILL_READ, "handoff") and not speaker.may_ask):
+        if team is None or name not in TEAM_TOOLS or (name not in (*SKILL_TOOLS, "handoff") and not speaker.may_ask):
             return ToolResult(name, False, None, "blocked")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or not current.is_chief or speaker.depth):
@@ -2915,6 +2918,15 @@ class AgentService:
                     'type': 'meeting', 'room_id': result['room_id'], 'name': result['name']}, ensure_ascii=False))
                 self._turn_changed(source_turn_id, 0)
             return ToolResult(name, True, result)
+        if name in ("skills_list", "skill_manage"):
+            try:
+                if name == "skills_list":
+                    return ToolResult(name, True, {"skills": team.capabilities.skills(speaker.id)}, untrusted=True)
+                skill = team.capabilities.manage_skill(speaker.id, dict(arguments))
+                team.skill_learned(speaker.id, skill, source_turn_id)
+                return ToolResult(name, True, {"skill": skill})
+            except (ValueError, OSError) as exc:
+                return ToolResult(name, False, None, "bad_arguments", instruction=str(exc))
         if name == SKILL_READ:
             read = getattr(team, "skill_read", None)
             text = None if read is None else read(speaker.id, arguments.get("name"))

@@ -15,6 +15,20 @@ from raphael_core.memory.service import MemoryService
 from .test_run import Rig
 
 
+async def test_completed_private_work_wakes_the_shared_learning_scheduler(make_rig, memory):
+    from .conftest import report
+    rig = make_rig()
+    seen = []
+    memory.after_turn = lambda member=0: seen.append(member)
+    rig.service.use_memory(memory)
+    rig.client.replies = [report("Finished work.")]
+    task = rig.submit()
+    identifier = AgentHistory(rig.conn).add(session_id="work", question="Do the work", route="delegate", prefix="", text="", status="running")
+    rig.service.attach_turn(task, identifier)
+    await rig.wait_for_reports()
+    assert seen == [0]
+
+
 class NoModel:
     async def complete_json(self, **kwargs):
         raise AssertionError("no model call is expected")

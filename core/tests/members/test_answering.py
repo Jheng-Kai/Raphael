@@ -510,7 +510,7 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["handoff", "ask_member"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member"]
 
 
 @pytest.mark.parametrize("text", ["幫我找行銷跟 PM 開個會議", "大家一起商量上架的事", "schedule a meeting about launch"])

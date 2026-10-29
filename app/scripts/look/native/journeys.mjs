@@ -3,6 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
@@ -76,7 +77,48 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
-  if (name === "memory-growth") {
+  if (name === "skill-growth") {
+    const { member: colleague } = await context.rpc("members.create", { name: "Skill reviewer", role: "Reviewer" });
+    await chat(page);
+    await perform(page, { action: "member", id: colleague.id });
+    await details(page);
+    await click(page, '[data-det="tab"][data-tab="memory"]');
+    await page.waitForSelector('[data-mem-space="own"]');
+    result.memoryHeading = await page.$eval('[data-mem-space="own"]', el => el.getAttribute("aria-label"));
+    await capture("memory-heading");
+    if (result.memoryHeading !== `${colleague.name}的記憶`) throw new Error(`Memory heading has unwanted spacing: ${result.memoryHeading}`);
+    await click(page, '.mb-det [data-det="close"]');
+    const send = async (text, expected) => {
+      const before = (await snapshot()).agent_turns.length;
+      await type(page, ".composer .cmp-input", text); await click(page, ".cmp-send");
+      for (let attempt = 0; ; attempt++) {
+        const turns = (await snapshot()).agent_turns;
+        const turn = turns.at(-1);
+        if (turns.length > before && turn.member_id === colleague.id && turn.status === "done") {
+          if (turn.text !== expected) throw new Error(`Skill task mismatch: ${turn.text}`);
+          return turn;
+        }
+        if (turn?.status === "error" || attempt > 200) throw new Error(`Skill task failed: ${JSON.stringify(turn)}`);
+        await pause(150);
+      }
+    };
+    result.first = await send("[native-skills:learn] Complete a clock audit with ten observations.", "Clock audit completed.");
+    for (let attempt = 0; ; attempt++) {
+      result.learned = await context.rpc("members.skills.list", { member_id: colleague.id });
+      if (result.learned.skills.some(s => s.name === "clock-audit" && s.provenance === "learned")) break;
+      if (attempt > 100) throw new Error("The production background review did not learn a skill");
+      await pause(150);
+    }
+    await page.waitForFunction(() => document.querySelector('.conversation-event-line')?.textContent.includes("clock-audit"));
+    await capture("skill-learned-notice");
+    result.second = await send("[native-skills:reuse] Repeat the clock audit using your learned procedure.", "The learned clock audit procedure was read.");
+    const audit = await snapshot();
+    result.steps = audit.agent_steps.filter(s => s.turn_id === result.first.id || s.turn_id === result.second.id);
+    if (result.steps.filter(s => s.turn_id === result.first.id && s.kind === "tool").length !== 10 ||
+        !result.steps.some(s => s.turn_id === result.second.id && s.tool === "skill_read" && s.outcome === "ok")) throw new Error("Persisted tool evidence does not prove learning and reuse");
+    if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
+    await capture("learned-skill-reused");
+  } else if (name === "memory-growth") {
     const { member: colleague } = await context.rpc("members.create", { name: "Memory reviewer", role: "Reviewer" });
     await chat(page);
     await perform(page, { action: "member", id: colleague.id });

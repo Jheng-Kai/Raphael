@@ -318,7 +318,7 @@ describe("a member's panel", () => {
     expect(api.core).toHaveBeenCalledWith("memory.list", { space: "shared" });
     expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 3 });
     const sections = [...panel.el.querySelectorAll<HTMLElement>("[data-mem-section]")];
-    expect(sections.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["shared", "共同記憶"], ["own", "日文老師 的記憶"]]);
+    expect(sections.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["shared", "共同記憶"], ["own", "日文老師的記憶"]]);
     expect(sections[0].textContent).toContain("主人住台北");
     expect(sections[1].textContent).toContain("在背單字");
   });
@@ -338,7 +338,7 @@ describe("a member's panel", () => {
     expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 3 });
     expect(api.core).toHaveBeenCalledWith("memory.list", { space: "shared" });
     panel.el.querySelector<HTMLElement>('[data-mem-space="shared"] [data-mem="more"]')!.click();
-    expect(document.querySelector("#app-popover [data-mem-move]")!.textContent).toBe("移到 日文老師 的記憶");
+    expect(document.querySelector("#app-popover [data-mem-move]")!.textContent).toBe("移到日文老師的記憶");
   });
 
   test("× closes it", () => {
@@ -425,14 +425,14 @@ describe("Raphael's panel", () => {
     expect(api.avatarPick).toHaveBeenCalled();
   });
 
-  test("his memory: 共同記憶 and 拉斐爾 的記憶", async () => {
+  test("his memory: 共同記憶 and 拉斐爾的記憶", async () => {
     current = 0;
     const panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
     await flush();
     expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 0 });
-    expect([...panel.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["共同記憶", "拉斐爾 的記憶"]);
+    expect([...panel.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["共同記憶", "拉斐爾的記憶"]);
   });
 });
 

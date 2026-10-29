@@ -116,3 +116,8 @@ with. Without the other brain (or in API-only mode, where no CLI starts) it is S
 "formal contrast brain unavailable". Offline honest fake brains on both brains and one
 negative test per check live in `core/tests/evaluate/test_p19_scenarios.py`; the native
 Alt+Space entry still needs its own live check.
+
+
+Phase 3 adds S21.skills.list and S21.skills.manage for the shared skills_list and
+skill_manage tool definitions. Manifest registration is coverage bookkeeping only; it is
+not live/API/CLI provider acceptance. The offline skill-growth native journey uses fakes.

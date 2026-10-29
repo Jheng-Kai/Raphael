@@ -31,6 +31,16 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("a learned skill renders one localized event without exposing its internal payload", () => {
+  const html = turnHTML(turn(20, { messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: T0 }] }), emptyTimelineState(), false, LOOK);
+  const lines = html.match(/<div class="conversation-event-line">.*?<\/div>/g)!;
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain('class="sys event-line"');
+  expect(lines[0]).toContain(ico("check"));
+  expect(visible(lines[0]).replace(/\s/g, "")).toContain("學會了：research-summary");
+  expect(html).not.toContain("skill_learned");
+});
+
 const at = (iso: string): number => Date.parse(iso);
 const T0 = at("2026-10-20T09:00:00+08:00");
 

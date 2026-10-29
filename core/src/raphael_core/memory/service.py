@@ -161,6 +161,7 @@ class MemoryService(Growth):
         start_delay_s: float = START_DELAY_S,
         notify: Callable[[str, dict], None] | None = None,
     ) -> None:
+        self.skill_review = None
         self._notify = notify
         self._conn = conn
         self._keys = keys
@@ -507,7 +508,8 @@ class MemoryService(Growth):
             conversation = self.conversation_for(member_id)
             conversation._client = self._brain(member_id)
             conversation.schedule_fold(self._model(member_id), self.ledger)
-        if self._waiting(limit=REFLECT_AFTER_TURNS, member_id=member_id) >= REFLECT_AFTER_TURNS:
+        skill_due = self.skill_review is not None and self.skill_review.due()
+        if skill_due or self._waiting(limit=REFLECT_AFTER_TURNS, member_id=member_id) >= REFLECT_AFTER_TURNS:
             self._spawn()
         else:
             self._arm(self._quiet_s)
@@ -551,6 +553,8 @@ class MemoryService(Growth):
             if left > 0:
                 return left
         delays: list[float] = []
+        if self.skill_review is not None and self.skill_review.due():
+            delays.append(RETRY_S if self._failed_at is not None else 0.0)
         for member_id in self._agents():
             try:
                 unread = self._unread(member_id=member_id)
@@ -646,6 +650,8 @@ class MemoryService(Growth):
                     applied = await self.reflect(member_id)
                     if applied.failed:
                         break
+            if self.skill_review is not None:
+                await self.skill_review.run_due()
             if self.consolidation_due():
                 await self.consolidate()
         except Exception as exc:  # the background must not break the conversation

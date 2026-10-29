@@ -84,3 +84,19 @@ bot-state, outside all member search/prompt sources; only owner RPC approval may
 apply them, with revision checks. Reads never call notification or mutation paths.
 The existing Memory pane handles pending review; no second UI or model loop is
 introduced for member conversations (A-01).
+
+
+## Growing skills (phase 3, 2026-10-29)
+
+members/skills.py extends the existing MemberCapabilities store, BotHomes journals and
+skills.json state. SQLite keeps skill identity/source/enable metadata; the core-only mirror
+also owns learned provenance and learning timestamps. Owner undo validates its current
+mirror revision, restores documents/references and database metadata, then journals the
+restored mirror. Reads are silent. Member tools cannot select another member or toggle
+skills. Generated/imported skill contents stay untrusted guidance.
+
+members/skill_review.py runs on the MemoryService scheduler with the same tool-less
+member-brain adapter as capture. memory_state stores per-conversation watermarks and
+three-failure bounds. This introduces no second conversation loop, settings registry or
+RPC boundary. API harness and RaphaelMcp share agent/team.py definitions and guarded
+execution (A-01/A-03/A-04); native CLI memory/skills remain disabled.

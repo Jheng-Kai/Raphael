@@ -329,6 +329,14 @@
         "production_state"
       ]
     },
+    "raphael/core/skills_list": {
+      "scenario_ids": ["S21.skills.list"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/skill_manage": {
+      "scenario_ids": ["S21.skills.manage"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/skill_read": {
       "scenario_ids": [
         "S21.skills.read"

@@ -2,6 +2,22 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "skill-learned-notice") {
+    require([...document.querySelectorAll('.conversation-event-line')].some(el => visible(el) && el.textContent.includes("學會了：research-summary")), "a learned skill has one localized conversation line");
+    require(visible(document.querySelector('.conversation-event-line .sys.event-line > .i')), "learned notices use the shared quiet system event with its small icon");
+    require(!document.querySelector('.work-section')?.textContent.includes('skill_learned'), "internal skill payload never enters public work");
+    return { check: name };
+  }
+  if (name === "growing-skills") {
+    const editor = document.querySelector('#mp-skill-text');
+    require(visible(editor) && editor.value.includes("## Verification"), "the actual saved skill opens in the existing member pane");
+    require(document.querySelector('.mb-det').textContent.includes("自行學會"), "learned provenance and date are shown");
+    const calls = window.__look.calls;
+    require(calls.some(c => c.method === "members.skills.read"), "opening reads the real skill boundary");
+    if (window.__look.data.skills[0].member_id === 1) require(!calls.some(c => c.method === "members.skills.update" || c.method === "members.skills.delete"), "reading the editor never mutates skills");
+    else require(calls.some(c => c.method === "members.skills.delete") && calls.some(c => c.method === "members.skills.update" && c.params.undo), "Raphael deletes and restores through the same owner boundary");
+    return { check: name };
+  }
   if (name === "pending-memory") {
     const editor = document.querySelector('[data-mem-space="own"] [data-mem-editor]');
     require(visible(editor), "the pending memory opens in the existing memory editor");
