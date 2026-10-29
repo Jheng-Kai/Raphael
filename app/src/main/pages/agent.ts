@@ -299,6 +299,11 @@ export function createAgent(app: AppContext): Page {
   });
   el.prepend(members.column);
   el.append(members.details);
+  const detailsScrim = document.createElement("div");
+  detailsScrim.className = "mb-det-scrim";
+  detailsScrim.setAttribute("aria-hidden", "true");
+  detailsScrim.addEventListener("click", () => members.setDetails(false));
+  el.insertBefore(detailsScrim, members.details);
   if (members.detailsOpen()) el.dataset.det = "open";
   el.querySelector(".mb-head-l")!.append(members.picker);
   const head = document.createElement("div"); head.className = "conversation-head";

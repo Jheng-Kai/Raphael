@@ -176,3 +176,7 @@ in judge-r7fb_vri: Claude reports ECONNREFUSED, no design feedback is returned,
 and OpenRouter requests remain zero. Design acceptance remains unverified.
 There are no received findings to accept or reject. Exact commands, inspected
 images and the replay script are recorded in OWNER-ROUND-5-NOTES.md.
+
+## Owner round 6 contracts
+
+Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column. See OWNER-ROUND-6-NOTES.md for commands, evidence and native/judge limits.

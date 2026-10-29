@@ -52,6 +52,8 @@ export async function run(options) {
     report.executablePath = executablePath;
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
+    // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
+    if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
     const translations = await readFile(join(app, "src/main/i18n/zh-TW.ts"), "utf8");
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
     const dataWords = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(dataWords) : value && typeof value === "object" ? Object.values(value).flatMap(dataWords) : [];

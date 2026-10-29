@@ -445,6 +445,13 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .row-shortcut .caps { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: var(--h-ctl); }
 /* A model: its dropdown is wider for the models' names; the price of what is chosen is under its name. */
 .slist .row-model .ctl .sel { width: 272px; }
+@media (max-width: 820px) {
+  .slist > .row-model { flex-direction: column; align-items: stretch; }
+  .slist > .row-model > .lbl { min-width: 0; flex: none; }
+  .slist > .row-model > .ctl { margin-left: 0; justify-content: flex-start; }
+  .slist .row-model .ctl .sel { width: 100%; }
+  .row-model .mp-slot { width: 100%; }
+}
 /* The key: how OpenRouter took it, then what came of the latest check. */
 .row-key .d { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) 0; }
 .status-more { color: var(--text-3); font-size: var(--fs-sm); }
@@ -556,6 +563,7 @@ body:has(.page-agent:not([hidden])) .toasts { bottom: 112px; }
 .ob:has([data-welcome]) { grid-template-rows: auto auto auto; align-content: center; }
 .ob:has([data-welcome]) .ob-top.quiet { display: none; }
 .ob:has([data-welcome]) .ob-col { margin: 0; }
+.ob [data-welcome] h2 { font-size: 44px; }
 .ob:has([data-welcome]) .ob-body { padding-bottom: 0; }
 .ob-actions { width: min(560px, 100%); margin-inline: auto; }
 .ob-foot .btn { min-height: 40px; }

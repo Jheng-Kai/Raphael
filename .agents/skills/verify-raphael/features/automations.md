@@ -7,7 +7,7 @@ destination/end conditions, edit/delete and calendar drop prefill.
 
 ## How to get to it (user POV)
 
-From Home click Today's icon or a timeline item. Home remains highlighted in the rail; there is no separate Automations entry. Switch Day/Week in the toolbar. Use Add, an event, or a member drop onto a calendar slot. All seven days fit the content width without horizontal scrolling. Above 960px of content width, the month, draggable members and Keep awake sit on the right. At smaller widths a calendar icon in the toolbar opens the same controls in a dismissible popover. Picking a date or starting a member drag dismisses it. Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Visible event faces remain 20px squares. Advanced
+From Home click Today's icon or a timeline item. Home remains highlighted in the rail; there is no separate Automations entry. Switch Day/Week in the toolbar. Use Add, an event, or a member drop onto a calendar slot. All seven days fit the content width without horizontal scrolling. Above 760px of content width, including a 1120px window, the month, draggable members and Keep awake sit on the right. At smaller widths a calendar icon in the toolbar opens the same controls in a dismissible popover. Picking a date or starting a member drag dismisses it. Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Visible event faces remain 20px squares. Advanced
 fields are under More. Member details also exposes routines; aggregate usage and CSV are in
 Settings > Models > Usage.
 
@@ -58,3 +58,7 @@ offset, while retaining the same text pattern, surface, type and spacing.
 ```powershell
 npm run look -- automation-delete --theme both --width 1120,720,1920x1080
 ```
+
+## Owner round 6 contracts
+
+Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member side panel at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller content areas use the existing compact view. calendar-shell asserts both modes.

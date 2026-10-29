@@ -136,7 +136,8 @@
 .mb-det-head { display: flex; align-items: center; padding: 4px calc(8px + 4 * var(--pa-u)) 0; }
 .mb-det-fill { flex: 1; }
 .page-agent .mb-det-head .btn.icon { width: var(--pa-dclose); min-height: var(--pa-dclose); border-radius: var(--r-pill); }
-.mb-det-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scroll { flex: 1; min-height: 0; width: 100%; max-width: calc(var(--layout-card-max) + 2 * var(--pa-dpad)); overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: var(--pa-dgap); padding: 0 var(--pa-dpad) calc(18px + 6 * var(--pa-u)); }
+.mb-det-scrim { display: none; }
 .mb-who { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: calc(2px + 3 * var(--pa-u)); text-align: center; }
 /* the face is the button that changes it: no edge and no fill, so that Raphael's emblem stands bare */
 .page-agent .btn.mb-avbtn { width: var(--pa-det-av); height: var(--pa-det-av); min-height: var(--pa-det-av); margin-bottom: calc(4px + 4 * var(--pa-u)); padding: 0; border-color: transparent; background: transparent; transition: opacity 0.15s ease; }
@@ -260,6 +261,7 @@
 /* ---------- narrower windows ---------- */
 /* Under 1120 px the panel lies over the chat, at its right. */
 @media (max-width: 1119px) {
+  .page-agent[data-det="open"]:not(.is-room) > .mb-det-scrim { display: block; position: absolute; inset: 0; z-index: 19; background: var(--scrim); }
   .page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: var(--pa-col) minmax(0, 1fr); }
   .mb-det { position: absolute; top: 0; right: 0; bottom: 0; z-index: 20; width: var(--pa-det); max-width: calc(100% - 16px); box-shadow: var(--pop); }
 }

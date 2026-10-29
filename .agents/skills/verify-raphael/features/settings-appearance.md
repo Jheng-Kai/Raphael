@@ -2,7 +2,7 @@
 
 Models in use includes one Quick questions row directly below Raphael's answer.
 The model uses the shared provider/model card and chooser, with the shortcut's
-purpose and price on the left. An empty quick model displays and inherits the answer
+purpose and price on the left, or above the picker at narrow widths. An empty quick model displays and inherits the answer
 model. Quick effort is chosen inside the chooser, in the same effort row as the answer
 model's (owner, 2026-10-27: never a separate control beside the card); a newly chosen
 model starts at low, and under 「與回答相同」 the row is the answer model's. The core
@@ -122,3 +122,7 @@ Header actions themselves share that right edge, without the old 32px inset.
 Compact panes with header actions reserve vertical clearance below the corner
 Close button. settings-alignment compares control bounds as well as containers
 and rejects overlap with Close.
+
+## Owner round 6 contracts
+
+Owner round 6: profile, dictation, appearance, skins, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.

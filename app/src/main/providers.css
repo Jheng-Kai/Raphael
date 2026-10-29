@@ -3,7 +3,6 @@
 .models-content:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .models-content > .sgroup { margin: 0; }
 .pv, .cli-accounts { container: models / inline-size; }
-.models-purpose-note { display: block; color: var(--text-2); line-height: 1.5; }
 .pv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
 .cli-card.pv-card { grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--sp-3); padding: var(--sp-4); }
 :where(:root[data-keys]) .cli-card:has(.btn:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }

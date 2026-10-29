@@ -456,3 +456,7 @@ Team at 1280x800 before pressing Fit, then inspects details at 1920x1080 and
 compact identity at 720x900. It reuses the shared rendered assertions and retains
 per-check failures and actual viewport sizes. No page module or DOM geometry is
 substituted; fake brain remains enabled and no provider request is needed.
+
+## Owner round 6 contracts
+
+Owner round 6: details/details-closed/raphael-details/details-routines/details-memory assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine/memory cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.

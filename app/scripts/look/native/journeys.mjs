@@ -103,6 +103,16 @@ export async function drive(name, context) {
     await click(page, '.mb-det [data-det="close"]');
     await page.setViewport({ width: 720, height: 900 }); await pause(250);
     await inspect("conversation-720", ["conversation-header"]);
+    await details(page); await pause(250);
+    await inspect("details-sheet-720", ["details-sheet"]);
+    const scrim = await page.$('.mb-det-scrim'), bounds = await scrim?.boundingBox();
+    if (bounds) {
+      await page.mouse.click(bounds.x + 4, bounds.y + 80);
+      await page.waitForSelector('.conversation-trigger[aria-expanded="false"]');
+      await page.waitForFunction(() => document.querySelector('.mb-det')?.hidden && getComputedStyle(document.querySelector('.mb-det-scrim')).display === 'none');
+      await inspect("details-dismissed-720", ["conversation-header"]);
+    }
+    await scrim?.dispose();
   } else if (name === "locale-sweep") {
     result.visits = [];
     const devices = await context.rpc("audio.devices", { refresh: false });

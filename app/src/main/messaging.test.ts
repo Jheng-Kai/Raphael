@@ -28,7 +28,7 @@ const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 describe("the setup", () => {
-  test("two rows like the other settings: Telegram with BotFather, then the token with 連接; one line under them", () => {
+  test("two concise rows keep BotFather and the token without a helper paragraph", () => {
     const html = messagingHTML(view());
     expect(html).toMatch(/^<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist">/);
     expect(html.match(/<div class="row /g)).toHaveLength(2);
@@ -36,8 +36,8 @@ describe("the setup", () => {
     expect(html).toContain('id="msg-token"');
     expect(html).toContain('type="password"');
     expect(html).toContain('data-msg="connect"');
-    expect(html.match(/<p class="foot">/g)).toHaveLength(1);
-    expect(visible(html)).toBe("Telegram BotFather 機器人權杖 連接 在 BotFather 建立機器人，把權杖貼在這裡。");
+    expect(html).not.toContain('<p class="foot">');
+    expect(visible(html)).toBe("Telegram BotFather 機器人權杖 連接");
   });
 
   test("the first row carries Telegram's mark and a dot that says it is not connected", () => {

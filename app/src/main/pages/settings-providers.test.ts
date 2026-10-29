@@ -48,7 +48,7 @@ test("快速提問 picks its effort inside the model list, as the answer model d
     models: [{ id: "cli:codex:fast", name: "Fast", is_default: true, reasoning_efforts: ["medium", "low"] }] }] });
   await mount();
   expect(page.el.querySelector('[data-row="quick-model"]')!.textContent).toContain("Quick questions");
-  expect(page.el.querySelector('[data-row="quick-model"] .models-purpose-note')!.textContent).toContain("Alt+Space");
+  expect(page.el.querySelector('[data-row="quick-model"] .models-purpose-note')).toBeNull();
   expect(page.el.querySelector('[data-k="quick-model"] .mp-tname')!.textContent).toBe("Fast");
   expect(page.el.querySelector('[data-k="quick-model"] .mp-source')!.textContent).toContain("Codex");
   expect(page.el.querySelector('[data-price="quick-model"]')!.textContent).toBe(t("brains.subscription"));

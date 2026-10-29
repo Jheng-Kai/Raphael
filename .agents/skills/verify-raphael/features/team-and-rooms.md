@@ -150,7 +150,7 @@ npm run look -- team team-panned team-rearranged team-member-menu team-drop-targ
 
 The board pans with a right or middle drag anywhere except an action, or a left drag on empty canvas.
 Wheel movement pans; Ctrl+wheel zooms at the pointer, within 50-150%. Minus/plus zoom about the
-viewport center. Opening starts at 100% without invoking Fit; reopening retains the chosen zoom. Overflowing groups remain reachable by panning. The monitor icon fits the chief and groups again.
+viewport center, then reveal the chief and first group. Opening starts at 100% without invoking Fit; reopening retains the chosen zoom. Overflowing groups remain reachable by panning. The monitor icon clears manual group positions, restores the common automatic column and fits the chief and groups again.
 If a layout is taller than the viewport even at 50%, fit starts at the top instead of clipping the chief. Opening or fitting the board brings the entire chief card into the canvas with a 16px inset; overflowing groups remain reachable by panning. Reset restores the automatic layout.
 The primary occupies the top card above the automatic groups; Raphael exchanges into its original group slot and remains the room chief. The geometry class `team-chief` names the top slot, not a new coordinator identity. Drag a group's header to move that panel independently.
 Device-local positions are keyed by group id in `raphael.team.positions`; missing, invalid or inaccessible
@@ -254,3 +254,7 @@ Team at 1280x800 before pressing Fit, then inspects details at 1920x1080 and
 compact identity at 720x900. It reuses the shared rendered assertions and retains
 per-check failures and actual viewport sizes. No page module or DOM geometry is
 substituted; fake brain remains enabled and no provider request is needed.
+
+## Owner round 6 contracts
+
+Owner round 6: team/team-fit/team-crisp-100/team-crisp-150/primary-team-board assert that model and source text is fully visible. Explicit Fit clears free placement and returns the chief plus every group to the same automatic left/right edges; ordinary drag placement remains available. Group rows size to their content; toolbar zoom reveals the chief and first group instead of cropping the first card. team-panned/team-rearranged/team-zoom/team-crisp-50 retain spatial interaction coverage; small text at 50% remains intentional.

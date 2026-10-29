@@ -2,6 +2,62 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "team-column-edges") {
+    const boxes = [...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(node => node.getBoundingClientRect());
+    require(boxes.length > 1 && boxes.every(box => Math.abs(box.left - boxes[0].left) < 1 && Math.abs(box.right - boxes[0].right) < 1), "Fit aligns the chief and every group on both column edges");
+    return { check: name, groups: boxes.length - 1 };
+  }
+  if (name === "team-model-readable") {
+    const labels = [...document.querySelectorAll('.team-model > span:last-child')];
+    require(labels.length > 0, "team model labels are present");
+    for (const label of labels) {
+      const range = document.createRange(); range.selectNodeContents(label);
+      const box = label.getBoundingClientRect();
+      require(label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1 &&
+        [...range.getClientRects()].every(line => line.left >= box.left - 1 && line.right <= box.right + 1 && line.bottom <= box.bottom + 1),
+      `model and source are fully readable: ${label.textContent}`);
+    }
+    return { check: name, labels: labels.length };
+  }
+  if (name === "details-sheet") {
+    const panel = document.querySelector('.mb-det:not([hidden])');
+    require(visible(panel), "details are open");
+    const scrim = document.querySelector('.mb-det-scrim'), sheet = getComputedStyle(panel).position === 'absolute';
+    require(!!visible(scrim) === sheet, "overlay details have a conversation scrim only while they are a sheet");
+    if (sheet) {
+      const box = panel.getBoundingClientRect(), chat = document.querySelector('.mb-chat').getBoundingClientRect();
+      const hit = document.elementFromPoint(chat.left + 4, Math.max(chat.top + 80, box.top + 80));
+      require(hit === scrim, "the scrim intercepts conversation clicks");
+      require(parseFloat(getComputedStyle(scrim).backgroundColor.split(',').at(-1)) > 0, "the scrim visibly separates the sheet");
+    }
+    return { check: name, sheet };
+  }
+  if (name === "settings-concise") {
+    const host = document.querySelector('.modal-body');
+    const pane = document.querySelector('.modal-scrim [data-pane][aria-current="page"]')?.dataset.pane;
+    const labels = pane === 'general' ? ['[data-k="subtitles"]'] : pane === 'dictation' ? ['[data-k="languages"]'] : [];
+    for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
+    require(!host.querySelector('.skin-card small, .models-purpose-note, .run-retained'), "skin, model and usage helpers are absent");
+    if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
+    if (pane === 'messaging') require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
+    return { check: name, pane };
+  }
+  if (name === "models-responsive") {
+    const rows = [...document.querySelectorAll('.row-model')];
+    require(rows.length === 4, "all four model purposes remain available");
+    for (const row of rows) {
+      const label = row.querySelector('.lbl').getBoundingClientRect(), picker = row.querySelector('.ctl').getBoundingClientRect();
+      if (innerWidth <= 820) require(picker.top >= label.bottom - 1 && Math.abs(picker.left - label.left) < 1, "narrow model rows place purpose and price above the picker");
+    }
+    return { check: name, rows: rows.length };
+  }
+  if (name === "compact-action") {
+    const action = document.querySelector('.run-header [data-run-act="export"], .keys-card [data-go="settings"]');
+    require(visible(action) && action.classList.contains('icon') && !action.textContent.trim(), "secondary actions use a bare icon");
+    require(!!action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "icon actions retain a localized name and tooltip");
+    if (action.dataset.runAct === 'export' && document.documentElement.lang === 'zh-TW') require(document.querySelector('.run-tiles').textContent.includes('權杖數') && !document.querySelector('.run-tiles').textContent.includes('Tokens'), "usage headings follow the Traditional Chinese glossary");
+    return { check: name, label: action.getAttribute('aria-label') };
+  }
   if (name === "team-readable") {
     const board=document.querySelector('.team-board'), matrix=new DOMMatrix(getComputedStyle(board).transform);
     require(Math.abs(matrix.a-1)<0.001,"initial Team view uses 100 percent; Fit is explicit");
@@ -49,6 +105,8 @@ export function checkRendered(name) {
     require(stats.length === 3, "three stats share one skeleton");
     require(parseFloat(getComputedStyle(page).maxWidth)===1080,"Home retains the supplied 1080px page measure");
     const boxes=stats.map(el=>el.getBoundingClientRect());
+    const emblem=lead.querySelector('.av').getBoundingClientRect(), copy=lead.querySelector('.ho-lead-copy').getBoundingClientRect();
+    require(copy.left >= emblem.right - 1 && copy.top < emblem.bottom && copy.bottom > emblem.top, "Home emblem and report stay side by side at narrow widths");
     if(innerWidth>760) require(boxes.every(b=>Math.abs(b.top-boxes[0].top)<1 && Math.abs(b.bottom-boxes[0].bottom)<1), "stats fill one complete aligned row");
     for(const chart of page.querySelectorAll('.ho-chart')) require(Math.abs(chart.getBoundingClientRect().height-48)<1,"charts keep their shared 48px height");
     return {check:name,stats:boxes.map(b=>({top:b.top,bottom:b.bottom}))};
@@ -71,7 +129,13 @@ export function checkRendered(name) {
   if(name === "no-naming") {
     require(!document.querySelector('.first-bot'),"no first Bot setup exists for an unconfigured empty thread");
     require(visible(document.querySelector('.page-agent .composer:not([hidden])')),"the ordinary composer is available immediately");
-    return {check:name};
+    return (async () => {
+      const img=[...document.querySelectorAll('.ra-hero img')].find(visible);
+      await img.decode();
+      const size=img.getBoundingClientRect().width * devicePixelRatio;
+      require(img.naturalWidth >= size, "the empty conversation avatar has enough source pixels for its display size");
+      return {check:name,sourceWidth:img.naturalWidth,displayPixels:size};
+    })();
   }
   if(name === "settings-alignment") {
     const host=document.querySelector('.modal-body'), style=getComputedStyle(host), right=host.getBoundingClientRect().left+parseFloat(style.paddingLeft)+Math.min(640,host.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight));
@@ -95,6 +159,8 @@ export function checkRendered(name) {
   if(name === "welcome-alignment") {
     const col=document.querySelector('.ob-col').getBoundingClientRect(), foot=document.querySelector('.ob-foot').getBoundingClientRect();
     require(foot.top-col.bottom<=32 && foot.top>=col.bottom,"welcome content and Start form one centered block");
+    const size=parseFloat(getComputedStyle(document.querySelector('.ob-col h2')).fontSize);
+    require(size >= 40 && size <= 48, "welcome title is the 40–48px page hero");
     return {check:name,gap:foot.top-col.bottom};
   }
   if (name === "cancel-armed" || name === "cancel-cleared") {
@@ -155,7 +221,7 @@ export function checkRendered(name) {
     const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
-      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
+      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card, .mb-panel-pages, .mb-det .mb-rt, .mb-det .mem'],
       ['reading', '.ho-row, .ho-slot, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
       ['page', '.page:not(.page-agent), .modal, .ho-hero'],
@@ -200,6 +266,10 @@ export function checkRendered(name) {
     require(Math.abs(matrix.a * 100 - zoom) < .01, `the board is at ${zoom}%`);
     require(style.willChange === "auto", `the resting board releases its raster layer (${style.willChange})`);
     require(Number.isInteger(matrix.e) && Number.isInteger(matrix.f), "resting pan uses whole pixels");
+    if (zoom === 150) {
+      const card = document.querySelector('.team-group-members .team-member').getBoundingClientRect(), view = board.parentElement.getBoundingClientRect();
+      require(card.left >= view.left - 1 && card.top >= view.top - 1, "toolbar zoom keeps the first group content visible instead of showing an empty cropped panel");
+    }
     return { check: name, zoom, willChange: style.willChange, pan: [matrix.e, matrix.f] };
   }
   if (name.startsWith("locale-")) return (async () => {
@@ -887,8 +957,8 @@ export function checkRendered(name) {
     require(!document.querySelector('.au-page [data-view]'), "the calendar has no list view");
     require(document.querySelector('#nav .nav[aria-current="page"]')?.dataset.go === "home", "the calendar belongs to Home in the rail");
     require(!document.querySelector('#nav .nav[data-go="automations"]'), "the rail has no automations entry");
-    const compact = grid.closest('.au-page').clientWidth <= 960;
-    require(visible(side) !== compact, "the side panel is hidden below 960px of content width");
+    const compact = grid.closest('.au-page').clientWidth <= 760;
+    require(visible(side) !== compact, "the month and members remain visible at 1120px; compact tools start below 760px content width");
     require(visible(document.querySelector('[data-au="tools"]')) === compact, "compact calendar tools have a toolbar icon");
     if (visible(side)) {
       require(side.getBoundingClientRect().left >= grid.getBoundingClientRect().right - 1, "the month and members sit on the right");

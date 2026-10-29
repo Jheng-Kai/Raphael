@@ -24,7 +24,7 @@ export function skinsHTML(brain: BrainSettings | null): string {
   return `<section class="sgroup"><h2>${esc(t("skin.styles"))}</h2><div class="skin-grid">` + SKINS.map(skin =>
     `<button type="button" class="btn skin-card" data-skin-choice="${skin}" aria-pressed="${skin === selected}" ${brain ? "" : "disabled"}>` +
     `<span class="skin-preview" aria-hidden="true">${["light", "dark"].map(mode => `<span class="skin-sample" data-preview="${skin}" data-mode="${mode}"><i class="skin-sidebar"></i><i class="skin-bubble"></i><i class="skin-reply"></i><i class="skin-composer"></i></span>`).join("")}</span>` +
-    `<strong>${esc(t(`skin.${skin}`))}</strong><small>${esc(t(`skin.${skin}Desc`))}</small></button>`).join("") + `</div></section>`;
+    `<strong>${esc(t(`skin.${skin}`))}</strong></button>`).join("") + `</div></section>`;
 }
 
 export function createOwnerControls(saved: (settings: BrainSettings) => void) {

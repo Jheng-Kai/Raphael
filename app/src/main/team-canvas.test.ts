@@ -108,3 +108,14 @@ test("a growing drop preview triggers another collision-free layout", () => {
   f.boxes.set(f.first, { x: 0, y: 140, width: 120, height: 280 }); f.canvas.layout(); f.separated();
   expect(f.drawn(f.second)).toMatchObject({ x: 4, y: 296 });
 });
+
+test("Fit restores both group edges to the automatic column after free placement", () => {
+  const f = fixture({ "1": { x: 36, y: 204 } });
+  f.boxes.set(f.second, { x: 0, y: 360, width: 120, height: 100 });
+  f.canvas.layout();
+  expect(f.drawn(f.first).x).toBe(36);
+  f.canvas.fit();
+  expect(f.drawn(f.first).x).toBe(0);
+  expect(f.drawn(f.second).x).toBe(0);
+  f.separated();
+});
