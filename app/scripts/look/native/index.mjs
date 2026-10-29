@@ -53,7 +53,9 @@ async function run(options) {
       let activePage;
       const env = { ...process.env, RAPHAEL_DATA_DIR: data, RAPHAEL_FAKE_LLM: "1", RAPHAEL_TEST_NATIVE: "1", RAPHAEL_CORE_PYTHON: python, PYTHONPATH: join(root, "core/src"), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1", CARGO_BUILD_JOBS: "2" };
       delete env.RAPHAEL_TEST_NATIVE_GMAIL;
+      delete env.RAPHAEL_TEST_NATIVE_HOMES;
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
+      if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {
         await database("init", journey.name);
@@ -102,7 +104,7 @@ async function run(options) {
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });
+        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });
         await capture("final");
       } catch (error) {
         result.failures.push(error.message);

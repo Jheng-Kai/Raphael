@@ -290,7 +290,8 @@ async def test_self_check_and_help_are_t0_and_never_return_key_values(make_rig, 
     assert "opaque-secret-value" not in messages
     assert any('"OpenRouter": true' in message.get("content", "") for message in client.chat_calls[-1]["messages"])
     for member in (0, 1):
-        assert {"self_check", "raphael_help"} <= dict(definitions_for(member)).keys()
+        from raphael_core.agent.speaker import Speaker
+        assert {"self_check", "raphael_help"} <= dict(definitions_for(Speaker(id=member))).keys()
     assert TIERS["self_check"] == TIERS["raphael_help"] == Tier.T0
 
 

@@ -28,6 +28,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
   // The owner's primary contact: Raphael until another member is chosen (`primaryMember` seeds it). The roster says it, as the core does.
   data.primaryId = variant.primaryMember ?? 0;
+  data.roomWrapupMessage.member_id = data.primaryId;
   if (variant.problem) data.status.openrouter.state = "no_key";
   let adminQuestion = variant.adminApproval ? data.adminQuestions[variant.adminApproval] : null;
   let adminTurn = adminQuestion ? data.turns.find(turn => turn.id === adminQuestion.turn_id) : null;
@@ -286,8 +287,8 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.list": {
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        return { members: data.members, groups: data.groups, team_context: {
-          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: 0,
+        return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId })), groups: data.groups, team_context: {
+          schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
           members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),
           apps: counted.apps, connected: counted.count,

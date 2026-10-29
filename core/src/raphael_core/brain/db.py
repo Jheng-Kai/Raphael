@@ -1027,6 +1027,16 @@ COMMIT;
 from .conversation_cleanup import migrate as _conversation_cleanup
 
 _MIGRATIONS[40] = _conversation_cleanup
+_MIGRATIONS[41] = """
+BEGIN;
+DROP TRIGGER room_chief_required;
+CREATE TRIGGER room_chief_required BEFORE DELETE ON room_members
+WHEN OLD.member_id=COALESCE((SELECT id FROM members WHERE primary_contact=1),0)
+AND EXISTS(SELECT 1 FROM rooms WHERE id=OLD.room_id AND is_team=0)
+BEGIN SELECT RAISE(ABORT,'The chief cannot leave a room'); END;
+PRAGMA user_version = 41;
+COMMIT;
+"""
 LATEST_VERSION = max(_MIGRATIONS)
 
 

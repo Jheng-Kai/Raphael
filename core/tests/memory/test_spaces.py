@@ -64,7 +64,7 @@ def said(name, *, space, kind="user", text="主人住在台北", op="ADD"):
 # --- the move at the upgrade -------------------------------------------------------------------
 
 
-def test_the_notes_about_the_owner_move_to_the_shared_memory_once_as_they_are(make, tmp_path, clock):
+def test_migration_preserves_private_owner_notes_without_publishing_them(make, tmp_path, clock):
     root = tmp_path / "memory"
     old = MemoryStore(root, now=clock.now)
     write(old, "user-city")
@@ -79,11 +79,11 @@ def test_the_notes_about_the_owner_move_to_the_shared_memory_once_as_they_are(ma
     write(taken, "user-city", text="主人住在高雄")
 
     memory = make()
-    assert [m.name for m in memory.shared.all()] == ["user-city", "user-name"]
+    assert [m.name for m in memory.shared.all()] == ["user-city"]
     assert memory.shared.get("user-city").description == "主人住在高雄"
-    assert (root / "shared" / "user-name.md").read_bytes() == hand
-    assert sorted(m.name for m in memory.store.all()) == ["preference-short", "user-city"]
-    assert "user-name" in (root / "shared" / "MEMORY.md").read_text(encoding="utf-8")
+    assert (tmp_path / "bots/0/memory/user-name.md").read_bytes() == hand
+    assert sorted(m.name for m in memory.store.all()) == ["preference-short", "user-city", "user-name"]
+    assert "user-name" not in (tmp_path / "shared/USER.md").read_text(encoding="utf-8")
 
     # Once: a note about the owner written to Raphael's own later stays there.
     write(memory.store, "user-job", text="主人是工程師")
@@ -110,6 +110,7 @@ def test_a_note_goes_to_the_space_it_names(memory, members):
         [said("user-city", space="shared"), said("preference-format", space="own", kind="preference", text="行程用條列")],
         5,
         A,
+        share=True,
     )
     assert sorted(applied.written) == ["preference-format", "user-city"]
     assert memory.shared.get("user-city").turns == (5,)
@@ -119,7 +120,7 @@ def test_a_note_goes_to_the_space_it_names(memory, members):
 
 async def test_a_shared_note_says_who_was_told_it_and_when_to_every_member(memory, members, rpc, clock):
     memory.apply_said([said("user-brand", space="shared", text="品牌主色是金色"),
-                       said("preference-format", space="own", kind="preference", text="行程用條列")], 5, 0)
+                       said("preference-format", space="own", kind="preference", text="行程用條列")], 5, 0, share=True)
     told = memory.shared.get("user-brand")
     assert (told.member, told.origin, told.turns, told.created[:10]) == (0, "said", (5,), "2026-10-22")
     assert memory.store.get("preference-format").member is None  # an own note needs no provenance
@@ -131,7 +132,7 @@ async def test_a_shared_note_says_who_was_told_it_and_when_to_every_member(memor
     clock.advance(days=1)
     await rpc.call("memory.update", {"name": "user-brand", "space": "shared", "body": "品牌主色是金色，輔色白。"})
     assert memory.shared.get("user-brand").member == 0  # the owner's edit keeps who was told it
-    memory.apply_said([said("user-brand", space="shared", op="UPDATE", text="品牌主色改為黑金")], 9, A)
+    memory.apply_said([said("user-brand", space="shared", op="UPDATE", text="品牌主色改為黑金")], 9, A, share=True)
     assert (memory.shared.get("user-brand").member, memory.shared.get("user-brand").turns) == (A, (5, 9))
 
 
@@ -156,7 +157,7 @@ def test_a_note_that_is_not_about_the_owner_at_large_stays_with_its_assistant(me
 def test_a_note_is_deleted_from_the_space_it_names(memory, members):
     write(memory.shared, "user-city")
     write(memory.store_for(A), "user-city", text="主人在高雄出差")
-    memory.apply_said([said("user-city", space="shared", op="DELETE")], 1, A)
+    memory.apply_said([said("user-city", space="shared", op="DELETE")], 1, A, share=True)
     assert memory.shared.get("user-city") is None
     assert memory.store_for(A).get("user-city") is not None
 
@@ -237,7 +238,7 @@ def item(name, *, space, kind="user", text="主人是工程師", op="ADD"):
     }  # fmt: skip
 
 
-async def test_each_assistant_reflects_on_its_own_turns_into_its_own_memory_and_the_shared(
+async def test_private_reflection_keeps_all_notes_in_the_members_home(
     make, members, history
 ):
     model = FakeModel(
@@ -258,8 +259,8 @@ async def test_each_assistant_reflects_on_its_own_turns_into_its_own_memory_and_
     assert "我是工程師" in call["user"]
     assert "PRIVATE-B" not in call["user"] and "PRIVATE-RAPHAEL" not in call["user"]
     assert "小行程" in call["system"]  # the pass is for this member
-    assert [(m.name, m.member) for m in memory.shared.all()] == [("user-job", A)]
-    assert sorted(m.name for m in memory.store_for(A).all()) == ["preference-format", "user-deadline"]
+    assert memory.shared.all() == []
+    assert sorted(m.name for m in memory.store_for(A).all()) == ["preference-format", "user-deadline", "user-job"]
     assert memory.reflected_through(A) > 0 and memory.reflected_through(B) == 0
     assert memory.reflected_through(0) == 0
 

@@ -30,16 +30,15 @@ test("deletion racing the history request rechecks existence before reporting an
  expect(view.active).toBe(false);expect(document.body.textContent).not.toContain("room not found");
 });
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
-test("a primary changes room picker order but Raphael remains the required chief", async () => {
+test("a primary changes room picker order and becomes the required chief", async () => {
  const { members } = await api.membersList();
  api.membersList.mockResolvedValue({ members, groups: [], team_context: { primary_id: 1 } });
  await openNewGroupChat();
  expect([...document.querySelectorAll<HTMLElement>('[data-dlg="member"]')].map(row=>row.dataset.member)).toEqual(['1','0']);
- const chief=document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="0"]')!;
+ const chief=document.querySelector<HTMLButtonElement>('[data-dlg="member"][data-member="1"]')!;
  expect(chief.disabled).toBe(true); expect(chief.getAttribute('aria-pressed')).toBe('true');
- expect(chief.querySelector('.mb-av')).toBeNull();
- expect(document.querySelector('[data-dlg="member"][data-member="1"]')!.getAttribute('aria-pressed')).toBe('false');
- document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();
+ expect(document.querySelector('[data-dlg="member"][data-member="0"]')!.getAttribute('aria-pressed')).toBe('false');
+ document.querySelector<HTMLElement>('[data-dlg="member"][data-member="0"]')!.click();
  expect([...document.querySelectorAll('[data-picked] > span')].map(row=>row.textContent)).toEqual(['Alice','Raphael']);
  expect(api.roomsCreate).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();

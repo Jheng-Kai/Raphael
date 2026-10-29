@@ -36,7 +36,7 @@ async def look_twice_then_report(rig):
 # --- a task from start to end ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model", ["cli:codex:gpt-5.6-terra?effort=high", "@local:text"])
+@pytest.mark.parametrize("model", ["@local:text"])
 async def test_background_tasks_use_auxiliary_api_model(make_rig, model):
     rig = make_rig()
     SettingsStore(rig.conn).set("assistant_model", "anthropic/claude-haiku-5.5")

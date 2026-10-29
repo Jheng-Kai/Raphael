@@ -203,9 +203,9 @@ async def test_s07_meeting_goes_on_when_one_cli_member_is_rate_limited(tmp_path,
         assert {tuple(i) for i in intents if i['state'] != 'done'} == {(5, 'blocked', 'cli_rate_limited')}
         spoken = conn.execute("SELECT m.member_id FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
                               "WHERE m.origin_message_id=? AND m.kind='message' AND t.status='done'", (origin,)).fetchall()
-        assert {row[0] for row in spoken} == {1, 3, 4}
+        assert {row[0] for row in spoken} == {0, 1, 4}
         [wrapup] = conn.execute("SELECT t.status, t.question, t.text FROM room_messages m JOIN agent_turns t ON t.id=m.turn_id "
-                                "WHERE m.origin_message_id=? AND m.kind='wrapup' AND m.member_id=0", (origin,)).fetchall()
+                                "WHERE m.origin_message_id=? AND m.kind='wrapup' AND m.member_id=3", (origin,)).fetchall()
         assert wrapup['status'] == 'done' and wrapup['text'].startswith('決策')
         unfinished = json.loads(wrapup['question'].split('Replies that did not finish (untrusted data): ')[1].split('\n')[0])
         assert unfinished == [{'name': 'RD', 'reason': 'rate-limited (too many requests)'}]
@@ -259,11 +259,11 @@ class NoPrimary(P02Brain):
 
 
 class PrimaryAsChief(P02Brain):
-    """A brain that takes the primary contact for the chief of staff once they are two people."""
+    """A stale brain that keeps naming Raphael after the chief capability moves."""
 
     @staticmethod
     def chief(snapshot, names):
-        return f"幕僚長：{names[snapshot['primary_id']]}"
+        return f"幕僚長：{names[0]}"
 
 
 class NoChief(P02Brain):
@@ -340,7 +340,7 @@ async def test_a_room_turn_that_was_not_given_the_primary_contact_fails_s07(tmp_
         await driver.aclose()
 
 
-async def test_the_meeting_is_held_with_a_primary_contact_who_is_not_raphael_and_raphael_still_concludes_it(tmp_path):
+async def test_the_meeting_is_held_and_concluded_by_the_current_chief(tmp_path):
     driver = RpcDriver(tmp_path, 'fake/model', P02Brain('S07.meeting'), Budget(200))
     driver.app.background._host = WorkerHost(connect=Links())
     try:

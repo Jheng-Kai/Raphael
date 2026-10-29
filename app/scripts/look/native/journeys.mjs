@@ -3,6 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
@@ -74,7 +75,24 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
-  if (name === "readable-layout") {
+  if (name === "bot-homes") {
+    const initial = await context.homes();
+    if (!initial.verified || Object.keys(initial.files).length !== 4) throw new Error("Migration lost copied memories or skills");
+    await chat(page);
+    await perform(page, { action: "member", id: 1 });
+    await wait(page, '.composer .cmp-input');
+    await type(page, '.composer .cmp-input', 'Verify your home and reply.'); await click(page, '.cmp-send');
+    for (let i = 0; ; i++) {
+      const turns = (await snapshot()).agent_turns.filter(row => row.member_id === 1);
+      const done = turns.find(row => row.status === "done" && row.text === "Native Codex home verified.");
+      if (done) { result.turn = done; break; }
+      if (turns.some(row => row.status === "error") || i > 120) throw new Error(`Member CLI did not answer: ${JSON.stringify(turns)}`);
+      await pause(200);
+    }
+    result.homes = await context.homes();
+    if (!result.homes.receipt?.member_home || !String(result.turn.model).startsWith("cli:codex")) throw new Error("The member did not use its Codex brain and migrated home");
+    await capture("member-codex-answer");
+  } else if (name === "readable-layout") {
     result.layout = [];
     const inspect = async (label, checks) => {
       const entry = { label, viewport: page.viewport(), checks: [], failures: [] };

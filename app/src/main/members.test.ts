@@ -30,6 +30,8 @@ test.each([["zh-TW", "幕僚長"], ["en", "Chief of staff"], ["ja", "参謀長"]
   expect(memberRole({ id: 0, role: "Legacy assistant" })).toBe(expected);
   expect(memberMatches(member(0, { role: "Legacy assistant" }), expected)).toBe(true);
   expect(memberRole({ id: 1, role: "Research" })).toBe("Research");
+  expect(memberRole({ id: 1, role: "Research", chief: true })).toBe(expected);
+  expect(memberRole({ id: 0, role: "Core assistant", chief: false })).toBe("Core assistant");
 });
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";

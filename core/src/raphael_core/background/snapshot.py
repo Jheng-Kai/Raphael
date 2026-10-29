@@ -264,7 +264,7 @@ def take_snapshot(
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, Tier.T0)
         definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
-        for name, item in definitions_for(speaker.id):
+        for name, item in definitions_for(speaker):
             if name in ("self_check", "raphael_help"):
                 continue
             native = harness_tool(name)

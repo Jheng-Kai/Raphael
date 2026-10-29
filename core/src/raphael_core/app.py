@@ -923,6 +923,10 @@ class App(Router):
             drafts=self.drafts,
         )
         self.agent.register(self)
+        from .native_journeys import bot_homes_brain
+        native_brain = bot_homes_brain(fake_llm, data_dir)
+        if native_brain is not None:
+            self.agent._cli_brains = native_brain
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
         self.background.use_team(self.members, self.agent.team_tool)

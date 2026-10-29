@@ -3,32 +3,16 @@
 consolidation (`reflection`), the tools the assistants reach them by, and the RPC methods of the
 settings page and of a member's 記憶 tab.
 
-Two spaces. Every assistant (Raphael, and each member of the team) has a memory of its own, and
-they all share one more:
+Every assistant owns `bots/<id>/memory/`, including Raphael (0). The common
+owner/team notes live under `shared/`, with USER.md and team.md derived from them.
+Private requests and reflection stay in that member's home; a model's space choice
+cannot share them. An explicit owner sharing request or an owner edit of shared
+memory authorizes shared writes. Searches and conversation summaries stay private.
+`ask_member` returns only what the asked member chooses to answer.
 
-- the shared memory (共同記憶), `memory\\shared\\` with its own `MEMORY.md`: what every assistant
-  should know about the owner, and only that (who they are, their stable preferences, the people in
-  their life, their life and work, how they like to be spoken to). Every assistant reads it and may
-  write to it; never what was decided or discussed with one of them, a task, a plan made in one
-  thread, or what a tool or the web said (`reflection.about_the_owner` holds to it). Each of its
-  notes keeps its provenance: the assistant it was told to (`member`), when, and the turns;
-- each assistant's own: Raphael's is the memory folder itself (`memory\\`), a member's
-  `memory\\members\\<id>\\`. Only that assistant reads and writes it: its role, what its routines
-  found, how the owner wants it to work.
-
-The conversations are private to each assistant: its prompt, its summary, its search of the past
-(`history_search`) and its reflection pass read only its own thread. What one of them was told
-reaches another only as the answer to a question it was asked (`ask_member`, or a hand-off in
-`consult` mode), which the asked one words from its own notes and conversation.
-
-The prompt carries both indexes, the shared one first (`store.MemoryIndex`), each within the limits
-of an index. A write chooses its space (`space`); a note read by name is looked for in the
-assistant's own memory first, then in the shared one.
-
-Upgrading: the notes of the type `user` in Raphael's folder were about the owner, so they move to
-the shared memory once (`_share_the_owner`), as their files are, edits by hand included; a note
-whose name the shared memory already has stays where it is. The move is marked as done in the
-database, so it is made once.
+Migration preserves the bytes and private/shared placement of all old notes and
+imported skills. It does not automatically publish private owner facts. BotHomes
+owns allowlisted atomic document writes and revision journals outside the homes.
 
 The RPC methods (the main window only; the shell checks their params before they come here). Each
 takes `space` ("own", the default, or "shared") and `member_id` (whose own: 0, Raphael, by default):
@@ -67,6 +51,7 @@ Nothing here logs a memory, a question or an answer.
 import asyncio
 import secrets
 import logging
+import re
 import shutil
 import sqlite3
 import time
@@ -88,8 +73,8 @@ from ..clock import wall_clock_ms
 from ..protocol import invalid_params
 from ..router import Router as RpcRouter
 from .conversation import SUMMARY_PURPOSE, Conversation
-from .reflection import MAX_TURNS, SPACES, Action, Applied, Reflector, apply_spaced
-from .store import MemoryIndex, MemoryRefused, MemoryStore, move_note, valid_name
+from .reflection import MAX_TURNS, SPACES, Action, Applied, Reflector, apply_actions
+from .store import MemoryIndex, MemoryRefused, MemoryStore, SharedMemoryStore, move_note, valid_name
 
 logger = logging.getLogger(__name__)
 
@@ -103,16 +88,19 @@ START_DELAY_S = 60.0
 RETRY_S = 15 * 60.0
 _REFLECTED = "reflected_through"
 _CONSOLIDATED = "consolidated_at_ms"
-# Set once the notes about the owner moved from Raphael's folder to the shared one.
-_SHARED_MOVED = "shared_moved"
 # What a search gives of a turn, in characters, at most.
 SNIPPET_CHARS = 150
 MAX_READ = 3
 # The folders, in the memory folder: the members' own, and the shared memory.
 MEMBERS_DIR = "members"
 SHARED_DIR = "shared"
-# The type of Raphael's notes that moves to the shared memory at the upgrade: who the owner is.
-_MOVED_TYPE = "user"
+
+
+def explicitly_shared(text: str) -> bool:
+    """Sharing is an owner's explicit instruction, never a model-selected space."""
+    if re.search(r"不要|別|不能|不准|不可以|禁止|\b(?:don't|do not|never)\b|共有しない|伝えない", text, re.I):
+        return False
+    return bool(re.search(r"告訴大家|告诉大家|分享給(?:大家|所有)|分享给(?:大家|所有)|全團隊都要知道|全团队都要知道|共同記憶|共同记忆|\b(?:tell|share (?:this |it )?with) (?:everyone|all members|the team)\b|全員に(?:共有|伝え)", text, re.I))
 
 
 def _snippet(text: str, words: Sequence[str], *, preserve_label: bool = False) -> str:
@@ -181,8 +169,13 @@ class MemoryService:
         self._start_delay_s = start_delay_s
         self._client = for_purpose(client, "memory")
         self._now = now
-        self.store = MemoryStore(root, now=now, on_change=lambda: self._changed(0))  # Raphael's own
-        self.shared = MemoryStore(root / SHARED_DIR, now=now, on_change=lambda: self._changed(0, "shared"))
+        from ..bots.homes import BotHomes
+        self.homes = BotHomes(root.parent)
+        self.homes.migrate(root)
+        self.store = MemoryStore(self.homes.home(0) / "memory", now=now,
+                                 homes=self.homes, on_change=lambda: self._changed(0))
+        self.shared = SharedMemoryStore(self.homes, now=now,
+                                        on_change=lambda: self._changed(0, "shared"))
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
         self._spend = SpendTracker(conn, now_ms, tz)
@@ -202,7 +195,6 @@ class MemoryService:
         self._failed_at: float | None = None
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
-        self._share_the_owner()
 
     def _changed(self, member_id: int, space: str = "own") -> None:
         """Only the affected space and owner leave the core, never a note's contents."""
@@ -244,25 +236,6 @@ class MemoryService:
         """The last turn of the thread of `member_id` its reflection pass has read (0: none)."""
         return self._state(_watermark(member_id))
 
-    def _share_the_owner(self) -> None:
-        """Once, at the upgrade to the shared memory: Raphael's notes about who the owner is (type
-        `user`) move to the shared memory, as their files are. A note the shared memory already has
-        a note of the same name for stays where it is. A move that fails is tried again at the next
-        start; the mark is set only once every note was dealt with."""
-        if self._state(_SHARED_MOVED):
-            return
-        moved = 0
-        try:
-            for memory in self.store.all():
-                if memory.type == _MOVED_TYPE and move_note(memory.name, self.store, self.shared):
-                    moved += 1
-            self._set_state(_SHARED_MOVED, 1)
-        except (OSError, sqlite3.Error) as exc:
-            logger.warning("Could not move the notes about the owner: %s", type(exc).__name__)
-            return
-        if moved:
-            logger.info("Moved %d notes about the owner to the shared memory", moved)
-
     # --- the spaces --------------------------------------------------------------------------------
 
     def store_for(self, member_id: int) -> MemoryStore:
@@ -271,7 +244,8 @@ class MemoryService:
             return self.store
         store = self._stores.get(member_id)
         if store is None:
-            store = MemoryStore(self.store.root / MEMBERS_DIR / str(int(member_id)), now=self._now,
+            store = MemoryStore(self.homes.home(member_id) / "memory", now=self._now,
+                                homes=self.homes, member_id=member_id,
                                 on_change=lambda: self._changed(member_id))
             self._stores[member_id] = store
         return store
@@ -345,13 +319,14 @@ class MemoryService:
                 )
         except sqlite3.Error as exc:
             logger.warning("Could not delete a member's summary: %s", type(exc).__name__)
-        folder = self.store.root / MEMBERS_DIR / str(int(member_id))
-        try:
-            await asyncio.to_thread(shutil.rmtree, folder, ignore_errors=False)
-        except FileNotFoundError:
-            pass
-        except OSError as exc:
-            logger.warning("Could not delete a member's memory: %s", type(exc).__name__)
+        for folder in (self.homes.home(member_id), self.homes.state(member_id)):
+            try:
+                self.homes.safe(folder)
+                await asyncio.to_thread(shutil.rmtree, folder, ignore_errors=False)
+            except FileNotFoundError:
+                pass
+            except (OSError, ValueError) as exc:
+                logger.warning("Could not delete a member's memory: %s", type(exc).__name__)
         self._changed(member_id)
 
     # --- for the assistant -------------------------------------------------------------------------
@@ -373,17 +348,18 @@ class MemoryService:
         """What a room's turn or work a colleague handed over may do with the memory."""
         return SharedMemory(self)
 
-    def apply_said(self, actions: Sequence[Action], turn_id: int, member_id: int = 0) -> Applied:
-        """Write what the owner asked to be remembered (or forgotten) in the turn `turn_id`: the
-        memories are ones the owner stated. Each goes to the space it names (the shared memory, or
-        the own of `member_id`) and is checked like any other write; one for the shared memory that
-        is not about the owner at large stays in the own (`reflection.apply_spaced`)."""
-        said = [replace(a, origin="said") for a in actions]
+    def apply_said(self, actions: Sequence[Action], turn_id: int, member_id: int = 0, *, share: bool = False) -> Applied:
+        """Keep private requests in their member's home; sharing requires owner authorization."""
+        said = [replace(a, origin="said", space=a.space if share else "own") for a in actions]
         try:
-            return apply_spaced(
-                said, self.store_for(member_id), self.shared, turns=[turn_id] if turn_id else [],
-                member=member_id,
-            )
+            result = Applied()
+            for space, store in (("own", self.store_for(member_id)), ("shared", self.shared)):
+                done = apply_actions([action for action in said if action.space == space], store,
+                                     turns=[turn_id] if turn_id else [], member=member_id if space == "shared" else None)
+                result.written += done.written
+                result.deleted += done.deleted
+                result.refused += done.refused
+            return result
         except OSError as exc:
             logger.warning("Could not write to the memory: %s", type(exc).__name__)
             return Applied(refused=["io"] * len(said))
@@ -679,7 +655,7 @@ class MemoryService:
             model=self._model(),
             ledger=self.ledger(),
             current=current,
-            shared=self.shared,
+            shared=None,
             agent=self._name_of(member_id),
             member=member_id,
         )

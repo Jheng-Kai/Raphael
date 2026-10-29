@@ -2,6 +2,14 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "member-brain-saved") {
+    const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
+    require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
+    require(window.__look.data.members.find(member => member.id === 1).model === saved[0].params.model, "the member retains its own brain");
+    require(document.querySelector('.mb-det [data-member-brain] .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
+    if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
+    return { check: name, model: saved[0].params.model };
+  }
   if (name === "team-column-edges") {
     const boxes = [...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(node => node.getBoundingClientRect());
     require(boxes.length > 1 && boxes.every(box => Math.abs(box.left - boxes[0].left) < 1 && Math.abs(box.right - boxes[0].right) < 1), "Fit aligns the chief and every group on both column edges");
@@ -1029,8 +1037,8 @@ export function checkRendered(name) {
       }
       return { id: group.dataset.teamGroup, cards: cards.length, columns, width: members.clientWidth };
     });
-    const chief = document.querySelector('[data-team-card="0"] .team-member-head > div > span');
-    if (chief) require(chief.textContent === '幕僚長', 'Raphael uses the same chief-of-staff role on the board and in the column');
+    const chief = document.querySelector('.team-chief .team-member-head > div > span');
+    if (chief) require(chief.textContent === '幕僚長', 'the current chief uses the same role on the board and in the column');
     return { check: name, panels };
   }
   if (name === "team-chief-visible" || name === "team-chief-reachable") {
@@ -1441,6 +1449,7 @@ export function checkRendered(name) {
     if (name === "primary-board") {
       const top = document.querySelector('.team-chief .team-member'), original = data.members.find(member => member.id === data.primaryId);
       require(Number(top.dataset.teamCard) === data.primaryId, "the primary occupies the board's top card");
+      require([...document.querySelectorAll(".team-member-head > div > span")].filter(role => role.textContent === "幕僚長").length === 1, "only the current chief is labeled chief of staff");
       const group = document.querySelector(`[data-team-group="${original.group_id ?? 'none'}"]`);
       require(group.querySelector('[data-team-card="0"] .av') && !group.querySelector('[data-team-card="0"] .mb-av'), "Raphael takes the primary's original group slot with his emblem");
       require(document.querySelectorAll('[data-team-card="0"]').length === 1 && !document.querySelector('[data-team="member-menu"][data-member="0"]'), "Raphael remains one protected identity");
@@ -1463,8 +1472,8 @@ export function checkRendered(name) {
       const rows = [...document.querySelectorAll(name === 'primary-calendar' ? '[data-drag-member]' : '[data-dlg="member"]')].filter(visible);
       require(JSON.stringify(order(rows)) === JSON.stringify(swapped(data.members.map(m => m.id))), "member choices exchange only the primary and Raphael");
       if (name === 'primary-room-picker') {
-        const chief = document.querySelector('[data-dlg="member"][data-member="0"]');
-        require(chief.disabled && chief.getAttribute('aria-pressed') === 'true' && !chief.querySelector('.mb-av'), "Raphael remains the required chief with his emblem");
+        const chief = document.querySelector(`[data-dlg="member"][data-member="${data.primaryId}"]`);
+        require(chief.disabled && chief.getAttribute('aria-pressed') === 'true', "the current chief is required");
         const picked = document.querySelector('[data-picked]');
         if (picked) {
           const expected = [...rows].filter(row => row.getAttribute('aria-pressed') === 'true').map(row => data.members.find(m => m.id === Number(row.dataset.member)).name);
@@ -1495,10 +1504,10 @@ export function checkRendered(name) {
     const room = data.rooms[0], faces = [...document.querySelectorAll('.au-room-heading .au-room-participant')];
     require(room.member_ids.includes(0) && faces.length === room.member_ids.length, "every room member is still present");
     const crowned = faces.filter(face => face.querySelector('.au-room-crown'));
-    require(crowned.length === 1 && crowned[0].querySelector('.av') && !crowned[0].querySelector('.mb-av'), "only Raphael keeps the chief's crown");
+    require(crowned.length === 1 && crowned[0] === faces[0], "only the current chief wears the crown");
     require(data.members.find(m => m.id === data.primaryId).name === faces[0].dataset.tooltip.split(' · ')[0], "the room's face list follows primary display order");
     const card = document.querySelector('.au-room-wrapup');
-    require(visible(card) && card.querySelector('.ra-face .av') && !card.querySelector('.ra-face .mb-av'), "Raphael writes the wrap-up");
+    require(visible(card) && card.querySelector('.ra-face'), "the current chief writes the wrap-up");
     require(document.querySelectorAll('.au-room-wrapup').length === 1 && (document.querySelector('.au-room-thread .tn:last-child .au-room-wrapup') || document.querySelector('.au-room-thread .tn:last-child.au-room-wrapup')), "the room ends with one wrap-up");
     return { check: name, crowned: crowned[0].dataset.tooltip, members };
   }
@@ -1645,6 +1654,16 @@ export function checkRendered(name) {
     require([...title.querySelectorAll(".i")].every(icon => icon.closest(".mb-pill-face")), "title has no dropdown glyph outside its member avatar");
     const list = panel.querySelector(".conversation-list");
     require(visible(list) && list.scrollWidth <= list.clientWidth + 1, "conversation management fits the panel");
+    const picker = panel.querySelector('[data-member-brain] .mp-trigger');
+    if (picker) {
+      require(panel.querySelectorAll('.mp-trigger').length === 1, "member details has one shared brain control");
+      const mark = picker.querySelector('.mono'), source = picker.querySelector('.mp-source');
+      if (mark) {
+        const bounds = mark.getBoundingClientRect();
+        require(bounds.width <= 28 && bounds.height <= 32, "the shared brain mark stays inside its control");
+      }
+      require(source.scrollWidth <= source.clientWidth + 1, "the complete brain source remains readable");
+    }
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
   }
   if (name === "composer-pair") {

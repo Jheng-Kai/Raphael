@@ -147,14 +147,14 @@ async def test_a_teacher_keeps_each_reply_and_replays_the_whole_lesson(setup, cl
     assert "Dropped." not in context
 
 
-async def test_a_member_answers_with_raphaels_model_even_with_an_old_one_of_its_own(setup, client):
-    # one model for the whole team (owner, 2026-10-24): a model kept on a member is not used
+async def test_a_member_answers_with_its_selected_model(setup, client):
+    # The member brain overrides the global setting (owner, 2026-10-29).
     rig, team = setup
     one = team.members.store.create_member(name="舊的", role="r", instructions="i", model="own/model")
     client.decisions.append(decision("chat"))
     client.chats.append(live_said("好。"))
     await typed(rig, "你好", one.id)
-    assert client.chat_calls[0]["model"] != "own/model"
+    assert client.chat_calls[0]["model"] == "own/model"
 
 
 @pytest.mark.parametrize("source", ["voice", None])

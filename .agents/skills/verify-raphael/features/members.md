@@ -5,7 +5,7 @@
 Remembered member-column collapse, original Raphael emblem, identity/personality, profile editing, avatar selection, memory, routines, skills,
 commands and voice settings, and the Permissions tab's two switches: ask before contacting colleagues, and write mail as a draft for the owner to send
 (`draft_first`, on by default; see the P08c section of [Conversation](conversation.md)). Members have independent conversations.
-The owner's primary contact (P15b-1, the last section) takes the top display slot in place of Raphael, without a star. `memberRole` uses the single three-language `rooms.chief` key for Raphael on the board, column, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data or change room coordination.
+The owner's primary contact (P15b-1, the last section) takes the top display slot in place of Raphael, without a star. `memberRole` uses the single three-language `rooms.chief` key for the current chief on the board, column, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data; the unique primary contact also holds the chief capability and coordinates rooms.
 
 ## How to get to it (user POV)
 
@@ -54,9 +54,9 @@ provider behavior need native evidence. A dialog screenshot does not prove savin
 
 ## Raphael team administration
 
-Raphael can administer the team from his conversation: overview, member creation
+The current chief can administer the team from their conversation: overview, member creation
 and editing, groups, any member's routines, skill imports and command templates.
-Management tools, including the legacy create_member alias, are offered only to member 0. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
+Management tools, including the legacy create_member alias, are offered only to the current chief capability holder. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
 presets, then the neutral silhouette, and the create dialog defaults.
 
 ```powershell
@@ -116,22 +116,22 @@ Raphael is the primary until another is chosen, and exactly one is at a time. Ch
 or a right click): it opens 「選擇主要成員」, a list of real buttons (Raphael and the other visible members, not the primary now) with the member whose menu
 it was chosen already, 取消 and the primary 設為主要. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses an up arrow instead of a star.
 The primary takes Raphael's large top slot in the member column, collapsed strip and team board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
-Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. Raphael stays the chief of staff (`room_coordinator_id = 0`), remains required in rooms and writes their single wrap-up. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
+Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
 npm run look -- members-expanded members-collapsed members-collapsed-hover members-reexpanded primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-contact-strip primary-member-picker primary-new-conversation primary-team-board primary-team-mentions primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
-`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips without a star. `primary-contact-menu` retains 設為主要 after 移到分組; `primary-contact-picker` excludes the current primary while offering Raphael, with one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices still require identity 0 and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
+`primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips without a star. `primary-contact-menu` retains 設為主要 after 移到分組; `primary-contact-picker` excludes the current primary while offering Raphael, with one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
 
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 
 The core keeps the flag on the member's row (schema v39, a unique index) and the roster is the one place it is read from: the snapshot's `primary_id`
-(and `chief_id`, always 0) is in its revision, and every prompt (an API turn, a resumed CLI thread's per-turn team block, a background task or
+(and equal `chief_id`) is in its revision, and every prompt (an API turn, a resumed CLI thread's per-turn team block, a background task or
 routine, each room turn) is built from it fresh. Offline proof: core/tests/members/test_primary.py (one at a time and its persistence, hide and delete hand it
-back to Raphael, nothing else changes, each room keeps Raphael and concludes once whenever the primary changes, a roster that kept the old one
-is told apart on each path), core/tests/background/test_primary.py, and Guardian S02 (every Bot names the new primary and Raphael as the chief after the
-owner changes it; a brain that keeps the old one, never says it or mixes the two up fails on both brain paths), S03.primary-dispatch (the primary hands
+back to Raphael, nothing else changes, each room uses the current chief and concludes once when the chief changes, a roster that kept the old one
+is told apart on each path), core/tests/background/test_primary.py, and Guardian S02 (every Bot names the new primary as the chief after the
+owner changes it; a brain that keeps the old one, never says it or names a different chief fails on both brain paths), S03.primary-dispatch (the primary hands
 the work to 信件助理 itself) and S07.meeting (held with a primary that is not Raphael). Live brains and the native shell (the persisted choice
 after a relaunch, the allowlisted `members.set_primary`) need their own acceptance.
 
@@ -212,3 +212,42 @@ a fake brain; it does not prove a physical microphone or live-provider behavior.
 ## Owner round 6 contracts
 
 Owner round 6: member-text and the shared details scenes cover conversation consumers of the overlay scrim, single inset and card cap. Existing compact rail badges, selection backgrounds and conversation placement remain owner-approved.
+
+
+## Bot homes, phase 1 (owner decision 2026-10-29)
+
+Every member, including Raphael, owns `bots/<id>/MEMORY.md`, `memory/` and
+`skills/<skill>/SKILL.md`. `bot-state/<id>/SOUL.md` is a derived persona mirror;
+the database remains authoritative. `skills.json` records enabled state, provenance
+and document revision. Atomic, bounded, allowlisted document writes redact secrets,
+check optimistic SHA-256 revisions and keep undo journals outside bot-writable homes.
+Core metadata undo restores the database before regenerating the mirror; no bot can
+write SOUL or role/enable metadata. Shared owner/team documents are `shared/USER.md`
+and `shared/team.md`; migrated shared notes remain under `shared/memory/`.
+
+Migration first verifies destinations and copies every source, then removes verified
+sources. It preserves legacy private/shared placement and bytes; conflicts abort
+without overwriting. Tests use a copied synthetic three-memory tree, never owner data.
+Private-chat writes and reflection stay in that member's home even when a model
+requests shared space. Only an explicit owner sharing request promotes a private
+request to shared memory. Search/read never cross another member's private memory
+or thread; `ask_member` returns the asked member's own answer.
+
+Member details uses the existing model picker once, with inherit-global plus API/CLI
+choices. Empty `members.model` inherits global; otherwise private turns, routines
+and background work honor that brain, including CLI. Raphael's global brain remains
+in Settings. Raphael now has the ordinary Skills tab. Native CLI memory/skills stay
+disabled; the host provides the member's own memory/skill context and tools.
+
+```powershell
+npm run look -- details raphael-details details-memory details-skills raphael-skills member-brain-saved primary-contact-column primary-contact-set primary-team-board primary-room-picker primary-room-members primary-room-chief quick-model-menu --theme both --width 1120,720,1920x1080
+npm run native -- bot-homes
+```
+
+`member-brain-saved` saves the CLI model, reopens details and the shared chooser,
+then checks the stored selection, selected row and one boundary write. The offline
+native `bot-homes` journey migrates
+three copied notes plus a skill, checks hashes, then answers through a fake Codex
+child using the production CLI loop/MCP boundary. It borrows no owner login and makes
+no provider calls. Fixture/native/real-provider/judge evidence remain separate.
+Automatic capture, recall/folding changes, learned skills and their UI are later phases.

@@ -327,7 +327,24 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 40
+LATEST = 41
+
+
+def test_v41_room_membership_guard_follows_the_unique_chief(conn):
+    from raphael_core.members.store import MemberStore
+    store = MemberStore(conn)
+    chief = store.create_member(name="Alice")
+    with conn:
+        room = conn.execute("INSERT INTO rooms(name,created) VALUES ('Review',1)").lastrowid
+        conn.executemany("INSERT INTO room_members(room_id,member_id) VALUES (?,?)", [(room, 0), (room, chief.id)])
+    store.set_primary(chief.id)
+    with conn:
+        conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=0", (room,))
+    with pytest.raises(sqlite3.IntegrityError, match="chief cannot leave"):
+        with conn:
+            conn.execute("DELETE FROM room_members WHERE room_id=? AND member_id=?", (room, chief.id))
+    assert store.delete_member(chief.id)
+    assert store.primary_id() == 0
 
 
 def test_v25_preserves_conversations_and_quotas_and_cleans_deleted_run_metrics(tmp_path):
