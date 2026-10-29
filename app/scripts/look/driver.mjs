@@ -1,5 +1,22 @@
 import { checkRendered } from "./checks.mjs";
 
+export function finiteMotionSettled() {
+  return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity);
+}
+
+/** Wait for real entrance transitions without changing their paint measurements or infinite activity indicators. */
+export async function settleMotion(page) {
+  await page.waitForFunction(finiteMotionSettled, { timeout: 5000 });
+}
+
+export async function decodeVisibleImages() {
+  await document.fonts.ready;
+  await Promise.all([...document.images].filter(image => {
+    const box = image.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth;
+  }).map(image => image.decode().catch(() => {})));
+}
+
 export function findVisibleElement(selector) {
   return [...document.querySelectorAll(selector)].find(element => {
     const box = element.getBoundingClientRect();
@@ -40,18 +57,25 @@ export async function perform(page, step) {
     else { await click("[data-room-new]"); await page.keyboard.press("Escape"); }
   };
   // Measure the real event through its next painted frame, excluding automation transport time.
-  if (step.measure) await page.evaluate(({ selector, action }) => {
-    window.__look.paint = new Promise(resolve => {
+  if (step.measure) await page.evaluate(({ selector, action, measure }) => {
+    window.__raphaelPaint = new Promise(resolve => {
       document.addEventListener(action === "type" ? "input" : "click", function capture(event) {
         if (!event.target.closest(selector)) return;
         document.removeEventListener(action === "type" ? "input" : "click", capture, true);
-        const start = performance.now();
-        performance.mark("look-paint-start");
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          const duration = performance.now() - start;
-          performance.mark("look-paint-end");
-          resolve(duration);
+        const start = performance.now(), tasks = [];
+        const observer = new PerformanceObserver(list => tasks.push(...list.getEntries()));
+        observer.observe({ type: "longtask" });
+        const finish = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+          tasks.push(...observer.takeRecords()); observer.disconnect();
+          resolve({ durationMs: performance.now() - start,
+            longTasks: tasks.filter(task => task.startTime + task.duration > start).map(task => ({ start: task.startTime, duration: task.duration })),
+            domNodes: document.querySelectorAll('[data-cs-body] *').length, cards: document.querySelectorAll('.cs-card').length });
         }));
+        const ready = () => {
+          if (!measure.readySelector || document.querySelector(measure.readySelector) || performance.now() - start > 2000) finish();
+          else requestAnimationFrame(ready);
+        };
+        ready();
       }, true);
     });
   }, step);
@@ -142,6 +166,9 @@ export async function perform(page, step) {
       }
       break;
     }
+    case "settle-motion":
+      await settleMotion(page);
+      break;
     case "freeze-motion":
       // Every animation held `at` ms in, also on elements drawn again later, so a moving frame is the same each run.
       await page.addStyleTag({ content: `*, *::before, *::after { animation-delay: -${Number(step.at)}ms !important; animation-play-state: paused !important; }` });
@@ -314,8 +341,11 @@ export async function perform(page, step) {
   // Let event handlers, microtasks and popover positioning finish between declarative actions.
   await new Promise(resolve => setTimeout(resolve, 100));
   if (step.measure) {
-    const durationMs = await page.evaluate(() => window.__look.paint);
-    if (durationMs > step.measure.budgetMs) throw new Error(`${step.measure.name}: ${durationMs.toFixed(1)}ms exceeds ${step.measure.budgetMs}ms event-to-paint budget`);
-    return { check: step.measure.name, durationMs, budgetMs: step.measure.budgetMs };
+    const measured = await page.evaluate(() => window.__raphaelPaint);
+    if (step.measure.enforce !== false) {
+      if (measured.durationMs > step.measure.budgetMs) throw new Error(`${step.measure.name}: ${measured.durationMs.toFixed(1)}ms exceeds ${step.measure.budgetMs}ms event-to-paint budget`);
+      if (step.measure.maxLongTaskMs && measured.longTasks.some(task => task.duration > step.measure.maxLongTaskMs)) throw new Error(`${step.measure.name}: long task exceeds ${step.measure.maxLongTaskMs}ms: ${JSON.stringify(measured.longTasks)}`);
+    }
+    return { check: step.measure.name, ...measured, budgetMs: step.measure.budgetMs };
   }
 }

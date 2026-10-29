@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { coreCheck } from "./guardian.mjs";
+import { coreCheck, coreEnvironment } from "./guardian.mjs";
 
 const app = resolve(import.meta.dirname, ".."), root = resolve(app, "..");
 const args = process.argv.slice(2);
@@ -19,7 +19,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --core or --rust");
   process.exitCode = 1;
 } else if (args.includes("--help")) {
-  console.log("npm run verify -- [--quick] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast. --quick: tsc + vitest only.\n--core: also run offline core pytest. --rust: also run offline cargo test.\n--live: paid brain/tool matrix. --judge run: paid design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
+  console.log("npm run verify -- [--quick] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast. --quick: tsc + vitest only.\n--core: also run offline core pytest. --rust: also run offline cargo test.\n--live: paid brain/tool matrix. --judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
 } else {
   await mkdir(output, { recursive: true });
   const directory = await mkdtemp(join(output, "verify-"));
@@ -48,7 +48,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
     let exitCode, error;
     try {
       const result = await new Promise(resolve => {
-        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, NO_COLOR: "1", PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: join(output, "cargo-target") } });
+        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, ...coreEnvironment(), ...check.env, NO_COLOR: "1", PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: join(output, "cargo-target") } });
         activeChild.once("error", value => resolve({ exitCode: 1, error: value.message }));
         activeChild.once("close", (code, signal) => resolve({ exitCode: code ?? 1, ...(signal ? { error: `Terminated by ${signal}` } : {}) }));
       });

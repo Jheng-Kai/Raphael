@@ -421,7 +421,7 @@ export function createSettings(app: AppContext): SettingsPage {
     // Only what changed moves: a list drawn again stands still, a switch that was turned slides.
     // Analytics owns its controls and filters; keep that live subtree out of page HTML redraws.
     usageHost.remove();
-    swapHTML(body, pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view()));
+    swapHTML(body, `<div class="set-content">${pane !== "about" && loading ? loadingHTML(view()) : paneHTML(view())}</div>`);
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);

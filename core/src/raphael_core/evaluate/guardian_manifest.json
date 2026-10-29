@@ -368,6 +368,10 @@
       "expected_assertions": [
         "production_state"
       ]
+    },
+    "raphael/core/find_app": {
+      "scenario_ids": ["S14.gmail"],
+      "expected_assertions": ["connector_card"]
     }
   }
 }

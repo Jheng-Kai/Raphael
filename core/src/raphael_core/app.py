@@ -282,8 +282,11 @@ class EchoClient:
             call = ChatToolCall(id=f"call_{seen}", name=name, arguments=arguments, raw_arguments=raw)
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
-        # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_consult
+        # Native journeys script only the provider's tool choice; core execution stays real.
+        from .native_journeys import native_consult, native_connect
+        connect = native_connect(messages, offered, seen)
+        if connect is not None:
+            return calling(*connect)
         consult = native_consult(messages, offered, seen)
         if consult is not None:
             return calling("ask_member", consult)
@@ -817,9 +820,9 @@ class App(Router):
         # The plugins: servers the user connected, and the hub the assistant reaches their tools by.
         self.integrations = IntegrationsService(self._conn, data_dir, self.vault, notify=self.notify)
         self.integrations.register(self)
-        from .native_journeys import GmailJourneyVault, gmail_enabled
+        from .native_journeys import GmailJourneyVault, gmail_enabled, catalog_enabled
 
-        native_gmail = gmail_enabled(fake_llm)
+        native_gmail = gmail_enabled(fake_llm) or catalog_enabled(fake_llm)
         self.connectors = ConnectorsService(
             data_dir, GmailJourneyVault() if native_gmail else self.vault, self.integrations,
             transport=offline_transport() if fake_llm and not native_gmail else None,

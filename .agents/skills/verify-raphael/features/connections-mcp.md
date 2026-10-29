@@ -259,3 +259,102 @@ after reopening, skill save feedback and the footer check's covered-button failu
 ## Shared content measures (2026-10-28)
 
 Follow the [content-width contract](README.md#content-width), including its token derivation, per-scene browser check and representative main-page matrix. Short items retain their cap when the page has spare width; reading columns and spatial workspaces use their documented measures.
+
+## Search-first catalog and chat discovery (2026-10-29)
+
+Built-in and managed apps share the vocabulary in connectors/finder-data.json:
+name, slug, descriptions and aliases. Connected apps lead, then available popular
+apps. Nine broad group chips replace provider category dropdowns by explicit owner
+exception to R-UI-20. Result pages contain 18 cards and retain the shared R-UI-45
+card measures. Search is debounced and indexed; no filtered catalog fetch occurs.
+
+```powershell
+npm run look -- plugins-store plugins-store-category plugins-store-search plugins-store-all plugins-store-empty plugins-store-motion connector-slack connector-slack-authorizing --theme both --width 1120,720,1920x1080,1180x780
+npm run look -- connector-reconnected --theme both --width 1120,720,1920x1080
+```
+
+`find_app` reads the same public vocabulary and reports id/name/provider/connected;
+`connect_app` validates any returned id, creates the existing T0 private chat card
+and resumes once only after its tools become available. Catalog display names and
+providers survive restart. Unknown ids fail closed. Non-Google cards never use
+private Google authorization. Rooms, nested exchanges, voice and quick requests
+cannot open these cards.
+Resumed turns carry the persisted catalog names separately from app ids, so an
+unknown app keeps its display name without losing existing Google brand marks.
+
+From a normal owner shell, build the isolated debug app, then run
+`npm run native -- store-finder catalog-connect`. Set RAPHAEL_NATIVE_APP to a
+non-Gmail catalog slug with managed sign-in (default slack, verified by the owner). Both explicitly
+allow only Composio network and read only its existing Credential Manager key;
+credentials/configuration writes remain inside the run. Catalog-connect scripts
+only the fake provider's tool choice, then drives production tools, gates, stores
+and sign-in for Raphael and a member. It stops before consent, cancelling only
+its first pending login to exercise the second speaker. This proves the core/UI
+path, not a live model's choice of tools. Store-finder records catalog size,
+paint time, DOM nodes and long tasks; >250 ms paint or >50 ms long tasks fails.
+Sandbox credential failures are blocked, not performance or authorization PASS.
+
+Settings headers, toolbars and content share one `.set-content` reading measure,
+including the Add button and the store's full-width search. Group chips stay on
+one horizontally scrollable row with no visible scrollbar. The shared content-width look guard checks
+these edges; profile, appearance and the custom MCP form represent ordinary rows,
+choice grids and flex/scrolling forms affected by this setting-wide constraint.
+Native screenshots wait for finite entrance animations, independently of measured
+click-to-paint. `plugins-store-motion` leaves motion enabled and requires all rows
+to reach full opacity with only the normal section gap before capture.
+Catalog logos persist with conversation cards (migration 42) and resumed turns,
+and store/card marks use the same renderer and HTTPS Composio allowlist. Slack's
+public catalog SVG has an exact offline snapshot declared in fixture.json, so
+pending and authorizing scenes exercise the real image element without network.
+
+## Accepted store and connector judge findings (2026-10-29)
+
+The store's search, tabs and single-row group chips stay above a separate results
+scrollport. `plugins-store-all` scrolls to pagination both before and after a page
+change and checks every toolbar control by bounds and hit testing; only results
+may scroll. The results fill the allocated flex space with layout and size
+containment, so their intrinsic height does not expand the fixed toolbar shell.
+Search, empty results and the optional key setup retain that layout.
+
+The custom MCP form keeps its trust notice and actions below the fields scrollport.
+Fields have bottom padding and scroll padding so revealing the final field leaves
+it and the environment variables fully above the footer. Header Add, input fields,
+trust notice and footer actions reserve the same scrollbar gutter; the rendered
+checks require their right edges to match without horizontal overflow.
+
+A pending chat connection card shows its app name and Connect action without a
+helper line (R-UI-02). Reconnect errors, authorization status and tool counts remain
+essential states. Authorizing copy has no literal ellipsis, uses the available text
+width and stays fully visible before Cancel. The turn remains paused while the
+card owns cancellation; composer Stop, rail selection and details-panel placement
+are unchanged by this fix.
+
+```powershell
+npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key connections-command connections-url connections-test connector-slack connector-slack-authorizing chat-connect-gmail connector-authorizing connector-reconnected --theme both --width 1120,720,1920x1080,1180x780
+```
+
+## Store counts and single-row categories (round 4, 2026-10-29)
+
+The Store tab counts apps the owner can add under the current search/category,
+excluding already connected entries. The pager uses that same filtered snapshot
+and total. Popular apps lead that available list and share its 18-card pages;
+they are no longer a separate uncounted block outside pagination. Connected apps
+remain a separate context section. The regression test in connections.test.ts
+walks every page, checking identical tab/pager totals, page sizes and exactly-once
+coverage of all addable apps, including popular apps.
+
+All ten category chips occupy one horizontal row at 720, 1120 and 1920x1080.
+The row scrolls without a visible scrollbar. Repainting results preserves its
+horizontal offset and the selected chip's keyboard focus. The category journey
+tabs through every chip, selects Other with Enter, checks it remains fully visible
+and focused, then returns to Productivity. Rendered checks reject wrapped chips,
+visible scrollbars and differing Store/pager totals. Toolbar hit tests cover the
+search and fully visible chips while results scroll independently.
+
+```powershell
+npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion --theme both --width 1120,720,1920x1080
+```
+
+This round's design judge is explicitly reserved for the maintainer's Codex shell;
+do not run it from this task. Fixture/browser results do not establish native,
+live-provider or design-judge acceptance.

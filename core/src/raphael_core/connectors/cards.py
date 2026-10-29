@@ -1,5 +1,5 @@
 """Connector cards: the card a chat shows in its own conversation when the task in it needs an app
-that is not connected (Gmail, Google Calendar), and the one resume of that task once it is.
+that is not connected, and the one resume of that task once it is.
 
 A card is a row of `connect_cards`, bound to the turn whose task asked for the app (the model's
 `connect_app`). Its state moves only along `MOVES`:
@@ -18,7 +18,7 @@ means the app's read tools can be called now, so a sign-in that granted less (a 
 
 When every card of a turn is connected, that turn's task resumes, once (`resume`, which the agent
 supplies): the claim is one conditional update, so a replayed callback or a second Connect finds
-nothing to resume. A card holds no URL, code, `state` or token, and none is logged; the window is
+nothing to resume. A card holds no authorization URL, code, `state` or token, and none is logged; its public catalog logo is display metadata. The window is
 told of a change by `agent.turn`.
 """
 
@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
 from ..protocol import RpcError, invalid_params
-from .apps import APPS, App
+from .apps import APPS, App, catalog_apps
 from .composio import KEY
 from .google import PREFIX
 from .service import GOOGLE_SERVER
@@ -58,7 +58,7 @@ _FAILURES = {
     "missing_key": "not_configured", "needs_own_oauth_app": "not_configured",
 }
 _COLUMNS = ("id, turn_id, member_id, conversation_id, app, language, reconnect, state, error, tool_count, done,"
-            " created_at_ms, expires_at_ms, resumed_at_ms")
+            " created_at_ms, expires_at_ms, resumed_at_ms, app_name, provider, app_logo")
 
 
 @dataclass(frozen=True)
@@ -77,10 +77,17 @@ class Card:
     created_at_ms: int
     expires_at_ms: int
     resumed: bool
+    app_name: str = ""
+    provider: str = "google"
+    app_logo: str = ""
+
+    @property
+    def name(self):
+        return self.app_name or (APPS[self.app].name if self.app in APPS else self.app)
 
     def view(self) -> dict:
         """The card as the window draws it."""
-        return {"id": self.id, "app": self.app, "name": APPS[self.app].name, "state": self.state,
+        return {"id": self.id, "app": self.app, "name": self.name, "logo": self.app_logo, "state": self.state,
                 "error": self.error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
                 "expires_at_ms": self.expires_at_ms, "resumed": self.resumed}
 
@@ -89,7 +96,7 @@ def _card(row: sqlite3.Row) -> Card:
     return Card(row["id"], row["turn_id"], row["member_id"], row["conversation_id"], row["app"], row["language"],
                 bool(row["reconnect"]), row["state"], row["error"], row["tool_count"],
                 tuple((key, digest) for key, digest in json.loads(row["done"])),
-                row["created_at_ms"], row["expires_at_ms"], row["resumed_at_ms"] is not None)
+                row["created_at_ms"], row["expires_at_ms"], row["resumed_at_ms"] is not None, row["app_name"], row["provider"], row["app_logo"])
 
 
 class CardStore:
@@ -104,15 +111,15 @@ class CardStore:
                          " WHERE state='authorizing'", (now_ms(),))
 
     def open(self, *, turn_id: int, member_id: int, conversation_id: int | None, app: str, language: str,
-             reconnect: bool, done: Iterable[tuple[str, str]] = ()) -> Card:
+             reconnect: bool, done: Iterable[tuple[str, str]] = (), app_name: str = "", provider: str = "google", app_logo: str = "") -> Card:
         """The card of `app` for `turn_id`: a new one, or the one the turn has (a task asks once per app)."""
         now = self._now_ms()
         with self._conn:
             self._conn.execute(
                 "INSERT OR IGNORE INTO connect_cards (id, turn_id, member_id, conversation_id, app, language, reconnect,"
-                " state, done, created_at_ms, updated_at_ms, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+                " state, done, created_at_ms, updated_at_ms, expires_at_ms, app_name, provider, app_logo) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)",
                 (secrets.token_hex(8), turn_id, member_id, conversation_id, app, language, int(reconnect),
-                 json.dumps(sorted(set(done))), now, now, now + self._wait_ms))
+                 json.dumps(sorted(set(done))), now, now, now + self._wait_ms, app_name, provider, app_logo))
         row = self._conn.execute(f"SELECT {_COLUMNS} FROM connect_cards WHERE turn_id=? AND app=?",
                                  (turn_id, app)).fetchone()
         return _card(row)
@@ -187,10 +194,37 @@ class ConnectorCards:
 
     # --- what the agent asks ----------------------------------------------------------------------
 
+    async def resolve(self, ident):
+        if not isinstance(ident, str):
+            return None
+        if ident in APPS:
+            return APPS[ident]
+        return next((app for app, _ in await catalog_apps(self._connectors) if app.id == ident), None)
+
+    async def find(self, query):
+        from .finder import normalize
+        if not isinstance(query, str) or not query.strip() or len(query) > 200:
+            raise ValueError("invalid app query")
+        tokens = normalize(query).split()
+        matches = []
+        for app, text in await catalog_apps(self._connectors):
+            if all(token in text for token in tokens):
+                provider = self._provider(app)
+                name = "composio" if provider and provider[0] == "connectors.connect" else app.provider
+                matches.append({"id": app.id, "name": app.name, "provider": name,
+                                "connected": bool(self.ready_tools(app))})
+                if len(matches) == 20:
+                    break
+        return {"apps": matches}
+
     def ready_tools(self, app: App) -> list[str]:
         """The tools of `app` that can be called now, through either provider; none while its read
         tools cannot, or when the connections cannot be read (unknown is never connected)."""
         try:
+            if app.provider == "builtin":
+                hub = self._connectors.hub
+                return [tool.name for server in hub._config.servers() if server.catalog_id == app.id
+                        and hub._server_entry(server)["state"] == "ready" for tool in server.tools if server.tool_on(tool)]
             google = [name for name in app.google_tools if self._connectors.tool_available(GOOGLE_SERVER, name)]
             if app.reads and set(app.reads) <= set(google):
                 return google
@@ -217,7 +251,8 @@ class ConnectorCards:
         if self.ready_tools(app):
             return None
         return self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
-                               app=app.id, language=language, reconnect=self._expired(app), done=done)
+                               app=app.id, language=language, reconnect=self._expired(app), done=done,
+                               app_name=app.name, provider=app.provider, app_logo=app.logo)
 
     def views(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
         return {turn_id: [card.view() for card in cards] for turn_id, cards in self.store.for_turns(turn_ids).items()}
@@ -261,14 +296,16 @@ class ConnectorCards:
     def _provider(self, app: App) -> tuple[str, dict] | None:
         """The sign-in to use: the owner's own Google authorization first, then Composio."""
         vault = self._connectors.vault
-        if "google" in self._connectors.store.connectors and vault.get(PREFIX + "client_id"):
+        if app.provider == "builtin":
+            return "integrations.connect", {"catalog_id": app.id}
+        if app.provider == "google" and "google" in self._connectors.store.connectors and vault.get(PREFIX + "client_id"):
             return "connectors.google.connect", {}
         if vault.get(KEY):
             return "connectors.connect", {"toolkit": app.composio}
         return None
 
     async def _sign_in(self, card: Card) -> None:
-        app = APPS[card.app]
+        app = APPS.get(card.app) or App(card.app, card.name, "", card.app, card.provider)
         try:
             try:
                 if not self.ready_tools(app):

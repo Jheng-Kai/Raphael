@@ -3,6 +3,23 @@ export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
   if (name === "content-width") {
+    const settings = document.querySelector('.modal-scrim:not([hidden]) .set-content');
+    if (visible(settings)) {
+      const edge = settings.getBoundingClientRect();
+      for (const child of settings.children) {
+        if (!visible(child) || ['absolute', 'fixed'].includes(getComputedStyle(child).position)) continue;
+        const box = child.getBoundingClientRect();
+        require(box.left >= edge.left - 1 && box.right <= edge.right + 1, `settings content shares one measure: ${child.className}`);
+      }
+      const action = settings.querySelector('.set-head > :last-child:not(h1)');
+      const form = settings.querySelector('.cs-form .add-grid');
+      const contentRight = form ? form.getBoundingClientRect().left + form.clientWidth - parseFloat(getComputedStyle(form).paddingRight) : edge.right;
+      if (visible(action)) require(Math.abs(action.getBoundingClientRect().right - contentRight) <= 1, "settings header action shares the content right edge");
+      for (const selector of ['.cs:has(.cs-store-groups) .cs-find .field', '.cs-store-groups']) {
+        const control = settings.querySelector(selector);
+        if (visible(control)) require(Math.abs(control.getBoundingClientRect().right - edge.right) <= 1, `settings toolbar shares the content right edge: ${selector}`);
+      }
+    }
     // Keep this measurable on the pre-token stylesheet too: all limits derive from the shared 32px space.
     const space = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sp-6'));
     require(space > 0, "the shared spacing scale is available");
@@ -1307,44 +1324,80 @@ export function checkRendered(name) {
     require(document.querySelector('[data-run-act="show-allowance"]'), "subscription exclusion links to allowances");
     return { check: name, bill: bill.textContent, sidebar: sidebar.textContent };
   }
-  if (name === "plugins-store-scrolled") {
-    const row = document.querySelector('.cs-composio-category:last-child .cs-card:last-child');
-    require(row?.textContent.includes('360'), "scrolling reaches the last app without fetching or pagination");
-    const box = row.getBoundingClientRect();
-    const main = row.querySelector('.cs-main'), add = row.querySelector('[data-conn="join"]');
-    const mainBox = main.getBoundingClientRect(), addBox = add.getBoundingClientRect();
-    const mark = row.querySelector('.ic').getBoundingClientRect();
-    require(box.top >= 0 && box.bottom <= window.innerHeight, "the last row scrolls fully into view");
-    require(mainBox.width > 0 && mainBox.height >= 62 && addBox.width > 0 && mark.width > 0, "deferred contents lay out their mark, text and Add action on arrival");
-    require(mainBox.right <= addBox.left && addBox.right <= box.right, "the last row keeps its inline action without overlap");
-    return { check: name, height: box.height, id: main.dataset.id };
+  if (name === "store-toolbar-visible") {
+    const pane = document.querySelector('.modal-body'), frame = pane.getBoundingClientRect();
+    const strip = document.querySelector('.cs-store-groups').getBoundingClientRect();
+    const controls = [document.querySelector('#conn-search'), ...[...document.querySelectorAll('.cs-store-groups button')].filter(button => {
+      const box = button.getBoundingClientRect();
+      return box.left >= strip.left && box.right <= strip.right;
+    })];
+    for (const control of controls) {
+      const box = control.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      require(box.top >= frame.top && box.bottom <= frame.bottom && control.contains(hit), "search and group chips stay visible while results scroll");
+    }
+    const results = document.querySelector('.cs-results');
+    require(results && results.scrollTop > 0 && pane.scrollTop === 0, "only the catalog results scroll");
+    return { check: name, scrollTop: results.scrollTop, controls: controls.length };
+  }
+  if (name === "connections-form-edges" || name === "connections-form-end") {
+    const grid = document.querySelector('.cs-form .add-grid'), port = grid.getBoundingClientRect();
+    const last = document.querySelector('#conn-limit'), edge = last.getBoundingClientRect().right;
+    if (name === "connections-form-edges") {
+      const add = document.querySelector('[data-k="conn-add"]'), save = document.querySelector('.add-acts [data-conn="connect"]');
+      const rights = [add, save].map(button => button.getBoundingClientRect().right);
+      require(rights.every(right => Math.abs(right - edge) <= 1), `header and footer actions share the form field right edge: fields ${edge}, actions ${rights.join(', ')}`);
+      return { check: name, right: edge };
+    }
+    const footer = document.querySelector('.cs-form > .trust').getBoundingClientRect();
+    for (const field of [document.querySelector('#conn-pairs').closest('.fld'), last.closest('.fld')]) {
+      const box = field.getBoundingClientRect();
+      require(box.top >= port.top - 1 && box.bottom <= Math.min(port.bottom, footer.top) - 16, "last fields scroll fully above the fixed footer with bottom space");
+    }
+    return { check: name, bottomGap: port.bottom - last.getBoundingClientRect().bottom };
   }
   if (name === "plugins-store-last-detail") {
-    require(document.querySelector('.cs-page h2')?.textContent.includes('360'), "the last app opens its own detail after scrolling");
+    require(document.querySelector('.cs-page h2')?.textContent.includes('360'), "search reaches the last app's detail");
+    return { check: name };
+  }
+  if (name === "plugins-store-empty") {
+    require(visible(document.querySelector('.cs-none')) && document.querySelectorAll('.cs-card').length === 0, "empty query has a clear state and no stale rows");
+    require(visible(document.querySelector('#conn-search')) && document.querySelectorAll('[data-conn="store-group"]').length === 10, "search and broad groups stay reachable");
     return { check: name };
   }
   if (["plugins-store-groups", "plugins-store-search", "plugins-store-category"].includes(name)) {
-    const groups = [...document.querySelectorAll('.cs-composio-category')];
-    const rows = [...document.querySelectorAll('.cs-composio-section .cs-card')];
+    const groups = document.querySelector('.cs-store-groups');
+    const style = getComputedStyle(groups), chips = [...groups.querySelectorAll('button')];
+    require(style.flexWrap === 'nowrap' && style.overflowX === 'auto' && style.scrollbarWidth === 'none', "category chips scroll on one row without a visible scrollbar");
+    require(chips.every(chip => Math.abs(chip.getBoundingClientRect().top - chips[0].getBoundingClientRect().top) <= 1), "every category chip shares one row");
+    const rows = [...document.querySelectorAll('.cs-card')];
     const ids = rows.map(row => row.querySelector('[data-conn="open-store"]').dataset.id);
-    require(new Set(ids).size === rows.length, "each managed app appears once");
-    require(!document.querySelector('[data-conn="load-more"]'), "there is no pagination control");
-    require(window.__look.calls.filter(c => c.method === 'connectors.catalog').every(c => !c.params?.search && !c.params?.category && !c.params?.cursor), "search and category never fetch filtered pages");
-    require(!window.__look.calls.some(c => c.method === 'connectors.categories'), "categories arrive with the full catalog");
-    const catalog = window.__look.data.pluginCatalog;
-    for (const row of rows) {
-      const id = row.querySelector('[data-conn="open-store"]').dataset.id;
-      const item = catalog.find(item => item.slug === id);
-      require(row.closest('[data-category]').dataset.category === item.categories[0], "an app belongs to its first category only");
+    require(new Set(ids).size === rows.length, "each app appears once");
+    require(rows.length <= 42, "connected, popular and result pages keep DOM bounded");
+    require(!document.querySelector('[data-k="conn-category"]'), "provider categories do not become a dropdown");
+    require(document.querySelectorAll('[data-conn="store-group"]').length === 10, "nine broad groups and All are available");
+    require(window.__look.calls.filter(c => c.method === 'connectors.catalog').every(c => !c.params?.search && !c.params?.category && !c.params?.cursor), "query and group changes search the complete local index");
+    const pager = document.querySelector('.cs-store-pages .num');
+    if (pager) require(Number(pager.textContent.split('/')[1].trim()) === Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "store tab and pager count the same addable apps");
+    if (name === "plugins-store-search") require(rows.length === 1 && rows[0].textContent.includes('360'), "search reaches the last app across groups");
+    if (name === "plugins-store-category") require(document.querySelector('[data-conn="store-group"][data-id="productivity"]').getAttribute('aria-pressed') === 'true', "the chosen broad group stays pressed");
+    return { check: name, rows: rows.length, ids };
+  }
+  if (name === "store-group-end") {
+    const groups = document.querySelector('.cs-store-groups'), frame = groups.getBoundingClientRect();
+    const last = groups.querySelector('[data-id="other"]'), box = last.getBoundingClientRect();
+    require(last.getAttribute('aria-pressed') === 'true' && document.activeElement === last, "keyboard selection retains the last category and focus after redraw");
+    require(box.left >= frame.left - 1 && box.right <= frame.right + 1 && last.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)), "the last category is fully visible and reachable after horizontal scrolling");
+    return { check: name, scrollLeft: groups.scrollLeft };
+  }
+  if (name === "plugins-store-settled") {
+    const rows = [...document.querySelectorAll('.cs-card')];
+    require(rows.length > 0 && rows.every(row => Number(getComputedStyle(row).opacity) >= .99), "all popular and result rows have finished fading in");
+    const sections = [...document.querySelectorAll('.cs-sec')];
+    for (let index = 1; index < sections.length; index++) {
+      require(sections[index].getBoundingClientRect().top - sections[index - 1].getBoundingClientRect().bottom <= 32, "sections have only the shared spacing gap");
     }
-    if (name === "plugins-store-groups") {
-      require(rows.length === 363, "all 360 load-fixture apps plus three unique base apps are present");
-      require(groups.map(g => g.dataset.category).join(',') === window.__look.data.pluginCategories.map(c => c.id).join(','), "headings follow provider order");
-    } else if (name === "plugins-store-search") {
-      require(rows.length === 1 && rows[0].textContent.includes('360'), "search reaches the last app across categories");
-    } else require(groups.length === 1 && groups[0].dataset.category === 'productivity' && rows.length === 121, "the shared dropdown narrows to one group");
-    require(document.querySelector('[data-k="conn-tab:store"] .n').textContent === String(document.querySelectorAll('.cs-card').length), "count follows the local filter");
-    return { check: name, rows: rows.length, categories: groups.map(g => g.dataset.category) };
+    return { check: name, rows: rows.length, opacity: rows.map(row => Number(getComputedStyle(row).opacity)) };
   }
   if (name === "plugins-store-rows") {
     const rows = [...document.querySelectorAll('.cs-card')];
@@ -1367,14 +1420,13 @@ export function checkRendered(name) {
   if (name === "plugins-store") {
     const cards = [...document.querySelectorAll('.cs-card')];
     const ids = cards.map(card => card.querySelector('[data-conn="open-store"]')?.dataset.id);
-    require(cards.length === Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "tab count equals rendered cards");
+    require(document.querySelectorAll('.cs-card [data-conn="join"]').length <= Number(document.querySelector('[data-k="conn-tab:store"] .n').textContent), "tab count includes all addable matches beyond the visible page");
     require(document.querySelector('[data-stagger="store:hot"] .cs-card') && document.querySelector('[data-stagger="store:all"] .cs-card'), "popular and all built-in sections remain available");
     require(window.__look.calls.some(c => c.method === 'integrations.catalog'), "built-in catalog uses the real IPC boundary");
     require(!document.querySelector('#conn-key'), "key form does not replace the store");
     require(new Set(ids).size === cards.length, "duplicate apps appear once");
     if (window.__look.data.composioConfigured) {
-      require(document.querySelector('.cs-composio-section .cs-card'), "Composio has its own section");
-      require(document.querySelector('.cs-composio-section [data-k="conn-category"]'), "category control belongs to Composio");
+      require(document.querySelector('.cs-store-groups'), "all catalog sources share broad group chips");
       require(document.querySelector('[data-conn="open-store"][data-id="notion"]'), "the built-in app wins over its managed duplicate");
     } else {
       require(document.querySelector('[data-conn="configure-composio"]'), "optional Composio row follows the built-ins");
@@ -1516,7 +1568,8 @@ export function checkRendered(name) {
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
     const mark = card.querySelector('.mono'), markStyle = getComputedStyle(mark);
-    require(visible(mark) && mark.querySelector('svg.logo path'), "R-UI-34: the app's own drawn mark");
+    require(visible(mark) && mark.querySelector('svg.logo path, img.logo'), "R-UI-34: the app's own catalog or bundled mark");
+    if (name.startsWith('connector-slack')) require(mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card uses exactly the store's catalog logo");
     require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     const reply = [...card.closest('.tn').querySelectorAll('.chat-message[data-expandable]')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");
@@ -1525,21 +1578,26 @@ export function checkRendered(name) {
       const inside = button.getBoundingClientRect();
       require(inside.left >= box.left && inside.right <= box.right && inside.bottom <= box.bottom, "R-UI-25: the action is inside its card");
     }
-    const said = card.querySelector('.cc-state').textContent.trim(), app = card.querySelector('.cc-name').textContent;
+    const status = card.querySelector('.cc-state'), said = status?.textContent.trim() ?? "", app = card.querySelector('.cc-name').textContent;
     const expected = {
-      "connector-card": ["pending", "連結後繼續這項工作", "連結", true],
-      "connector-authorizing": ["authorizing", "等你在瀏覽器登入…", "取消", false],
+      "connector-card": ["pending", "", "連結", true],
+      "connector-slack": ["pending", "", "連結", true],
+      "connector-slack-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
+      "connector-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
       "connector-expired": ["pending", "授權已過期", "重新連結", true],
       "connector-reconnected": ["connected", "已重新連結 · 2 個工具", null, false],
     }[name];
     require(expected, `no expectation for ${name}`);
     const [state, words, action, primary] = expected;
+    if (!words) require(!status, "R-UI-02: a pending card has no helper line or empty status row");
     require(card.dataset.cardState === state && said === words, `${app}'s card reads "${words}" (${card.dataset.cardState}: "${said}")`);
     require(action === null ? buttons.length === 0 : buttons.length === 1 && buttons[0].textContent.trim() === action
       && buttons[0].classList.contains('pri') === primary, `the card's one action is ${action ?? "none"}`);
-    if (name === "connector-authorizing") {
+    if (name === "connector-authorizing" || name === "connector-slack-authorizing") {
+      const text = status.querySelector('span:last-child'), actionBox = buttons[0].getBoundingClientRect();
+      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().right <= actionBox.left - 4 && !/…|\.{3}/.test(text.textContent), "authorizing status uses its available width without truncation");
       require(visible(card.querySelector('.spin')), "the card shows the sign-in under way");
-      require(window.__look.calls.some(call => call.method === "integrations.card_connect" && call.params?.id === "card-gmail"),
+      require(window.__look.calls.some(call => call.method === "integrations.card_connect" && call.params?.id === card.dataset.connector),
         "Connect reached the core with the card's id");
     }
     if (name === "connector-reconnected") {

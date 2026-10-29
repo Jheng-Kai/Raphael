@@ -1027,6 +1027,19 @@ COMMIT;
 from .conversation_cleanup import migrate as _conversation_cleanup
 
 _MIGRATIONS[40] = _conversation_cleanup
+_MIGRATIONS[41] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE connect_cards ADD COLUMN provider TEXT NOT NULL DEFAULT 'google';
+PRAGMA user_version = 41;
+COMMIT;
+"""
+_MIGRATIONS[42] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_logo TEXT NOT NULL DEFAULT '';
+PRAGMA user_version = 42;
+COMMIT;
+"""
 LATEST_VERSION = max(_MIGRATIONS)
 
 

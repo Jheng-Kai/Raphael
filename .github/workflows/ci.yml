@@ -1,7 +1,7 @@
 name: CI
 
 # Every PR and merge-queue entry checks all layers and renders the real UI. Only
-# changed UI opts into the paid judge. Dependency pushes refresh the Rust cache.
+# Changed UI uses a signed-in subscription CLI judge when available. No API judge runs implicitly.
 on:
   push:
     branches: [main]
@@ -92,17 +92,18 @@ jobs:
           LOOK_BROWSER: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
         run: npm run look -- --all --theme both --width 1120,720,1920x1080
 
-      - name: Determine paid design review availability
+      - name: Determine subscription design review availability
         if: always() && needs.changes.outputs.ui == 'true'
         id: judge
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RAPHAEL_JUDGE_BRAIN: ${{ vars.RAPHAEL_JUDGE_BRAIN || 'claude' }}
         run: |
-          if ($env:OPENROUTER_API_KEY) { 'enabled=true' >> $env:GITHUB_OUTPUT }
+          if ($env:RAPHAEL_JUDGE_BRAIN -notin @('claude', 'codex')) { throw 'CI judge requires a subscription CLI.' }
+          if (Get-Command $env:RAPHAEL_JUDGE_BRAIN -ErrorAction SilentlyContinue) { 'enabled=true' >> $env:GITHUB_OUTPUT }
           else {
             'enabled=false' >> $env:GITHUB_OUTPUT
-            Write-Output '::notice::Design judge SKIP: OPENROUTER_API_KEY is unavailable (including fork PRs). This is not a design PASS.'
-            'Design judge: SKIP (no secret); no visual-model acceptance claimed.' >> $env:GITHUB_STEP_SUMMARY
+            Write-Output '::notice::Design judge SKIP: a signed-in subscription CLI is unavailable. This is not a design PASS.'
+            'Design judge: SKIP (no subscription CLI); no visual-model acceptance claimed.' >> $env:GITHUB_STEP_SUMMARY
           }
 
       - name: Set up uv for design judge
@@ -131,17 +132,16 @@ jobs:
           RAPHAEL_JUDGE_REFERENCE_MANIFEST: ${{ vars.RAPHAEL_JUDGE_REFERENCE_MANIFEST }}
         run: node scripts/judge-references.mjs
 
-      - name: Judge changed UI with a bounded budget
+      - name: Judge changed UI with a bounded subscription request count
         if: steps.judge.outputs.enabled == 'true'
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          RAPHAEL_JUDGE_MODEL: ${{ vars.RAPHAEL_JUDGE_MODEL || 'anthropic/claude-sonnet-5.5' }}
+          RAPHAEL_JUDGE_BRAIN: ${{ vars.RAPHAEL_JUDGE_BRAIN || 'claude' }}
         run: |
           $lookRun = Get-ChildItem .look -Directory -Filter 'run-*' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $lookRun) { throw 'No look run available for judge.' }
           $refs = Get-Content .look/references/paths.json -Raw | ConvertFrom-Json
           $env:RAPHAEL_JUDGE_REFERENCES = ConvertTo-Json -InputObject @($refs) -Compress
-          npm run judge -- $lookRun.FullName --max-cost-usd 15 --request-ceiling 0.10 --max-requests 1932
+          npm run judge -- $lookRun.FullName --brain $env:RAPHAEL_JUDGE_BRAIN --max-requests 1968
 
       - name: Preserve valid cached reviews even when later images fail
         if: always() && steps.judge.outputs.enabled == 'true'

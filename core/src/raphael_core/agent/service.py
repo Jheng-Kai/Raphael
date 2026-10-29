@@ -135,7 +135,6 @@ import httpx
 from ..background.brief import background_block, background_line
 from ..background.tasks import Refused
 from ..background.snapshot import FIND, MCP, take_snapshot
-from ..connectors.apps import APPS
 from ..brain.catalog import CatalogEntry
 from ..clock import wall_clock_ms
 from ..computer.run import ComputerRun, ComputerRuns, Final, Handback, Question, conversation_block
@@ -178,7 +177,7 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
 from .harness_tools import (
-    CONNECT_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, HarnessToolError,
+    CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, HarnessToolError,
     routine_event, tool as harness_tool,
 )
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS
@@ -2285,7 +2284,7 @@ class AgentService:
         tool = call.tool
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("routine_list", "team_overview", "show", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
+            if tool.key in ("routine_list", "team_overview", "show", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2396,7 +2395,11 @@ class AgentService:
                 if name != "routine_list":
                     self._message(ask, "event", routine_event(name, data, ask.language))
             elif name == CONNECT_APP:
-                data = self._show_card(ask, args)
+                data = await self._show_card(ask, args)
+            elif name == FIND_APP:
+                if self._cards is None:
+                    raise HarnessToolError("unavailable")
+                data = await self._cards.find(args.get("query"))
             elif name == REQUEST_SECRET:
                 data = self._show_secret(ask, args)
             elif name == EMAIL_DRAFT:
@@ -2441,16 +2444,16 @@ class AgentService:
                                   approver="auto" if approval is None else "user")
         return result
 
-    def _show_card(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
+    async def _show_card(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
         """`connect_app`: the card of an app the request needs, in this private chat, holding what
         the request already did. The turn then waits for it; its connection resumes the request."""
-        app = APPS.get(args.get("app")) if isinstance(args.get("app"), str) else None
-        if app is None:
-            raise ValueError("unknown app")
         if self._cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
         if ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED):
             raise HarnessToolError("private_chat_only")
+        app = await self._cards.resolve(args.get("app"))
+        if app is None:
+            raise ValueError("unknown app")
         card = self._cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                                 app=app, language=ask.language, done=ask.made)
         if card is None:
@@ -2559,7 +2562,7 @@ class AgentService:
         asking = self._inflight.get(origin.session_id)
         if asking is not None and not asking.done():  # the turn that asked ends first
             await asyncio.wait({asking}, timeout=30.0)
-        resumption = Resumption(turn_id, tuple(APPS[card.app].name for card in apps),
+        resumption = Resumption(turn_id, tuple(card.name for card in apps),
                                 frozenset({*(done for card in [*apps, *keys] for done in card.done),
                                            *(report.done if report is not None else ())}),
                                 secrets=tuple(dict.fromkeys(card.name for card in keys)), report=report)
@@ -3846,6 +3849,8 @@ class AgentService:
                     **({"handoffs": handoffs} if handoffs else {}),
                     **({"connectors": shown} if shown else {}),
                     **({"resumed_apps": [card["app"] for card in waited]} if waited else {}),
+                    **({"resumed_app_names": [card["name"] for card in waited]} if waited else {}),
+                    **({"resumed_app_logos": [card["logo"] for card in waited]} if waited else {}),
                     **({"secrets": asked_keys} if asked_keys else {}),
                     **({"resumed_secrets": list(dict.fromkeys(card["name"] for card in saved_keys))} if saved_keys else {}),
                     **({"computers": asked_hands} if asked_hands else {}),

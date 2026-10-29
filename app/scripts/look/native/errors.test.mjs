@@ -23,6 +23,15 @@ describe("native document error capture", () => {
     } finally { geometry.mockRestore(); visibility.mockRestore(); }
   });
 
+  it("accepts the shortened OS device name in a microphone label but checks the surrounding locale", () => {
+    document.body.innerHTML = '<button id="current" data-k="mic"><span>Automatic (立體聲混音)</span></button><button id="stale" data-k="mic">自動 (立體聲混音)</button><span id="elsewhere">立體聲混音</span>';
+    const geometry = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 10, height: 10 });
+    const visibility = vi.spyOn(HTMLElement.prototype, "checkVisibility").mockReturnValue(true);
+    try {
+      expect(wrongLanguage("en", [], ["立體聲混音 (Realtek(R) Audio)"]).map(issue => issue.id)).toEqual(["stale", "elsewhere"]);
+    } finally { geometry.mockRestore(); visibility.mockRestore(); }
+  });
+
   it("observes real toast mutations and rejection events without counting success toasts", async () => {
     const page = Object.assign(new EventEmitter(), {
       exposeFunction: async (name, callback) => { window[name] = callback; },

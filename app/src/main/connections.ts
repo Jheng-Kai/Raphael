@@ -11,18 +11,32 @@ import {
   type SkillItem, type SkillPage, loadSkillItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
 } from "./connection-skills";
 import { confirmDelete } from "./member-dialogs";
-import { managedGroup, pluginLogoURL, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
+import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { dayLabel, describeError, formatClock } from "./format";
 import { getLocale, t } from "./i18n";
+import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
-import { SERVICE_ICONS, type ServiceIconId, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+import { serviceIconOf } from "./service-icons";
+import { entryIcon } from "./service-mark";
+export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
 import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyText, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, tabs, tg, toaster } from "./ui";
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;
+const STORE_GROUP_LABELS: Record<string, MessageKey> = {
+  communication: "store.group.communication",
+  productivity: "store.group.productivity",
+  development: "store.group.development",
+  documents: "store.group.documents",
+  marketing: "store.group.marketing",
+  sales: "store.group.sales",
+  finance: "store.group.finance",
+  media: "store.group.media",
+  other: "store.group.other",
+};
 
 /** Where a service that is signed in to with a code keeps the list of the apps it has let in. */
 const GRANTS_URL: Record<string, string> = { github: "https://github.com/settings/applications" };
@@ -103,6 +117,7 @@ export interface ConnectionsView {
   tab: Tab;
   /** What was typed in the search box. */
   search: string;
+  storePage?: number;
   /** What is open: the dialog of a connected service over the list, or the page of a store entry in its place. */
   open: { tab: Tab; id: string } | null;
   /** The dialog's list of tools is unfolded. */
@@ -214,30 +229,10 @@ export function examplePrompt(s: StoreService | undefined): string | null {
   return (s.examples[getLocale()] ?? s.examples.en ?? [])[0] ?? null;
 }
 
-const isIcon = (id: string | null | undefined): id is ServiceIconId => !!id && (id in SERVICE_ICONS || hasLogo(id as ServiceIconId));
-
-/** The picture of a service: its mark, bare, or a neutral plug. */
-export function iconHTML(_name: string, icon: ServiceIconId | null, size: "md" | "xl"): string {
-  if (icon && hasLogo(icon)) return `<span class="mono ${size} logo-art">${serviceLogoHTML(icon)}</span>`;
-  return icon && icon in SERVICE_ICONS
-    ? `<span class="mono ${size} logo-mono"${brandStyle(icon)}>${serviceIconSVG(icon)}</span>`
-    : `<span class="mono ${size}" aria-hidden="true">${ico("plug")}</span>`;
-}
-
 function groupIcon(g: ConnectionGroup, v: ConnectionsView, size: "md" | "xl"): string {
-  const logo = pluginLogoURL(g.logo);
-  if (logo) return remoteIcon(logo, size);
   const entry = entryOf(g, v);
-  const known = isIcon(entry?.icon) ? entry.icon : serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url });
-  return iconHTML(g.name, known, size);
+  return entryIcon({ name: g.name, logo: g.logo, icon: entry?.icon ?? serviceIconOf({ name: g.name, command: g.command, args: g.args, url: g.url }) }, size);
 }
-
-/** The picture of a service of the store (the first-run guide draws it too). */
-const remoteIcon = (logo: string, size: "md" | "xl"): string => `<span class="mono ${size} logo-art"><img class="logo" src="${esc(logo)}" alt="" referrerpolicy="no-referrer" loading="lazy"></span>`;
-export const entryIcon = (s: StoreService, size: "md" | "xl"): string => {
-  const logo = pluginLogoURL(s.logo);
-  return logo ? remoteIcon(logo, size) : iconHTML(s.name, isIcon(s.icon) ? s.icon : serviceIconOf({ name: s.name }), size);
-};
 
 /** The command or URL of a custom service; the row ellipsizes it and its title keeps it whole. */
 function where(g: ConnectionGroup): string {
@@ -549,17 +544,21 @@ function uniqueComposio(v: ConnectionsView): StoreService[] {
 }
 
 interface StoreEntries {
-  builtin: StoreService[];
-  managed: StoreService[];
+  connected: StoreService[];
+  available: StoreService[];
   count: number;
 }
 
-/** One filtered snapshot supplies both the rows and their tab count. */
+/** One filtered snapshot counts and pages every addable app, including popular apps. */
 function storeEntries(v: ConnectionsView): StoreEntries {
-  const found = (s: StoreService): boolean => matches(v.search, s.name, s.publisher, words(s.summary));
+  const found = (s: StoreService): boolean => storeMatches(s, v.search) && (!v.category || storeGroup(s) === v.category);
   const builtin = (Array.isArray(v.catalog) ? v.catalog : []).filter(found);
-  const managed = uniqueComposio(v).filter(s => (!v.category || s.category === v.category) && found(s));
-  return { builtin, managed, count: builtin.length + managed.length };
+  const managed = uniqueComposio(v).filter(found);
+  const all = [...builtin, ...managed].sort((a, b) => a.name.localeCompare(b.name));
+  const connected = all.filter(s => s.server_id);
+  const available = all.filter(s => !s.server_id);
+  if (!v.search.trim() && !v.category) available.sort((a, b) => Number(popularApp(b)) - Number(popularApp(a)));
+  return { connected, available, count: available.length };
 }
 
 const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h6v10H4zM14 7h6v10h-6zM10 10h4m-4 4h4"/></svg></span>`;
@@ -578,29 +577,29 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v)):
     list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(s => cardHTML(s, v)).join("")}</div></section>` : "";
   const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
   const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
-  const found = entries.builtin;
-  const popular = v.search.trim() ? [] : found.filter(s => s.popular);
-  const rest = found.filter(s => !popular.includes(s)).sort((a, b) => a.name.localeCompare(b.name));
-  let html = v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store")
-    : section("hot", t("conn.hot"), popular) + section("all", t("conn.all"), rest);
+  const browsing = !v.search.trim() && !v.category;
+  const connected = entries.connected.slice(0, 12);
+  const page = Math.min(v.storePage ?? 0, Math.max(0, Math.ceil(entries.count / STORE_PAGE_SIZE) - 1));
+  const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
+  const popular = browsing ? shown.filter(popularApp) : [];
+  const rest = shown.filter(s => !popular.includes(s));
+  const chips = `<div class="cs-store-groups" role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
+    btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>`;
+  let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
+    section("connected", t("conn.tab.installed"), connected) + section("hot", t("store.popular"), popular) +
+    section("all", t("conn.all"), rest);
+  if (entries.count > STORE_PAGE_SIZE) html += `<nav class="cs-store-pages" aria-label="${esc(t("conn.all"))}">` +
+    btn(esc(t("store.previous")), "sm", ` data-conn="store-page" data-id="${page - 1}"${page === 0 ? " disabled" : ""}`) +
+    `<span class="num" role="status">${page * STORE_PAGE_SIZE + 1}–${Math.min((page + 1) * STORE_PAGE_SIZE, entries.count)} / ${entries.count}</span>` +
+    btn(esc(t("store.next")), "sm", ` data-conn="store-page" data-id="${page + 1}"${(page + 1) * STORE_PAGE_SIZE >= entries.count ? " disabled" : ""}`) + `</nav>`;
+  if (!connected.length && !entries.count && Array.isArray(v.catalog) && (!v.configured || Array.isArray(v.composioCatalog))) html += `<p class="cs-none" role="status">${esc(t("conn.noMatch"))}</p>`;
   if (v.configured) {
-    const managed = entries.managed;
-    // Provider order is preserved; each app belongs to its first category only.
-    const grouped = new Map<string, StoreService[]>(v.categories.map(c => [c.value, []]));
-    for (const item of managed) {
-      if (!grouped.has(item.category)) grouped.set(item.category, []);
-      grouped.get(item.category)!.push(item);
-    }
-    const groups = [...grouped].filter(([, list]) => list.length).map(([key, list]) =>
-      `<section class="cs-composio-category" data-category="${esc(key)}"><h3>${esc(v.categories.find(c => c.value === key)?.label || key || t("plugins.uncategorized"))}</h3><div class="cs-grid">${list.map(s => cardHTML(s, v)).join("")}</div></section>`).join("");
-    html += `<section class="cs-sec cs-composio-section"><div class="cs-store-heading"><h2>Composio</h2>${sel([{ value: "", label: t("plugins.allCategories") }, ...v.categories], v.category, t("plugins.category"), ' data-k="conn-category"')}</div>` +
-      (v.composioCatalog === "loading" ? loading : v.composioCatalog === "failed" ? retry("retry-store")
-        : managed.length ? groups : `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`) + `</section>`;
+    if (v.composioCatalog === "loading") html += loading;
+    else if (v.composioCatalog === "failed") html += retry("retry-store");
   } else if (v.configured === false) {
     html += `<div class="cs-composio-setup">${composioMark()}<span>${esc(t("plugins.moreApps"))}</span>${btn(esc(t("plugins.configure")), "sm", ' data-conn="configure-composio"')}</div>`;
   }
-  if (Array.isArray(v.catalog) && !entries.count && !v.configured) html = `<p class="cs-none">${esc(t("conn.noMatch"))}</p>` + html;
-  return html;
+  return chips + `<div class="cs-results">${html}</div>`;
 }
 
 const backHTML = (): string => `<div class="cs-back">${btn(`${ico("left")}${esc(t("conn.back"))}`, "", ' data-conn="back"')}</div>`;
@@ -705,7 +704,7 @@ export function connectionsHTML(v: ConnectionsView): string {
   const device = g && v.login?.target === g.id ? "" : deviceHTML(v);
   const skill = openSkill(v);
   const entries = storeEntries(v);
-  return `<div class="cs">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
+  return `<div class="cs${v.tab === "store" ? " cs-store" : ""}">${device}${barHTML(v, entries)}<div class="cs-body" data-cs-body>${bodyHTML(v, entries)}</div></div>` + (v.keyOpen ? keyDialogHTML(v) : g ? dialogHTML(g, v) : skill ? skillScrimHTML(skill.item, skill.page, dialogNoticeHTML(v)) : "");
 }
 
 /** The skill whose page is open, if it is still there. */
@@ -783,6 +782,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   let audit: AuditEntry[] = [];
   let tab: Tab = "installed";
   let search = "";
+  let storePage = 0;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let open: ConnectionsView["open"] = null;
   let toolsOpen = false;
   let auditOpen = false;
@@ -826,7 +827,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, skills, skill, audit, tab, search, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Draws only what is under the bar (the search box keeps its focus and its input method). */
@@ -834,8 +835,23 @@ export function createConnections(host: ConnectionsHost): Connections {
     const body = typeof document !== "undefined" ? document.querySelector<HTMLElement>("[data-cs-body]") : null;
     const current = view();
     const entries = storeEntries(current);
-    if (body && host.visible()) body.innerHTML = bodyHTML(current, entries);
-    else redraw();
+    if (body && host.visible()) {
+      const offset = body.querySelector(".cs-store-groups")?.scrollLeft ?? 0;
+      const active = body.contains(document.activeElement) ? (document.activeElement as HTMLElement)?.dataset : undefined;
+      const focusedGroup = active?.conn === "store-group" ? active.id : undefined;
+      body.innerHTML = bodyHTML(current, entries);
+      const groups = body.querySelector<HTMLElement>(".cs-store-groups");
+      if (groups) {
+        groups.scrollLeft = offset;
+        const focused = focusedGroup === undefined ? undefined : [...groups.querySelectorAll<HTMLButtonElement>("button")].find(button => button.dataset.id === focusedGroup);
+        if (focused) {
+          focused.focus({ preventScroll: true });
+          const frame = groups.getBoundingClientRect(), box = focused.getBoundingClientRect();
+          if (box.right > frame.right) groups.scrollLeft += box.right - frame.right;
+          else if (box.left < frame.left) groups.scrollLeft += box.left - frame.left;
+        }
+      }
+    } else redraw();
     const count = typeof document !== "undefined" ? (host.root ?? document).querySelector('[data-k="conn-tab:store"] .n') : null;
     if (count) count.textContent = String(entries.count);
   }
@@ -1408,6 +1424,8 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "retry-skills": void loadSkills(); break;
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(false); break;
+      case "store-group": category = id; storePage = 0; repaintBody(); break;
+      case "store-page": storePage = Math.max(0, Number(id) || 0); repaintBody(); break;
       case "retry-store": void (configured ? loadCatalog() : load()); break;
       default:
         return false;
@@ -1417,8 +1435,10 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function input(el: HTMLInputElement): boolean {
     if (el.id === "conn-search") {
-      search = el.value;
-      repaintBody();
+      search = el.value; storePage = 0;
+      clearTimeout(searchTimer);
+      if (tab === "store") searchTimer = setTimeout(repaintBody, 80);
+      else repaintBody();
       return true;
     }
     if (el.id === "conn-key") return true;
@@ -1472,10 +1492,6 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function menuFor(k: string): ConnectionMenu | null {
     switch (k) {
-      case "conn-category": return {
-        choices: [{ value: "", label: t("plugins.allCategories") }, ...categories], current: category,
-        pick: value => { category = value; repaintBody(); },
-      };
       case "conn-add":
         return {
           choices: [{ value: "custom", label: t("mcp.add") }, { value: "paste", label: t("mcp.paste") }, { value: "import", label: t("mcp.fromApps") }],
@@ -1511,7 +1527,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   function reset(): void {
     catalogLoads++;
-    category = "";
+    category = ""; storePage = 0; clearTimeout(searchTimer);
     keyError = ""; keyOpen = false; keySaves++; keyBusy = false;
     stopOutside?.(); stopOutside = null;
     clearTimeout(confirmTimer);
