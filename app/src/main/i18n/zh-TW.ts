@@ -2,6 +2,15 @@ import { navZh } from "./nav-catalogs";
 import { homeZh } from "./home-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "desktop.open": "即時桌面",
+  "desktop.take": "接手控制",
+  "desktop.release": "交還控制",
+  "desktop.owner": "你正在控制電腦",
+  "desktop.member": "成員正在控制電腦",
+  "desktop.connecting": "正在連線至桌面…",
+  "desktop.stopped": "電腦已停止",
+  "desktop.unavailable": "Docker 目前無法使用",
+  "desktop.busy": "目前無法切換控制權，請稍後再試。",
   "common.deleted": "已刪除",
   "common.showAll": "查看全部",
   "common.showLess": "收合",

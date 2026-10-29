@@ -265,6 +265,11 @@ export function installMock(fixture, config = {}, target = window) {
   };
   async function core(method, p = {}) {
     switch (method) {
+      case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
+      case "computer.viewer_open": return { session: "look-desktop", url: `${location.origin}/scripts/look/fixtures/desktop.html` };
+      case "computer.viewer_renew": return data.desktop;
+      case "computer.viewer_control": data.desktop.control = p.held ? "owner" : "member"; return data.desktop;
+      case "computer.viewer_close": if (data.desktop) data.desktop.control = "member"; return {};
       case "settings.get": return { settings: data.settings };
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;

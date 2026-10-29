@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { installMock } from "./mock-ipc.js";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { decodeVisibleImages, perform } from "./driver.mjs";
@@ -12,7 +14,8 @@ import { requestDisposition } from "./requests.mjs";
 import { saveReport } from "./report.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
-export const LATIN_NAMES = ["Raphael", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "Catppuccin", "Latte", "Mocha", "KEY=value", "Settings → Project Settings → API Keys"];
+// Docker is an installed product name, including its unavailable-engine state.
+export const LATIN_NAMES = ["Raphael", "Docker", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "Catppuccin", "Latte", "Mocha", "KEY=value", "Settings → Project Settings → API Keys"];
 
 // Agents run inside their own sandbox, where the browser cannot start a second one; the page is our
 // own app on loopback only.
@@ -52,6 +55,20 @@ export async function run(options) {
     report.executablePath = executablePath;
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
+    let desktopResponses = {};
+    if (options.selected.some(scene => scene.name.startsWith("desktop-"))) {
+      // Render the production bridge shell/bootstrap, replacing only remote RFB.
+      const python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe");
+      const source = join(import.meta.dirname, "fixtures/desktop-upstream.html.txt");
+      const { stdout } = await promisify(execFile)(python, ["-c", "import json,sys; from pathlib import Path; from raphael_core.computer.viewer import embedded_page,BOOTSTRAP; print(json.dumps({'page':embedded_page(Path(sys.argv[1]).read_text(encoding='utf-8')).decode(),'bootstrap':BOOTSTRAP.decode()}))", source], { windowsHide: true, env: { ...process.env, PYTHONPATH: join(app, "../core/src"), PYTHONDONTWRITEBYTECODE: "1" } });
+      const bridge = JSON.parse(stdout), base = "/scripts/look/fixtures/";
+      desktopResponses = {
+        [base + "desktop.html"]: { contentType: "text/html", body: bridge.page },
+        [base + "bridge.js"]: { contentType: "text/javascript", body: bridge.bootstrap },
+        [base + "connection"]: { contentType: "application/json", body: JSON.stringify({ held: false, path: "/synthetic-rfb" }) },
+        [base + "core/rfb.js"]: { contentType: "text/javascript", body: await readFile(join(import.meta.dirname, "fixtures/desktop-rfb.js"), "utf8") },
+      };
+    }
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
     // Recorded public artwork keeps catalog URLs realistic while the look run stays offline.
@@ -88,7 +105,9 @@ export async function run(options) {
         page.on("request", request => {
           const url = request.url();
           const disposition = requestDisposition(url, origin);
-          if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
+          const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
+          if (desktopResponse) void request.respond({ status: 200, ...desktopResponse }).catch(() => {});
+          else if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
           else if (disposition === "empty") void request.respond({ status: 204 }).catch(() => {});
           else if (disposition === "continue") void request.continue().catch(() => {});
           else { error("network", `External request blocked: ${url}`); void request.abort().catch(() => {}); }

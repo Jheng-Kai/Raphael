@@ -15,7 +15,6 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
@@ -80,11 +79,15 @@ def mount_arg(path):
     return stream.getvalue()
 
 
-def run_args(target, owner, password, *, tz=None):
+def timezone_name(tz):
     try:
-        zone = ZoneInfo(tz).key
+        return ZoneInfo(tz).key
     except (TypeError, ValueError, ZoneInfoNotFoundError):
-        zone = "UTC"
+        return "UTC"
+
+
+def run_args(target, owner, password, *, tz=None):
+    zone = timezone_name(tz)
     args = ["run", "-d", "--name", target.name, "--hostname", target.name]
     for key, value in {**IMAGE_LABELS, f"{LABEL}.owner": owner, f"{LABEL}.target": target.key}.items():
         args += ["--label", f"{key}={value}"]
@@ -161,6 +164,7 @@ class LocalVm:
         self.task = None
         self.busy = lambda key: False
         self.timezone = lambda: None
+        self.timezone_pending = False
 
     def target(self, member_id=0):
         mode = "shared" if self.settings is None else self.settings.get("computer_vm_mode")
@@ -219,9 +223,23 @@ class LocalVm:
             ready = version.code == health.code == 0 and version.stdout.strip() == f"cua-driver {VERSION}" and healthy(health.stdout)
         bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
         port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
-        password = next((x[7:] for x in raw["Config"].get("Env", []) if x.startswith("VNC_PW=")), "")
-        url = f"http://127.0.0.1:{port}/vnc.html#" + urlencode({"autoconnect": "true", "resize": "scale", "password": password}) if port else ""
+        url = f"http://127.0.0.1:{port}/vnc.html#autoconnect=true&resize=scale&view_only=true" if port else ""
         return {"state": "running" if running else "stopped", "ready": ready, "viewer_url": url}
+
+    async def viewer_connection(self, target):
+        """Core-only credentials, never a public status, URL or diagnostic."""
+        if not await self.available():
+            raise VmError("unavailable")
+        image_id = await self.image()
+        raw = await self.inspect(target)
+        if not image_id or not compatible(raw, target, self.owner, image_id) or raw.get("State", {}).get("Running") is not True:
+            raise VmError("unavailable")
+        bindings = raw.get("NetworkSettings", {}).get("Ports", {}).get("6901/tcp") or []
+        port = next((int(p["HostPort"]) for p in bindings if p.get("HostIp") == "127.0.0.1" and str(p.get("HostPort", "")).isdigit()), None)
+        if port is None or not 0 < port < 65536:
+            raise VmError("unavailable")
+        password = next((x[7:] for x in raw["Config"].get("Env", []) if x.startswith("VNC_PW=")), "")
+        return port, password
 
     async def build(self):
         if not await self.available():
@@ -236,27 +254,77 @@ class LocalVm:
 
     async def start(self, target):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
-            state = await self.status(target, probe=False)
-            if state["state"] in ("unavailable", "incompatible"):
-                raise VmError(state["state"])
-            if state["state"] == "missing":
-                if not state.get("image"):
-                    raise VmError("image_missing")
-                target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
-                result = await self.run(run_args(target, self.owner, secrets.token_urlsafe(24), tz=self.timezone()), timeout=60)
-            elif state["state"] == "stopped":
-                result = await self.run(["start", target.name], timeout=60)
-            else:
-                result = Result(0)
-            if result.code:
-                raise VmError("start_failed")
-            self.last_activity[target.key] = self.clock()
-            for _ in range(45):
-                state = await self.status(target)
-                if state["ready"]:
+            return await self._start(target)
+
+    async def _start(self, target):
+        state = await self.status(target, probe=False)
+        if state["state"] in ("unavailable", "incompatible"):
+            raise VmError(state["state"])
+        zone = timezone_name(self.timezone())
+        state = await self._reconcile_timezone(target, state, zone)
+        if state["state"] == "missing":
+            if not state.get("image"):
+                raise VmError("image_missing")
+            target.workspace.mkdir(parents=True, exist_ok=True, mode=0o700)
+            result = await self.run(run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone), timeout=60)
+        elif state["state"] == "stopped":
+            result = await self.run(["start", target.name], timeout=60)
+        else:
+            result = Result(0)
+        if result.code:
+            raise VmError("start_failed")
+        self.last_activity[target.key] = self.clock()
+        for _ in range(45):
+            state = await self.status(target)
+            if state["ready"]:
+                return state
+            await asyncio.sleep(1)
+        raise VmError("health_timeout")
+
+    async def _reconcile_timezone(self, target, state, zone, *, keep_stopped=False):
+        if state["state"] in ("running", "stopped") and self.timezone():
+            raw = await self.inspect(target)
+            if not compatible(raw, target, self.owner, await self.image()):
+                raise VmError("incompatible")
+            if f"TZ={zone}" not in raw["Config"].get("Env", []):
+                if target.key in self.held:
+                    raise VmError("owner_holds_control")
+                # Only status-validated, owned containers reach this path. Docker
+                # cannot change their environment; the bind workspace survives.
+                if state["state"] == "running" and (await self.run(["stop", "--time", "10", target.name], timeout=30)).code:
+                    raise VmError("stop_failed")
+                if (await self.run(["rm", target.name])).code:
+                    raise VmError("remove_failed")
+                if keep_stopped and state["state"] == "stopped":
+                    args = run_args(target, self.owner, secrets.token_urlsafe(24), tz=zone)
+                    args[:2] = ["create"]
+                    if (await self.run(args, timeout=60)).code:
+                        raise VmError("start_failed")
                     return state
-                await asyncio.sleep(1)
-            raise VmError("health_timeout")
+                state = {"state": "missing", "image": True}
+        return state
+
+    async def refresh_timezone(self):
+        """Reconcile desktops created before Home supplied the owner's zone."""
+        self.timezone_pending = True
+        if not self.timezone() or not await self.available():
+            return
+        await self.recover()
+        self.timezone_pending = False
+        for target in list(self.targets.values()):
+            async with self.locks.setdefault(target.key, asyncio.Lock()):
+                if self.active.get(target.key) or target.key in self.held or self.busy(target.key):
+                    self.timezone_pending = True
+                    continue  # The next tool start retries after the current work/hold.
+                try:
+                    state = await self.status(target, probe=False)
+                    if state["state"] == "running":
+                        await self._start(target)
+                    elif state["state"] == "stopped":
+                        await self._reconcile_timezone(target, state, timezone_name(self.timezone()), keep_stopped=True)
+                except (VmError, OSError, TimeoutError):
+                    self.timezone_pending = True
+                    continue  # Home remains usable while Docker is unavailable.
 
     async def stop(self, target, *, remove=False):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
@@ -364,6 +432,8 @@ print(base64.b64encode(data).decode())
             await self.recover()
             while True:
                 await asyncio.sleep(30)
+                if self.timezone_pending:
+                    await self.refresh_timezone()
                 await self.sweep()
         except (OSError, TimeoutError, VmError):
             return

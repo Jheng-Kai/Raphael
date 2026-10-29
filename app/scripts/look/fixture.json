@@ -1,4 +1,5 @@
 {
+  "desktop": null,
   "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg" },
   "ownerRound": {
     "memberConversation": {

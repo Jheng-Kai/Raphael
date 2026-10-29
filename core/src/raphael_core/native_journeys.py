@@ -89,6 +89,7 @@ async def vm_smoke(directory):
         vm.hold(target, False)
         state = await vm.status(target)
         assert state["ready"] and state["viewer_url"]
+        state.pop("viewer_url", None)
         return {"state": state, "completed": completed, "brain": "fake", "paid_requests": 0,
                 "without_approval": completed, "owner_held_refused": refused,
                 "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments)}
@@ -99,6 +100,35 @@ async def vm_smoke(directory):
 
 def attachment_id(store):
     return next(path.name for path in store.root.iterdir() if not path.name.endswith(".json"))
+
+
+async def vm_timezone_smoke(directory):
+    """Run after the app's Home load, against the same owned desktop."""
+    from .computer.vm import LocalVm
+    from .computer.vm_tools import VmTools
+    from .services.attachment_store import AttachmentStore
+    from .agent.gate import ToolGate
+    from .agent.policy import Tier
+
+    if not native_enabled(True):
+        raise RuntimeError("VM timezone smoke requires the native runner")
+    vm = LocalVm(directory)
+    class EmptyHub:
+        def offered(self): return []
+        def tier_of(self, key): return None
+        def kind_of(self, server, name): return None
+        def record_unrun(self, *args, **kwargs): pass
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory))
+    try:
+        await hub.prepare()
+        tool = next(tool for tool in hub.offered() if tool.name == "vm_exec")
+        gate = ToolGate(hub)
+        assert gate.tier(tool.key) == Tier.T0 and not gate.needs_confirmation(tool.key)
+        result = await gate.call_plugin(tool.key, {"command": "date +%z"})
+        assert result.ok, f"vm_exec date: {result.kind}"
+        return {"command": "date +%z", "offset": json.loads(result.text)["output"].strip()}
+    finally:
+        await vm.aclose()
 
 
 def native_enabled(fake_llm: bool) -> bool:

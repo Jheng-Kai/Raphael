@@ -3,6 +3,15 @@ import { homeJa } from "./home-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "desktop.open": "ライブデスクトップ",
+  "desktop.take": "操作を引き継ぐ",
+  "desktop.release": "操作を返す",
+  "desktop.owner": "あなたがコンピューターを操作中",
+  "desktop.member": "メンバーがコンピューターを操作中",
+  "desktop.connecting": "デスクトップに接続中…",
+  "desktop.stopped": "コンピューターは停止中です",
+  "desktop.unavailable": "Docker を利用できません",
+  "desktop.busy": "操作を切り替えられませんでした。しばらくしてからもう一度お試しください。",
   "common.deleted": "削除しました",
   "common.showAll": "すべて表示",
   "common.showLess": "折りたたむ",

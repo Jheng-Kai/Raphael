@@ -28,6 +28,10 @@ elif operation == "vm-stop":
     vm = LocalVm(directory)
     asyncio.run(vm.stop(vm.target()))
     print("{}")
+elif operation == "vm-offset":
+    import asyncio
+    from raphael_core.native_journeys import vm_timezone_smoke
+    print(json.dumps(asyncio.run(vm_timezone_smoke(directory))))
 elif operation == "init":
     from raphael_core.brain.db import connect
 

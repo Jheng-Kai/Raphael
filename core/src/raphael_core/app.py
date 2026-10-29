@@ -853,6 +853,9 @@ class App(Router):
 
         from .native_journeys import native_enabled
         self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), enabled=not fake_llm or native_enabled(fake_llm))
+        from .computer.viewer import DesktopViewer
+        self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
+        self.desktop_viewer.register(self)
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
@@ -951,6 +954,7 @@ class App(Router):
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
         self.vm.timezone = lambda: self.home.timezone_name
+        self.home.timezone_changed = self.vm.refresh_timezone
         self.background.use_team(self.members, self.agent.team_tool)
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member
@@ -1157,6 +1161,7 @@ class App(Router):
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),
             ("end the assistant's requests", self.agent.aclose),
+            ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
             ("end Raphael's voice", self.speaker.aclose),
             ("end the memory's background pass", self.memory.aclose),

@@ -80,6 +80,53 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "member-computer") {
+    // The pre-launch smoke deliberately creates a desktop before Home knows TZ.
+    // Await the real app's timezone propagation before checking that same VM.
+    const ownerZone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+    await context.rpc("home.overview", { tz: ownerZone });
+    const clock = await context.computerOffset();
+    const minutes = -new Date().getTimezoneOffset();
+    const expected = `${minutes < 0 ? "-" : "+"}${String(Math.floor(Math.abs(minutes) / 60)).padStart(2, "0")}${String(Math.abs(minutes) % 60).padStart(2, "0")}`;
+    result.computer.timezone = { ...clock, ownerZone, expected };
+    if (clock.offset !== expected) throw new Error(`VM UTC offset ${clock.offset} differs from host ${expected}`);
+    await chat(page);
+    await wait(page, '[data-desktop="open"]:not([hidden])');
+    await capture("entry");
+    await click(page, '[data-desktop="open"]');
+    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    const iframe = await page.$('.desktop-viewer iframe');
+    const desktop = await iframe.contentFrame();
+    await desktop.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
+    await desktop.waitForFunction(() => document.querySelector('#noVNC_container canvas')?.width > 100, { timeout: 60000 });
+    if (await page.$eval('.desktop-viewer iframe', element => /password/i.test(element.src))) throw new Error("Credential in viewer URL");
+    const inspectDesktop = async label => {
+      await desktop.waitForFunction(() => {
+        const canvas = document.querySelector('#noVNC_container canvas');
+        if (!canvas?.width) return false;
+        const box = canvas.getBoundingClientRect();
+        return Math.min(Math.abs(box.width - innerWidth), Math.abs(box.height - innerHeight)) <= 2;
+      }, { timeout: 60000 });
+      (result.computer.frames ??= []).push({ state: label, ...await desktop.evaluate(checkRendered, "desktop-frame") });
+    };
+    await inspectDesktop("viewer");
+    await capture("viewer");
+    await click(page, '[data-dlg="control"]');
+    await page.waitForSelector('.desktop-viewer[data-desktop-state="owner"]', { visible: true, timeout: 60000 });
+    const state = await context.rpc("computer.viewer_status", { member_id: 0 });
+    if (state.control !== "owner") throw new Error("Take control did not acquire the real lease");
+    result.computer.uiHeld = state.control;
+    await inspectDesktop("owner");
+    await capture("owner");
+    await click(page, '[data-dlg="control"]');
+    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    if ((await context.rpc("computer.viewer_status", { member_id: 0 })).control !== "member") throw new Error("Handback retained the lease");
+    result.computer.uiHandback = "member";
+    await inspectDesktop("handback");
+    await capture("handback");
+    await click(page, '.desktop-viewer [data-dlg="close"]');
+    return;
+  }
   if (name === "skill-growth") {
     const { member: colleague } = await context.rpc("members.create", { name: "Skill reviewer", role: "Reviewer" });
     await chat(page);

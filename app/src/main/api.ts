@@ -4,6 +4,7 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { withWindowHotkeyPause } from "./window-hotkeys";
+import type { DesktopState, DesktopSession } from "./desktop-viewer";
 import type { LanguageGroup } from "./languages";
 import type { TelegramStatus } from "./messaging";
 import type { AvatarCrop } from "./avatar";
@@ -71,6 +72,12 @@ export const homeOverview = (): Promise<HomeOverview> => core("home.overview", {
 
 /** Asks OpenRouter again; answers with the `openrouter` part of the status. */
 export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("status.check_openrouter");
+
+export const desktopStatus = (member_id: number): Promise<DesktopState> => core("computer.viewer_status", { member_id });
+export const desktopOpen = (member_id: number): Promise<DesktopSession> => core("computer.viewer_open", { member_id });
+export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
+export const desktopControl = (session: string, held: boolean): Promise<DesktopState> => core("computer.viewer_control", { session, held });
+export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 
 // ---------- usage and prices ----------
 

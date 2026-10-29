@@ -386,6 +386,11 @@ const ALLOWED_PREFIXES: [&str; 8] = [
 // a messaging app has no way to reach any of them: only this window does.
 // A slice, not a fixed-length array: branches that each add a method merge without a count to fix.
 const ALLOWED_METHODS: &[&str] = &[
+    "computer.viewer_status",
+    "computer.viewer_open",
+    "computer.viewer_renew",
+    "computer.viewer_control",
+    "computer.viewer_close",
     "home.overview",
     "connectors.catalog",
     "connectors.categories",
@@ -2231,6 +2236,16 @@ mod tests {
         assert!(
             !is_allowed_method("dictation.start") && !is_allowed_method("brain.finalize_dictation")
         );
+    }
+
+    #[test]
+    fn desktop_viewer_exposes_only_named_main_window_operations() {
+        for method in ["computer.viewer_status", "computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close"] {
+            assert!(is_allowed_method(method));
+        }
+        assert!(!is_allowed_method("computer.viewer_credentials"));
+        assert!(!is_allowed_method("computer.viewer_exec"));
+        assert!(ensure_caller("overlay", crate::MAIN_WINDOW).is_err());
     }
 
     #[test]
