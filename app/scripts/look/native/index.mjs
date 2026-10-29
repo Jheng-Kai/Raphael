@@ -10,6 +10,7 @@ import { contactSheets } from "../contact-sheet.mjs";
 import { BROWSER_ARGS, browserPath } from "../runner.mjs";
 import { launch, stopOwned, connectWebView, freePort } from "./process.mjs";
 import { collectErrors, paidRequests } from "./errors.mjs";
+import { prepareVoiceSample, requireVoiceModels } from "./audio.mjs";
 import { drive, journeys, pause } from "./journeys.mjs";
 import { decodeVisibleImages, settleMotion } from "../driver.mjs";
 
@@ -66,13 +67,14 @@ async function run(options) {
         let audioMs = 0;
         delete env.RAPHAEL_FAKE_AUDIO;
         if (journey.name === "voice-conversation") {
-          const sample = process.env.RAPHAEL_NATIVE_WAV || join(process.env.APPDATA, "Raphael/models/qwen3-asr/test_wavs/fr1.wav");
-          const wav = join(journeyDir, "voice.wav");
-          await copyFile(sample, wav);
-          env.RAPHAEL_FAKE_AUDIO = wav;
+          const sample = await prepareVoiceSample(journeyDir);
+          env.RAPHAEL_FAKE_AUDIO = sample.file;
           env.RAPHAEL_MODELS_DIR = process.env.RAPHAEL_MODELS_DIR || join(process.env.APPDATA, "Raphael/models");
-          const { stdout } = await execute(python, ["-c", "import sys,wave; w=wave.open(sys.argv[1]); print(round(w.getnframes()/w.getframerate()*1000))", wav], { windowsHide: true });
-          audioMs = Number(stdout.trim()); result.audio = { file: wav, milliseconds: audioMs, engine: "local qwen3-asr" };
+          const { stdout } = await execute(python, ["-c", "import sys,wave; w=wave.open(sys.argv[1]); print(round(w.getnframes()/w.getframerate()*1000))", sample.file], { windowsHide: true });
+          audioMs = Number(stdout.trim()); result.audio = { ...sample, milliseconds: audioMs, engine: "local qwen3-asr" };
+          // Use the core's registry, before launching the app or attempting speech capture.
+          result.modelReadiness = await database("voice-models", env.RAPHAEL_MODELS_DIR);
+          requireVoiceModels(result.modelReadiness);
         } else {
           env.RAPHAEL_MODELS_DIR = join(data, "models");
           // VAD is a startup prerequisite even when no speech journey is selected.
@@ -101,7 +103,8 @@ async function run(options) {
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
         const capture = async label => {
-          await settleMotion(page);
+          try { await settleMotion(page); }
+          catch (error) { throw new Error(`${journey.name}/${label}: ${error.message}`, { cause: error }); }
           await page.evaluate(decodeVisibleImages);
           const image = `${journey.name}-${label}.png`;
           await page.screenshot({ path: join(directory, image) });
@@ -112,6 +115,7 @@ async function run(options) {
         await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack" });
         await capture("final");
       } catch (error) {
+        if (error.code === "NATIVE_MODEL_MISSING") result.blocked = { reason: error.message, models: error.models };
         result.failures.push(error.message);
         if (browser) {
           try {
@@ -130,7 +134,7 @@ async function run(options) {
         }
         try { await browser?.disconnect(); } catch (error) { result.failures.push(`CDP cleanup: ${error.message}`); }
         browser = null;
-        try { await stopOwned(owned); result.cleanup = "Owned app/core/WebView2 process tree closed by PID"; } catch (error) { result.failures.push(`Process cleanup: ${error.message}`); }
+        try { await stopOwned(owned); result.cleanup = owned ? "Owned app/core/WebView2 process tree closed by PID" : "No app process was launched"; } catch (error) { result.failures.push(`Process cleanup: ${error.message}`); }
         owned = null;
         const persistedLog = join(data, "logs/raphael.log");
         if (existsSync(persistedLog)) {
@@ -143,7 +147,8 @@ async function run(options) {
         if (costs.length) result.failures.push(`Undeclared paid/Composio requests: ${JSON.stringify(costs)}`);
         if (journey.name === "gmail-connect") result.connectorLog = log.split(/\r?\n/).flatMap((line, index, lines) => /connect|composio|card/i.test(line) ? lines.slice(Math.max(0, index - 2), index + 3) : []);
         result.failed = !!(result.failures.length || result.runtimeErrors.length);
-        console.log(`${result.failed ? "FAIL" : "PASS"} ${journey.name}: ${result.failures[0] || result.runtimeErrors[0]?.message || "assertions passed"}`);
+        result.status = result.blocked ? "blocked" : result.failed ? "failed" : "passed";
+        console.log(`${result.blocked ? "BLOCKED" : result.failed ? "FAIL" : "PASS"} ${journey.name}: ${result.failures[0] || result.runtimeErrors[0]?.message || "assertions passed"}`);
         await save();
       }
     }

@@ -7,7 +7,18 @@ from pathlib import Path
 directory = Path(sys.argv[1]).resolve()
 database = directory / "raphael.db"
 operation = sys.argv[2]
-if operation == "init":
+if operation == "voice-models":
+    from raphael_core.device.models import REGISTRY
+
+    root = Path(sys.argv[3]).resolve()
+    missing = []
+    for name in ("qwen3-asr", "silero-vad"):
+        folder = root / name
+        files = [file for file in REGISTRY[name].files if not (folder / file).is_file()]
+        if files:
+            missing.append({"name": name, "folder": str(folder), "files": files})
+    print(json.dumps({"missing": missing}))
+elif operation == "init":
     from raphael_core.brain.db import connect
 
     if database.exists():

@@ -47,10 +47,15 @@ EchoClient answers normal agent turns. In native mode only, `[native-consult:Nam
 scripts its choice of the real `ask_member` tool. The normal tool gate, shared
 AgentService, room scheduler and SQLite stores create the exchanges/reports.
 
-The voice journey copies a short WAV into its run and uses the real local Qwen3 ASR
-and VAD models, read-only. `RAPHAEL_NATIVE_WAV` and `RAPHAEL_MODELS_DIR` override the
-sample and installed model directory. Missing models or audio are failures, never
-cloud fallbacks. Non-speech journeys copy only the installed VAD into their model directory.
+The voice journey synthesizes its own short 16 kHz mono WAV offline with Windows
+`System.Speech` into its run; it never reads a sample from the owner's data. It uses
+the real local Qwen3 ASR and VAD models, read-only. `RAPHAEL_NATIVE_WAV` supplies an
+explicit sample override and `RAPHAEL_MODELS_DIR` selects the installed model root.
+After retaining the sample, a preflight checks the core registry's required files
+before launching the app. Missing models report `BLOCKED` with their exact folder
+and missing files; the journey and overall run fail with exit 1. Missing audio and
+synthesis errors also fail, with no sample, engine, download or cloud fallback.
+Non-speech journeys copy only the installed VAD into their model directory.
 The native model manager refuses all downloads. Only initialization
 writes fixture prerequisites to SQLite; assertions reopen that run's DB with `mode=ro`.
 Conversation deletion reports all tables with `conversation_id`, including turns,

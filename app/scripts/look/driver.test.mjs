@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { finiteMotionSettled, findVisibleElement, perform } from "./driver.mjs";
+import { finiteMotionSettled, settleMotion, findVisibleElement, perform } from "./driver.mjs";
 import { requestDisposition } from "./requests.mjs";
 
 describe("look browser interaction contracts", () => {
@@ -15,6 +15,25 @@ describe("look browser interaction contracts", () => {
     } finally { delete document.getAnimations; }
   });
   afterEach(() => { document.body.innerHTML = ""; });
+  it("captures a successful deletion while its eight-second toast countdown still runs, but waits for the toast entrance", () => {
+    document.body.innerHTML = '<div class="toast"><span>Deleted conversation</span><i class="toast-bar"></i></div>';
+    const entrance = { animationName: "toast-in", playState: "running", effect: { target: document.querySelector(".toast"), getTiming: () => ({ iterations: 1, duration: 220 }) } };
+    const countdown = { animationName: "toast-count", playState: "running", effect: { target: document.querySelector(".toast-bar"), getTiming: () => ({ iterations: 1, duration: 8000 }) } };
+    document.getAnimations = () => [entrance, countdown];
+    try {
+      expect(finiteMotionSettled()).toBe(false);
+      entrance.playState = "finished";
+      expect(finiteMotionSettled()).toBe(true);
+      countdown.animationName = "row-in";
+      expect(finiteMotionSettled()).toBe(false);
+    } finally { delete document.getAnimations; }
+  });
+  it("names the motion and target that prevented capture readiness", async () => {
+    const pending = [{ name: "row-in", target: '<div class="row"></div>', currentTime: 100, timing: { duration: 9000 } }];
+    const page = { waitForFunction: vi.fn().mockRejectedValue(new Error("Waiting failed: 5000ms exceeded")), evaluate: vi.fn().mockResolvedValue(pending) };
+    await expect(settleMotion(page)).rejects.toThrow('Motion did not settle: waiting for finite entrance animations; pending=[{"name":"row-in"');
+    expect(page.waitForFunction).toHaveBeenCalledWith(finiteMotionSettled, { timeout: 5000 });
+  });
   it("requeries a replaced click target without replaying application errors", async () => {
     const stale = { click: vi.fn().mockRejectedValue(new Error("Node is either not clickable or not an Element")), dispose: vi.fn() };
     const current = { click: vi.fn().mockResolvedValue(undefined), dispose: vi.fn() };

@@ -1,12 +1,21 @@
 import { checkRendered } from "./checks.mjs";
 
 export function finiteMotionSettled() {
-  return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity);
+  return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
+    // This is the notification's lifetime, not its entrance; capture the success while it is visible.
+    (animation.animationName === "toast-count" && animation.effect?.target?.matches(".toast-bar")));
 }
 
 /** Wait for real entrance transitions without changing their paint measurements or infinite activity indicators. */
 export async function settleMotion(page) {
-  await page.waitForFunction(finiteMotionSettled, { timeout: 5000 });
+  try { await page.waitForFunction(finiteMotionSettled, { timeout: 5000 }); }
+  catch (error) {
+    const pending = await page.evaluate(() => document.getAnimations().filter(animation =>
+      animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity
+    ).map(animation => ({ name: animation.animationName ?? "transition", target: animation.effect?.target?.outerHTML,
+      currentTime: animation.currentTime, timing: animation.effect?.getTiming() })));
+    throw new Error(`Motion did not settle: waiting for finite entrance animations; pending=${JSON.stringify(pending)}`, { cause: error });
+  }
 }
 
 export async function decodeVisibleImages() {
