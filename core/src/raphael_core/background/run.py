@@ -381,10 +381,24 @@ class TaskRun:
             raise invalid_params("messages must be a list of messages")
         if not messages:
             raise invalid_params("messages is empty")
-        request_chars = len(json.dumps(messages, ensure_ascii=False))
+        # Desktop images have a separate byte budget; they must not consume the
+        # text cap or be estimated as millions of text tokens.
+        request_chars = 0
+        image_chars = 0
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                request_chars += len(json.dumps({key: value for key, value in message.items() if key != "content"}, ensure_ascii=False))
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url" and isinstance(part.get("image_url"), dict) and isinstance(url := part["image_url"].get("url"), str) and url.startswith("data:image/"):
+                        image_chars += len(url)
+                    else:
+                        request_chars += len(json.dumps(part, ensure_ascii=False))
+            else:
+                request_chars += len(json.dumps(message, ensure_ascii=False))
         async with self._turn:
             # A conversation grown past what is sent is a task that has used what it was given.
-            if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS:
+            if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS or image_chars > 14_000_000:
                 raise stopped("limit_model")
             return await self._chat(messages, request_chars)
 
@@ -523,6 +537,8 @@ class TaskRun:
         """What the owner's safety rules say of a call: PASS for a tool its server says only reads,
         and for Raphael's own but `create_member`, which are never judged. The judge is paid, so the
         limits on money are read first."""
+        if self._gate.is_vm_tool(ref.key):
+            return PASS
         if ref.name == ASK_MEMBER and self.ask_before_members:
             return Screening(ASK)
         if self._gate.safety is None:
@@ -614,6 +630,7 @@ class TaskRun:
             "kind": result.kind,
             "content": text,
             "truncated": cut or result.truncated,
+            **({"blocks": result.blocks} if result.blocks else {}),
         }
         return reply, _outcome_of(result), None if now is None else now.name, sent
 

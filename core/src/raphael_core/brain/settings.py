@@ -88,6 +88,8 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "台北",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
+    "computer_vm_mode": "shared",
+    "computer_vm_idle_minutes": 480,
     # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
     "worker_cost_cap_usd": 0.20,
     # The models the user starred in the pickers, per role (the page's names for them), in the order
@@ -161,6 +163,7 @@ URL_MAX_CHARS = 300
 # What one background task may cost, as the settings page offers it.
 WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
+    "computer_vm_mode": ("shared", "per-bot"),
     "skin": ("default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"),
     "action_mode": ("ask", "direct"),
     "worker_cost_cap_usd": WORKER_COST_CAPS,
@@ -331,6 +334,8 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if value is None and key in _NULLABLE:
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key == "computer_vm_idle_minutes" and not 5 <= value <= 1440:
+        raise ValueError("Computer idle minutes must be between 5 and 1440")
     if key in ("owner_name", "owner_about"):
         value = value.strip()
         if len(value) > (100 if key == "owner_name" else 4000) or "\x00" in value:

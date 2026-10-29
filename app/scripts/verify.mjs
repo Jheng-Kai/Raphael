@@ -29,7 +29,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   ];
   if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   if (args.includes("--core")) {
-    const core = join(root, "core"), python = join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+    const core = join(root, "core"), python = process.env.RAPHAEL_CORE_PYTHON || join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
     checks.push(existsSync(python) ? { name: "pytest", command: python, args: ["-m", "pytest", "-p", "no:cacheprovider"], cwd: core } : { name: "pytest", command: "uv", args: ["run", "--offline", "--frozen", "--no-sync", "python", "-m", "pytest", "-p", "no:cacheprovider"], cwd: core });
   }
   if (args.includes("--rust")) checks.push({ name: "cargo", command: "cargo", args: ["test", "--offline", "--locked"], cwd: join(app, "src-tauri") });
@@ -48,7 +48,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
     let exitCode, error;
     try {
       const result = await new Promise(resolve => {
-        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, NO_COLOR: "1", PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: join(output, "cargo-target") } });
+        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, NO_COLOR: "1", PYTHONPATH: join(root, "core/src"), PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: join(output, "cargo-target") } });
         activeChild.once("error", value => resolve({ exitCode: 1, error: value.message }));
         activeChild.once("close", (code, signal) => resolve({ exitCode: code ?? 1, ...(signal ? { error: `Terminated by ${signal}` } : {}) }));
       });

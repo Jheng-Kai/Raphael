@@ -269,8 +269,9 @@ def take_snapshot(
         try:
             tools = [
                 tool
-                for tool in plugins.offered()
-                if tool.tier <= max_tier and speaker.uses_plugin(tool.key)
+                for tool in getattr(plugins, "offered_for", lambda member: plugins.offered())(speaker.id)
+                if (tool.tier <= max_tier or getattr(plugins, "is_computer_tool", lambda key: False)(tool.key))
+                and speaker.uses_plugin(tool.key)
             ]
         except Exception:  # a plugin that breaks leaves its tools out, not the task
             tools = []

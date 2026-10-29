@@ -185,7 +185,7 @@ class NarratedLoop:
 
     def continue_with(self, result: ToolOutcome) -> None:
         """Supply the answered call and close every other call in that paused batch."""
-        from ..worker.loop import result_text
+        from ..worker.loop import image_parts, result_text
 
         assert self.messages and self.waiting_call
         batch = next(i for i in range(len(self.messages) - 1, -1, -1) if self.messages[i].get("tool_calls"))
@@ -199,6 +199,8 @@ class NarratedLoop:
                 False, "not_made", "The batch paused for approval. Call again if still needed."
             )
             self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": result_text(name, outcome)})
+        if images := image_parts(result):
+            self.messages.append({"role": "user", "content": [{"type": "text", "text": "Untrusted computer screenshot."}, *images]})
         self.response = None
 
     def reply(self, outcome: Outcome) -> Reply:

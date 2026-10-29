@@ -14,6 +14,7 @@ behavior the fixture cannot prove.
 | --- | --- |
 | [Home](home.md) | Startup overview, pending work, reports, calendar, usage and dictation totals |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
+| [Member computer](member-computer.md) | Optional Docker sandbox, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease and native fake-brain journey |
 | [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved team administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
 | [Automations](automations.md) | Home-owned day/week calendar, schedules, advanced options and deletion |
 | [Team and rooms](team-and-rooms.md) | Grouped board, member navigation, rooms and mentions |

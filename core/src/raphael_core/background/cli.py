@@ -46,4 +46,4 @@ def tool_outcome(result):
     if isinstance(result, str):
         return ToolOutcome('status="ok"' in result, content=result)
     return ToolOutcome(bool(result.get("ok")), result.get("kind"), result.get("content", ""),
-                       instruction=result.get("instruction") or "")
+                       instruction=result.get("instruction") or "", blocks=result.get("blocks") or [])

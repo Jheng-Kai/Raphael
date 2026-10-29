@@ -1,0 +1,23 @@
+Raphael optional Docker desktop
+
+This Dockerfile adapts OpenMausBot server/container-computer.ts.
+Copyright 2026 Milind Soni and OpenMausBot contributors
+Licensed under Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Upstream source: https://github.com/milind-soni/OpenMausBot
+Revision: f9191b5384b9900b2371696336439ae5ad6e0117
+Changes: Raphael paths/labels, static Docker build context, bundled notices.
+
+Cua Driver (0.37.0) and Cua XFCE desktop image
+MIT License. Preserve the licenses distributed with the image and wheel.
+Source: https://github.com/trycua/cua
+
+noVNC
+Copyright the noVNC authors. Mozilla Public License 2.0 (MPL-2.0).
+The desktop image supplies the unmodified client, with its original notices.
+Corresponding source and notices: https://github.com/novnc/noVNC
+License: https://www.mozilla.org/MPL/2.0/
+
+Noto Sans CJK JP Regular
+SIL Open Font License 1.1. The pinned original license is installed at
+/usr/local/share/licenses/noto-cjk/OFL.txt.
+Source: https://github.com/notofonts/noto-cjk

@@ -96,7 +96,8 @@ class CliLoop:
         self.rate_limit_waits = rate_limit_waits
         self.ledger, self.language, self.plain = ledger, language, plain
         self.spoken = spoken
-        self.system = system + "\n" + PUBLIC_PROGRESS_RULES + "\nUse only Raphael MCP tools for actions and lookups. "
+        mcp_names = "Raphael and computer" if any(item["function"]["name"].startswith("computer__") for item in tools) else "Raphael"
+        self.system = system + "\n" + PUBLIC_PROGRESS_RULES + f"\nUse only {mcp_names} MCP tools for actions and lookups. "
         self.system += (
             'For the spoken reply only, return one JSON object with text, messages (usually one; several only '
             'when naturally separate, at most four), '
@@ -174,7 +175,7 @@ class CliLoop:
             result = await self._execute(identifier, name, args)
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
-            return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok))
+            return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok), blocks=result.blocks)
 
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]
@@ -352,6 +353,7 @@ class CliLoop:
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         async with aclosing(self.driver.run(user=self.user, system=self.system, endpoint=server.url,
                 token=server.token, session=session, permission=self._native_permission,
+                **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
                 cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
             async for event in stream:
                 if event.kind == "session" and self.resume_session:

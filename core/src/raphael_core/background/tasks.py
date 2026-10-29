@@ -272,6 +272,9 @@ class TaskStore:
             f"SELECT {_TASK_COLUMNS} FROM worker_tasks WHERE source_turn_id=? ORDER BY id", (source_turn_id,))]
 
     def pause_for_children(self, task_id, continuation):
+        from ..worker.loop import without_computer_images
+        if "messages" in continuation:
+            continuation = {**continuation, "messages": without_computer_images(continuation["messages"])}
         with self._conn:
             self._conn.execute("UPDATE worker_tasks SET state='waiting',continuation=? WHERE id=? AND state='running'",
                                (json.dumps(continuation,ensure_ascii=False),task_id))

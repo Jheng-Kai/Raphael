@@ -361,7 +361,7 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     call itself have a kind only."""
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
-        return ToolResult(_label(call), True, data, untrusted=True)
+        return ToolResult(_label(call), True, data, untrusted=True, blocks=outcome.blocks)
     if outcome.kind == "tool_error":
         return ToolResult(
             _label(call), False, {"content": outcome.text}, "tool_error", untrusted=True
@@ -751,6 +751,7 @@ class AgentService:
         self._decider = decider if decider is not None else Router(client)
         self._inflight: dict[str, asyncio.Task[dict]] = {}
         self._inflight_members: dict[str, int] = {}
+        self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
         self._clock = clock
         # session id -> when agent.cancel named it (the monotonic clock).
         self._cancelled: dict[str, float] = {}
@@ -853,6 +854,13 @@ class AgentService:
             return
         self._warming.add(task)
         task.add_done_callback(self._warming.discard)
+
+    def computer_scope_busy(self, member_id, conversation_id):
+        return ((member_id, conversation_id) in self._inflight_scopes.values()
+            or any(loop.member_id == member_id and loop.conversation_id == conversation_id
+                   and loop.task is not None and not loop.task.done() for loop in self._cli_loops)
+            or any(followup.ask.speaker.id == member_id and followup.ask.conversation_id == conversation_id
+                   for followup in self._followups.values()))
 
     async def aclose(self) -> None:
         """End the requests being thought about and close the HTTP client of the tools. A fold of
@@ -1038,9 +1046,12 @@ class AgentService:
         if earlier is not None:
             earlier.cancel()
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
-        task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES else self._answer(ask))
+        from ..computer.vm_tools import vm_scope
+        with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
+            task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES else self._answer(ask))
         self._inflight[ask.session_id] = task
         self._inflight_members[ask.session_id] = ask.speaker.id
+        self._inflight_scopes[ask.session_id] = (ask.speaker.id, ask.conversation_id)
         try:
             result = await task
             if ask.quick and result.get("status") == "confirm":
@@ -1068,6 +1079,7 @@ class AgentService:
             if self._inflight.get(ask.session_id) is task:
                 del self._inflight[ask.session_id]
                 self._inflight_members.pop(ask.session_id, None)
+                self._inflight_scopes.pop(ask.session_id, None)
             if ask.quick:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
                 ask.trace_logged = True
@@ -1658,7 +1670,7 @@ class AgentService:
     def _loop_result(result: ToolResult) -> ToolOutcome:
         # A call that failed has no data: its kind is what the model is shown, not a "null".
         return ToolOutcome(result.ok, result.error, "" if result.data is None and not result.ok else json.dumps(result.data, ensure_ascii=False),
-                           instruction=result.instruction or "")
+                           instruction=result.instruction or "", blocks=result.blocks or [])
 
     def _computer_result(self, loop: NarratedLoop, result: dict) -> ToolOutcome:
         """Screen-derived answers remain untrusted for memory and future tool input."""
@@ -1672,6 +1684,9 @@ class AgentService:
     ) -> dict:
         """A narrated turn, sharing the fast tier's safety gate and permission cards."""
         if loop is None:
+            prepare = getattr(self._plugins, "prepare", None)
+            if prepare is not None:
+                await prepare(ask.speaker.id)
             context = self._conversation_of(ask.speaker.id, ask.conversation_id).context(quick=ask.quick)
             index = None if self._memory is None else self._memory.index(ask.speaker.id)
             say_ja = ask.voiced and ask.language != "ja"
@@ -2118,7 +2133,8 @@ class AgentService:
         tools = []
         if self._plugins is not None:
             try:
-                tools = [tool for tool in self._plugins.offered() if speaker.uses_plugin(tool.key)]
+                offered = getattr(self._plugins, "offered_for", lambda member: self._plugins.offered())
+                tools = [tool for tool in offered(speaker.id) if speaker.uses_plugin(tool.key)]
             except Exception as exc:  # a plugin that breaks must not break the answer
                 logger.warning("Could not list the plugins' tools: %s", type(exc).__name__)
         if ask is not None:
@@ -2283,6 +2299,8 @@ class AgentService:
         """What the owner's safety rules say of a call of a plugin's tool or a team tool: PASS for a
         tool its server says only reads. Member contact preferences can require the owner's yes."""
         tool = call.tool
+        if self._gate.is_vm_tool(tool.key):
+            return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
             if tool.key in ("routine_list", "team_overview", "show", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
@@ -2312,7 +2330,9 @@ class AgentService:
         *,
         steps: list[Step] | None = None,
     ) -> ToolResult:
-        result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
+        from ..computer.vm_tools import vm_scope
+        with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
+            result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
             from .harness_tools import definitions_for
             definition = dict(definitions_for(ask.speaker.id)).get(call.tool.key)
@@ -3421,6 +3441,7 @@ class AgentService:
         task = asyncio.ensure_future(resume())
         self._inflight[ask.session_id] = task
         self._inflight_members[ask.session_id] = ask.speaker.id
+        self._inflight_scopes[ask.session_id] = (ask.speaker.id, ask.conversation_id)
         try:
             return await task
         except asyncio.CancelledError:
@@ -3433,6 +3454,7 @@ class AgentService:
             if self._inflight.get(ask.session_id) is task:
                 del self._inflight[ask.session_id]
                 self._inflight_members.pop(ask.session_id, None)
+                self._inflight_scopes.pop(ask.session_id, None)
 
     async def _resume_narrated(
         self,
@@ -3450,6 +3472,7 @@ class AgentService:
         session_id = followup.ask.session_id
         self._inflight[session_id] = task
         self._inflight_members[session_id] = followup.ask.speaker.id
+        self._inflight_scopes[session_id] = (followup.ask.speaker.id, followup.ask.conversation_id)
         try:
             return await task
         except asyncio.CancelledError:
@@ -3463,6 +3486,7 @@ class AgentService:
             if self._inflight.get(session_id) is task:
                 del self._inflight[session_id]
                 self._inflight_members.pop(session_id, None)
+                self._inflight_scopes.pop(session_id, None)
 
     def _outcome(
         self,

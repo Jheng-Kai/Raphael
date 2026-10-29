@@ -92,6 +92,7 @@ class PluginResult:
     kind: str | None = None
     text: str = ""
     truncated: bool = False
+    blocks: list[dict] = field(default_factory=list)
 
 
 class PluginHub(Protocol):
