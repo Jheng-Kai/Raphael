@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 41
+LATEST = 43
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -466,6 +466,43 @@ SCHEMA_V38 = {**SCHEMA_V37,
 
 # Schema v39: the member that is the owner's primary contact carries a flag, and at most one does.
 SCHEMA_V39 = {**SCHEMA_V38, "members": [*SCHEMA_V38["members"], "primary_contact INTEGER NOT NULL DEFAULT 0"]}
+# Schema v40 cleans conversation rows without adding columns; v41 updates the chief guard; v42 persists catalog card metadata.
+SCHEMA_V42 = {**SCHEMA_V39, "connect_cards": [*SCHEMA_V39["connect_cards"],
+    "app_name TEXT NOT NULL DEFAULT ''", "provider TEXT NOT NULL DEFAULT 'google'"]}
+SCHEMA_V43 = {**SCHEMA_V42, "connect_cards": [*SCHEMA_V42["connect_cards"], "app_logo TEXT NOT NULL DEFAULT ''"]}
+
+
+def test_v43_preserves_catalog_card_metadata_and_defaults_older_logos(tmp_path):
+    path = tmp_path / "v42.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 43):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO agent_turns (id,session_id,question,route,prefix,text,status,created_at_ms) VALUES (1,'s','Connect Slack','answer','','','done',1)")
+    raw.execute("INSERT INTO connect_cards (id,turn_id,member_id,app,language,state,created_at_ms,updated_at_ms,expires_at_ms,app_name,provider) VALUES ('kept',1,0,'slack','en','pending',1,1,9999999999999,'Slack','composio')")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    card = migrated.execute("SELECT app_name,provider,app_logo,state FROM connect_cards WHERE id='kept'").fetchone()
+    assert tuple(card) == ('Slack', 'composio', '', 'pending')
+    migrated.close()
+
+
+def test_v42_preserves_existing_google_cards_and_adds_compatible_metadata_defaults(tmp_path):
+    path = tmp_path / "v41.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 42):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO agent_turns (id,session_id,question,route,prefix,text,status,created_at_ms) VALUES (1,'s','Connect Gmail','answer','','','done',1)")
+    raw.execute("INSERT INTO connect_cards (id,turn_id,member_id,app,language,state,created_at_ms,updated_at_ms,expires_at_ms) VALUES ('kept',1,0,'gmail','en','pending',1,1,9999999999999)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    card = migrated.execute("SELECT * FROM connect_cards WHERE id='kept'").fetchone()
+    assert (card['app'], card['state'], card['app_name'], card['provider'], card['resumed_at_ms']) == ('gmail', 'pending', '', 'google', None)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    migrated.close()
 
 
 def test_v39_makes_raphael_the_primary_contact_of_every_older_team_and_allows_one_member_at_most(tmp_path):
@@ -531,7 +568,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V39) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V43) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -545,7 +582,7 @@ def test_connect_creates_the_latest_schema(conn):
         "worker_questions_task",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V39.items():
+    for table, columns in SCHEMA_V43.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

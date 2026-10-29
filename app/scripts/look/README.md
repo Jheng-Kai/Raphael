@@ -11,7 +11,7 @@ An expected regression still exits 1; keep the failure and its exact evidence.
 Build once after changing Rust or frontend code, offline, with two Cargo jobs:
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'D:\Documentation\github_repos\Raphael\.worktrees\.target'
+$env:CARGO_TARGET_DIR = Join-Path (Get-Location) '.native/cargo-target'
 $env:CARGO_BUILD_JOBS = '2'
 $env:CARGO_NET_OFFLINE = 'true'
 npm run tauri -- build --debug --no-bundle
@@ -19,8 +19,8 @@ npm run native -- --list
 npm run native -- locale-sweep voice-conversation delete-conversation
 ```
 
-If that target directory is protected, select `app/.native/cargo-target` in this
-worktree instead. Never use the owner's main-checkout `app/src-tauri/target`.
+Keep that target directory inside this worktree. Never use the owner's
+main-checkout `app/src-tauri/target`.
 Run this Tauri build **after** `verify -- --rust` when using the same target: Cargo
 integration tests can rebuild `app.exe` against the development URL instead of the
 bundled entry. A `localhost:1420` target without a dev server is a build prerequisite
@@ -75,12 +75,50 @@ Console errors, page exceptions, unhandled rejections and unexpected/error toast
 fail the journey. Explicit creation/deletion/history-clearing success toasts are the only toast exemption.
 Locale sweeps inspect visible text/labels against scripts and exact other-language
 catalog phrases, retaining offending elements. The brand `Raphael` is accepted;
-actual OS microphone names from `audio.devices` are exempt only inside the microphone
+actual OS microphone names (including their shortened device prefix) from `audio.devices` are exempt only inside the microphone
 selector, while surrounding application labels remain checked. Japanese Kanji shared with Chinese
 cannot be distinguished by Unicode script alone; exact catalog checks cover static
 copy while dynamic/backend text still needs review. Every non-loopback URL in the
-run log fails the cost guard, except declared Composio hosts in `gmail-connect`.
-Provider clients are fake; connectors also use offline transport except that journey.
+run log fails the cost guard, except declared Composio hosts in explicitly selected
+`gmail-connect`, `store-finder` and `catalog-connect` journeys. Provider clients are fake;
+connectors also use offline transport except these opt-in journeys.
+
+For real store performance and non-Gmail authorization, run from the owner's normal
+PowerShell (the restricted agent shell cannot read Windows Credential Manager):
+
+```powershell
+Set-Location 'D:\Documentation\github_repos\Raphael\.worktrees\native\app'
+$env:CARGO_TARGET_DIR = Join-Path (Get-Location) '.native/cargo-target'
+$env:CARGO_BUILD_JOBS = '2'
+$env:RAPHAEL_CORE_PYTHON = Join-Path (Get-Location) '../core/.venv/Scripts/python.exe'
+$env:RAPHAEL_NATIVE_APP = 'slack'
+npm.cmd run native -- store-finder catalog-connect
+```
+
+Both journeys read only the existing Composio credential. No key is supplied in the
+environment or written to reports. `store-finder` requires at least 100 real catalog
+entries, records the public catalog, click-to-paint duration, long tasks, DOM nodes and
+card count, then rejects paint over 250 ms or any long task over 50 ms. It supports
+the old category dropdown for a before-fix measurement and the new All chip afterward.
+`catalog-connect` scripts only the fake brain's `find_app` then `connect_app` choice;
+the UI, core tools, policy, cards, database and Composio sign-in are real. It checks
+both Raphael and a new member, requires exactly those two successful tool steps,
+and checks pending/authorizing state without resumption. Raphael's pending login is
+cancelled before testing the member; the member's login stops at authorizing. The
+runner never drives an external consent page. Choose another available non-Gmail
+catalog slug with `RAPHAEL_NATIVE_APP` if Slack cannot start a new authorization.
+The runner sets `RAPHAEL_TEST_NATIVE_CATALOG=1` only for these two explicit journeys.
+They do not use a CLI model or OpenRouter. Missing Credential Manager access is a
+prerequisite failure, never evidence that the owner's key is missing.
+
+Native captures wait for finite entrance animations before taking screenshots;
+click-to-paint measurements are retained from the original event interval. Infinite
+activity indicators do not block capture. `plugins-store-motion` covers the real
+staggered rows reaching full opacity; other store scenes keep reduced motion.
+Store groups wrap without horizontal scrolling. Every settings pane uses the same
+content measure for its heading, toolbar and body. Catalog artwork declared in
+fixture.json.imageResponses is served from recorded public assets offline; all
+undeclared external requests remain failures.
 
 ```powershell
 # Owner-only: do not include this in routine regression runs.
@@ -220,7 +258,7 @@ Coverage merges auto's automation/team/room matrix, nav's settings/MCP/usage mat
 polish's composers/skins, layout's dictation/notices/onboarding and narrate's chat states.
 Conversation management opens through the title-controlled details panel. Usage
 retains aggregate summaries, grouping, allowances and CSV; per-run navigation is removed. The deliberately removed owner menu/photo controls have no
-scenes. There are 330 current scenes (1980 combinations across light/dark and 1120, 720, 1920x1080). The member-column scenes cover the primary top slot, its exchange with Raphael, collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep all seven days visible and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening starts at 100%; overflowing groups remain pannable, and reopening preserves the chosen session zoom. Fit is explicit. The chief uses the same compact card track and inset as group members. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
+scenes. There are 339 current scenes (2034 combinations across light/dark and 1120, 720, 1920x1080). The member-column scenes cover the primary top slot, its exchange with Raphael, collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep all seven days visible and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening starts at 100%; overflowing groups remain pannable, and reopening preserves the chosen session zoom. Fit is explicit. The chief uses the same compact card track and inset as group members. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
 Team administration scenes cover full, long and eight-member batch approvals, held deletion approval,
 live member selection after approval, and an unchanged roster after rejection.
 The right-click scenes (`scenes/context-menu.mjs`, R-UI-44) press the real right button with the `right-click` step, which keeps its point in `window.__look.pointer`, and their `context-menu` check asserts that the menu is open, starts at the pointer, does not cover it and has the items of the menu a click on the ⋯ opens; `context-menu-key` presses Shift+F10 on a focused row. Every scene's audit also asks `context-menu.ts` for the ⋯ buttons that no row of its table reaches (`R-UI-44`).
@@ -251,10 +289,16 @@ all three sizes and both themes for every selected scene and a passed look repor
 Its rules, feature context, external reference paths, budgets and cache are
 documented in the verify-raphael skill and `GUARDIAN-NOTES.md`. The verify alias is
 `npm run verify -- --judge <look run>`; set `RAPHAEL_JUDGE_REFERENCES` to a JSON array
-of external image paths. Live matrix and judge opt into paid network requests;
-ordinary verify/look and their fake-model unit tests remain offline. The judge request cap is 1842 (the full matrix has 1842 images); dollar budgets and per-request admission ceilings still apply. Every PR runs
-the repo's contracts and full look matrix in CI. Missing hosted secrets produce
-an explicit SKIP notice, never live/design acceptance.
+of external image paths. Judge defaults to the signed-in Claude Code subscription;
+`npm run judge -- <look run> --brain codex --references <external image>` selects
+Codex. Both use read-only isolated CLI turns, strip API credentials/endpoints,
+review three candidates per request and preserve per-image scores/cache/refusal.
+`--max-requests` bounds submitted batches; reports record CLI version, model and
+redacted diagnostics. No OpenRouter client is constructed on these paths. Testing
+must never use OpenRouter. The retained API provider requires an explicit owner
+request and `--brain openrouter`; its dollar admission limits still apply.
+Ordinary verify/look and fake-model tests remain offline. Missing subscription
+login or external references is blocked/SKIP, never design acceptance.
 
 The nine `composer-stop-*` scenes cover roster repaints, typed requests before the first turn, native voice processing, quick/member navigation and a live background task. Result scenes press the same slot and assert the exact cancellation boundary, no voice key, and the returned idle emblem. `composer-task-stop` also rejects an emblem mislabeled as Stop.
 

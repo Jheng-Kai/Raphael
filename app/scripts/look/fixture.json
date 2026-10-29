@@ -1,4 +1,5 @@
 {
+  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg" },
   "ownerRound": {
     "memberConversation": {
       "id": 12,
@@ -602,6 +603,15 @@
         }
       ]
     },
+    "slack": {
+      "id": 123, "session_id": "look-connect-slack", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "連結 Slack，之後再找團隊訊息。", "route": "answer", "source": "app",
+      "prefix": "", "text": "先連結 Slack，連好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "先連結 Slack，連好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-slack", "app": "slack", "name": "Slack", "logo": "https://logos.composio.dev/api/slack",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
     "calendar": {
       "id": 122,
       "session_id": "look-connect-calendar",
@@ -730,7 +740,7 @@
   "pluginCatalog": [
     { "slug": "notion", "name": "Notion", "description": "搜尋筆記、整理頁面與專案資料", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false },
     { "slug": "github", "name": "GitHub", "description": "管理儲存庫、議題與程式碼審查", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
-    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "", "categories": ["communication"], "can_connect": true, "no_auth": false },
+    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "https://logos.composio.dev/api/slack", "categories": ["communication"], "can_connect": true, "no_auth": false },
     { "slug": "gmail", "name": "Gmail", "description": "搜尋郵件、撰寫草稿與回覆", "logo": "", "categories": ["communication"], "can_connect": true, "no_auth": false },
     { "slug": "linear", "name": "Linear", "description": "追蹤專案與團隊議題", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
     { "slug": "googledrive", "name": "Google Drive", "description": "查找檔案、整理共用文件", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false }

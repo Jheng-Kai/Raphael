@@ -1037,6 +1037,19 @@ BEGIN SELECT RAISE(ABORT,'The chief cannot leave a room'); END;
 PRAGMA user_version = 41;
 COMMIT;
 """
+_MIGRATIONS[42] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE connect_cards ADD COLUMN provider TEXT NOT NULL DEFAULT 'google';
+PRAGMA user_version = 42;
+COMMIT;
+"""
+_MIGRATIONS[43] = """
+BEGIN;
+ALTER TABLE connect_cards ADD COLUMN app_logo TEXT NOT NULL DEFAULT '';
+PRAGMA user_version = 43;
+COMMIT;
+"""
 LATEST_VERSION = max(_MIGRATIONS)
 
 

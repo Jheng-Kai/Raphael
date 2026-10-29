@@ -14,11 +14,15 @@ it("CI enforces the same offline layers and real three-size UI for every PR", ()
   expect(ci).not.toContain("paths-ignore:");
   expect(ci).toContain("out true true true");
   expect(ci).toContain("Design judge SKIP");
-  expect(ci).toContain("--max-cost-usd");
+  expect(ci).not.toContain("--max-cost-usd");
   const requestLimit = Number(ci.match(/--max-requests (\d+)/)?.[1]);
-  expect(requestLimit).toBeGreaterThanOrEqual(scenes.length * 6);
+  const batchSize = Number(ci.match(/--batch-size (\d+)/)?.[1]);
+  expect(batchSize).toBeGreaterThanOrEqual(1);
+  expect(batchSize).toBeLessThanOrEqual(4);
+  expect(requestLimit).toBeGreaterThanOrEqual(Math.ceil(scenes.length * 6 / batchSize));
   expect(requestLimit).toBeLessThanOrEqual(2000);
-  expect(ci).toContain("secrets.OPENROUTER_API_KEY");
+  expect(ci).not.toContain("secrets.OPENROUTER_API_KEY");
+  expect(ci).toContain("CI judge requires a subscription CLI.");
   expect(ci).toContain("needs: [changes, frontend, python, windows-shell]");
   const nightly = read(".github/workflows/guardian-live.yml");
   expect(nightly).toContain("--api-only");
@@ -32,6 +36,8 @@ it("portable guard commands use the installed core environment without shell int
     expect(check.cwd).toBe(resolve(root, "core"));
     expect(check.args).toContain(kind === "live" ? "raphael_core.evaluate.guardian" : "raphael_core.evaluate.design_judge");
     expect(check.args).not.toContain("sync");
+    expect(check.env.PYTHONPATH.split(process.platform === "win32" ? ";" : ":")[0]).toBe(resolve(root, "core/src"));
+    if (kind === "judge") expect(check.args.slice(-2)).toEqual(["--brain", "claude"]);
   }
 });
 

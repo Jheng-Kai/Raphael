@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installMock } from "./mock-ipc.js";
 import { auditDocument, failedChecks } from "./audit.mjs";
-import { perform } from "./driver.mjs";
+import { decodeVisibleImages, perform } from "./driver.mjs";
 import { checkRendered } from "./checks.mjs";
 import { contactSheets } from "./contact-sheet.mjs";
 import { requestDisposition } from "./requests.mjs";
@@ -54,6 +54,9 @@ export async function run(options) {
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
     // Match avatar_get's data URL contract using the full-resolution public fixture artwork.
     if (fixture.avatar?.url?.startsWith('/brand/')) fixture.avatar.url = `data:image/png;base64,${(await readFile(join(app, 'public', fixture.avatar.url))).toString('base64')}`;
+    // Recorded public artwork keeps catalog URLs realistic while the look run stays offline.
+    const imageResponses = Object.fromEntries(await Promise.all(Object.entries(fixture.imageResponses ?? {}).map(async ([url, file]) =>
+      [url, await readFile(join(import.meta.dirname, file))])));
     const translations = await readFile(join(app, "src/main/i18n/zh-TW.ts"), "utf8");
     // Words a Chinese window may show in Latin letters: the synthetic data's own, and names of products and keys.
     const dataWords = value => typeof value === "string" ? value.match(/[A-Za-z]{2,}/g) ?? [] : Array.isArray(value) ? value.flatMap(dataWords) : value && typeof value === "object" ? Object.values(value).flatMap(dataWords) : [];
@@ -85,7 +88,8 @@ export async function run(options) {
         page.on("request", request => {
           const url = request.url();
           const disposition = requestDisposition(url, origin);
-          if (disposition === "empty") void request.respond({ status: 204 }).catch(() => {});
+          if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
+          else if (disposition === "empty") void request.respond({ status: 204 }).catch(() => {});
           else if (disposition === "continue") void request.continue().catch(() => {});
           else { error("network", `External request blocked: ${url}`); void request.abort().catch(() => {}); }
         });
@@ -124,7 +128,7 @@ export async function run(options) {
           }
           if (assertion?.check) (result.assertions ??= []).push(assertion);
         }
-        await page.evaluate(async () => { await document.fonts.ready; await Promise.all([...document.images].map(image => image.decode().catch(() => {}))); });
+        await page.evaluate(decodeVisibleImages);
         await new Promise(resolve => setTimeout(resolve, 300));
       } catch (value) {
         error("scene", value.message);
