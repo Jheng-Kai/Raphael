@@ -99,7 +99,7 @@ async function run(options) {
           const image = `${journey.name}-${label}.png`;
           await page.screenshot({ path: join(directory, image) });
           result.image = image;
-          report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: 1120, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
+          report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
         await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });

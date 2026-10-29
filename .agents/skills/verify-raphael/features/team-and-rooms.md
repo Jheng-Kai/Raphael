@@ -150,7 +150,7 @@ npm run look -- team team-panned team-rearranged team-member-menu team-drop-targ
 
 The board pans with a right or middle drag anywhere except an action, or a left drag on empty canvas.
 Wheel movement pans; Ctrl+wheel zooms at the pointer, within 50-150%. Minus/plus zoom about the
-viewport center. Opening fits the initial column above the composer; reopening retains the chosen zoom. The monitor icon fits the chief and groups again.
+viewport center. Opening starts at 100% without invoking Fit; reopening retains the chosen zoom. Overflowing groups remain reachable by panning. The monitor icon fits the chief and groups again.
 If a layout is taller than the viewport even at 50%, fit starts at the top instead of clipping the chief. Opening or fitting the board brings the entire chief card into the canvas with a 16px inset; overflowing groups remain reachable by panning. Reset restores the automatic layout.
 The primary occupies the top card above the automatic groups; Raphael exchanges into its original group slot and remains the room chief. The geometry class `team-chief` names the top slot, not a new coordinator identity. Drag a group's header to move that panel independently.
 Device-local positions are keyed by group id in `raphael.team.positions`; missing, invalid or inaccessible
@@ -187,7 +187,7 @@ The seven canvas scenes above use `fixture.json`'s `teamBoard` roster through th
 
 ## Primary display exchange (owner, 2026-10-27)
 
-`primary-team-board` uses the one/eight-member CLI fixture with 紫苑 as primary: her card takes the top slot, and Raphael takes her place in 學習 with his emblem, localized chief-of-staff role and protected actions. It checks the exchanged IDs, initial fitted zoom, wrapped content-sized panels, no overlap and top-card visibility, without pressing Fit before capture. `team-fit` independently checks fitting; `team-zoom` checks retained zoom after reopening. `primary-team-mentions` checks member ordering while keeping everyone/groups/apps and mention values unchanged. `primary-room-picker`, `primary-room-members` and `primary-room-chief` cover display order with identity 0 still required/crowned and authoring the single wrap-up. See [Members](members.md) for the shared order and other pickers. No core or routing contract changes.
+`primary-team-board` uses the one/eight-member CLI fixture with 紫苑 as primary: her card takes the top slot, and Raphael takes her place in 學習 with his emblem, localized chief-of-staff role and protected actions. It checks the exchanged IDs, initial 100% zoom, wrapped content-sized panels, no overlap and top-card visibility, without pressing Fit before capture. `team-fit` independently checks fitting; `team-zoom` checks retained zoom after reopening. `primary-team-mentions` checks member ordering while keeping everyone/groups/apps and mention values unchanged. `primary-room-picker`, `primary-room-members` and `primary-room-chief` cover display order with identity 0 still required/crowned and authoring the single wrap-up. See [Members](members.md) for the shared order and other pickers. No core or routing contract changes.
 
 ## Crisp team zoom at rest (2026-10-28)
 
@@ -226,16 +226,31 @@ error. Deleting a group returns to the existing board and shows the same toast.
 npm run look -- esc-room-armed room-stop room-delete team-delete --theme both --width 1120,720,1920x1080
 ```
 
-## Owner round 4 aligned initial board
+## Owner round 5 readable initial board
 
-The chief and groups flow on one shared capped 896px column; the chief is the
-board-level header, while group member cards retain the 384px short-card cap.
-Groups retain empty card tracks instead of stretching a single member. Opening
-fits all initial groups above the composer; later visits retain the chosen zoom.
-Manual pan, zoom and group placement remain available. Room threads/composers
-share the 896px conversation token. Default group heights remain content-sized.
+The chief wrapper and groups flow on one shared capped 896px column. The chief
+card uses the same member-card track and horizontal inset as group members;
+every card retains the 384px short-card cap. Groups retain empty card tracks
+instead of stretching a single member. Opening starts at 100%, even when the
+roster extends below the canvas; later visits retain the chosen zoom. Fit is an
+explicit action and may zoom below 100%. Manual pan, zoom and group placement
+remain available. Room threads/composers share the 896px conversation token.
+Default group heights remain content-sized.
+
+`team-readable` compares the chief card's width/left edge with the first group
+member and requires initial 100% zoom. The ordinary team and primary-board checks
+retain this opening contract; fit and zoom scenes independently exercise manual
+scaling. `pages/team.test.ts` gives a tall roster actual bounds so accidental
+opening Fit cannot pass on zero-sized DOM-test geometry.
 
 Dragging a group may extend the team-board/team-groups spatial layout wrappers
 inside the clipped, pannable viewport. The general horizontal-overflow audit
 exempts only those two wrappers inside a clipped canvas. Actual member cards,
 text and document overflow remain checked; audit.test.mjs covers both cases.
+
+Native regression: `npm run native -- readable-layout` uses a fresh real SQLite
+database and a roster persisted through production RPC. The real WebView opens
+Team at 1280x800 before pressing Fit, then inspects details at 1920x1080 and
+compact identity at 720x900. It reuses the shared rendered assertions and retains
+per-check failures and actual viewport sizes. No page module or DOM geometry is
+substituted; fake brain remains enabled and no provider request is needed.

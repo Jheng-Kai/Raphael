@@ -70,6 +70,22 @@ test("fit centers every visible panel in the viewport within the zoom range", ()
   for (const node of page.el.querySelectorAll<HTMLElement>('.team-chief, [data-team-group]')) vi.spyOn(node, 'getBoundingClientRect').mockReturnValue({ left: 100, top: 100, right: 700, bottom: 500 } as DOMRect);
   click('[data-team="fit"]'); const [x, y, z] = transform(); expect(z).toBeCloseTo(1.28); expect(x + 400 * z).toBeCloseTo(400); expect(y + 300 * z).toBeCloseTo(300);
 });
+test("opening a tall roster never invokes automatic Fit", async () => {
+  page.hide(); page.el.remove();
+  const original = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function(this: HTMLElement) {
+    if (this.matches(".team-chief, [data-team-group]")) return {left:32,top:24,right:928,bottom:1124,width:896,height:1100} as DOMRect;
+    return original.call(this);
+  });
+  page = createTeamPage({go,onEvent:()=>()=>{}} as unknown as AppContext);
+  document.body.append(page.el);
+  Object.defineProperties(query('.team-board-scroll'), {clientWidth:{value:1048},clientHeight:{value:640}});
+  page.show(); await flush();
+  expect(transform()[2]).toBe(1);
+  click('[data-team="fit"]');
+  expect(transform()[2]).toBeLessThan(1);
+});
+
 test("opening keeps 100 percent and reopening preserves the session zoom", async () => {
   expect(transform()[2]).toBe(1);
   expect(query('[data-team-card="0"] .team-member-head').textContent).toContain('Chief of staff');

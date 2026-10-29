@@ -1,7 +1,9 @@
 import { perform } from "../driver.mjs";
+import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
@@ -71,7 +73,37 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
-  if (name === "locale-sweep") {
+  if (name === "readable-layout") {
+    result.layout = [];
+    const inspect = async (label, checks) => {
+      const entry = { label, viewport: page.viewport(), checks: [], failures: [] };
+      for (const check of checks) {
+        try { entry.checks.push(await page.evaluate(checkRendered, check)); }
+        catch (error) { entry.failures.push(error.message); result.failures.push(error.message); }
+      }
+      result.layout.push(entry);
+      await capture(label);
+    };
+    // Persist prerequisites through production RPC; UI geometry is never replaced.
+    for (const [groupIndex, count] of [[1, 1], [2, 8]]) {
+      const { group } = await context.rpc("groups.create", { name: `Layout group ${groupIndex}` });
+      for (let index = 0; index < count; index++) await context.rpc("members.create", {
+        name: `Colleague ${groupIndex}-${index + 1}`, role: "Research", group_id: group.id,
+      });
+    }
+    await page.setViewport({ width: 1280, height: 800 });
+    await click(page, '#nav [data-go="team"]');
+    await wait(page, '.team-group-members .team-member'); await pause(250);
+    await inspect("team-opening-1280", ["team-readable", "content-width"]);
+    await click(page, '[data-team="fit"]'); await pause(200);
+    await inspect("team-explicit-fit-1280", ["team-canvas-fit", "content-width"]);
+    await page.setViewport({ width: 1920, height: 1080 });
+    await chat(page); await details(page); await pause(250);
+    await inspect("details-1920", ["details-alignment", "conversation-header"]);
+    await click(page, '.mb-det [data-det="close"]');
+    await page.setViewport({ width: 720, height: 900 }); await pause(250);
+    await inspect("conversation-720", ["conversation-header"]);
+  } else if (name === "locale-sweep") {
     result.visits = [];
     const devices = await context.rpc("audio.devices", { refresh: false });
     const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];

@@ -435,3 +435,24 @@ Recording Stop releases/transcribes/sends, while only Escape uses two-press canc
 The ordinary details scene retains its deliberate keyboard-focus screenshot after
 asserting pointer behavior. Raphael-details also asserts pointer opening and captures
 the ring-free resulting state; its close control shares the same details shell.
+## Owner round 5 panel and conversation header
+
+The shared details scroll container owns the 16px horizontal inset. New
+conversation, the actual search input, section headings, conversation rows and
+the routines/memory block fill that same content width, without nested horizontal
+padding. `details-alignment` compares actual rendered field/card edges.
+
+Below the member-picker breakpoint (860px), the picker owns the identity and the
+centered trigger shows only the conversation caption. Identity and caption lines
+do not vertically shrink; captions reserve a full 1.5em line. The
+`conversation-header` check rejects duplicate compact identity and text whose
+range/scroll bounds exceed its line box. The reported 1920px half-line clipping
+was not reproduced in the baseline chat fixture; baseline evidence must not be
+claimed as a reproduction of that specific image.
+
+Native regression: `npm run native -- readable-layout` uses a fresh real SQLite
+database and a roster persisted through production RPC. The real WebView opens
+Team at 1280x800 before pressing Fit, then inspects details at 1920x1080 and
+compact identity at 720x900. It reuses the shared rendered assertions and retains
+per-check failures and actual viewport sizes. No page module or DOM geometry is
+substituted; fake brain remains enabled and no provider request is needed.

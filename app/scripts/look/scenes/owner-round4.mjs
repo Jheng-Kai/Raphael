@@ -14,6 +14,8 @@ export function withOwnerRound4(scenes) {
     ...original.steps.flatMap(step => original.name === "details" && step.action === "icon-interactions"
       ? [check("details-pointer-focus"), step] : [step]),
     ...(checks[original.name] ? [check(checks[original.name])] : []),
+    ...(original.name === "team" ? [check("team-readable")] : []),
+    ...(["chat", "details", "details-closed", "member-text", "raphael-details"].includes(original.name) ? [check("conversation-header"), check("details-alignment")] : []),
   ]}));
 }
 export const noNaming = scene("no-naming", "An empty unconfigured Raphael thread has no naming setup",

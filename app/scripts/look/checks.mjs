@@ -2,6 +2,38 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "team-readable") {
+    const board=document.querySelector('.team-board'), matrix=new DOMMatrix(getComputedStyle(board).transform);
+    require(Math.abs(matrix.a-1)<0.001,"initial Team view uses 100 percent; Fit is explicit");
+    const chief=board.querySelector('.team-chief .team-member').getBoundingClientRect();
+    const member=board.querySelector('.team-group-members .team-member').getBoundingClientRect();
+    require(Math.abs(chief.width-member.width)<1 && Math.abs(chief.left-member.left)<1,"chief shares the member-card track and inset");
+    return {check:name,zoom:matrix.a,cardWidth:chief.width};
+  }
+  if (name === "details-alignment") {
+    const panel=document.querySelector('.mb-det:not([hidden])');
+    if (!visible(panel)) return {check:name,open:false};
+    const blocks=[...panel.querySelectorAll('.conversation-new, .conversation-tools, .mb-panel-pages')].filter(visible);
+    const reference=panel.querySelector('.conversation-new').getBoundingClientRect();
+    for (const block of blocks) {
+      const box=block.getBoundingClientRect();
+      const field=block.matches('.conversation-tools') ? block.querySelector('input').getBoundingClientRect() : box;
+      require(Math.abs(field.left-reference.left)<1 && Math.abs(field.right-reference.right)<1,"every details block shares the New conversation field inset");
+    }
+    return {check:name,blocks:blocks.length};
+  }
+  if (name === "conversation-header") {
+    const header=document.querySelector('.mb-chat > .mb-head'), trigger=header.querySelector('.conversation-trigger');
+    const caption=trigger.querySelector('.conversation-caption'), identity=trigger.querySelector('.mb-pill');
+    const picker=header.querySelector('.mb-pick');
+    if (visible(picker)) require(!visible(identity),"compact header shows identity once in the picker");
+    for (const line of [caption,identity.querySelector('.mb-pill-t')].filter(visible)) {
+      const range=document.createRange();range.selectNodeContents(line);
+      const text=range.getBoundingClientRect(), box=line.getBoundingClientRect();
+      require(text.top>=box.top-1 && text.bottom<=box.bottom+1 && line.scrollHeight<=line.clientHeight+1,`header text has a complete unclipped line (${line.className}: text=${text.height}, box=${box.height}, scroll=${line.scrollHeight}, client=${line.clientHeight})`);
+    }
+    return {check:name,captionHeight:caption.getBoundingClientRect().height,identity:visible(identity)};
+  }
   if (name === "details-pointer-focus") {
     const close = document.querySelector('.mb-det [data-det="close"]');
     require(visible(close), "details opened from the pointer");
@@ -57,7 +89,7 @@ export function checkRendered(name) {
   if(name === "team-alignment") {
     const nodes=[...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(el=>el.getBoundingClientRect());
     require(nodes.length>1 && nodes.every(b=>Math.abs(b.left-nodes[0].left)<1 && Math.abs(b.right-nodes[0].right)<1),"team chief and groups share both column edges");
-    require(Math.max(...nodes.map(b=>b.bottom))<=document.querySelector('.team-bottom').getBoundingClientRect().top,"initial team fit clears the composer");
+    require(new DOMMatrix(getComputedStyle(document.querySelector('.team-board')).transform).a >= 1,"opening preserves readable member type; overflow is pannable");
     return {check:name,groups:nodes.length};
   }
   if(name === "welcome-alignment") {
@@ -123,10 +155,9 @@ export function checkRendered(name) {
     const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
-      ['card', '.ho-card:not(.page-home .ho-card), .team-member:not(.team-chief .team-member), .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
+      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card'],
       ['reading', '.ho-row, .ho-slot, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
-      ['thread', '.team-chief .team-member'],
       ['page', '.page:not(.page-agent), .modal, .ho-hero'],
       ['workspace', '.team-board, .au-page'],
     ];
@@ -939,7 +970,7 @@ export function checkRendered(name) {
     const viewport = document.querySelector('.team-board-scroll'), board = document.querySelector('.team-board');
     const view = viewport.getBoundingClientRect();
     const matrix = new DOMMatrix(getComputedStyle(board).transform);
-    if (name === 'team-canvas-open') require(matrix.a >= 0.5 && matrix.a <= 1.5, 'opening fits the board within the supported zoom range');
+    if (name === 'team-canvas-open') require(Math.abs(matrix.a-1)<0.001, 'opening keeps the readable 100 percent view; only explicit Fit scales to fit');
     if (name === 'team-canvas-reopened') require(Math.abs(matrix.a - 1.1 * Math.exp(0.08)) < 0.001, 'reopening the board preserves the zoom chosen in this session');
     if (name === 'team-canvas-panned') require(Math.abs(matrix.e - window.__look.teamPan.x - 60) <= 1 && Math.abs(matrix.f - window.__look.teamPan.y + 40) <= 1 && !document.querySelector('#app-popover'), 'right drag moves the canvas without a menu');
     if (name === 'team-canvas-rearranged') {

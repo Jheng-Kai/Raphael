@@ -25,12 +25,12 @@ it("rejects the owner's stretched dictionary and Home geometry on 97fa61bd", () 
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("measures team cards before the owner's canvas zoom", () => {
+it("measures every team card, including the chief, before canvas zoom", () => {
   const browser = new Window();
   browser.document.documentElement.style.setProperty('--sp-6', '32px');
   browser.document.documentElement.style.setProperty('--sp-5', '24px');
-  browser.document.body.innerHTML = '<div class="team-board" style="transform:scale(1.5)"><div class="team-member"></div></div>';
-  const board = browser.document.querySelector('.team-board'), card = board.firstElementChild;
+  browser.document.body.innerHTML = '<div class="team-board" style="transform:scale(1.5)"><div class="team-chief"><div class="team-member"></div></div></div>';
+  const board = browser.document.querySelector('.team-board'), card = board.querySelector('.team-member');
   board.getBoundingClientRect = () => ({ width: 1760 * 1.5, height: 900 });
   card.getBoundingClientRect = () => ({ width: 384 * 1.5, height: 200 });
   vi.stubGlobal('document', browser.document);

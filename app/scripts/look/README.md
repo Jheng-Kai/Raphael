@@ -214,7 +214,7 @@ Coverage merges auto's automation/team/room matrix, nav's settings/MCP/usage mat
 polish's composers/skins, layout's dictation/notices/onboarding and narrate's chat states.
 Conversation management opens through the title-controlled details panel. Usage
 retains aggregate summaries, grouping, allowances and CSV; per-run navigation is removed. The deliberately removed owner menu/photo controls have no
-scenes. There are 330 current scenes (1980 combinations across light/dark and 1120, 720, 1920x1080). The member-column scenes cover the primary top slot, its exchange with Raphael, collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep all seven days visible and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening fits the initial roster above the composer; reopening preserves the chosen session zoom. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
+scenes. There are 330 current scenes (1980 combinations across light/dark and 1120, 720, 1920x1080). The member-column scenes cover the primary top slot, its exchange with Raphael, collapse, face tooltips and re-expansion; primary scenes also cover member/conversation/room/routine pickers, calendar tools and mentions without stars; dictation tabs use horizontal keyboard navigation. Team mentions and slash commands align to their text character and prefer the space above it, without an empty icon/check column. Calendar checks prohibit horizontal scrolling, keep all seven days visible and exercise responsive month/member/keep-awake controls. Team headers share the page padding and align Add with the title. Geometry checks cover all three sizes. The default Team scene also enforces R-UI-01: group panels size to their own members while chief/group containers share a capped column; no area minimum or sibling-height stretching. Opening starts at 100%; overflowing groups remain pannable, and reopening preserves the chosen session zoom. Fit is explicit. The chief uses the same compact card track and inset as group members. Group members wrap across the available panel width into at most three columns, while a one-member panel retains empty card tracks. Drop previews grow and shrink column capacity and rerun collision resolution. The seven canvas scenes use the one-person 學習/eight-person 未分組 CLI roster in `fixture.json.teamBoard`. Checks reject stretched panels and raw CLI refs, and require the whole chief on opening and after fit (at the 50% floor a tall roster may continue below the canvas). The opening and primary-board screenshots do not press Fit; `team-zoom` reopens the page and checks session zoom retention. Raphael roles use `memberRole` and the existing three-language `rooms.chief` key across member views. Model-choice scenes cover cloud/local row spacing, themed borders, readable metadata, scroll access and keyboard selection without downloading.
 Team administration scenes cover full, long and eight-member batch approvals, held deletion approval,
 live member selection after approval, and an unchanged roster after rejection.
 The right-click scenes (`scenes/context-menu.mjs`, R-UI-44) press the real right button with the `right-click` step, which keeps its point in `window.__look.pointer`, and their `context-menu` check asserts that the menu is open, starts at the pointer, does not cover it and has the items of the menu a click on the ⋯ opens; `context-menu-key` presses Shift+F10 on a focused row. Every scene's audit also asks `context-menu.ts` for the ⋯ buttons that no row of its table reaches (`R-UI-44`).
@@ -262,7 +262,21 @@ remembered bounds; manual first/second launches show and focus the window,
 while --autostart leaves it in the tray.
 
 Home's combined inbox and three-stat layout, two-by-two dictation totals,
-896px conversation measure, shared settings edges, fitted team column and
+896px conversation measure, shared settings edges, readable team column and
 centered welcome are asserted by their ordinary feature scenes. no-naming
 replaces the removed first-Bot setup scenes. Details' pointer focus assertion
 runs before its separate keyboard icon-interaction check.
+
+## Owner round 5 readable layout
+
+Run all main-page scenes in both themes at 1120, 720, 1920x1080 and 1280x800.
+`team-readable` rejects automatic opening Fit and compares the chief card with
+the group card track. `details-alignment` compares New conversation, the search
+input and routines/memory block. `conversation-header` rejects duplicate compact
+identity and clipped header line boxes. Explicit Fit and manual canvas zoom
+remain independent interactions; they may intentionally go below 100%.
+
+`npm run native -- readable-layout` applies the same assertions to an isolated
+WebView/SQLite run. Roster prerequisites use production RPC; opening, explicit
+Fit, conversation navigation and details controls use the real UI. Captures
+record their actual viewport dimensions.

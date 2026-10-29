@@ -49,7 +49,7 @@ Owner item 9 (2026-10-28), R-UI-45: no page becomes a stripe at any window size.
 | `--layout-word-min/max` | 7 / 10 spaces = 224 / 320px | Dictionary auto-fill grid; a sparse grid keeps empty tracks |
 | `--layout-card-min/max` | 9 / 12 spaces = 288 / 384px | Short cards, totals, store cards and calendar events |
 | `--layout-reading-max` | 20 spaces = 640px | History, shared lists, aligned settings panes, connected apps and routines |
-| `--layout-thread-max` | 28 spaces = 896px | Raphael/member/room threads and composers; aligned team header/group column |
+| `--layout-thread-max` | 28 spaces = 896px | Raphael/member/room threads and composers; outer team group column |
 | `--layout-page-max` | 3 card maxima + 2 grid gaps + 2 page gutters = 1264px | Ordinary pages and the calendar's own container |
 | `--layout-workspace-max` | 55 spaces = 1760px | Spatial team workspace; its member cards still obey the short-card cap |
 
@@ -68,9 +68,9 @@ uses page-level agenda/inbox containers instead of the generic short-card cap.
 Short inbox/agenda rows remain reading-capped; the Home check rejects an orphan
 stat row, a narrow/reordered lead and unequal chart baselines.
 The 896px thread measure is 28 existing 32px spaces, adding room for conversation
-content while prose keeps 20 spaces. Team's chief is a board-level header on that
-same 896px track; groups contain independently capped member cards and empty tracks
-remain when a group has one member. Settings retains its 1000px modal and uses one
+content while prose keeps 20 spaces. Team's chief and every group member use
+the same compact card track, capped at 384px, inside the shared 896px board column.
+Empty tracks remain when a group has one member. Settings retains its 1000px modal and uses one
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
@@ -107,10 +107,10 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Feature | Native journey needed: drive, assert, brain |
 | --- | --- |
 | Home | Planned home-persistence: start/restart, open report/calendar/pending work; assert real aggregates and navigation against SQLite; fake brain. |
-| Conversation | locale-sweep, voice-conversation, delete-conversation; drive locale/composer/sidebar, real member consultations and room reports, delete recipient conversations/source member; reject old rows/date/exchange chrome in replacement defaults and new named threads, compare actual history IPC with read-only production SQL and NULL conversation rows; native fake brain. Planned conversation-cards: approvals, attachments, Stop and reconnect; fake or signed-in Codex CLI. |
+| Conversation | readable-layout checks shared details edges and compact identity; locale-sweep, voice-conversation, delete-conversation; drive locale/composer/sidebar, real member consultations and room reports, delete recipient conversations/source member; reject old rows/date/exchange chrome in replacement defaults and new named threads, compare actual history IPC with read-only production SQL and NULL conversation rows; native fake brain. Planned conversation-cards: approvals, attachments, Stop and reconnect; fake or signed-in Codex CLI. |
 | Members | delete-conversation creates/deletes members through UI and checks orphan exchange rows/deleted source names. Planned members-persistence: edit/hide/duplicate/primary/resources/voice and right-click menus, restart; assert member/resource/primary state and shared agent path; fake brain, Codex CLI for administration. |
 | Automations | Planned automations-worker: create/edit/delete schedule, trigger worker, cancel/restart; assert schedule, task and report persistence and no late writes; fake brain. |
-| Team and rooms | locale-sweep visits team; delete-conversation creates a room, mentions Raphael/member, waits for reports/wrap-up and checks room rows stay out of private history. Legacy quarantine rows cannot be created through current UI and are not fabricated. Planned rooms-routing: group management and stop; assert routing and cancellation; fake brain, Codex CLI for reasoning. |
+| Team and rooms | readable-layout checks 100% opening, compact chief alignment and explicit Fit on a persisted roster; locale-sweep visits team; delete-conversation creates a room, mentions Raphael/member, waits for reports/wrap-up and checks room rows stay out of private history. Legacy quarantine rows cannot be created through current UI and are not fabricated. Planned rooms-routing: group management and stop; assert routing and cancellation; fake brain, Codex CLI for reasoning. |
 | Dictation | locale-sweep visits all tabs; voice-conversation uses WAV/local STT. Planned dictation-paste-learning: injected hotkeys in an isolated target, microphone/WAV, paste and correction; assert target text, history, dictionary learning and overlay focus; fake brain/local STT. |
 | Settings and appearance | locale-sweep drives every locale/settings section. Planned settings-restart: change theme/skin/model/mic/preferences and restart; assert device/core persistence and window behavior; fake brain. |
 | Connections and MCP | gmail-connect (explicit opt-in only): ask/connect card, assert final state/error and redacted CLI event/stderr diagnostics in the run log; configured signed-in Codex model, run-local workspace/state, fake API clients, declared Composio only, stop at authorizing without Google consent approval. Restricted-network failures before a card are not OAuth acceptance. Planned MCP lifecycle/permissions/private skills: assert discovery and real tool gates; local fake server/CLI. |
@@ -152,3 +152,27 @@ Final verify-uDt0V9 passes 2412 tests. Final native run-ux8wg1 passes locale-swe
 voice-conversation and delete-conversation with the worktree debug build; WAV/local
 ASR and fake brain only. Judge was not run under the owner's explicit instruction.
 The complete command/evidence record is OWNER-ROUND-4-NOTES.md in the worktree.
+
+## Owner round 5 acceptance
+
+Team opens at 100%, with explicit Fit and a chief card on the same compact track
+as group members. The details scroll container owns the single horizontal inset.
+Compact conversation headers show identity once; caption/identity lines cannot
+flex-shrink. Shared checks cover these contracts in browser and native WebView.
+The owner's specific 1920 half-line clipping was not reproduced on the baseline;
+the full-line guard passes before and after and is preventive coverage only.
+
+Main-page run-KddPl2 passes 296/296 cells: 37 scenes, both themes, widths
+1120,720,1920x1080,1280x800. All 19 contact sheets and relevant full-size images
+were inspected. verify-KjxZq8 passes tsc, 2413 tests and contrast. Native
+readable-layout fails on the previous debug binary (run-Z7BaV5) and passes after
+an offline worktree-local debug build; run-TtwBye passes readable-layout,
+locale-sweep, voice-conversation and delete-conversation (4/4).
+
+The requested npm judge command exits 2 because this branch does not support
+--brain. A read-only invocation of the existing native-worktree subscription
+judge, explicitly rooted at this worktree with both supplied references, exits 1
+in judge-r7fb_vri: Claude reports ECONNREFUSED, no design feedback is returned,
+and OpenRouter requests remain zero. Design acceptance remains unverified.
+There are no received findings to accept or reject. Exact commands, inspected
+images and the replay script are recorded in OWNER-ROUND-5-NOTES.md.
