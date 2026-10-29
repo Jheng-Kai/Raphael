@@ -77,7 +77,7 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
     assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
     assert [t["function"]["name"] for t in first["tools"]] == [
-        "weather", "web_search", "local_time", "web_read", "Notes__look",
+        "weather", "web_search", "local_time", "web_read", "self_check", "raphael_help", "Notes__look",
     ]  # fmt: skip
     result = second["messages"][-1]
     assert result["role"] == "tool" and result["tool_call_id"] == "c1"
@@ -403,9 +403,10 @@ async def test_a_worker_that_is_slow_to_start_is_waited_for_as_long_as_its_hello
         (RuntimeError("boom"), "error"),
     ],
 )
-async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(make_rig, error, line):
+async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(make_rig, error, line, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     rig = make_rig()
-    rig.client.replies = [error]
+    rig.client.replies = [error] * 4
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
     assert (done["state"], done["prefix"], done["text"]) == ("failed", "Negative", phrase("en", line))
@@ -772,7 +773,8 @@ async def test_a_task_carried_out_by_a_real_worker_process(make_rig, plugins, ca
 # --- what is logged -------------------------------------------------------------------------------
 
 
-async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplog):
+async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplog, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     rig = make_rig()
     await rig.plugins.connect(look="T0", broken="T0", slow="T0")
     secret_text = "PRIVATE-TASK-TEXT window title: Secret Plans - Notepad"
@@ -781,7 +783,7 @@ async def test_nothing_of_a_task_is_logged_whichever_way_it_ends(make_rig, caplo
         [turn("PRIVATE-THOUGHT", [call("Notes__look", {"topic": ARGUMENT}, "c1"), call("Notes__broken", {}, "c2")]),
          report("PRIVATE-REPORT", detail="PRIVATE-DETAIL")],
         # a model that fails
-        [OpenRouterError(500, "server", "PRIVATE-ERROR-MESSAGE")],
+        [OpenRouterError(500, "server", "Service unavailable")] * 4,
         # a limit
         [turn("", [call("local_time", {"n": n}, f"c{n}")]) for n in range(16)],
         # a crash

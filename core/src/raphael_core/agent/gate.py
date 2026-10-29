@@ -269,8 +269,9 @@ class ToolGate:
         try:
             return await plugins.call(key, arguments, approver=approver, task_id=task_id, **kept)
         except Exception as exc:  # not the hub's own failures, which it reports in the outcome
-            logger.warning("A plugin call failed unexpectedly: %s", type(exc).__name__)
-            return PluginResult(False, "error")
+            from ..failures import classify
+            failure = classify(exc)
+            return PluginResult(False, failure.kind, failure.reason)
 
     def record_unrun(self, key: str, *, outcome: str, task_id: int | None = None) -> None:
         """The audit of a call that was asked about and not made ("denied" or "expired")."""

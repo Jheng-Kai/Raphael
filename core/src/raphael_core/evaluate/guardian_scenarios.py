@@ -141,6 +141,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         "files": ("create-html", "create-xlsx", "create-pdf", "attachment-inventory"),
         "computer": ("operate", "take-over", "done", "stop", "apps", "open", "look", "act", "hand-over"),
         "settings-quick": ("settings-inventory", "confirm", "deny", "expired", "edited-inputs", "quick-model", "approve"),
+        "diagnostics": ("self-check", "help"),
     }
     from ..agent.commands import COMMANDS
     operations["commands"] = tuple(COMMANDS)
@@ -149,7 +150,7 @@ def cells(registry=(), catalog=(), *, servers=()):
             implemented = family == "routines" and operation != "run-now"
             result.append(ScenarioCell(f"S21.{family}.{operation}", f"{family}: {operation}", SCENARIOS[20].prompt,
                                       ("production_state",), "P21a" if family in ("routines", "skills", "memory") else "P21b-c",
-                                      "routine-" + operation if implemented else ""))
+                                      "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics" else ""))
     # The current reader has extension sets and inline MIME/dispatch branches,
     # rather than a separate format registry. Inventory those production source
     # declarations; never maintain a second hand-copied list in the evaluator.

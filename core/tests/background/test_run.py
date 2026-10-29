@@ -203,8 +203,9 @@ async def test_cancelling_gives_up_the_model_call_under_way(rig):
         (RuntimeError("boom"), "error"),
     ],
 )
-async def test_a_model_that_fails_ends_the_task_with_the_kind_of_failure(rig, error, detail):
-    rig.client.replies = [error]
+async def test_a_model_that_fails_ends_the_task_with_the_kind_of_failure(rig, error, detail, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
+    rig.client.replies = [error] * 4
     assert await stop_of(rig.chat()) == ("failed", detail)
     assert rig.steps()[0].outcome == "error"
     # The reason is the kind folded into the view's few words: "offline" is a network that failed.
@@ -215,11 +216,12 @@ async def test_a_model_that_takes_too_long_is_a_timeout(rig, monkeypatch):
     import raphael_core.background.run as module
 
     monkeypatch.setattr(module, "CHAT_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
 
     async def slow(**kwargs):
         await asyncio.sleep(30)
 
-    rig.client.replies = [slow]
+    rig.client.replies = [slow] * 4
     assert await stop_of(rig.chat()) == ("failed", "timeout")
     assert rig.steps()[0].outcome == "timeout"
     assert rig.steps()[0].reason == "timeout"
@@ -438,10 +440,11 @@ async def test_a_lookup_that_cannot_reach_its_service_fails_with_its_kind(rig):
 # --- what is logged -------------------------------------------------------------------------------
 
 
-async def test_nothing_of_the_task_is_logged(rig, caplog):
+async def test_nothing_of_the_task_is_logged(rig, caplog, monkeypatch):
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
     await rig.plugins.connect(look="T0", broken="T0")
     rig.resnap()
-    rig.client.replies = [OpenRouterError(500, "server", "PRIVATE-DETAIL"), turn("PRIVATE-WORDS")]
+    rig.client.replies = [OpenRouterError(500, "server", "Service unavailable")] * 4 + [turn("PRIVATE-WORDS")]
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(RpcError):
             await rig.chat([{"role": "user", "content": "PRIVATE-PROMPT"}])

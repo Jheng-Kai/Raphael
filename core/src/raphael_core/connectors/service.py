@@ -116,7 +116,8 @@ class ConnectorsService:
                 async with self._lock:
                     return await handler(params)
             except ConnectorFailure as error:
-                return {"ok": False, "error": error.kind, "http_status": error.status or None}
+                return {"ok": False, "error": error.kind, "http_status": error.status or None,
+                        **({"failure": error.diagnostic.wire()} if error.diagnostic else {})}
             except RpcError:
                 raise
             except Exception:

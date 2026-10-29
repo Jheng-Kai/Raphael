@@ -323,8 +323,9 @@ async def test_a_task_goes_on_from_the_conversation_it_is_given():
 
 
 async def test_calls_that_keep_failing_steer_the_model_once_and_then_stop_the_task():
-    # every call fails; the topics differ so that no call is refused as a repeat
-    failing = lambda name, arguments: ToolOutcome(False, "error", "")
+    # Distinct failure kinds exercise the global guard without hitting the per-tool pair guard.
+    kinds = iter(("network", "timeout", "auth_expired", "not_found", "rate_limit", "server", "tool_broken", "unknown"))
+    failing = lambda name, arguments: ToolOutcome(False, next(kinds), "")
     turns = [Turn("", [ask("Notes__look", {"topic": f"t{i}"}, f"c{i}")]) for i in range(10)]
     host = FakeHost(turns, answer=failing)
     outcome = await run(host)

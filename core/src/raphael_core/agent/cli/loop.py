@@ -21,13 +21,14 @@ from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
+from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, RepeatFailures, REPEAT_NOTE, classify, tool_failure
 
 logger = logging.getLogger(__name__)
 
 # The line a CLI brain puts between two chat messages of one reply.
 MESSAGE_BREAK = "<<<next message>>>"
 # A rate-limited turn that has not acted yet runs again after each of these waits.
-RATE_LIMIT_WAITS_S = (20.0, 60.0)
+RATE_LIMIT_WAITS_S = RETRY_WAITS
 # A room or background turn has no one sitting on it: it rides out a throttle of minutes (live, 429s lasted several).
 ROOM_RATE_LIMIT_WAITS_S = (30.0, 60.0, 120.0, 240.0)
 
@@ -132,6 +133,8 @@ class CliLoop:
         self._acted = False
         self._usage = {}
         self._repeats = RepeatGuard()
+        self._failures = RepeatFailures()
+        self.failure_reason = None
         self.on_done = None
         self.expire = expire
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
@@ -160,6 +163,8 @@ class CliLoop:
                 return ToolOutcome(False, "tool_limit")
             if not self._repeats.allows(name, args):
                 return ToolOutcome(False, "repeated")
+            if self._failures.blocked(name):
+                return ToolOutcome(False, "repeated", REPEAT_NOTE)
             self._progress()
             if name == "approve":
                 decision = await self._permission(args)
@@ -172,6 +177,11 @@ class CliLoop:
                                                         "behavior": "allow", "destination": "session"}]
                 return ToolOutcome(True, content=json.dumps(answer))
             result = await self._execute(identifier, name, args)
+            if not result.ok:
+                failure = tool_failure(result.kind, result.content)
+                result.content = json.dumps(failure.wire(), ensure_ascii=False)
+                if self._failures.record(name, failure.kind):
+                    result.instruction = (result.instruction or result.content or failure.reason) + "\n" + REPEAT_NOTE
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
             return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok))
@@ -193,6 +203,9 @@ class CliLoop:
                     self.expire()
                 self.cancel()
                 return ToolOutcome(False, "expired")
+        except Exception as exc:
+            failure = classify(exc)
+            return ToolOutcome(False, failure.kind, json.dumps(failure.wire()))
 
     async def _permission(self, args):
         self._progress()
@@ -248,6 +261,12 @@ class CliLoop:
 
     def _failure(self, reason, name):
         self.failure = reason
+        if reason in KINDS:
+            failure = self.failure_reason or Failure(reason, reason)
+            message = failure.sentence(name, self.language)
+            self.event(message)
+            self._queue.put_nowait(Outcome("done", final=message))
+            return
         messages = {
             "missing": f"請先安裝 {name}，再到設定 › 模型與用量登入。",
             "login": f"請先到設定 › 模型與用量 › 訂閱帳號，為 {name} 按下「連線」。",
@@ -319,9 +338,10 @@ class CliLoop:
                     waits = list(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     failure = await self._attempt(name, command, model, server, session, workspace)
                     # Running the request again is safe only while nothing of it has happened yet.
-                    while failure == "rate_limited" and waits and not (self._acted or self._calls):
+                    while failure in TRANSIENT and waits and not (self._acted or self._calls):
                         wait = waits.pop(0)
-                        self.progress(self._rate_limit_wait(NAMES[name], wait))
+                        self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
+                                      Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
                         await asyncio.sleep(wait)
                         failure = await self._attempt(name, command, model, server, session, workspace)
                 if failure:
@@ -334,7 +354,8 @@ class CliLoop:
                 frame = traceback.extract_tb(error.__traceback__)[-1]
                 logger.warning("CLI turn failed: %s at %s:%d", type(error).__name__, frame.name, frame.lineno)
                 if not self._handed_off():
-                    self._failure("error", NAMES[name])
+                    self.failure_reason = classify(error)
+                    self._failure(self.failure_reason.kind, NAMES[name])
             finally:
                 if self.driver:
                     await self.driver.interrupt()
@@ -376,7 +397,8 @@ class CliLoop:
                     native_capture("normalized-error", event.text)
                     if self._handed_off():
                         return None
-                    return event.text if event.text in ("quota", "rate_limited") else "error"
+                    self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text)})
+                    return self.failure_reason.kind
                 elif event.kind == "final":
                     if self._handed_off():
                         return None
@@ -385,8 +407,12 @@ class CliLoop:
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()
-                    return "error"
-        return None if self._handed_off() else "error"
+                    self.failure_reason = classify("CLI ended without an answer")
+                    return "unknown"
+        if self._handed_off():
+            return None
+        self.failure_reason = classify("CLI stream ended before completion")
+        return "unknown"
 
     async def _native_permission(self, args):
         async with self._serial:

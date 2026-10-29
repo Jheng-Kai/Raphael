@@ -377,6 +377,12 @@ class RpcDriver:
                 reasons.append("failure_not_one_sentence")
             if self.recorder.receipts:
                 reasons.append("failure_produced_receipt")
+        elif cell.driver.startswith("diagnostic-"):
+            tool = "self_check" if cell.driver == "diagnostic-self-check" else "raphael_help"
+            result = await self.ask(cell.prompt + f" Use {tool} once, then explain the result.")
+            reasons = [] if any(trace["name"] == tool and trace["outcome"] == "ok" for trace in self.traces) else ["missing_diagnostic_check"]
+            if self.recorder.receipts:
+                reasons.append("diagnosis_produced_receipt")
         elif cell.driver.startswith("routine-"):
             operation = cell.driver.removeprefix("routine-")
             title = "驗證寫作" + self.nonce

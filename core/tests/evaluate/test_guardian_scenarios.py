@@ -31,6 +31,17 @@ def selected(identifier):
     return next(cell for cell in cells() if cell.id == identifier)
 
 
+@pytest.mark.parametrize("operation,tool", [("self-check", "self_check"), ("help", "raphael_help")])
+async def test_read_only_diagnostics_use_the_production_harness(tmp_path, operation, tool):
+    driver = RpcDriver(tmp_path, "fake/model", FakeClient([("", [(tool, {})]), ("已檢查現有設定。", [])]), Budget(5))
+    try:
+        reasons, _ = await driver.execute(selected("S21.diagnostics." + operation))
+        assert not reasons
+        assert driver.recorder.receipts == []
+    finally:
+        await driver.aclose()
+
+
 @pytest.mark.parametrize('identifier',['S03.immediate-start','S03.primary-dispatch','S08.immediate-start','S08.completion'])
 @pytest.mark.parametrize('brain',['api','cli'])
 async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,monkeypatch,identifier,brain):

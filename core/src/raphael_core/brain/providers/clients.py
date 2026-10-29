@@ -170,8 +170,18 @@ class CompatibleProvider(OpenRouterClient):
                 refused = False
             if refused:
                 raise OpenRouterError(status, "refusal", "Provider declined the request")
-            kind = {401: "auth", 403: "auth", 408: "timeout", 429: "rate_limit"}.get(status, "error")
-            raise OpenRouterError(status, kind, f"Provider request failed ({status})")
+            from ...failures import classify
+            try:
+                body_error = response.json()
+            except ValueError:
+                body_error = {"message": f"Provider request failed ({status})"}
+            failure = classify({"status": status, "error": body_error.get("error", body_error) if isinstance(body_error, dict) else
+                                f"Provider request failed ({status})"},
+                               secrets=[value.removeprefix("Bearer ") for value in headers.values()])
+            kind = {"auth_expired": "auth", "permission_denied": "permission_denied"}.get(failure.kind, failure.kind)
+            error = OpenRouterError(status, kind, failure.reason)
+            error.diagnostic = failure
+            raise error
         try:
             decoded = response.json()
             if _refused_error(decoded):
@@ -242,6 +252,8 @@ class CompatibleProvider(OpenRouterClient):
         try:
             result = await method(**kwargs)
         except OpenRouterError as error:
+            if getattr(error, "diagnostic", None) is not None:
+                raise
             if error.kind in ("bad_response", "bad_request", "server"):
                 raise OpenRouterError(error.status, "error", "Invalid provider response") from None
             raise

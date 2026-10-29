@@ -1,11 +1,13 @@
 import { perform } from "../driver.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
+import { checkRendered } from "../checks.mjs";
 
 export const journeys = [
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
+  { name: "self-diagnosis", description: "Force an offline connection card failure; the same member checks and explains the real reason" },
 ];
 const click = (page, selector) => perform(page, { action: "click", selector });
 const wait = (page, selector) => perform(page, { action: "wait", selector });
@@ -71,7 +73,52 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
-  if (name === "locale-sweep") {
+  if (name === "self-diagnosis") {
+    await chat(page);
+    await perform(page, { action: "member-column", collapsed: false });
+    await click(page, '.mb-col [data-col="add"]');
+    await click(page, '#app-popover [data-pick="member"]');
+    await type(page, "#mb-new-name", "NativeDiagnosis");
+    await type(page, "#mb-new-role", "Diagnosis colleague");
+    await click(page, '.mp-dialog [data-dlg="create"]');
+    await page.waitForSelector(".mp-dialog", { hidden: true });
+    const member = (await snapshot()).members.find(row => row.name === "NativeDiagnosis");
+    if (!member) throw new Error("Diagnosis member was not persisted");
+    await perform(page, { action: "member", id: member.id });
+    await wait(page, ".composer .cmp-input");
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id && row.is_default);
+    if (!conversation) throw new Error("Diagnosis member has no private conversation");
+    await typed(context, "請幫我整理 Gmail [native-diagnosis]", conversation.id);
+    await wait(page, '[data-connector][data-card-state="pending"]');
+    await capture("pending");
+    // The isolated fake vault has neither OAuth configuration nor a Composio key.
+    await click(page, '[data-connector] [data-act="card-connect"]');
+    await wait(page, '[data-connector][data-card-state="failed"]');
+    await capture("failed");
+    let continuation;
+    for (let i = 0; i < 100; i++) {
+      const state = await snapshot();
+      continuation = state.agent_turns.find(row => row.member_id === member.id && row.conversation_id === conversation.id && row.source === "connector" && row.status === "done" && row.text.includes("我已檢查設定"));
+      if (continuation) { result.stored = state; break; }
+      await pause(150);
+    }
+    if (!continuation) throw new Error("Failed connection card never returned a natural reply to the member's completed turn");
+    await page.waitForFunction(id => document.querySelector(`.tn[data-id="${id}"]`)?.innerText.includes("我已檢查設定"), {}, continuation.id);
+    if (await page.$(`[data-resumed="${continuation.id}"]`)) throw new Error("Failed continuation claimed that the app was connected");
+    result.continuation = continuation;
+    const checks = result.stored.agent_steps.filter(step => step.turn_id === continuation.id);
+    if (!checks.some(step => step.tool === "self_check" && step.outcome === "ok")) throw new Error("Member did not run the read-only self-check");
+    if (result.stored.connect_cards.length !== 1) throw new Error("Failure recovery minted another connection card");
+    const failedCard = result.stored.connect_cards[0];
+    if (continuation.member_id !== failedCard.member_id || continuation.conversation_id !== failedCard.conversation_id) throw new Error("Failure continuation escaped the originating member conversation");
+    if (failedCard.error !== "not_configured") throw new Error("Connection card did not preserve the real failure reason");
+    await perform(page, { action: "wait-text", selector: `.mb-col [data-member="${member.id}"] .mb-row-p`, text: "Gmail 還沒登入" });
+    result.ownerCopy = await page.evaluate(checkRendered, "failure-owner-copy");
+    result.assertions = { failure_kind: "auth_expired", reason: failedCard.error, self_check: true,
+      same_member: continuation.member_id === failedCard.member_id,
+      same_conversation: continuation.conversation_id === failedCard.conversation_id, card_count: 1 };
+    await capture("continued");
+  } else if (name === "locale-sweep") {
     result.visits = [];
     const devices = await context.rpc("audio.devices", { refresh: false });
     const deviceNames = [...new Set([devices.automatic_device, devices.selected, ...devices.devices.map(device => device.name)].filter(Boolean))];

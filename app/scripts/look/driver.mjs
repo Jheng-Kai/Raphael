@@ -194,6 +194,13 @@ export async function perform(page, step) {
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
     case "wait": { const element = await visible(step.selector); await element.dispose(); break; }
+    case "wait-text":
+      try {
+        await page.waitForFunction(({ selector, text }) => [...document.querySelectorAll(selector)].some(element =>
+          element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0 && element.textContent.includes(text)),
+        { timeout: 6000 }, { selector: step.selector, text: step.text });
+      } catch (error) { throw new Error(`Text did not appear: ${step.selector}: ${step.text}`, { cause: error }); }
+      break;
     case "wait-gone":
       // A result that is an absence (an uninstalled app's row, a closed dialog): the selector no longer matches anything.
       try { await page.waitForFunction(selector => !document.querySelector(selector), { timeout: 6000 }, step.selector); }

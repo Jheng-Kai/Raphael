@@ -105,13 +105,14 @@ async def test_a_call_that_timed_out_or_was_cancelled_is_charged_its_estimate(ri
     import raphael_core.background.run as module
 
     monkeypatch.setattr(module, "CHAT_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
 
     async def slow(**kwargs):
         await asyncio.sleep(30)
 
-    rig.client.replies = [slow]
+    rig.client.replies = [slow] * 4
     await stop_of(rig.chat())
-    assert rig.run.ledger.total >= 0.02
+    assert rig.run.ledger.total >= 0.08
     before = rig.run.ledger.total
     started = asyncio.Event()
 

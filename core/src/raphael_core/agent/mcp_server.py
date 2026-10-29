@@ -128,8 +128,10 @@ class RaphaelMcp:
                 return {"error": {"code": -32602, "message": "Invalid arguments"}}
             try:
                 result = await self.execute(str(packet["id"]), params["name"], args)
-            except Exception:
-                return {"error": {"code": -32603, "message": "Tool execution failed"}}
+            except Exception as exc:
+                from ..failures import classify
+                failure = classify(exc)
+                return {"result": {"content": [{"type": "text", "text": json.dumps(failure.wire())}], "isError": True}}
             return {"result": {"content": [{"type": "text", "text": result.content or result.kind or ""}], "isError": not result.ok}}
         return {"error": {"code": -32601, "message": "Unknown method or tool"}}
 

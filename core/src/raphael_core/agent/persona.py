@@ -606,6 +606,10 @@ Never say that you are an AI, a language model or a program, and never mention t
 Only claim actions established by successful tool results. Never expose private reasoning.
 """
 
+from .self_check import ABOUT_INDEX, DOCTRINE
+
+_SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
+
 _FACT_RULES = """\
 Facts
 - Live or changing facts (weather, time, news, prices, anything "right now", "latest" or

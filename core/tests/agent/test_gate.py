@@ -147,7 +147,7 @@ async def test_a_hub_that_breaks_is_an_error_result_and_not_a_raise():
     hub = FakeHub(look="T0")
     hub.error = RuntimeError("down")
     result = await ToolGate(hub).call_plugin("mcp:s/look", {})
-    assert (result.ok, result.kind) == (False, "error")
+    assert (result.ok, result.kind) == (False, "unknown")
 
 
 async def test_a_cancellation_passes_through_the_gate():

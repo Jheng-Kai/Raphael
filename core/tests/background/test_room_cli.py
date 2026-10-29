@@ -141,7 +141,7 @@ async def test_cli_room_turn_reports_a_rate_limit_it_cannot_wait_out(make_rig, m
     await until(lambda: rig.task(task).state in ("done", "failed"))
     failed = rig.task(task)
     assert (failed.state, failed.reason) == ("failed", "cli_rate_limited")
-    assert failed.report_text == "Codex CLI is rate-limited right now (too many requests). Try again in a little while."
+    assert failed.report_text == "Codex CLI is receiving too many requests right now. Try again shortly."
     assert AgentHistory(rig.conn).get(turn).status == "error"
     assert len(played) == (1 if first else 3)
 

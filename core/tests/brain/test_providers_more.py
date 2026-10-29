@@ -144,7 +144,7 @@ def test_fallback_settings_roundtrip_and_validation(purpose):
 
 
 @pytest.mark.parametrize("status,explicit,expected", [(429, True, "answer"), (503, True, "answer"),
-    (401, True, "answer"), (401, False, "auth"), (400, True, "error"), (429, False, "rate_limit")])
+    (401, True, "answer"), (401, False, "auth"), (400, True, "unknown"), (429, False, "rate_limit")])
 async def test_router_fallback_policy_and_secret_free_logs(status, explicit, expected, caplog):
     conn, vault, requests = connect(":memory:"), {}, []
     settings = SettingsStore(conn)
@@ -191,7 +191,7 @@ async def test_fallback_exhaustion_reports_last_error_kind():
         client = ProviderRouter(registry, registry.openrouter).for_purpose("cleanup")
         with pytest.raises(OpenRouterError) as error:
             await client.chat_text(model=f"@{primary}:primary", system="s", user="u", timeout_s=1, max_tokens=10)
-        assert error.value.kind == "error" and error.value.status == 504
+        assert error.value.kind == "server" and error.value.status == 504
         assert len(requests) == 2
         await registry.aclose()
     conn.close()

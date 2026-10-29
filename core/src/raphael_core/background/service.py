@@ -403,6 +403,7 @@ class BackgroundService:
         # assistant makes (`AgentService.team_tool`). None until it is given: Raphael's tasks only.
         self._team: Team | None = None
         self._team_tool: Callable[..., Awaitable[ToolResult]] | None = None
+        self.diagnostics = None
         # task id -> the files handed over with it, in memory only, until the task is taken up
         # (they then go with its run, and are gone when it ends). A task run again has none.
         self._attachments: dict[int, list[Attachment]] = {}
@@ -1063,6 +1064,7 @@ class BackgroundService:
             team=self._team_call(speaker, task, ledger) if team else None,
             can_wait=True,
             ask_before_members=speaker.ask_before_members,
+            diagnostics=(lambda: self.diagnostics(speaker, task.turn_id or task.source_turn_id)) if self.diagnostics else None,
         )
         if recovered:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls
@@ -1188,7 +1190,8 @@ class BackgroundService:
             else:
                 reply = dataclasses.asdict(outcome)
                 if loop.failure:
-                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + loop.failure, "final":outcome.final}
+                    legacy = {"rate_limit": "rate_limited", "usage_limit": "quota", "auth_expired": "login", "unknown": "error"}
+                    reply = {"status":"stopped", "kind":"failed", "detail":"cli_" + legacy.get(loop.failure, loop.failure), "final":outcome.final}
                 self._conclude_run(task, run, reply)
         except TimeoutError:
             self._conclude_run(task, run, {"status":"stopped", "kind":"limit_time"})

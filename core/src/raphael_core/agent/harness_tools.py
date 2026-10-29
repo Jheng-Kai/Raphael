@@ -27,6 +27,8 @@ def definition(description, properties=None, required=()):
 
 
 DEFINITIONS = {
+    "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in and reported quota/credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
+    "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
     "routine_create": definition("Create a routine for the current speaker from the owner's request. Translate daily/weekdays/weekly times into a schedule in the owner's local time zone.", ROUTINE_FIELDS, ["title", "prompt", "schedule"]),
     "routine_list": definition("List only the current speaker's routines."),
@@ -60,7 +62,7 @@ for name, command in COMMANDS.items():
         properties, required = {}, []
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
-TIERS = {name: Tier.T0 if name in ("show", "routine_list", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)

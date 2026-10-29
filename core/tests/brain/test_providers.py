@@ -235,7 +235,7 @@ async def test_compatible_tool_roundtrip(kind):
     assert second.content == "done" and second.usage_known
 
 
-@pytest.mark.parametrize("status,kind", [(401, "auth"), (403, "auth"), (429, "rate_limit"), (408, "timeout"), (500, "error")])
+@pytest.mark.parametrize("status,kind", [(401, "auth"), (403, "permission_denied"), (429, "rate_limit"), (408, "timeout"), (500, "server")])
 @pytest.mark.parametrize("native", [False, True])
 async def test_compatible_errors_are_safe(status, kind, native):
     from raphael_core.brain.providers.clients import AnthropicProvider

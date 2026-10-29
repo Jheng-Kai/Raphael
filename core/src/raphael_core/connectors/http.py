@@ -4,12 +4,14 @@ import logging
 from typing import Any
 
 import httpx
+from ..failures import classify
 
 
 class ConnectorFailure(Exception):
-    def __init__(self, kind: str, status: int = 0) -> None:
+    def __init__(self, kind: str, status: int = 0, diagnostic=None) -> None:
         self.kind = kind
         self.status = status
+        self.diagnostic = diagnostic
         super().__init__(kind)
 
 
@@ -41,7 +43,8 @@ class PrivateHttp:
     async def json(self, method: str, url: str, **kwargs: Any) -> dict:
         response = await self.response(method, url, **kwargs)
         if response.status_code >= 300:
-            # Do not pass an upstream error message, URL, body or exception to the router.
+            # Only a bounded, redacted provider message crosses the private boundary.
+            diagnostic = None
             kind = {401: "auth", 403: "auth", 404: "gone", 409: "conflict", 429: "rate_limit"}.get(
                 response.status_code, "http_error")
             try:
@@ -50,12 +53,15 @@ class PrivateHttp:
                 if error == "invalid_grant":
                     kind = "reconnect"
                 detail = error if isinstance(error, dict) else data
+                if isinstance(detail.get("message"), str):
+                    diagnostic = classify({"status": response.status_code, "message": detail["message"]},
+                                          secrets=kwargs.get("headers", {}).values())
                 if response.status_code == 400 and (detail.get("slug") == "ToolRouterV2_ToolkitNotAllowed"
                         or detail.get("code") == "ToolRouterV2_ToolkitNotAllowed"):
                     kind = "toolkit_not_allowed"
             except (ValueError, AttributeError):
                 pass
-            raise ConnectorFailure(kind, response.status_code)
+            raise ConnectorFailure(kind, response.status_code, diagnostic)
         try:
             data = response.json()
         except ValueError:

@@ -17,6 +17,7 @@ from pathlib import Path
 from .process import Child, PrivateFiles, secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory, enabled as native_enabled
 from ..quota import parse_quota
+from ...failures import classify
 from ...clock import wall_clock_ms
 
 logger = logging.getLogger(__name__)
@@ -65,15 +66,21 @@ class Driver:
         self.turn = None
         self.quota = quota
         self.exhausted = False
+        self.reset_at_ms = None
         self._diagnostic_secrets = []
 
     def native_diagnostic(self, stage, value):
         native_capture(stage, value, self._diagnostic_secrets)
 
     def _event(self, kind, text):
-        # Only normalized quota metadata crosses this boundary, never provider diagnostics.
-        if kind == "error" and self.exhausted:
-            text = "quota"
+        if kind == "error":
+            failure = classify(text, secrets=self._diagnostic_secrets)
+            if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
+                failure = classify({"kind": "usage_limit", "message": failure.reason})
+            if failure.kind == "usage_limit" and self.reset_at_ms:
+                reset = datetime.fromtimestamp(self.reset_at_ms / 1000, timezone.utc).isoformat()
+                failure = classify({"kind": failure.kind, "message": f"{failure.reason}; reset: {reset}"})
+            return Event(kind, failure.kind, failure.wire())
         elif kind == "final" and self.quota and not self.exhausted:
             self.quota(self.name, {"exhausted": False})
         return Event(kind, text)
@@ -92,7 +99,7 @@ class Driver:
     async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=()):
         files = PrivateFiles()
         codex_auth = None
-        self._diagnostic_secrets = [token] if native_enabled() else []
+        self._diagnostic_secrets = [token]
         try:
             await files.secure()
             prompt_file = files.write("system.txt", system)
@@ -118,7 +125,7 @@ class Driver:
                 # The thread's `config` is not applied to MCP servers: they are set when the server
                 # starts, the token passed through the environment, never on the command line.
                 home, environ, auth = await codex_home(child_cwd, environ, owner=self.home)
-                if auth and native_enabled():
+                if auth:
                     self._diagnostic_secrets.extend(auth.get("tokens", {}).values())
                 codex_auth = home / "auth.json"
                 if auth is not None:
@@ -182,7 +189,7 @@ class Driver:
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
             self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
-            yield self._event("error", "protocol_or_process_error")
+            yield self._event("error", error)
         finally:
             try:
                 await self.interrupt()
@@ -227,6 +234,7 @@ class Driver:
             data = parse_quota(packet, wall_clock_ms())
             if data is not None:
                 self.exhausted = data["exhausted"]
+                self.reset_at_ms = data.get("reset_at_ms")
                 if self.quota:
                     self.quota(self.name, data)
 
@@ -266,7 +274,8 @@ class Driver:
                 yield Event("usage", data=packet.get("usage", {}))
                 if packet.get("is_error") or packet.get("subtype") != "success":
                     # api_error_status is the HTTP status of the API error that ended the turn.
-                    yield self._event("error", "rate_limited" if packet.get("api_error_status") == 429 else "cli_failed")
+                    yield self._event("error", {"error": packet.get("result") or packet.get("errors") or "CLI failed",
+                                                "status": packet.get("api_error_status")})
                 else:
                     yield self._event("final", packet.get("result") or "")
                 return
@@ -295,8 +304,7 @@ class Driver:
                     yield Event("session", self.session)
                 yield Event("usage", data=result.get("usage") or {})
                 if result.get("status") != "SUCCESS":
-                    error = str(result.get("error") or "").lower()
-                    yield self._event("error", "quota" if "quota" in error or "rate limit" in error else "cli_failed")
+                    yield self._event("error", result.get("error") or "CLI failed")
                 else:
                     yield self._event("final", result.get("response") or "")
                 return
@@ -330,7 +338,7 @@ class Driver:
                         arguments.pop("threadId", None)
                         await request("thread/start", arguments, "session")
                         continue
-                    yield self._event("error", "cli_request_failed")
+                    yield self._event("error", packet.get("error") or "CLI request failed")
                     return
                 result = packet.get("result") or {}
                 if label == "initialize":
@@ -398,12 +406,12 @@ class Driver:
                 if turn.get("status") == "completed":
                     yield self._event("final", final_text)
                 else:
-                    yield self._event("error", "rate_limited" if passing_limit(turn.get("error")) else "cli_turn_failed")
+                    yield self._event("error", turn.get("error") or "CLI turn failed")
                 return
             elif method == "error":
                 if params.get("willRetry") is True:
                     continue  # Codex retries the turn itself; its outcome still comes as turn/completed
-                yield self._event("error", "rate_limited" if passing_limit(params.get("error")) else "cli_error")
+                yield self._event("error", params.get("error") or "CLI error")
                 return
 
 

@@ -977,16 +977,19 @@ async def test_over_the_monthly_limit_answers_are_still_available(
 
 
 async def test_offline_the_commands_still_work_and_the_rest_is_refused_with_the_reason(
-    rig, client, actions
+    rig, client, actions, monkeypatch
 ):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     network = OpenRouterError(0, "network", "offline")
     client.decisions.extend([network, network])
     client.replies.extend([network, network])
-    client.chats.append(network)
+    client.chats.extend([network] * 4)
     assert (await rig.ask("打開 youtube.com"))["prefix"] == "了"  # by the list of words
     assert did(actions) == [("open_url", "https://youtube.com/")]
     result = await rig.ask("台北天氣如何")
-    assert (result["prefix"], result["text"]) == ("否", "無法連線至網路。")
+    assert (result["prefix"], result["text"]) == ("否", "拉斐爾 目前無法連線，請確認網路後再試。")
 
 
 async def test_a_request_the_list_of_words_cannot_find_is_not_guessed_at(rig, client, actions):
@@ -1011,7 +1014,7 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.decisions.append(OpenRouterError(401, "auth", "bad key"))
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
-    assert result["text"] == "OpenRouter 金鑰無法使用。" and client.json_calls == []
+    assert result["text"] == "拉斐爾 還沒登入或缺少金鑰，請到設定 › 連接完成連線。" and client.json_calls == []
 
 
 async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid_for(
