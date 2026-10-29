@@ -97,7 +97,12 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // A task that waits for an app shows its connector card; `cardSignIn` "approve" finishes the sign-in the
   // way the core reports it (authorizing, then connected) and adds the turn that resumes the task.
-  if (variant.connectorCard) data.turns.push(structuredClone(data.connectorTurns[variant.connectorCard]));
+  if (variant.connectorCard) {
+    const turn = structuredClone(data.connectorTurns[variant.connectorCard]);
+    if (variant.connectorMember) Object.assign(turn, { member_id: variant.connectorMember,
+      conversation_id: data.conversations.find(item => item.member_id === variant.connectorMember && item.is_default).id, prefix: "" });
+    data.turns.push(turn);
+  }
   // A task that waits for a key shows its secret card, and one paused for the owner's hands its computer card. The
   // fixture reports their states as the core does and keeps only the states: the key typed into a card is
   // received by `integrations.card_save` and forgotten (`resumeFails`: the task does not continue; `signedIn`:
@@ -438,6 +443,21 @@ export function installMock(fixture, config = {}, target = window) {
             Object.assign(card, { state: "connected", tool_count: 2, resumed: true });
             data.turns.push(structuredClone(data.connectorResume));
             state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
+          }, 0);
+        }
+        if (variant.cardSignIn === "fail") {
+          setTimeout(() => {
+            Object.assign(card, { state: "failed", error: "not_configured" });
+            const continuation = structuredClone(data.connectorResume);
+            Object.assign(continuation, { member_id: turn.member_id, conversation_id: turn.conversation_id,
+              prefix: turn.prefix, text: variant.cardFailureText, resumed_apps: [],
+              steps: [{ kind: "tool", tool: "self_check", server: "Raphael", outcome: "ok", ms: 1 }],
+              messages: [{ seq: 1, kind: "reply", text: variant.cardFailureText, at_ms: continuation.created_at_ms }] });
+            data.turns.push(continuation);
+            Object.assign(data.members.find(member => member.id === continuation.member_id), {
+              preview: continuation.text, last_at: continuation.created_at_ms });
+            state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
+            state.emit({ type: "AgentTurn", turn_id: continuation.id, member_id: continuation.member_id });
           }, 0);
         }
         return { card: copy(card), started: true };

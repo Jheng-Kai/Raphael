@@ -52,6 +52,24 @@ describe("look browser interaction contracts", () => {
     expect(findVisibleElement('[data-action="reply"]').textContent).toBe("Answer");
     expect(findVisibleElement(".missing")).toBeNull();
   });
+  it("waits for updated visible text instead of accepting a stale sidebar preview", async () => {
+    const page = { waitForFunction: vi.fn().mockResolvedValue(undefined) };
+    const step = { action: "wait-text", selector: ".preview", text: "Gmail 還沒登入" };
+    await perform(page, step);
+    const ready = page.waitForFunction.mock.calls[0][0];
+    const query = { selector: step.selector, text: step.text };
+    expect(ready(query)).toBe(false);
+    document.body.innerHTML = '<span class="preview">Old reply</span>';
+    const preview = document.querySelector('.preview');
+    preview.getBoundingClientRect = () => ({ width: 200, height: 30 });
+    expect(ready(query)).toBe(false);
+    preview.textContent = step.text;
+    expect(ready(query)).toBe(true);
+    preview.getBoundingClientRect = () => ({ width: 0, height: 0 });
+    expect(ready(query)).toBe(false);
+    page.waitForFunction.mockRejectedValue(new Error("timeout"));
+    await expect(perform(page, step)).rejects.toThrow("Text did not appear: .preview");
+  });
   it("ignores an empty first match", () => {
     document.body.innerHTML = '<div class="target"></div><div class="target">Ready</div>';
     document.querySelectorAll(".target")[1].getBoundingClientRect = () => ({ width: 100, height: 30 });

@@ -18,6 +18,7 @@ plugins' (`integrations.client.KINDS`), the lookups' (`tools.ToolResult.error`) 
 """
 
 from dataclasses import dataclass
+from ..failures import KINDS
 
 # bad_arguments: the tool was given something it does not take. auth: it needs a new sign-in.
 # missing_secret: a key or token it needs is not set. denied: the sign-in was refused. timeout:
@@ -31,7 +32,7 @@ from dataclasses import dataclass
 # sign-in, a payment, an administrator's prompt); refused_app: an app Raphael never operates;
 # interrupted: the owner's own mouse or keys stopped the run. forbidden: a safety rule of the
 # owner's (`agent.safety`) forbids it, so it was not done. error: anything else.
-REASONS = frozenset(
+REASONS = KINDS | frozenset(
     {
         "bad_arguments",
         "auth",
@@ -96,6 +97,8 @@ def reason_of(outcome: str, kind: str | None) -> str | None:
     "cancelled") because of `kind`; None for a step that went well."""
     if outcome == "ok":
         return None
+    if kind in KINDS:
+        return kind
     if kind:
         kind = _ALIASES.get(kind, kind)
         if kind in REASONS:

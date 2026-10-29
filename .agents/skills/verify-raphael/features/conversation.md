@@ -456,3 +456,43 @@ Team at 1280x800 before pressing Fit, then inspects details at 1920x1080 and
 compact identity at 720x900. It reuses the shared rendered assertions and retains
 per-check failures and actual viewport sizes. No page module or DOM geometry is
 substituted; fake brain remains enabled and no provider request is needed.
+
+## Failure diagnosis and continuation (2026-10-29)
+
+API and subscription CLI brains share the failure taxonomy in `failures.py`.
+Interactive transient failures retry at 1/3/8 seconds only before any tool has acted;
+room/background CLI turns retain their 30/60/120/240-second waits. Failed
+connection and secret cards return a redacted diagnostic to the original member
+and conversation, preserving completed-action receipts. No card is automatically
+reopened and an owner denial never triggers a corrective round. The API harness
+allows one corrective round after a failed tool; two equal tool/failure pairs
+block further attempts with that tool, even with different arguments.
+
+Every interactive and background brain receives the T0 `self_check` and
+`raphael_help` tools plus the shared diagnosis doctrine and About Raphael index.
+Self-check reads existing state only and reports key presence, never key values.
+Full Codex plan windows remain visible in usage; explicit credits entitlement
+allows the turn to continue. A terminal usage limit retains its reset metadata.
+
+Owner replies and retry progress use complete per-kind phrases in Traditional
+Chinese, Japanese or English. Diagnostic IDs and provider reasons stay on the
+brain/tool wire, never in the chat or sidebar preview; the subject is the failed
+service/brain or the speaking member, with Raphael's existing localized name.
+`failure-owner-copy` checks both visible surfaces in `connector-failed-continued`
+and the native self-diagnosis journey, including underscores rendered as italics.
+The native fake brain writes a fixed natural reply independently of this helper.
+
+```powershell
+npm run verify -- --core
+npm run look -- connector-failed-continued connector-reconnected chat-secret-saved-not-resumed --theme both --width 1120,720,1920x1080
+npm run native -- self-diagnosis
+```
+
+`core/tests/agent/test_self_diagnosis.py` covers taxonomy, redaction, credits,
+corrective/denial bounds, repeat failures, reference names and T0 availability.
+The native fake-brain journey exercises the production connection card, failed
+sign-in, self-check and continuation in the original member conversation. Its
+screenshots and SQLite assertions are separate from provider/OAuth acceptance.
+The October 28 quota regression uses a synthetic protocol fixture because the
+original packet is unavailable. Live checks and judge require an authorized
+provider; offline results never establish live or design acceptance.

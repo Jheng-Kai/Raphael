@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 import httpx
 
 from .settings import DEFAULTS
+from ..failures import classify, redact
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +219,10 @@ def _failure(
         logger.warning(
             "OpenRouter call failed: status=%s kind=%s cause=%s", status, kind, type(cause).__name__
         )
-    return OpenRouterError(status, kind, message)
+    failure = classify({"kind": kind, "status": status, "message": message})
+    error = OpenRouterError(status, kind, failure.reason)
+    error.diagnostic = failure
+    return error
 
 
 def _authorization(key: str | None) -> str:
@@ -1019,9 +1023,13 @@ class OpenRouterClient:
         error = _error_object(decoded)
 
         if not response.is_success:
-            raise _failure(status, _kind_for(status, error), _message(error, f"HTTP {status}"))
+            reason = redact(_message(error, f"HTTP {status}"), secrets=[
+                value.removeprefix("Bearer ") for value in headers.values()])
+            raise _failure(status, _kind_for(status, error), reason)
         if isinstance(decoded, dict) and decoded.get("error"):
             # OpenRouter answers 200 once a provider has accepted the request; a failure after
             # that is reported in the body.
+            error = {**error, "message": redact(_message(error, "OpenRouter reported an error"),
+                                                secrets=headers.values())}
             raise _reported_error(error, status, "OpenRouter reported an error")
         return _Reply(status, decoded, latency_ms)

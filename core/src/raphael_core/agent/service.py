@@ -170,6 +170,7 @@ from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
 from .device import DeviceActions
 from .failure import AgentFailure, failure_kind
+from ..failures import Failure, classify
 from .gate import BUILTIN_SERVER, ToolGate
 from .history import VOICE, AgentHistory, Turn
 from .conversations import QUICK, Conversations
@@ -362,9 +363,10 @@ def _tool_result(call: PlannedCall, outcome: PluginResult) -> ToolResult:
     if outcome.ok:
         data = {"content": outcome.text, "cut_short": outcome.truncated}
         return ToolResult(_label(call), True, data, untrusted=True)
-    if outcome.kind == "tool_error":
+    if outcome.text:
+        failure = classify({"message": outcome.text, "kind": outcome.kind if outcome.kind != "tool_error" else None})
         return ToolResult(
-            _label(call), False, {"content": outcome.text}, "tool_error", untrusted=True
+            _label(call), False, {"content": failure.reason, **failure.wire()}, outcome.kind or failure.kind, untrusted=True
         )
     return ToolResult(_label(call), False, None, outcome.kind or "error")
 
@@ -496,9 +498,16 @@ class Resumption:
     secrets: tuple[str, ...] = ()
     report: "ComputerReport | None" = None
     made: list[tuple[str, str]] = field(default_factory=list, compare=False)
+    failure: Failure | None = None
 
     def note(self) -> str:
         parts = []
+        if self.failure is not None:
+            parts.append("The earlier card or continuation failed; nothing is connected or saved unless explicitly listed below. "
+                         "Read this classified reason, run self_check once, then fix what you can or report what only the owner "
+                         "can do and why. Do not create another connection/secret card on your own. "
+                         "If consent was denied, do not try another way to perform that action.\n" +
+                         wrap_untrusted("card_failure", json.dumps(self.failure.wire()), ok=False))
         if self.apps:
             parts.append(f"Now connected: {', '.join(self.apps)}. The owner signed in from the card you showed for the request"
                          " in <question>, which was asked earlier and resumes now, once. Do it now with these apps' tools,"
@@ -673,10 +682,12 @@ class AgentService:
         self._cards = cards
         if cards is not None:
             cards.resume = self.resume_turn
+            cards.failure = self.failure_turn
         # The secret cards: a key the owner saved resumes the task that asked for it, once (`resume_turn`).
         self._secret_cards = secret_cards
         if secret_cards is not None:
             secret_cards.resume = self.resume_turn
+            secret_cards.failure = self.failure_turn
         # The cards of the owner's turn at the computer: a run that ended after it resumes the task, once.
         self._handbacks = handbacks
         if handbacks is not None:
@@ -732,6 +743,13 @@ class AgentService:
         self._plugins = plugins
         self._gate = gate if gate is not None else ToolGate(plugins, conn=conn, now_ms=now_ms)
         self._background = background
+        from types import SimpleNamespace
+        from .self_check import snapshot as diagnostics
+        def task_diagnostics(speaker, turn_id):
+            row = self._conn.execute("SELECT conversation_id,scope FROM agent_turns WHERE id=?", (turn_id,)).fetchone()
+            return diagnostics(self, SimpleNamespace(speaker=speaker, conversation_id=row[0] if row else None,
+                                                      scope=row[1] if row else "background"))
+        background.diagnostics = task_diagnostics
         # The connections to the plugins' servers, kept for a short while: a second question about
         # the same service does not start it again.
         self._pool = McpPool(idle_s=PLUGIN_IDLE_S)
@@ -816,6 +834,10 @@ class AgentService:
         for brain in result["brains"]:
             if brain["windows"]:
                 brain["source"] = "live"
+                if brain.get("credits") is not None:
+                    self.quotas.record(brain["id"], {"windows": [
+                        {**window, "status": "rejected" if window.get("remaining_percent") == 0 else "allowed"}
+                        for window in brain["windows"]], "credits": brain["credits"], "exhausted": False})
             else:
                 brain["windows"] = self.quotas.allowances(brain["id"])
                 brain["source"] = "reported" if brain["windows"] else "unavailable"
@@ -1103,7 +1125,7 @@ class AgentService:
             try:
                 return await self._narrated(ask, settings, ledger)
             except AgentFailure as error:
-                return self._failed(ask, "answer", error.kind, ledger)
+                return self._failed(ask, "answer", error, ledger)
             except Exception as exc:
                 logger.warning("The typed harness failed: %s", type(exc).__name__)
                 return self._failed(ask, "answer", failure_kind(exc), ledger)
@@ -1137,7 +1159,7 @@ class AgentService:
                 return await self._narrated(ask, settings, ledger)
             result = await self._route(ask, decision, settings, ledger)
         except AgentFailure as error:
-            result = self._failed(ask, route, error.kind, ledger)
+            result = self._failed(ask, route, error, ledger)
         except Exception as exc:  # the shell shows no raw errors: this too is a 否 reply
             logger.warning("The %s route failed unexpectedly: %s", route, type(exc).__name__)
             result = self._failed(ask, route, failure_kind(exc), ledger)
@@ -2396,11 +2418,18 @@ class AgentService:
                 if name != "routine_list":
                     self._message(ask, "event", routine_event(name, data, ask.language))
             elif name == CONNECT_APP:
+                if ask.resumption and ask.resumption.failure:
+                    raise HarnessToolError("owner_action_required")
                 data = self._show_card(ask, args)
             elif name == REQUEST_SECRET:
+                if ask.resumption and ask.resumption.failure:
+                    raise HarnessToolError("owner_action_required")
                 data = self._show_secret(ask, args)
             elif name == EMAIL_DRAFT:
                 data = self._show_draft(ask, args)
+            elif name in ("self_check", "raphael_help"):
+                from .self_check import ABOUT, snapshot
+                data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
             elif name in COMMANDS:
                 if ask.source not in _AT_THIS_COMPUTER or ask.nested:
                     raise HarnessToolError("presence_required")
@@ -2434,8 +2463,8 @@ class AgentService:
         except (ValueError, NotApproved, UnknownTool):
             result = ToolResult(name, False, None, "bad_arguments")
         except Exception as exc:
-            logger.warning("A harness tool failed: %s", type(exc).__name__)
-            result = ToolResult(name, False, None, "error")
+            failure = classify(exc)
+            result = ToolResult(name, False, failure.wire(), failure.kind)
         (ask.steps if steps is None else steps).append(self._step("tool", name, BUILTIN_SERVER, "ok" if result.ok else "error", began, result.error))
         self._gate.record_builtin(name, outcome="ok" if result.ok else "error",
                                   approver="auto" if approval is None else "user")
@@ -2546,7 +2575,11 @@ class AgentService:
         found = self._team.find(name) if self._team is not None else None
         return None if found is None else found.id
 
-    async def resume_turn(self, turn_id: int, attempt: int = 1, *, report: "ComputerReport | None" = None) -> Resumed:
+    async def failure_turn(self, turn_id: int, failure: Failure) -> Resumed:
+        return await self.resume_turn(turn_id, failure=failure)
+
+    async def resume_turn(self, turn_id: int, attempt: int = 1, *, report: "ComputerReport | None" = None,
+                          failure: Failure | None = None) -> Resumed:
         """Carry on, once, the request of `turn_id` now that every card it showed is done (the apps
         connected, the keys saved, the computer task ended after the owner's turn): the same request in
         the same thread, which now has what it needs. Whether it went on, and what it did, so that a
@@ -2559,12 +2592,15 @@ class AgentService:
         asking = self._inflight.get(origin.session_id)
         if asking is not None and not asking.done():  # the turn that asked ends first
             await asyncio.wait({asking}, timeout=30.0)
-        resumption = Resumption(turn_id, tuple(APPS[card.app].name for card in apps),
+        if failure is not None and (self._history.get(turn_id) is None or self._was_cancelled(origin.session_id)):
+            return Resumed(True)
+        resumption = Resumption(turn_id, tuple(APPS[card.app].name for card in apps if card.state == "connected"),
                                 frozenset({*(done for card in [*apps, *keys] for done in card.done),
                                            *(report.done if report is not None else ())}),
-                                secrets=tuple(dict.fromkeys(card.name for card in keys)), report=report)
+                                secrets=tuple(dict.fromkeys(card.name for card in keys if card.state in ("saved", "resuming", "resumed"))),
+                                report=report, failure=failure)
         language = report.language if report is not None else (apps or keys)[0].language
-        result = await self.ask(f"connect-{turn_id}" + (f"-{attempt}" if attempt > 1 else ""), origin.question, language, RESUMED,
+        result = await self.ask((f"failure-{turn_id}" if failure else f"connect-{turn_id}") + (f"-{attempt}" if attempt > 1 else ""), origin.question, language, RESUMED,
                                 member_id=origin.member_id, conversation_id=origin.conversation_id, resumption=resumption)
         written = self._history.get(result["turn_id"]) if type(result.get("turn_id")) is int and result["turn_id"] else None
         return Resumed(written is not None and written.status != "error", tuple(resumption.made))
@@ -2900,7 +2936,7 @@ class AgentService:
                 self._record(ask, "exchange", "", "", "running", None, ledger)
                 result = await self._narrated(ask, settings, ledger)
             except AgentFailure as error:
-                failure = error.kind
+                failure = error
             except Exception as exc:
                 logger.warning("A member's answer failed unexpectedly: %s", type(exc).__name__)
                 failure = "error"
@@ -3055,7 +3091,7 @@ class AgentService:
                     followup.ask, self._read_settings(followup.ask.speaker, followup.ask.conversation_id), ledger, loop
                 )
             except AgentFailure as error:
-                return self._failed(followup.ask, "answer", error.kind, ledger)
+                return self._failed(followup.ask, "answer", error, ledger)
         if call.tool.key == CREATE_MEMBER and result.ok:
             # 《了。已建立「小行程」。》, after the yes a rule asked for: nothing more to word.
             created = str((result.data or {}).get("created", ""))
@@ -3413,7 +3449,7 @@ class AgentService:
             try:
                 return await self._narrated(ask, self._read_settings(ask.speaker, ask.conversation_id), run.ledger, loop)
             except AgentFailure as error:
-                return self._failed(ask, "answer", error.kind, run.ledger)
+                return self._failed(ask, "answer", error, run.ledger)
             except Exception as error:
                 logger.warning("The desktop harness failed: %s", type(error).__name__)
                 return self._failed(ask, "answer", "error", run.ledger)
@@ -3810,11 +3846,14 @@ class AgentService:
             task, task_steps = tasks.get(turn.id or 0, (None, []))
             handoffs = self._colleague_events(turn, asked.get(turn.id or 0, []))
             shown = cards.get(turn.id or 0)
-            waited = cards.get(turn.source_turn_id or 0) if turn.source == RESUMED else None
+            successful_resume = turn.source == RESUMED and not turn.session_id.startswith("failure-")
+            waited = [card for card in cards.get(turn.source_turn_id or 0, [])
+                      if card["state"] == "connected"] if successful_resume else None
             asked_keys = keys.get(turn.id or 0)
-            saved_keys = keys.get(turn.source_turn_id or 0) if turn.source == RESUMED else None
+            saved_keys = [card for card in keys.get(turn.source_turn_id or 0, [])
+                          if card["state"] in {"saved", "resuming", "resumed"}] if successful_resume else None
             asked_hands = hands.get(turn.id or 0)
-            given_back = hands.get(turn.source_turn_id or 0) if turn.source == RESUMED else None
+            given_back = hands.get(turn.source_turn_id or 0) if successful_resume else None
             views.append(
                 {
                     "id": turn.id,
@@ -4030,6 +4069,11 @@ class AgentService:
 
     def _failed(self, ask: _Ask, route: str, kind: str, ledger: Ledger) -> dict:
         """The 否 reply for a request that could not be answered, with the reason."""
+        diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
+        kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if diagnostic is not None:
+            name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
+            return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")
         return self._finish(
             ask, route, "negative", phrase(ask.language, kind), ledger, status="error"
         )

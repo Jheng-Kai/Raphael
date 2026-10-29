@@ -315,7 +315,7 @@ async def test_provider_reasoning_intent_and_budget(kind, model, effort, expecte
 @pytest.mark.parametrize("content,finish,kind", [
     (None, "stop", "truncated"), ("", "stop", "truncated"),
     ("  ", "stop", "truncated"), ('{"text":', "length", "truncated"),
-    ("[]", "length", "truncated"), ("not JSON", "stop", "error"),
+    ("[]", "length", "truncated"), ("not JSON", "stop", "bad_response"),
     ('{"text":"Hello world."}', "length", None),
 ])
 async def test_truncated_classification_preserves_usable_json(content, finish, kind, caplog):

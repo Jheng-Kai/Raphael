@@ -25,6 +25,7 @@ is over: the card is saved, with `interrupted`.
 """
 
 import asyncio
+from ..failures import classify
 import json
 import logging
 import re
@@ -206,6 +207,8 @@ class SecretCards:
         self.store = SecretCardStore(conn, now_ms, wait_ms)
         self._conn, self._integrations, self._notify = conn, integrations, notify
         self.resume: Callable[[int, int], Awaitable[object]] | None = None
+        self.failure = None
+        self._reported_failures = set()
         self._tasks: set[asyncio.Task] = set()
 
     def register(self, router) -> None:
@@ -281,6 +284,8 @@ class SecretCards:
         if error:
             failed = self.store.move(card.id, "failed", error=error) or card
             self._changed(failed)
+            self._report_failure(card.turn_id, classify({"kind": "tool_broken" if error == "vault" else "not_found" if error == "gone" else "refused",
+                                                         "message": f"The secret could not be saved ({error})."}))
             return {"card": failed.view(), "saved": False}
         moved = self.store.move(card.id, "saved")
         started = self.store.claim_resume(card.turn_id)
@@ -307,16 +312,37 @@ class SecretCards:
 
     async def _resume(self, turn_id: int, attempt: int) -> None:
         ok, made = False, ()
+        cancelled = False
         try:
             outcome = await self.resume(turn_id, attempt)
             ok, made = bool(getattr(outcome, "ok", False)), tuple(getattr(outcome, "made", ()))
+        except asyncio.CancelledError:
+            cancelled = True
+            raise
         except Exception as exc:
-            logger.warning("A saved card's task could not resume: %s", type(exc).__name__)
+            # A vault exception may contain the submitted value; retain its class only.
+            self._report_failure(turn_id, classify({"kind": "tool_broken", "message": type(exc).__name__}))
         finally:
             # A resume cut off (the core closing) is one that did not continue, like a failed one.
             self.store.resume_finished(turn_id, ok, made)
+            if not ok and not cancelled:
+                self._report_failure(turn_id, classify("resume_failed"))
             for card in self.cards_of(turn_id)[:1]:
                 self._changed(card)
+
+    def _report_failure(self, turn_id, failure):
+        if self.failure is None or turn_id in self._reported_failures:
+            return
+        self._reported_failures.add(turn_id)
+
+        async def report():
+            try:
+                await self.failure(turn_id, failure)
+            except Exception as exc:
+                classify({"kind": "unknown", "message": type(exc).__name__})
+        task = asyncio.create_task(report())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     def _changed(self, card: SecretCard) -> None:
         if self._notify is not None:

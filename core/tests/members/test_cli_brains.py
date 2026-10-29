@@ -74,7 +74,7 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
         assert result["text"] == answer and replies == [answer]
     else:
         assert turn["status"] == "error"
-        assert result["text"] == "Claude Code stopped unexpectedly. Check its login and try again."
+        assert result["text"] == "Claude Code could not complete this task. Check the settings and try once more."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
         assert "Still checking." not in replies
 
@@ -344,7 +344,7 @@ async def test_a_quick_cli_question_fails_at_once_when_rate_limited(setup, tmp_p
     launches = tmp_path / "launches.txt"
     fake_brain(rig, tmp_path, RATE_LIMITED_CODEX.replace("LAUNCHES", repr(str(launches))).replace("ANSWER_ON", "99"), name="codex")
     result = await rig.ask("Explain it")
-    assert result["text"] == "Codex CLI 目前請求太頻繁而被限流，請稍後再試。"
+    assert result["text"] == "Codex CLI 暫時收到太多請求，請稍後再試。"
     assert launches.read_text() == "x"
 
 
@@ -366,7 +366,7 @@ print(json.dumps({"type":"assistant","message":{"content":[{"type":"thinking","t
 sys.exit(1)
 ''')
     result = await typed(rig, "Hello", teacher.id)
-    assert "登入狀態" in result["text"]
+    assert result["text"] == "Claude Code 未能完成這項工作，請檢查設定後再試一次。"
     history = await rig.call("agent.history.list", {"member_id": teacher.id})
     assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(history) + caplog.text
     assert "PRIVATE-REASONING" not in json.dumps(history) + caplog.text

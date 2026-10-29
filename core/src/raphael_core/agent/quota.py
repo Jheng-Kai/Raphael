@@ -8,7 +8,32 @@ from datetime import datetime, timedelta
 
 from ..clock import wall_clock_ms
 
-_LIMIT = re.compile(r"quota|rate.?limit|usage.?limit|limit.{0,24}(?:reached|exceeded)|resource_exhausted|out of.{0,10}(?:usage|credits)|hit your limit", re.I)
+_LIMIT = re.compile(r"quota|usage.?limit|limit.{0,24}(?:reached|exceeded)|resource_exhausted|out of.{0,10}(?:usage|credits)|hit your limit", re.I)
+
+
+def credit_state(packet: dict) -> dict | None:
+    """Normalize only Codex credit fields, without retaining account/provider text."""
+    if not isinstance(packet, dict):
+        return None
+    credits = packet.get("credits")
+    if isinstance(credits, dict):
+        balance = credits.get("balance")
+        try:
+            balance = float(balance) if not isinstance(balance, bool) and balance is not None else None
+            balance = balance if balance is not None and math.isfinite(balance) and balance >= 0 else None
+        except (ValueError, TypeError, OverflowError):
+            balance = None
+        return {"has_credits": credits.get("hasCredits") is True, "unlimited": credits.get("unlimited") is True,
+                "balance": balance}
+    for value in packet.values():
+        if isinstance(value, dict) and (found := credit_state(value)) is not None:
+            return found
+    return None
+
+
+def can_use_credits(state: dict | None) -> bool:
+    # hasCredits is authoritative; a balance alone does not establish entitlement.
+    return bool(state and (state.get("has_credits") is True or state.get("unlimited") is True))
 
 
 def _timestamp(value):
@@ -41,11 +66,17 @@ def parse_quota(packet: dict, now_ms: int) -> dict | None:
                 "windows": [{"period": period, "remaining_percent": remaining,
                              "resets_at": reset // 1000 if reset else None, "status": status}]}
     text = json.dumps(packet, ensure_ascii=False, default=str)[:64000]
+    limit_text = re.sub(r"rate[ _-]?limit", "", text, flags=re.I)
     windows = []
     reported = []
+    denied = False
 
     def visit(item):
+        nonlocal denied
         if isinstance(item, dict):
+            if item.get("error") and _LIMIT.search(re.sub(r"rate[ _-]?limit", "",
+                    json.dumps(item["error"], default=str), flags=re.I)):
+                denied = True
             percent = item.get("usedPercent", item.get("used_percent"))
             if type(percent) in (int, float) and math.isfinite(percent):
                 reset = _timestamp(item.get("resetsAt", item.get("resets_at")))
@@ -64,9 +95,15 @@ def parse_quota(packet: dict, now_ms: int) -> dict | None:
     visit(packet)
     if windows:
         exhausted = [reset for full, reset in windows if full and (reset is None or reset > now_ms)]
-        return {"exhausted": bool(exhausted), "reset_at_ms": max((r for r in exhausted if r), default=None),
+        credits = credit_state(packet)
+        blocked = denied or bool(exhausted) and not can_use_credits(credits)
+        return {"exhausted": blocked, "reset_at_ms": max((r for r in exhausted if r), default=None) if blocked else None,
+                **({"terminal": True} if denied else {}),
+                **({"credits": credits} if credits is not None else {}),
                 **({"windows": reported} if reported else {})}
-    if not _LIMIT.search(text):
+    if (credits := credit_state(packet)) is not None and not _LIMIT.search(limit_text):
+        return {"exhausted": False, "reset_at_ms": None, "credits": credits}
+    if not _LIMIT.search(limit_text):
         return None
     resets = []
 
@@ -108,11 +145,14 @@ def parse_quota(packet: dict, now_ms: int) -> dict | None:
 class Quotas:
     def __init__(self, conn: sqlite3.Connection, now_ms=wall_clock_ms, notify=None):
         self.conn, self.now_ms, self.notify = conn, now_ms, notify
+        self.credits: dict[str, dict] = {}
 
     def record(self, provider: str, data: dict) -> None:
         if provider not in ("codex", "claude", "gemini"):
             return
         reset = data.get("reset_at_ms")
+        if isinstance(data.get("credits"), dict):
+            self.credits[provider] = data["credits"]
         with self.conn:
             for window in data.get("windows", []):
                 period, status = window.get("period"), window.get("status")
@@ -122,12 +162,14 @@ class Quotas:
                 remaining = remaining if type(remaining) in (int, float) and math.isfinite(remaining) and 0 <= remaining <= 100 else None
                 self.conn.execute("INSERT INTO subscription_allowances VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(provider, period) DO UPDATE SET remaining_percent=excluded.remaining_percent, resets_at=excluded.resets_at, status=excluded.status, updated_at_ms=excluded.updated_at_ms",
                                   (provider, period, remaining, stamp if type(stamp) is int and stamp > 0 else None, status, self.now_ms()))
-            if data.get("windows") or not data.get("exhausted") and self.allowances(provider):
+            if not data.get("terminal") and (data.get("windows") or not data.get("exhausted") and self.allowances(provider)):
                 # A healthy short window must not clear a still-rejected weekly window.
                 rejected = [w for w in self.allowances(provider) if w["status"] == "rejected"
                             and (w["resets_at"] is None or w["resets_at"] * 1000 > self.now_ms())]
                 data = {"exhausted": bool(rejected)}
                 reset = None if any(w["resets_at"] is None for w in rejected) else max((w["resets_at"] * 1000 for w in rejected), default=None)
+                if can_use_credits(self.credits.get(provider)):
+                    data = {"exhausted": False}
             if not data.get("exhausted") or (type(reset) is int and reset <= self.now_ms()):
                 self.conn.execute("DELETE FROM subscription_quotas WHERE provider = ?", (provider,))
             else:

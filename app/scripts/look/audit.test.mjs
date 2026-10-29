@@ -6,6 +6,26 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects machine diagnostics in failure replies and sidebar previews, including Markdown italics", () => {
+    const win = new Window();
+    const natural = "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。";
+    win.document.body.innerHTML = `<div class="tn"><div class="ra"><div class="chat-message" data-expandable>${natural}</div></div></div><div class="mb-col"><div data-member="1" aria-current="true"><span class="mb-row-p">${natural}</span></div></div>`;
+    const reply = win.document.querySelector('.chat-message'), preview = win.document.querySelector('.mb-row-p');
+    for (const element of [reply, preview]) element.getBoundingClientRect = () => ({ width: 200, height: 40 });
+    vi.stubGlobal('document', win.document);
+    try {
+      expect(checkRendered('failure-owner-copy').preview).toBe(natural);
+      for (const element of [reply, preview]) {
+        for (const token of ['auth_expired', '(auth<em>expired</em>)', ';', 'not_configured']) {
+          element.innerHTML = `${natural} ${token}`;
+          expect(() => checkRendered('failure-owner-copy')).toThrow('exposes no machine diagnostic');
+        }
+        element.textContent = natural;
+      }
+      preview.remove();
+      expect(() => checkRendered('failure-owner-copy')).toThrow('sidebar preview are visible');
+    } finally { vi.unstubAllGlobals(); win.happyDOM.abort(); }
+  });
   it("allows movable canvas wrappers to extend while retaining card and document overflow checks", () => {
     const win = new Window();
     win.document.body.innerHTML = '<div class="team-board-scroll" style="overflow:hidden"><div class="team-board"><div class="team-groups"><section class="team-group" style="transform:translate(36px,64px)"><span id="label">Long member name</span></section></div></div></div><div id="outside">Other content</div>';

@@ -219,8 +219,10 @@ class TaskRun:
         team: "TeamCall | None" = None,
         can_wait: bool = False,
         ask_before_members: bool = False,
+        diagnostics: Callable[[], dict] | None = None,
     ) -> None:
         self._memory = memory
+        self._diagnostics = diagnostics
         # The team tools (`agent.team`), made for this task's speaker on this task's ledger.
         self._team = team
         self.handoff_receipts = []
@@ -395,9 +397,13 @@ class TaskRun:
         remaining = self._remaining_s()
         timeout = min(CHAT_TIMEOUT_S, remaining)
         try:
-            turn = await self._guarded(
-                asyncio.wait_for(
-                    self._client.chat_tools(
+            from ..failures import RETRY_WAITS, classify
+            waits = iter(RETRY_WAITS)
+            while True:
+                remaining = self._remaining_s()
+                timeout = min(CHAT_TIMEOUT_S, remaining)
+                try:
+                    turn = await self._guarded(asyncio.wait_for(self._client.chat_tools(
                         model=self.model,
                         # The task's own model answers with all of its time: live, a fallback model
                         # took over slow replies, each attempt getting a third of the time.
@@ -408,10 +414,18 @@ class TaskRun:
                         timeout_s=timeout,
                         max_tokens=CHAT_MAX_TOKENS,
                         reasoning_effort="none",
-                    ),
-                    timeout,
-                )
-            )
+                    ), timeout))
+                    break
+                except RpcError:
+                    raise
+                except Exception as error:
+                    failure = classify(error)
+                    wait = next(waits, None)
+                    if self.tool_calls or not failure.transient or wait is None or wait >= self._remaining_s():
+                        raise
+                    if isinstance(error, TimeoutError):
+                        self._charge_estimate(request_chars)
+                    await self._guarded(asyncio.sleep(wait))
         except OpenRouterError as error:
             logger.warning(
                 "The task's model failed: kind=%s status=%s", error.kind, error.status
@@ -743,6 +757,11 @@ class TaskRun:
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
+            if name in ("self_check", "raphael_help"):
+                from ..agent.self_check import ABOUT
+                data = ({"reference": ABOUT} if name == "raphael_help" else
+                        self._diagnostics() if self._diagnostics else {"state": "unknown"})
+                return ToolResult(name, True, data)
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()

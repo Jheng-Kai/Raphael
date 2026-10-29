@@ -18,7 +18,13 @@ class FakeClient:
 
     async def chat_tools(self, **kwargs):
         self.requests.append(kwargs)
-        content, calls = next(self.turns)
+        from raphael_core.failures import CORRECTIVE_NOTE
+        if kwargs["messages"][-1].get("content") == CORRECTIVE_NOTE:
+            content, calls = self.last_final, []
+        else:
+            content, calls = next(self.turns)
+        if not calls:
+            self.last_final = content
         return ChatTurn(content, [ChatToolCall(str(i), name, args, json.dumps(args)) for i, (name, args) in enumerate(calls)], kwargs["model"], .001, 10, 10, 1)
 
 
@@ -162,7 +168,7 @@ async def test_provider_error_is_classified_without_secret_text(conn, tmp_path):
         async def chat_tools(self, **kwargs):
             raise RuntimeError("synthetic-secret-never-report")
     result = await cell("fake/model", 0, SCENARIOS[1], brains=FakeBrains(tmp_path), client=BrokenClient(), sessions=Sessions(conn), conn=conn, budget=Budget(5))
-    assert result["status"] == "FAIL" and result["reason"] == "RuntimeError"
+    assert result["status"] == "FAIL" and result["reason"] == "unknown"
     assert "synthetic-secret" not in json.dumps(result)
 
 

@@ -260,8 +260,13 @@ def take_snapshot(
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
     snapshot = Snapshot(refs, definitions)
+    for name in ("self_check", "raphael_help"):
+        refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, Tier.T0)
+        definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
         for name, item in definitions_for(speaker.id):
+            if name in ("self_check", "raphael_help"):
+                continue
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})

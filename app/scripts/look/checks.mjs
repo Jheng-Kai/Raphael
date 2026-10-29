@@ -34,6 +34,18 @@ export function checkRendered(name) {
     }
     return {check:name,captionHeight:caption.getBoundingClientRect().height,identity:visible(identity)};
   }
+  if (name === "failure-owner-copy") {
+    const replies = [...document.querySelectorAll('.tn .ra .chat-message[data-expandable]')].filter(visible);
+    const reply = replies.at(-1), preview = document.querySelector('.mb-col [data-member][aria-current="true"] .mb-row-p');
+    require(visible(reply) && visible(preview), "the reply and its sidebar preview are visible");
+    const copy = { reply: reply.textContent.trim(), preview: preview.textContent.trim() };
+    for (const [surface, text] of Object.entries(copy)) {
+      require(text.includes("Gmail") && text.includes("還沒登入"), `${surface} explains the connection failure naturally`);
+      require(!/[a-z]+_[a-z_]+|[（(]\s*(?:credits|usage_?limit|rate_?limit|overloaded|server|auth_?expired|network|permission_?denied|not_?found|tool_?broken|timeout|refused|unknown)\s*[）)]|;|not_?configured/i.test(text), `${surface} exposes no machine diagnostic or ASCII semicolon`);
+    }
+    require(!reply.querySelector("em"), "machine underscores cannot become italics in the reply");
+    return { check: name, ...copy };
+  }
   if (name === "details-pointer-focus") {
     const close = document.querySelector('.mb-det [data-det="close"]');
     require(visible(close), "details opened from the pointer");

@@ -19,6 +19,7 @@ from .answers import Reply, loose_reply, parse_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
+from ..failures import RepeatFailures, RETRY_WAITS, classify, tool_failure
 
 PUBLIC_PROGRESS_RULES = """
 This is a live conversation: your owner sees your messages while you work.
@@ -123,15 +124,33 @@ class NarratedLoop:
         self.response: dict | None = None
         self.seen: list[ToolResult] = []
         self.batch_calls = []
+        self.failure_guard = RepeatFailures()
+        self.last_failure = None
+        self.acted = False
 
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
         began = time.perf_counter()
         try:
-            answer = await asyncio.wait_for(self.client.chat_tools(
-                model=self.model, fallbacks=self.fallbacks,
-                messages=list(messages), tools=list(tools), timeout_s=60,
-                max_tokens=4000, reasoning_effort=self.reasoning_effort,
-            ), 60)
+            waits = iter(RETRY_WAITS)
+            while True:
+                try:
+                    answer = await asyncio.wait_for(self.client.chat_tools(
+                        model=self.model, fallbacks=self.fallbacks,
+                        messages=list(messages), tools=list(tools), timeout_s=60,
+                        max_tokens=4000, reasoning_effort=self.reasoning_effort,
+                    ), 60)
+                    self.last_failure = None
+                    break
+                except Stop:
+                    raise
+                except Exception as error:
+                    self.last_failure = classify(error)
+                    wait = next(waits, None)
+                    if self.acted or not self.last_failure.transient or wait is None:
+                        raise
+                    await asyncio.sleep(wait)
+        except Stop:
+            raise
         except OpenRouterError as error:
             self.ledger.add(model=self.model, cost_usd=0, ms=int((time.perf_counter()-began)*1000), outcome="error")
             raise Stop("failed", failure_kind(error)) from None
@@ -143,6 +162,9 @@ class NarratedLoop:
             self.ledger.add(model=self.model, cost_usd=estimate_cost(self.model, len(str(messages))),
                             ms=int((time.perf_counter()-began)*1000), outcome="cancelled")
             raise
+        except Exception as error:
+            self.last_failure = classify(error)
+            raise Stop("failed", self.last_failure.kind) from None
         self.ledger.add(
             model=answer.model, cost_usd=answer.cost_usd if answer.usage_known else max(
                 answer.cost_usd, estimate_cost(self.model, len(str(messages)))
@@ -168,6 +190,7 @@ class NarratedLoop:
         ])
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
+        self.acted = True
         return await self.execute(call_id, name, arguments)
 
     async def run(self) -> Outcome:
@@ -176,6 +199,8 @@ class NarratedLoop:
             self, system=self.system, user=self.user, tools=self.tools,
             limits=Limits(80 - self.model_calls, 200 - self.tool_calls, self.remaining_s),
             messages=self.messages,
+            failure_guard=self.failure_guard,
+            corrective_rounds=1,
         )
         self.remaining_s = max(0, self.remaining_s - (time.monotonic() - began))
         self.model_calls += outcome.model_calls
@@ -198,11 +223,15 @@ class NarratedLoop:
             outcome = result if call["id"] == self.waiting_call else ToolOutcome(
                 False, "not_made", "The batch paused for approval. Call again if still needed."
             )
+            if call["id"] == self.waiting_call and not outcome.ok:
+                self.failure_guard.record(name, tool_failure(outcome.kind, outcome.content).kind)
             self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": result_text(name, outcome)})
         self.response = None
 
     def reply(self, outcome: Outcome) -> Reply:
         if outcome.status != "done":
+            if self.last_failure is not None and outcome.kind == "failed":
+                raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure)
             raise AgentFailure(outcome.detail or "error")
         objects, prose = _content(outcome.final)
         data = next((obj for obj in reversed(objects) if "text" in obj or "messages" in obj),

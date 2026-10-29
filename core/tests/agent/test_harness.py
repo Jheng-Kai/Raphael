@@ -80,9 +80,10 @@ async def test_show_refuses_an_unseen_url_before_any_fetch(make_rig, client, mon
         pytest.fail("Unseen URL reached the fetcher")
 
     monkeypatch.setattr(rig.service._tools, "show", unexpected)
-    client.chats = [chat("Showing a reference.", ("show", {"url": "https://unseen.example/"})), chat('{"text":"Which reference did you mean?","detail":""}')]
+    client.chats = [chat("Showing a reference.", ("show", {"url": "https://unseen.example/"})),
+                    chat('{"text":"Which reference did you mean?","detail":""}'), chat('{"text":"Please provide the reference."}')]
     await typed(rig, "Show it")
-    assert "url_not_seen" in client.chat_calls[-1]["messages"][-1]["content"]
+    assert any("url_not_seen" in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
 
 
 async def test_only_explicit_public_fields_are_published_from_structured_narration(make_rig, client):

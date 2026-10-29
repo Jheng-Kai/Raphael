@@ -5,6 +5,7 @@ import json
 
 from .discovery import cli_available
 from .process import Child
+from ..quota import credit_state
 
 
 async def read_allowances(brains):
@@ -18,7 +19,8 @@ async def read_allowances(brains):
         if cli_available(command, signed_in, disconnected):
             rows.append({"id": name, "name": label, "windows": []})
     if any(row["id"] == "codex" for row in rows):
-        rows[0]["windows"] = await _codex_windows(brains)
+        row = next(row for row in rows if row["id"] == "codex")
+        row.update(await _codex_windows(brains))
     return {"brains": rows}
 
 
@@ -69,8 +71,9 @@ async def _codex_windows(brains):
             if period and type(used) is int and 0 <= used <= 100:
                 windows.append({"period": period, "remaining_percent": 100 - used,
                                 "resets_at": reset if type(reset) is int and reset > 0 else None})
-        return windows
+        credits = credit_state(snapshot)
+        return {"windows": windows, **({"credits": credits} if credits is not None else {})}
     except (OSError, ValueError, TypeError, AttributeError, TimeoutError):
-        return []
+        return {"windows": []}
     finally:
         await child.kill()

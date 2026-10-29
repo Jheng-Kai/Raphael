@@ -32,6 +32,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from ..failures import RepeatFailures, REPEAT_NOTE, CORRECTIVE_NOTE, tool_failure, redact
 
 from .guards import (
     MAX_ARGUMENT_CHARS,
@@ -189,6 +190,8 @@ async def run_task(
     cancelled: asyncio.Event | None = None,
     clock: Callable[[], float] = time.monotonic,
     messages: Sequence[dict] | None = None,
+    failure_guard: RepeatFailures | None = None,
+    corrective_rounds: int = 0,
 ) -> Outcome:
     """Carry out a task. `system` and `user` are the first two messages of the conversation (the
     core wrote them), `tools` the tools the model is offered in the chat format; a task that goes
@@ -207,6 +210,10 @@ async def run_task(
     messages = conversation
     repeats = RepeatGuard()
     failures = FailureGuard()
+    failure_guard = failure_guard or RepeatFailures()
+    corrective = any(message.get("role") == "user" and message.get("content") == CORRECTIVE_NOTE
+                     for message in messages)
+    last_failed = owner_denied = False
     deadline = clock() + limits.seconds
     model_calls = tool_calls = 0
 
@@ -225,12 +232,19 @@ async def run_task(
             model_calls += 1
             messages.append(_assistant_message(turn))
             if not turn.calls:
+                if last_failed and not owner_denied and not corrective and corrective_rounds:
+                    corrective = True
+                    messages.append({"role": "user", "content": CORRECTIVE_NOTE})
+                    continue
                 return Outcome("done", turn.content, None, None, model_calls, tool_calls)
+            last_failed = False
             steer = False
             dispatched = False
             for call in turn.calls:
                 # Every hand-off of a batch starts now; anything else in it waits for the delegated work.
                 refusal = WAITING_FOR_WORK if dispatched and call.name != "handoff" else _refusal(call, offered, repeats)
+                if refusal is None and failure_guard.blocked(call.name):
+                    refusal = REPEAT_NOTE
                 if refusal is None:
                     check_before("limit_tool", tool_calls, limits.tool_calls)
                     tool_calls += 1
@@ -250,6 +264,13 @@ async def run_task(
                     if outcome.ok:
                         failures.succeeded()
                     else:
+                        last_failed = True
+                        owner_denied = owner_denied or outcome.kind in (
+                            "denied", "declined", "cancelled", "owner_denied", "forbidden",
+                            "presence_required", "private_chat_only", "member_create_limit")
+                        failure = tool_failure(outcome.kind, outcome.content)
+                        if failure_guard.record(call.name, failure.kind):
+                            content += "\n" + REPEAT_NOTE
                         verdict = failures.failed()
                         if verdict == "stop":
                             raise Stop("failed", "tool_failures")
@@ -295,8 +316,10 @@ def result_text(name: str, outcome: ToolOutcome) -> str:
         return wrap_untrusted(name, outcome.content, ok=True)
     if outcome.instruction:
         return wrap_untrusted(name, f"The call was refused. {outcome.instruction}", ok=False)
-    reason = outcome.kind or "error"
+    reason = tool_failure(outcome.kind, outcome.content, record=False).kind
+    if outcome.kind and reason != outcome.kind:
+        reason += "; " + redact(outcome.kind)
     text = f"The call failed ({reason})."
     if outcome.content:  # a tool that says why it failed: its words are data too
-        text += f"\n{outcome.content}"
+        text += f"\n{redact(outcome.content)}"
     return wrap_untrusted(name, text, ok=False)

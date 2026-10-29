@@ -283,7 +283,13 @@ class EchoClient:
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_consult
+        from .native_journeys import native_consult, native_diagnosis
+        diagnosis = native_diagnosis(messages, offered, seen)
+        if diagnosis is not None:
+            name, value = diagnosis
+            if name == "reply":
+                return ChatTurn(json.dumps({"text": value}), [], "fake/echo", 0.0, 0, 0, 0)
+            return calling(name, value)
         consult = native_consult(messages, offered, seen)
         if consult is not None:
             return calling("ask_member", consult)

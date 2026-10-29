@@ -1,6 +1,14 @@
 {
   "version": 1,
   "tools": {
+    "raphael/core/self_check": {
+      "scenario_ids": ["S21.diagnostics.self-check"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/raphael_help": {
+      "scenario_ids": ["S21.diagnostics.help"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/handoff": {
       "scenario_ids": ["S03.immediate-start", "S08.immediate-start"],
       "expected_assertions": ["immediate_start"]

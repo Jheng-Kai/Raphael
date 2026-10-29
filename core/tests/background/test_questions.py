@@ -350,7 +350,7 @@ async def test_a_rule_that_forbids_refuses_the_call_and_the_task_goes_on(make_ri
     [done] = await rig.wait_for_reports()
     assert done["text"] == "Could not note it." and calls == [] and questions(rig) == []
     told = rig.client.chat_calls[1]["messages"][-1]["content"]
-    assert "(forbidden)" in told and "「寫筆記」 forbids this call" in told
+    assert "refused; forbidden" in told and "「寫筆記」 forbids this call" in told
     steps = [(s.tool, s.outcome, s.reason) for s in rig.steps(task_id) if s.kind == "tool"]
     assert steps == [("note", "blocked", "forbidden")]
 

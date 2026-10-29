@@ -29,13 +29,16 @@ async def test_router_timeout_hands_voice_to_the_harness_with_conversation(make_
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), OpenRouterError(0, "timeout", "slow")])
-async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(make_rig, client, error):
+async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(make_rig, client, error, monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     rig = make_rig()
     client.decisions.append(decision("answer", route_confidence=0.1))
     client.replies.append(TimeoutError())
-    client.chats.append(error)
+    client.chats.extend([error] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "The request took too long. Please try again."
+    assert result["text"] == "Raphael took too long to respond. Try again later."
     [turn] = await rig.turns()
     assert turn["status"] == "error" and turn["route"] == "answer"
 
@@ -44,14 +47,17 @@ async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(ma
     OpenRouterError(0, "network", "unreachable"), ConnectionError("unreachable"),
     httpx.ConnectError("unreachable"),
 ])
-async def test_a_connection_failure_is_offline_only_after_the_harness_also_fails(make_rig, client, connection):
+async def test_a_connection_failure_is_offline_only_after_the_harness_also_fails(make_rig, client, connection, monkeypatch):
+    async def no_wait(_):
+        pass
+    monkeypatch.setattr("raphael_core.agent.narration.asyncio.sleep", no_wait)
     rig = make_rig()
     client.decisions.append(OpenRouterError(0, "network", "unreachable"))
     client.replies.append(OpenRouterError(0, "network", "unreachable"))
-    client.chats.append(connection)
+    client.chats.extend([connection] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "The network is unreachable."
-    assert len(client.chat_calls) == 1
+    assert result["text"] == "Raphael cannot connect right now. Check your network and try again."
+    assert len(client.chat_calls) == 4
 
 
 @pytest.mark.parametrize("route", ["unclear", "unsure", "timeout", "broken"])

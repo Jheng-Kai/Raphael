@@ -261,7 +261,7 @@ async def test_codex_malformed_login_fails_without_launching_child_or_logging_co
     events = [event async for event in driver.run(user="Hi", system="Persona", endpoint="http://127.0.0.1:1/mcp",
         token="ephemeral", cwd=str(tmp_path), permission=None)]
     assert driver.child is None
-    assert events[-1].kind == "error" and events[-1].text == "protocol_or_process_error"
+    assert events[-1].kind == "error" and events[-1].text == ("tool_broken" if content == "not-json" else "auth_expired")
     assert "secret" not in caplog.text
     assert auth.read_text(encoding="utf-8") == content
 
@@ -402,15 +402,15 @@ else:
     expected = {"exhausted": False} if state == "recovered" else {"exhausted": True, "reset_at_ms": NOW + 3600000}
     assert recorded == [(name, expected)]
     assert events[-1].kind == ("error" if state == "failed" else "final")
-    assert events[-1].text == ("quota" if state == "failed" else "Public answer.")
+    assert events[-1].text == ("usage_limit" if state == "failed" else "Public answer.")
     assert all("PRIVATE-DIAGNOSTIC" not in event.text for event in events)
 
 
 @pytest.mark.parametrize("shape,expected", [
-    ("notified", ("error", "rate_limited")), ("snake_case", ("error", "rate_limited")),
-    ("retried", ("final", "Public answer.")), ("exhausted", ("error", "quota")), ("other", ("error", "cli_turn_failed")),
+    ("notified", ("error", "rate_limit")), ("snake_case", ("error", "rate_limit")),
+    ("retried", ("final", "Public answer.")), ("exhausted", ("error", "usage_limit")), ("other", ("error", "unknown")),
     # Live: "Selected model is at capacity" passes after a wait, like a 429.
-    ("overloaded", ("error", "rate_limited")), ("overloaded_snake", ("error", "rate_limited")),
+    ("overloaded", ("error", "overloaded")), ("overloaded_snake", ("error", "overloaded")),
 ])
 async def test_codex_too_many_requests_is_a_rate_limit_unless_the_plan_is_exhausted(tmp_path, monkeypatch, shape, expected):
     from raphael_core.agent.cli.drivers import Driver
@@ -454,7 +454,7 @@ for line in sys.stdin:
     assert all("PRIVATE-DIAGNOSTIC" not in event.text and "429" not in event.text for event in events)
 
 
-@pytest.mark.parametrize("shape,expected", [("limited", "rate_limited"), ("exhausted", "quota"), ("other", "cli_failed")])
+@pytest.mark.parametrize("shape,expected", [("limited", "rate_limit"), ("exhausted", "usage_limit"), ("other", "server")])
 async def test_claude_api_429_is_a_rate_limit_unless_the_plan_window_is_rejected(tmp_path, monkeypatch, shape, expected):
     from raphael_core.agent.cli.drivers import Driver
     from .test_quota import NOW

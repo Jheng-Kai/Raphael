@@ -36,6 +36,7 @@ from .apps import APPS, App
 from .composio import KEY
 from .google import PREFIX
 from .service import GOOGLE_SERVER
+from ..failures import classify
 
 logger = logging.getLogger(__name__)
 
@@ -161,9 +162,10 @@ class CardStore:
 
 
 class _Failed(Exception):
-    def __init__(self, kind: str) -> None:
+    def __init__(self, kind: str, diagnostic=None) -> None:
         super().__init__(kind)
         self.kind = kind
+        self.diagnostic = diagnostic
 
 
 class ConnectorCards:
@@ -177,6 +179,8 @@ class ConnectorCards:
         self.store = CardStore(conn, now_ms, wait_ms)
         self._conn, self._router, self._connectors, self._notify = conn, router, connectors, notify
         self.resume: Callable[[int], Awaitable[None]] | None = None
+        self.failure = None
+        self._reported_failures = set()
         self._login: tuple[str, asyncio.Task] | None = None
         self._owner_cancelled = False
         self._tasks: set[asyncio.Task] = set()
@@ -269,6 +273,7 @@ class ConnectorCards:
 
     async def _sign_in(self, card: Card) -> None:
         app = APPS[card.app]
+        diagnostic = None
         try:
             try:
                 if not self.ready_tools(app):
@@ -277,15 +282,20 @@ class ConnectorCards:
                         raise _Failed("not_configured")
                     result = await self._router.call(*provider)
                     if not result.get("connected"):
-                        raise _Failed(_FAILURES.get(str(result.get("error")), "error"))
+                        raw = str(result.get("error") or "unknown")
+                        raise _Failed(_FAILURES.get(raw, classify(raw).kind),
+                                      classify(result["failure"]) if result.get("failure") else None)
                 tools = self.ready_tools(app)
                 if not tools:
                     raise _Failed("scope")
                 ended = self.store.move(card.id, "connected", tool_count=len(tools))
             except _Failed as failure:
+                diagnostic = failure.diagnostic
                 ended = self.store.move(card.id, "failed", error=failure.kind)
-            except RpcError:
-                ended = self.store.move(card.id, "failed", error="error")
+            except Exception as exc:
+                failure = classify(exc)
+                diagnostic = failure
+                ended = self.store.move(card.id, "failed", error=failure.kind)
             except asyncio.CancelledError:
                 if not self._owner_cancelled:
                     self.store.move(card.id, "failed", error="interrupted")
@@ -297,9 +307,21 @@ class ConnectorCards:
             self._changed(self.store.get(card.id) or card)
         if ended is not None and ended.state == "connected" and self.store.claim_resume(ended.turn_id) and self.resume:
             try:
-                await self.resume(ended.turn_id)
+                outcome = await self.resume(ended.turn_id)
+                if getattr(outcome, "ok", True) is False:
+                    await self._failed(ended, classify("resume_failed"))
             except Exception as exc:
-                logger.warning("A connected card's task could not resume: %s", type(exc).__name__)
+                await self._failed(ended, classify(exc))
+        elif ended is not None and ended.state == "failed":
+            await self._failed(ended, diagnostic or classify(ended.error))
+
+    async def _failed(self, card, failure):
+        if self.failure is not None and card.turn_id not in self._reported_failures:
+            self._reported_failures.add(card.turn_id)
+            try:
+                await self.failure(card.turn_id, failure)
+            except Exception as exc:
+                classify(exc)
 
     def _changed(self, card: Card) -> None:
         if self._notify is not None:
