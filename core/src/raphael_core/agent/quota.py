@@ -150,6 +150,7 @@ class Quotas:
     def record(self, provider: str, data: dict) -> None:
         if provider not in ("codex", "claude", "gemini"):
             return
+        before = self._state(provider)
         reset = data.get("reset_at_ms")
         if isinstance(data.get("credits"), dict):
             self.credits[provider] = data["credits"]
@@ -175,8 +176,14 @@ class Quotas:
             else:
                 self.conn.execute("INSERT INTO subscription_quotas VALUES (?, ?, ?) ON CONFLICT(provider) DO UPDATE SET reset_at_ms = excluded.reset_at_ms, updated_at_ms = excluded.updated_at_ms",
                                   (provider, reset if type(reset) is int else None, self.now_ms()))
-        if self.notify:
+        # Usage reads record live windows; only a real change may notify, or every reader reloads forever.
+        if self.notify and self._state(provider) != before:
             self.notify("quota.changed", {})
+
+    def _state(self, provider: str):
+        windows = [(w["period"], w["remaining_percent"], w["resets_at"], w["status"]) for w in self.allowances(provider)]
+        blocked = self.conn.execute("SELECT reset_at_ms FROM subscription_quotas WHERE provider = ?", (provider,)).fetchone()
+        return windows, None if blocked is None else (blocked[0],), self.credits.get(provider)
 
     def allowances(self, provider: str) -> list[dict]:
         return [dict(row) for row in self.conn.execute(

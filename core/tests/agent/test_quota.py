@@ -90,6 +90,21 @@ def test_quota_persists_expires_and_clears_on_recovery(conn):
     assert events[-1][0] == "quota.changed"
 
 
+def test_recording_an_unchanged_quota_does_not_notify(conn):
+    # Reading usage records live windows; a change event on every read made Home and Usage reload forever.
+    now = [NOW]
+    events = []
+    store = Quotas(conn, lambda: now[0], lambda method, params: events.append(method))
+    live = {"windows": [{"period": "fiveHour", "remaining_percent": 40, "resets_at": NOW // 1000 + 3600, "status": "allowed"}],
+            "credits": {"has_credits": True, "unlimited": False, "balance": 5.0}, "exhausted": False}
+    store.record("codex", live)
+    now[0] += 5000
+    store.record("codex", live)
+    assert events == ["quota.changed"]
+    store.record("codex", {**live, "windows": [{**live["windows"][0], "remaining_percent": 0, "status": "rejected"}]})
+    assert events == ["quota.changed", "quota.changed"]
+
+
 def test_healthy_short_window_and_success_do_not_clear_rejected_weekly_window(conn):
     store = Quotas(conn, lambda: NOW)
     for period, status in (("seven_day", "rejected"), ("five_hour", "allowed")):
