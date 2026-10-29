@@ -47,7 +47,7 @@ async def vm_smoke(directory):
             raise VmError("Desktop tool discovery failed; build the pinned image first")
         assert "computer__click" in snapshot.refs, "Desktop click tool discovery failed"
         gate, completed = ToolGate(hub, conn=conn), []
-        calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480}),
+        calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480, "scope": "desktop"}),
                  ("computer__vm_exec", {"command": "printf 'Raphael VM smoke\\n' > raphael-smoke.txt; cat raphael-smoke.txt"}),
                  ("computer__attach_file", {"path": "/home/cua/workspace/raphael-smoke.txt"})]
 
