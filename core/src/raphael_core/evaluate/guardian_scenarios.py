@@ -133,7 +133,7 @@ def cells(registry=(), catalog=(), *, servers=()):
     operations = {
         "routines": ("create", "list", "edit", "pause", "resume", "run-now", "delete"),
         "skills": ("save-trigger", "edit", "run", "delete", "read"),
-        "memory": ("show", "save-global", "forget", "private-global", "history-search"),
+        "memory": ("show", "save-global", "forget", "private-global", "history-search", "update", "log", "session-search", "session-read"),
         "calendar": ("create", "move", "list"),
         "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import"),
         "meetings": ("create-reuse", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),

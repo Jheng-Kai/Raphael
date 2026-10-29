@@ -241,6 +241,22 @@
         "production_state"
       ]
     },
+    "raphael/core/memory_update": {
+      "scenario_ids": ["S21.memory.update"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/memory_log": {
+      "scenario_ids": ["S21.memory.log"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/session_search": {
+      "scenario_ids": ["S21.memory.session-search"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/session_read": {
+      "scenario_ids": ["S21.memory.session-read"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/memory_read": {
       "scenario_ids": [
         "S21.memory.show"

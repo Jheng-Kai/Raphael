@@ -79,6 +79,10 @@ class FakeModel:
                 answer = await answer
         if isinstance(answer, BaseException):
             raise answer
+        # Match the structured response schema required from production brains.
+        if isinstance(answer, dict) and isinstance(answer.get("actions"), list):
+            answer = {**answer, "actions": [dict(item, confidence=item.get("confidence", 1.0))
+                       if isinstance(item, dict) else item for item in answer["actions"]]}
         return answer if isinstance(answer, Completion) else completion(answer)
 
 

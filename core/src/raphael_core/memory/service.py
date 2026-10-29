@@ -1,5 +1,5 @@
 """The memory of Raphael and of the members of the owner's team as one service: the files
-(`store`), each conversation's summary (`conversation`), the reflection pass and the weekly
+(`store`), each conversation's summary (`conversation`), the reflection pass and the daily
 consolidation (`reflection`), the tools the assistants reach them by, and the RPC methods of the
 settings page and of a member's 記憶 tab.
 
@@ -33,16 +33,16 @@ takes `space` ("own", the default, or "shared") and `member_id` (whose own: 0, R
 The tools of the assistant (`agent.gate` knows them, and their tiers): `memory_read` and
 `history_search` only read (T0); `memory_write` and `memory_delete` change the memory (T1, which
 runs at once, with no yes asked for). The fast tier writes only from the owner's own turn
-(`apply_said`, see `agent.service`); the background worker may read and search, never write, since
-it reads what services return.
+(`apply_said`, see `agent.service`); private background workers use the same growth tools; after external ingestion,
+writes remain pending until owner approval.
 
-The reflection pass runs in the background on the cheap model (the `agent_model` setting), for each
+The reflection pass runs in the background on each member's selected brain (including CLI), for each
 assistant over its own turns (a watermark each): after REFLECT_AFTER_TURNS answered turns it has not
 read, or once the conversation has been quiet for QUIET_S with any such turn, and once soon after
-the app starts when one is waiting. The weekly consolidation runs with it when the last one is a
-week old, for each space by itself. A timer that finds nothing due yet, and every pass when it ends,
+the app starts when one is waiting. The daily consolidation runs with it when the last one is a
+day old, for each space by itself. A timer that finds nothing due yet, and every pass when it ends,
 arms the timer again for the next time something will be (the quiet time, the pause of RETRY_S
-after a failure, the week), so nothing waits for the owner's next turn. Both need the key and room
+after a failure, the day), so nothing waits for the owner's next turn. Both need the key and room
 under the month's limit, and both are written to the spend with the purpose "memory".
 
 Nothing here logs a memory, a question or an answer.
@@ -75,13 +75,14 @@ from ..router import Router as RpcRouter
 from .conversation import SUMMARY_PURPOSE, Conversation
 from .reflection import MAX_TURNS, SPACES, Action, Applied, Reflector, apply_actions
 from .store import MemoryIndex, MemoryRefused, MemoryStore, SharedMemoryStore, move_note, valid_name
+from .growth import Growth
 
 logger = logging.getLogger(__name__)
 
 PURPOSE = SUMMARY_PURPOSE  # "memory", in the spend
 QUIET_S = 25 * 60.0
-REFLECT_AFTER_TURNS = 10
-CONSOLIDATE_EVERY_MS = 7 * 86_400_000
+REFLECT_AFTER_TURNS = 6
+CONSOLIDATE_EVERY_MS = 86_400_000
 # How long after the app starts the memory looks for turns it has not read.
 START_DELAY_S = 60.0
 # A pass that failed is not tried again for this long.
@@ -139,7 +140,7 @@ def _watermark(member_id: int) -> str:
     return _REFLECTED if member_id == 0 else f"{_REFLECTED}:{int(member_id)}"
 
 
-class MemoryService:
+class MemoryService(Growth):
     """The memory. `conn` is the open database (used on the event loop only), `root` the memory
     folder, `client` the OpenRouter client, `keys` where the key lives. `now_ms` is the wall clock,
     `tz` the time zone of the spend's months, `clock` a monotonic clock in seconds and `now` the
@@ -168,6 +169,8 @@ class MemoryService:
         self._quiet_s = quiet_s
         self._start_delay_s = start_delay_s
         self._client = for_purpose(client, "memory")
+        self._base_client = client
+        self._cli_brains = None
         self._now = now
         from ..bots.homes import BotHomes
         self.homes = BotHomes(root.parent)
@@ -342,7 +345,11 @@ class MemoryService:
             except OSError as exc:
                 logger.warning("Could not read the memory: %s", type(exc).__name__)
                 indexes.append("")
-        return MemoryIndex(shared=indexes[0], own=None if member_id is None else indexes[1])
+        from .growth import prompt_document
+        own = None if member_id is None else prompt_document(self.store_for(member_id))
+        topics = "\n".join(indexes).splitlines()[:40]
+        return MemoryIndex(shared=prompt_document(self.shared), own=own,
+                           topics="\n".join(topics)[:2000])
 
     def shared_reader(self) -> "SharedMemory":
         """What a room's turn or work a colleague handed over may do with the memory."""
@@ -404,7 +411,7 @@ class MemoryService:
             space, memory = "own", own.get(name) if own is not None and valid_name(name) else None
             if memory is None and valid_name(name):
                 space, memory = "shared", self.shared.get(name)
-            if memory is None:
+            if memory is None or memory.expired((own or self.shared).today()):
                 missing.append(name)
                 continue
             found.append(
@@ -444,8 +451,10 @@ class MemoryService:
         words = [w.casefold() for w in query.split()]
         found = []
         screen = False
+        from .growth import tainted_turn
+        steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
         for turn in turns:
-            screen = screen or turn.route in ("operate", "exchange", "routine")
+            screen = screen or turn.route in ("operate", "exchange", "routine") or tainted_turn(turn, steps.get(turn.id, ()))
             when = datetime.fromtimestamp(turn.created_at_ms / 1000).strftime("%Y-%m-%d %H:%M")
             answer = turn.detail if turn.detail and len(turn.detail) > len(turn.text) else turn.text
             question_label, answer_label = turn_speakers(turn)
@@ -463,14 +472,23 @@ class MemoryService:
 
     # --- the background ----------------------------------------------------------------------------
 
-    def _model(self) -> str:
-        return api_model(self._settings, self._settings.get("agent_model"))
+    def _model(self, member_id: int = 0) -> str:
+        row = self._conn.execute("SELECT model FROM members WHERE id=?", (member_id,)).fetchone() if member_id else None
+        return (row[0] if row and row[0] else self._settings.get("agent_model"))
 
-    def may_spend(self) -> bool:
+    def _brain(self, member_id):
+        from .brain import MemoryBrain
+        return MemoryBrain(self, member_id)
+
+    def may_spend(self, member_id: int = 0) -> bool:
         """Whether a call of the memory's own may be made: there is a key."""
         try:
+            from ..agent.cli.discovery import brain_ref
+            reference = brain_ref(self._model(member_id))
+            if reference:
+                return self._cli_brains is not None and self._cli_brains.available(reference[0])
             if isinstance(self._client, ProviderRouter):
-                return self._client.available(self._model())
+                return self._client.available(self._model(member_id))
             if not (self._keys.get() or "").strip():
                 return False
             return True
@@ -485,8 +503,10 @@ class MemoryService:
         """A turn was written in the thread of `member_id`: fold its conversation if it is time,
         and run the reflection pass now if enough turns wait for one, or once the conversation has
         been quiet for a while."""
-        if self.may_spend():
-            self.conversation_for(member_id).schedule_fold(self._model(), self.ledger)
+        if self.may_spend(member_id):
+            conversation = self.conversation_for(member_id)
+            conversation._client = self._brain(member_id)
+            conversation.schedule_fold(self._model(member_id), self.ledger)
         if self._waiting(limit=REFLECT_AFTER_TURNS, member_id=member_id) >= REFLECT_AFTER_TURNS:
             self._spawn()
         else:
@@ -524,7 +544,7 @@ class MemoryService:
     def _next_due_s(self) -> float | None:
         """In how many seconds a pass will next be due: the end of the pause after a failure, else
         the soonest of the reflection passes (now when REFLECT_AFTER_TURNS turns of one assistant
-        wait, or when its conversation will have been quiet for QUIET_S) and the weekly
+        wait, or when its conversation will have been quiet for QUIET_S) and the daily
         consolidation. None when nothing waits: the owner's next turn arms the timer again."""
         if self._failed_at is not None:
             left = RETRY_S - (self._clock() - self._failed_at)
@@ -543,8 +563,8 @@ class MemoryService:
             except sqlite3.Error:
                 pass
         if self._any_memories():
-            weekly_ms = self._state(_CONSOLIDATED) + CONSOLIDATE_EVERY_MS - self._now_ms()
-            delays.append(max(0.0, weekly_ms / 1000))
+            daily_ms = self._state(_CONSOLIDATED) + CONSOLIDATE_EVERY_MS - self._now_ms()
+            delays.append(max(0.0, daily_ms / 1000))
         return min(delays) if delays else None
 
     def _last_turn_ms(self, unread: Sequence[Turn], member_id: int = 0) -> int:
@@ -560,13 +580,11 @@ class MemoryService:
 
     def _unread(self, limit: int = MAX_TURNS, member_id: int = 0) -> list[Turn]:
         """The answered turns of the thread of `member_id` its reflection pass has not read, the
-        latest `limit` of them. An exchange with another member and a routine's run are not the
+        earliest `limit` of them, so a backlog never skips old facts. An exchange with another member and a routine's run are not the
         owner's own words: the pass never reads them."""
-        turns = self._history.after(
-            self.reflected_through(member_id), limit=limit * 3, member_id=member_id
-        )
+        turns = self._history.after(self.reflected_through(member_id), member_id=member_id)
         own = [t for t in turns if t.status == "done" and t.route not in ("exchange", "routine")]
-        return own[-limit:]
+        return own[:limit]
 
     def _due(self, member_id: int) -> bool:
         try:
@@ -615,16 +633,16 @@ class MemoryService:
     async def run_due(self) -> None:
         """The reflection passes and the consolidation, whichever are due, one after the other;
         then the timer is armed for whatever is due next (the rest of a long backlog, the pause
-        after a failure, the next quiet time or week). Without a key or room under the limit
+        after a failure, the next quiet time or day). Without a key or room under the limit
         nothing runs, and the timer looks again no sooner than RETRY_S."""
-        if not self.may_spend():
+        if not any(self.may_spend(member_id) for member_id in self._agents()):
             delay = self._next_due_s()
             if delay is not None:
                 self._arm(max(delay, RETRY_S))
             return
         try:
             for member_id in self._agents():
-                if self._due(member_id):
+                if self._due(member_id) and self.may_spend(member_id):
                     applied = await self.reflect(member_id)
                     if applied.failed:
                         break
@@ -637,7 +655,7 @@ class MemoryService:
 
     async def reflect(self, member_id: int = 0) -> Applied:
         """One reflection pass over the turns of `member_id` it has not read, into its own memory
-        and the shared one. The watermark moves past them when the model answered, whatever it
+        only. The watermark moves past them when the model answered, whatever it
         made of them; a model that failed leaves them for the next pass, which waits RETRY_S. When
         the conversation was cleared while the model thought, nothing is applied and the
         watermark stays where the clear put it."""
@@ -649,15 +667,20 @@ class MemoryService:
         def current() -> bool:
             return self._turn_clears == clears
 
-        applied = await self._reflector.reflect(
+        reflector = Reflector(self._brain(member_id))
+        from .growth import tainted_turn
+        steps = self._history.steps([turn.id for turn in turns if turn.id is not None])
+        applied = await reflector.reflect(
             self.store_for(member_id),
             turns,
-            model=self._model(),
+            model=self._model(member_id),
             ledger=self.ledger(),
             current=current,
             shared=None,
             agent=self._name_of(member_id),
             member=member_id,
+            stage=lambda actions: self._capture_pending(member_id, actions),
+            untrusted=any(tainted_turn(turn, steps.get(turn.id, ())) for turn in turns),
         )
         if applied.failed:
             self._failed_at = self._clock()
@@ -667,14 +690,17 @@ class MemoryService:
         return applied
 
     async def consolidate(self) -> Applied:
-        """The weekly tidy of every space, each by itself (the shared one never deletes a note);
-        the next one is a week away once the model has answered for each."""
+        """The daily tidy of every space, each by itself (the shared one never deletes a note);
+        the next one is a day away once the model has answered for each."""
         total = Applied()
         for store, shared in self._spaces():
             if not store.all():
                 continue
-            applied = await self._reflector.consolidate(
-                store, model=self._model(), ledger=self.ledger(), shared=shared
+            member_id = store.member_id
+            if not self.may_spend(member_id):
+                continue
+            applied = await Reflector(self._brain(member_id)).consolidate(
+                store, model=self._model(member_id), ledger=self.ledger(), shared=shared, split=True
             )
             total.written += applied.written
             total.deleted += applied.deleted
@@ -773,6 +799,8 @@ class MemoryService:
             }
             for m in self.space(space, member_id).all()
         ]
+        if space == "own":
+            memories += [self._pending_view(item) for item in self.pending(member_id)]
         shown = None
         if space == "own":
             summary = self.conversation_for(member_id).summary()
@@ -781,12 +809,27 @@ class MemoryService:
         return {"memories": memories, "summary": shown}
 
     async def _get(self, params: dict) -> dict:
+        if self._space_of(params) == "own":
+            item = next((item for item in self.pending(self._member(params)) if item["name"] == self._name(params)), None)
+            if item is not None:
+                return self._pending_view(item)
         memory = self._store(params).get(self._name(params))
         if memory is None:
             raise invalid_params("no memory has that name")
         return memory.view()
 
     async def _update(self, params: dict) -> dict:
+        if self._space_of(params) == "own":
+            item = next((item for item in self.pending(self._member(params)) if item["name"] == self._name(params)), None)
+            if item is not None:
+                # Saving this owner-only editor approves precisely the displayed
+                # proposal; bots cannot call memory.update RPCs through MCP.
+                if params.get("body") != self._pending_view(item)["body"]:
+                    raise invalid_params("Review the proposal, then save to approve or delete to reject")
+                result = self.resolve_pending(self._member(params), item["name"], approve=True)
+                if not result.ok:
+                    raise invalid_params(result.error)
+                return {"name": item["name"], "body": params["body"], "approved": True}
         store = self._store(params)
         name = self._name(params)
         body = params.get("body")
@@ -812,9 +855,14 @@ class MemoryService:
         return memory.view()
 
     async def _delete(self, params: dict) -> dict:
+        if self._space_of(params) == "own" and any(item["name"] == self._name(params) for item in self.pending(self._member(params))):
+            return {"deleted": self.resolve_pending(self._member(params), self._name(params), approve=False).ok}
         return {"deleted": self._store(params).delete(self._name(params))}
 
     async def _clear(self, params: dict) -> dict:
+        if self._space_of(params) == "own":
+            for item in self.pending(self._member(params)):
+                self.resolve_pending(self._member(params), item["name"], approve=False)
         return {"deleted": self._store(params).clear()}
 
     async def _move(self, params: dict) -> dict:
@@ -846,6 +894,9 @@ class MemberMemory:
 
     memory: MemoryService
     member_id: int
+
+    def growth(self, name, args, *, untrusted=False):
+        return self.memory.growth(name, args, untrusted=untrusted, member_id=self.member_id)
 
     def index(self) -> MemoryIndex:
         return self.memory.index(self.member_id)

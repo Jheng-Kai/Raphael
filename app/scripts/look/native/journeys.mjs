@@ -3,6 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
@@ -75,7 +76,34 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
-  if (name === "bot-homes") {
+  if (name === "memory-growth") {
+    const { member: colleague } = await context.rpc("members.create", { name: "Memory reviewer", role: "Reviewer" });
+    await chat(page);
+    await perform(page, { action: "member", id: colleague.id });
+    const send = async (text, expected) => {
+      const before = (await snapshot()).agent_turns.filter(row => row.member_id === colleague.id).length;
+      await type(page, ".composer .cmp-input", text);
+      await click(page, ".cmp-send");
+      for (let attempt = 0; ; attempt++) {
+        const turns = (await snapshot()).agent_turns.filter(row => row.member_id === colleague.id);
+        const turn = turns.at(-1);
+        if (turns.length > before && turn.status === "done") {
+          if (turn.text !== expected) throw new Error(`Memory answer mismatch: ${turn.text}`);
+          return turn;
+        }
+        if (turn?.status === "error" || attempt > 120) throw new Error(`Memory turn failed: ${JSON.stringify(turn)}`);
+        await pause(100);
+      }
+    };
+    await send("[native-memory:record] The project colour is heliotrope.", "The member saved the project colour.");
+    for (let n = 2; n <= 24; n++) await send(`[native-memory:step] Unrelated work step ${n}.`, "Work step recorded.");
+    result.turn25 = await send("[native-memory:recall] What is the project colour?", "The project colour is heliotrope.");
+    result.memory = await context.memoryHome(colleague.id);
+    if (!result.memory.exists || !result.memory.body.includes("heliotrope") || result.memory.otherHomes.length) throw new Error("Member memory is missing or leaked to another home");
+    result.turns = (await snapshot()).agent_turns.filter(row => row.member_id === colleague.id);
+    if (result.turns.length !== 25 || result.turns.some(row => row.cost_usd !== 0)) throw new Error("Native memory journey did not complete exactly 25 free turns");
+    await capture("turn-twenty-five-recalled");
+  } else if (name === "bot-homes") {
     const initial = await context.homes();
     if (!initial.verified || Object.keys(initial.files).length !== 4) throw new Error("Migration lost copied memories or skills");
     await chat(page);

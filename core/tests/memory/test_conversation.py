@@ -90,6 +90,8 @@ def conversation(conn, clock):
         reflected_through=lambda: reflected["through"],
     )  # fmt: skip
     made.reflected = reflected
+    # A deliberately small model window exercises folding without a huge fixture.
+    made.context_window = 400
     return made
 
 
@@ -140,22 +142,23 @@ def test_the_context_is_the_summary_and_the_answered_turns_after_it(conversation
     conversation._save("Ongoing:\n- 規劃週末", 2)
     context = conversation.context()
     assert context.summary == "Ongoing:\n- 規劃週末"
-    assert [t.question for t in context.turns] == ["q2", "q3", "q4"]
+    assert [t.question for t in context.turns] == ["q0", "q1", "q2", "q3", "q4"]
 
 
-def test_a_quick_route_reads_only_the_last_six_turns(conversation, history):
+def test_a_quick_route_keeps_all_turns_below_half_the_model_window(conversation, history):
     for n in range(10):
         add_turn(history, f"q{n}")
-    assert [t.question for t in conversation.context(quick=True).turns] == [f"q{n}" for n in range(4, 10)]
-    assert len(conversation.context(quick=True).turns) == QUICK_TURNS
+    assert [t.question for t in conversation.context(quick=True).turns] == [f"q{n}" for n in range(10)]
+    assert len(conversation.context(quick=True).turns) == 10
     assert len(conversation.context().turns) == 10
 
 
-def test_the_context_holds_at_most_thirty_turns_however_far_the_fold_lags(conversation, history):
+def test_the_context_keeps_start_and_recent_turns_when_the_fold_lags(conversation, history):
     for n in range(50):
         add_turn(history, f"q{n}")
     turns = conversation.context().turns
-    assert len(turns) == FOLD_AT_TURNS and turns[-1].question == "q49"
+    assert len(turns) < 50 and turns[-1].question == "q49"
+    assert [turn.question for turn in turns[:2]] == ["q0", "q1"]
 
 
 def test_a_discussion_shows_the_start_of_its_longer_text():
@@ -273,7 +276,9 @@ async def test_a_long_backlog_is_folded_from_its_newest_turns(conversation, hist
     conversation._client.replies.append({"summary": "Context:\n..."})
     assert await conversation.fold("m", Ledger(SpendTracker(conn, clock.ms))) is True
     user = conversation._client.calls[0]["user"]
-    assert "turn283 " in user and "turn0 " not in user
+    middle = user.split("Verbatim conversation start", 1)[0]
+    assert "turn283 " in middle and "turn0 " not in middle
+    assert "turn0 " in user  # the beginning stays verbatim outside the folded middle
     assert estimate_tokens(user) < 20_000
     assert conversation.summary().through_turn_id == 300 - KEEP_TURNS
 

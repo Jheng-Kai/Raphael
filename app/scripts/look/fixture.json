@@ -2763,6 +2763,19 @@
   ],
   "memories": [
     {
+      "member_id": 1,
+      "name": "reference-pending-aabbccddeeff001122334455",
+      "description": "研究結果與下一次檢查",
+      "body": "原型已完成第一輪檢查。下一次檢查採用較小的樣本，保留這輪的比較結果。",
+      "type": "reference",
+      "origin": "pending",
+      "operation": "add",
+      "target": "reference-review-outcome",
+      "space": "own",
+      "updated": "",
+      "expires": null
+    },
+    {
       "id": 1,
       "member_id": 1,
       "text": "專案每週三檢查原型，週五回顧結果。",

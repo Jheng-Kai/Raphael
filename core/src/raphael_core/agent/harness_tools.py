@@ -5,6 +5,7 @@ from .commands import COMMANDS
 from .plugins import PluginTool
 from .policy import Tier
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, TIERS as ADMIN_TIERS
+from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS, WRITE_TOOLS as GROWTH_WRITES
 
 CONNECT_APP = "connect_app"
 REQUEST_SECRET = "request_secret"
@@ -62,7 +63,8 @@ for name, command in COMMANDS.items():
         properties, required = {}, []
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
-TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+DEFINITIONS.update(MEMORY_DEFINITIONS)
+TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)

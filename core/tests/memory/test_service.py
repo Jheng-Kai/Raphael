@@ -191,13 +191,14 @@ def test_what_the_owner_said_is_written_as_said_and_its_turn_is_noted(memory):
 # --- when the background runs --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model_id", ["cli:codex:gpt-5.6-terra?effort=high", "@local:text"])
+@pytest.mark.parametrize("model_id", ["openai/gpt-6-luna", "@local:text"])
 @pytest.mark.parametrize("work", ["fold", "reflect", "consolidate"])
-async def test_memory_api_work_uses_assistant_model(memory, history, model, conn, model_id, work):
+async def test_memory_work_keeps_the_selected_brain(memory, history, model, conn, model_id, work):
     settings = SettingsStore(conn)
     settings.set("agent_model", model_id)
     settings.set("assistant_model", "anthropic/claude-haiku-5.5")
     if work == "fold":
+        memory.conversation.context_window = 300
         from raphael_core.memory.conversation import FOLD_AT_TURNS
         for number in range(FOLD_AT_TURNS + 1):
             add_turn(history, f"Question {number}")
@@ -215,7 +216,7 @@ async def test_memory_api_work_uses_assistant_model(memory, history, model, conn
         model.replies.append({"actions": []})
         await memory.consolidate()
     assert model.calls
-    assert all(call["model"] == "anthropic/claude-haiku-5.5" for call in model.calls)
+    assert all(call["model"] == model_id for call in model.calls)
 
 
 async def test_the_pass_runs_after_ten_turns_and_moves_its_watermark(memory, history, model, conn):

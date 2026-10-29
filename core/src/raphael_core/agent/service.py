@@ -150,6 +150,7 @@ from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
 from ..memory.conversation import Conversation, asks_to_remember
 from ..memory.store import MemoryIndex
+from ..memory.growth import TOOLS as GROWTH_TOOLS, WRITE_TOOLS as GROWTH_WRITES
 from ..services.attachment_store import AttachmentStore
 from .attachment_inputs import text_context
 from ..worker.guards import neutralize, wrap_untrusted
@@ -285,8 +286,8 @@ VOICE_TURN_TIMEOUT_S = 45.0
 # The statuses of a turn that ended with a denial or a question that ran out: Raphael does not say
 # these aloud, as the owner knows (a "no", an Esc) or was not there.
 _UNSPOKEN = ("denied", "expired")
-# The routes that read the whole of the conversation after its summary; the others read its last
-# few turns (`memory.conversation.QUICK_TURNS`), which keeps a quick answer cheap.
+# Route classification retained for callers; all routes now share the full-history
+# and selected half-window context policy.
 _FULL_CONTEXT_ROUTES = ("discuss",)
 # A connection to a plugin's server that nobody uses is closed after this long.
 PLUGIN_IDLE_S = 120.0
@@ -457,6 +458,7 @@ class _Ask:
     trace_logged: bool = False
     admin_pending: list[PlannedCall] = field(default_factory=list)
     admin_screenings: list[Screening] = field(default_factory=list)
+    memory_untrusted: bool = False
     # (tool key, argument digest) of each call made that changes something, in order.
     made: list[tuple[str, str]] = field(default_factory=list)
     # The apps whose connector cards this turn showed: it then waits for them and calls nothing else.
@@ -730,6 +732,8 @@ class AgentService:
         if self._cli_brains.settings is None:
             self._cli_brains.settings = self._settings
         self._cli_sessions = CliSessions(conn)
+        if self._memory is not None:
+            self._memory._cli_brains = self._cli_brains
         self._cli_loops: set[CliLoop] = set()
         self._now_ms = now_ms
         self._actions = actions
@@ -1231,7 +1235,7 @@ class AgentService:
         with what was found. AgentFailure as `Voice.reply` raises it. A member of the team reads
         its own conversation and memory, and speaks as itself."""
         member_id = ask.speaker.id
-        context = self._conversation_of(member_id, ask.conversation_id).context(quick=ask.quick or route not in _FULL_CONTEXT_ROUTES)
+        context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
         index = None if self._memory is None else self._memory.index(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
@@ -1252,6 +1256,7 @@ class AgentService:
                 say_ja=ask.voiced and ask.language != "ja",
                 roster=roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings),
                 reasoning_effort=self._effort(settings),
+                recall=self._recall(ask),
             )
 
         reply = await word(tools, False)
@@ -1304,14 +1309,24 @@ class AgentService:
         if ask.nested:
             logger.info("Notes were not written: the request came from another member")
             return None
-        if any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen):
-            logger.info("Notes were not written: the reply was shown data from outside")
+        if ask.memory_untrusted or ask.attachments or any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen):
+            from ..memory.reflection import Applied
+            from ..memory.service import explicitly_shared
+            applied = Applied()
             for item in reply.memory:
-                tool = "memory_delete" if item.op == "DELETE" else "memory_write"
-                ask.steps.append(
-                    self._step("tool", tool, BUILTIN_SERVER, "blocked", time.perf_counter(), "blocked")
-                )
-            return None
+                share = explicitly_shared(ask.text)
+                store = self._memory.shared if share and item.space == "shared" else self._memory.store_for(ask.speaker.id)
+                op = "remove" if item.op == "DELETE" else "replace" if store.get(item.name) else "add"
+                result = self._memory.update_memory(ask.speaker.id, {"op": op, "name": item.name,
+                    "type": item.type, "description": item.description, "body": item.body, "until": item.expires,
+                    "space": item.space}, untrusted=True, share=share)
+                if not result.ok:
+                    applied.refused.append(result.error)
+                ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER,
+                    "ok" if result.ok else "blocked", time.perf_counter(), result.error, "pending_approval" if result.ok else None))
+            if not reply.text:
+                reply.text = {"zh-TW": "記憶變更已放入待確認，確認後才會生效。", "en": "The memory change is pending your approval.", "ja": "記憶の変更は確認待ちです。"}[ask.language]
+            return applied
         allowed = []
         for item in reply.memory:
             tool = "memory_delete" if item.op == "DELETE" else "memory_write"
@@ -1695,7 +1710,7 @@ class AgentService:
     ) -> dict:
         """A narrated turn, sharing the fast tier's safety gate and permission cards."""
         if loop is None:
-            context = self._conversation_of(ask.speaker.id, ask.conversation_id).context(quick=ask.quick)
+            context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
             index = None if self._memory is None else self._memory.index(ask.speaker.id)
             say_ja = ask.voiced and ask.language != "ja"
             if brain_ref(settings.model):
@@ -1726,6 +1741,7 @@ class AgentService:
                 self._moment(), context.turns, [], ask.language,
                 background_block(self._briefs(ask.speaker.id)), summary=context.summary, say_ja=say_ja, narrated=True,
                 quote=ask.quote,
+                recall=self._recall(ask),
             )
             if ask.resumption is not None:
                 user += ask.resumption.note()
@@ -1898,6 +1914,7 @@ class AgentService:
                         result = found[0] if found else ToolResult(name, False, None, "not_found")
                     else:
                         return ToolOutcome(False, "unknown_tool")
+                ask.memory_untrusted = ask.memory_untrusted or result.untrusted
                 loop.seen.append(result)
                 if result.ok and name == CREATE_MEMBER:
                     self._message(ask, "event", phrase(ask.language, "member_created", member=str((result.data or {}).get("created", ""))))
@@ -1940,7 +1957,7 @@ class AgentService:
             if brain_ref(settings.model):
                 common["execute"] = cli_execute
                 loop = CliLoop(brains=self._cli_brains, sessions=self._cli_sessions,
-                    attachments=ask.attachments, resume_session=not ask.quick and not ask.nested,
+                    attachments=ask.attachments, resume_session=not ask.nested,
                     rate_limit_waits=() if ask.quick else None,
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
@@ -2306,6 +2323,10 @@ class AgentService:
         """What the owner's safety rules say of a call of a plugin's tool or a team tool: PASS for a
         tool its server says only reads. Member contact preferences can require the owner's yes."""
         tool = call.tool
+        if tool.key in GROWTH_TOOLS:
+            # Local journalled writes are reversible. External ingestion is staged
+            # by the memory boundary, rather than granting a model permission.
+            return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
             if tool.key in ("routine_list", "team_overview", "show", "computer", CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
@@ -2369,6 +2390,43 @@ class AgentService:
             return result
         if call.tool.key in ("memory_write", "memory_delete"):
             return self._cli_memory_call(ask, call, steps, approval, action)
+        if call.tool.key in GROWTH_TOOLS:
+            self._gate.check_for(action or Action(call.tool.key, call.arguments), call.tool.key, call.arguments, approval)
+            if self._memory is None:
+                return ToolResult(call.tool.key, False, None, "unavailable")
+            name, args, member = call.tool.key, call.arguments, ask.speaker.id
+            private = ask.scope == "private"
+            if name == "session_search":
+                result = self._memory.session_search(member, args.get("query", ""), args.get("limit", 8), private=private)
+            elif name == "session_read":
+                result = self._memory.session_read(member, args.get("id"), args.get("offset", 0), private=private)
+            else:
+                result = None
+            if result is not None:
+                ask.memory_untrusted = ask.memory_untrusted or result.untrusted
+                (ask.steps if steps is None else steps).append(self._step("tool", name, BUILTIN_SERVER,
+                    "ok" if result.ok else "blocked", time.perf_counter(), result.error,
+                    "external_content" if result.untrusted else None))
+                self._gate.record_builtin(name, outcome="ok" if result.ok else "blocked")
+                return result
+            loop = next((item for item in self._cli_loops if item.member_id == member and item.conversation_id == ask.conversation_id), None)
+            external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(
+                step.tool in ("web_search", "web_read", "read_attachment", "computer", "ask_member")
+                or step.server not in (None, "", BUILTIN_SERVER) for step in ask.steps
+            ) or loop and any(result.untrusted for result in loop.seen))
+            from ..memory.service import explicitly_shared
+            if name == "memory_log":
+                result = (self._memory.log_memory(member, args, untrusted=external) if private else
+                          ToolResult(name, False, None, "private_only"))
+            else:
+                if not private:
+                    args = {**args, "space": "shared"}
+                result = self._memory.update_memory(member, args, untrusted=external,
+                    share=ask.scope == "room" or explicitly_shared(ask.text))
+            (ask.steps if steps is None else steps).append(self._step("tool", name, BUILTIN_SERVER,
+                "ok" if result.ok else "blocked", time.perf_counter(), result.error))
+            self._gate.record_builtin(name, outcome="ok" if result.ok else "blocked")
+            return result
         if call.tool.key in HARNESS_TOOLS:
             return await self._harness_call(ask, call, approval, action, steps=steps)
         if call.tool.key in TEAM_TOOLS:
@@ -2380,7 +2438,7 @@ class AgentService:
         args = dict(call.arguments)
         args["op"] = "delete" if call.tool.key == "memory_delete" else "write"
         loop = next((loop for loop in self._cli_loops if loop.member_id == ask.speaker.id and loop.conversation_id == ask.conversation_id), None)
-        if not asks_to_remember(ask.text) or loop is None:
+        if loop is None:
             return ToolResult(call.tool.key, False, None, "owner_request_required")
         reply = parse_reply({"text": "Memory update", "memory": [args]}, ask.language, plain=True)
         before = len(ask.steps)
@@ -2730,6 +2788,25 @@ class AgentService:
         )
 
     # --- the team ---------------------------------------------------------------------------------
+
+    def _recall(self, ask):
+        if self._memory is None:
+            return ""
+        text, external = self._memory.recall_result(ask.speaker.id, ask.text, private=ask.scope == "private", conversation_id=ask.conversation_id)
+        ask.memory_untrusted = ask.memory_untrusted or external
+        if external:
+            ask.steps.append(self._step("tool", "session_search", BUILTIN_SERVER, "ok", time.perf_counter(), None, "external_content"))
+        return text
+
+    def _memory_context(self, speaker, conversation_id, *, quick=False):
+        conversation = self._conversation_of(speaker.id, conversation_id)
+        model = self._read_settings(speaker, conversation_id).model
+        entry = next((entry for entry in (self._tool_support._catalog() or []) if entry.id == model), None)
+        if entry is not None and entry.context_length:
+            conversation.context_window = entry.context_length
+        if self._memory is not None:
+            conversation._client = self._memory._brain(speaker.id)
+        return conversation.context(quick=quick)
 
     def _conversation_of(self, member_id: int, conversation_id: int | None = None) -> Conversation:
         """The conversation of the thread of `member_id`: Raphael's for 0."""
@@ -4284,7 +4361,7 @@ class AgentService:
         if self._memory is not None and not ask.nested and status not in ("running", "confirm"):
             try:
                 # The fold and, for Raphael's, the reflection pass, in the background.
-                if ask.conversation_id != self.conversations.main(member_id) and self._memory.may_spend():
+                if ask.conversation_id != self.conversations.main(member_id) and self._memory.may_spend(member_id):
                     self._conversation_of(member_id, ask.conversation_id).schedule_fold(self._read_settings(ask.speaker, ask.conversation_id).model, self._memory.ledger)
                 if member_id:
                     self._memory.after_turn(member_id)

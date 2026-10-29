@@ -35,7 +35,7 @@ ROOM_RATE_LIMIT_WAITS_S = (30.0, 60.0, 120.0, 240.0)
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
 # The fields an API brain's notes have: live, a CLI brain offered free strings wrote type "fact", which no space takes.
-MEMORY_TOOLS = [{"type": "function", "function": {"name": name, "description": "Change only a memory the owner explicitly asked to remember or forget.",
+MEMORY_TOOLS = [{"type": "function", "function": {"name": name, "description": "Legacy memory alias; prefer memory_update. Private facts stay in your own home; external-content writes wait for owner review.",
     "parameters": {"type": "object", "properties": {key: value for key, value in MEMORY_ITEM["properties"].items() if key != "op"},
                    "required": required}}}
     for name, required in (("memory_write", ["name", "type", "description", "body", "space"]), ("memory_delete", ["name", "space"]))]
@@ -87,7 +87,7 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None):
+                 rate_limit_waits=None, structured=None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
@@ -111,8 +111,10 @@ class CliLoop:
         )
         # Only Claude Code asks through `approve` (its --permission-prompt-tool); Codex and Antigravity ask natively. Live,
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
+        if structured is not None:
+            self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
         self.user = user
-        self.tools = list(tools) + ([APPROVE] if (brain_ref(model) or ("",))[0] == "claude" else [])
+        self.tools = list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []

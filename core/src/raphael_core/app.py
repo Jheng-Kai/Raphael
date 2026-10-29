@@ -283,8 +283,8 @@ class EchoClient:
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_consult, native_diagnosis
-        diagnosis = native_diagnosis(messages, offered, seen)
+        from .native_journeys import native_consult, native_diagnosis, native_memory
+        diagnosis = native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen)
         if diagnosis is not None:
             name, value = diagnosis
             if name == "reply":
@@ -927,6 +927,7 @@ class App(Router):
         native_brain = bot_homes_brain(fake_llm, data_dir)
         if native_brain is not None:
             self.agent._cli_brains = native_brain
+            self.memory._cli_brains = native_brain
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
         self.background.use_team(self.members, self.agent.team_tool)

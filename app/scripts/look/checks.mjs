@@ -2,6 +2,16 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "pending-memory") {
+    const editor = document.querySelector('[data-mem-space="own"] [data-mem-editor]');
+    require(visible(editor), "the pending memory opens in the existing memory editor");
+    require(editor.querySelector('textarea')?.readOnly && editor.querySelector('input')?.readOnly, "the exact proposal stays read-only until owner approval");
+    require(editor.querySelector('[data-mem="save"]')?.textContent.includes("確認記憶"), "the primary action explicitly approves the memory");
+    require(editor.textContent.includes("外部內容"), "the owner is told why approval is required");
+    require(editor.textContent.includes("新增記憶") && editor.textContent.includes("私人記憶") && !editor.textContent.includes("????"), "the operation and destination are readable localized words");
+    require(!window.__look.calls.some(call => call.method === "memory.update"), "opening and reading never applies the pending change");
+    return { check: name };
+  }
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");

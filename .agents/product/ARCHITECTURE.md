@@ -70,3 +70,17 @@ flyer. Escape alone uses cancelSession and the shared two-press gesture.
 First and single-instance manual launches share first_run::opens_at_start(args);
 only explicit --autostart stays hidden. Remembered bounds remain window-state's
 responsibility. Conversation content never depends on profile_ready.
+
+
+## Growing member memory (phase 2, 2026-10-29)
+
+`memory/growth.py` is the shared host implementation for memory tools and silent,
+permission-scoped ephemeral FTS5 retrieval. `memory/brain.py` runs capture, tidy
+and folding on the selected member brain; CLI uses the production CliLoop with
+no tools and a separate ephemeral session, preserving normal native sessions.
+The API harness and RaphaelMcp consume one definition registry (A-03/A-04).
+Private capture remains in the member home. External-content proposals live in
+bot-state, outside all member search/prompt sources; only owner RPC approval may
+apply them, with revision checks. Reads never call notification or mutation paths.
+The existing Memory pane handles pending review; no second UI or model loop is
+introduced for member conversations (A-01).

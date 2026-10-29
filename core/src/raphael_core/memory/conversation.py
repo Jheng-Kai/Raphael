@@ -11,8 +11,8 @@ the next, for the provider's prompt cache):
   the question and Raphael's line (and, for a discussion, the start of its longer text). Only the
   turns that were answered: one that waits for a yes, was refused or failed says nothing.
 - The summary (`conversation_summaries`) covers the turns before them. When the turns after it pass
-  FOLD_AT_TOKENS (about 12K tokens) or FOLD_AT_TURNS, the oldest of them are folded into it by one
-  call to the cheap model (`fold`), down to a tail of KEEP_TOKENS (about 6K) or KEEP_TURNS. The
+  half the selected model context window, their middle is folded into it by one
+  call to the member's own brain (`fold`), down to a tail of KEEP_TOKENS (about 6K) or KEEP_TURNS. The
   summary is updated in place, not written anew from a summary of a summary, and is held to
   SUMMARY_MAX_TOKENS (about 1,500 tokens) by code.
 - Some turns are never folded yet (`protected`): a question that waits for a yes or a no, a turn
@@ -29,8 +29,8 @@ the next, for the provider's prompt cache):
   start again from 1 once the conversation is cleared, the summary's own progress
   (`through_turn_id`, 0 both before and after a clear during the first fold) cannot tell. Its call
   is in the spend all the same, since it was paid for.
-- The quick routes (an answer, small talk) read the summary and only the last QUICK_TURNS turns: a
-  quick answer stays cheap.
+- Quick routes use the same full history and half-window budget as other routes. The opening
+  turns and recent turns remain verbatim when the middle is folded.
 
 Folded turns are not deleted: the conversation view shows them and the search finds them. The
 summary can be cleared (`clear_summary`, `memory.summary_clear`); the turns are then read again
@@ -86,6 +86,8 @@ FOLD_PAUSES_S = (60.0, 300.0, 900.0)
 FOLD_TIMEOUT_S = 30.0
 FOLD_MAX_TOKENS = 2_400
 SUMMARY_PURPOSE = "memory"
+DEFAULT_CONTEXT_WINDOW = 32_000
+KEEP_START_TURNS = 2
 
 # The words of a correction ("不對", "that's not what I meant", "違う"): a turn that holds one is
 # kept for the reflection pass before it is folded.
@@ -209,7 +211,7 @@ class Context:
 
 
 def plan_fold(
-    turns: Sequence[Turn], protected: set[int]
+    turns: Sequence[Turn], protected: set[int], *, context_window: int | None = None
 ) -> tuple[list[Turn], int] | None:
     """Which of `turns` (every turn after the summary, oldest first, whatever its status) to fold
     into the summary now, and the id of the last turn the summary will cover; None when it is not
@@ -221,7 +223,8 @@ def plan_fold(
     the start."""
     answered = [turn for turn in turns if turn.status == "done"]
     total = sum(_turn_tokens(turn) for turn in answered)
-    if total <= FOLD_AT_TOKENS and len(answered) <= FOLD_AT_TURNS:
+    threshold = FOLD_AT_TOKENS if context_window is None else context_window // 2
+    if total <= threshold and (context_window is not None or len(answered) <= FOLD_AT_TURNS):
         return None
     kept, kept_tokens = 0, 0
     for turn in reversed(turns):
@@ -275,6 +278,13 @@ class Conversation:
         self._paused_until = 0.0
         # How many times the summary was cleared: a fold that began at another count is stale.
         self._clears = 0
+        self.context_window = DEFAULT_CONTEXT_WINDOW
+
+    def _conversation_id(self):
+        if self.conversation_id is not None:
+            return self.conversation_id
+        row = self._conn.execute("SELECT id FROM conversations WHERE member_id=? AND is_default=1", (self.member_id,)).fetchone()
+        return row[0] if row else None
 
     # --- the summary -----------------------------------------------------------------------------
 
@@ -338,31 +348,31 @@ class Conversation:
 
     # --- what the model reads ----------------------------------------------------------------------
 
-    def context(self, *, quick: bool = False) -> Context:
-        """The summary and the recent turns for a request. `quick` (an answer, small talk) keeps
-        only the last QUICK_TURNS turns. However far the folding lags behind (the model failed),
-        the turns read are held to FOLD_AT_TOKENS and FOLD_AT_TURNS, the newest kept."""
+    def context(self, *, quick: bool = False, context_window: int | None = None) -> Context:
+        """Full history below half the model window; opening and recent turns otherwise.
+
+        Reading context never folds, saves state or emits change notifications.
+        """
         try:
             summary = self.summary()
-            after = self._history.after(
-                summary.through_turn_id, limit=FOLD_AT_TURNS * 3, member_id=self.member_id,
-                conversation_id=self.conversation_id or Conversations(self._conn, self._now_ms).main(self.member_id),
-            )
+            after = self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id())
         except sqlite3.Error as exc:
             logger.warning("Could not read the conversation so far: %s", type(exc).__name__)
             return Context("", [])
         answered = [turn for turn in after if turn.status == "done"]
-        limit_turns = QUICK_TURNS if quick else FOLD_AT_TURNS
+        start = answered[:KEEP_START_TURNS]
+        tail = [turn for turn in answered[KEEP_START_TURNS:] if (turn.id or 0) > summary.through_turn_id]
         shown: list[Turn] = []
-        tokens = 0
-        for turn in reversed(answered):
+        tokens = sum(_turn_tokens(turn) for turn in start) + estimate_tokens(summary.text)
+        budget = (context_window or self.context_window) // 2
+        for turn in reversed(tail):
             cost = _turn_tokens(turn)
-            if len(shown) >= limit_turns or (shown and tokens + cost > FOLD_AT_TOKENS):
+            if shown and tokens + cost > budget:
                 break
             shown.append(turn)
             tokens += cost
         shown.reverse()
-        return Context(summary.text, shown)
+        return Context(summary.text, start + shown)
 
     # --- folding ---------------------------------------------------------------------------------
 
@@ -400,9 +410,9 @@ class Conversation:
     def fold_due(self) -> tuple[list[Turn], int] | None:
         """What a fold now would fold (see `plan_fold`), or None."""
         summary = self.summary()
-        turns = self._history.after(summary.through_turn_id, member_id=self.member_id,
-                                    conversation_id=self.conversation_id or Conversations(self._conn, self._now_ms).main(self.member_id))
-        return plan_fold(turns, self.protected(turns))
+        all_turns = self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id())
+        turns = [turn for turn in all_turns[KEEP_START_TURNS:] if (turn.id or 0) > summary.through_turn_id]
+        return plan_fold(turns, self.protected(turns), context_window=self.context_window)
 
     def schedule_fold(self, model: str, ledger_for: Callable[[], Ledger]) -> None:
         """Fold in the background if it is time and no fold runs or waits out a pause. Needs the
@@ -467,6 +477,9 @@ class Conversation:
             f"<summary_so_far>\n{summary.text or '(none yet)'}\n</summary_so_far>\n\n"
             f"<turns>\n{turns}\n</turns>"
         )
+        start = self._history.after(0, member_id=self.member_id, conversation_id=self._conversation_id())[:KEEP_START_TURNS]
+        user += "\n\nVerbatim conversation start (retained separately, for context):\n" + "\n".join(
+            f"[{turn_time(turn.created_at_ms)}]\n{turn_text(turn, detail=True)}" for turn in start)
         try:
             completion = await asyncio.wait_for(
                 self._client.complete_json(

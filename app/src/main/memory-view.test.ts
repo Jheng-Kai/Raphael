@@ -25,6 +25,17 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const buttons = (html: string): string[] => [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
 
 describe("the memory's rows", () => {
+  test("pending proposals are distinct and read-only, with an explicit owner approval action", () => {
+    const pending = { ...LIST.memories[0], origin: "pending", operation: "replace", target: "user-city", space: "own" };
+    const html = memoryHTML(view({ expanded: true, status: { memories: [pending], summary: null }, editing: {
+      name: pending.name, body: "Taipei", draft: "Taipei", description: pending.description,
+      descDraft: pending.description, saving: false, error: null,
+    } }));
+    expect(visible(html)).toContain("待確認");
+    expect(html.match(/ readonly/g)).toHaveLength(2);
+    expect(visible(html)).toContain("確認記憶");
+    expect(visible(html)).toContain("外部內容");
+  });
   test("closed, it is one row: 記憶 and how many notes there are, with a chevron", () => {
     const html = memoryHTML(view());
     expect(html).toMatch(/^<section class="sgroup mem" data-mem-section aria-label="記憶"><div class="slist">/);
@@ -157,6 +168,23 @@ describe("the controller", () => {
     expect(c.view().expanded).toBe(true);
     click(c, "expand");
     expect(c.view().expanded).toBe(false);
+  });
+
+  test("an unchanged pending proposal still requires one explicit approval write", async () => {
+    const pending = { ...LIST.memories[0], origin: "pending", operation: "add", target: "user-city", space: "own" };
+    api.core.mockImplementation(async (method: string) => {
+      if (method === "memory.list") return { memories: [pending], summary: null };
+      if (method === "memory.get") return { ...pending, body: "Taipei", turns: [] };
+      return {};
+    });
+    const c = make();
+    await c.load();
+    click(c, "edit", pending.name);
+    await vi.waitFor(() => expect(c.view().editing?.body).toBe("Taipei"));
+    expect(api.core.mock.calls.filter(([method]) => method === "memory.update")).toHaveLength(0);
+    click(c, "save");
+    await vi.waitFor(() => expect(c.view().editing).toBeNull());
+    expect(api.core.mock.calls.filter(([method]) => method === "memory.update")).toHaveLength(1);
   });
 
   test("the pencil reads the note; 儲存 sends what was typed and reads the list again", async () => {

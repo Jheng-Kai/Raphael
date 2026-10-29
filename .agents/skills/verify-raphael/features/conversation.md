@@ -500,3 +500,23 @@ provider; offline results never establish live or design acceptance.
 ## Owner round 6 contracts
 
 Owner round 6: details/details-closed/raphael-details/details-routines/details-memory assert a visible, hit-testable conversation scrim whenever the panel overlays, and close it with a real pointer click. Inline panels have no scrim. The details scroll container owns the only row inset; routine/memory cards stay within 384px. Keyboard focus remains tested separately before pointer-state capture. no-naming decodes its avatar source and compares source resolution with rendered device pixels; the fixture uses an existing 1024px source, matching avatar_get image data.
+
+
+## Growing memory context, phase 2 (2026-10-29)
+
+Quick and ordinary private routes retain the full answered conversation until
+roughly half the selected model's context window. Folding summarizes the middle
+on that member's own brain, preserving the opening and recent turns verbatim.
+CLI native sessions remain enabled; the normal context includes the saved summary
+when a native session reopens. Cold context/summary reads never save or notify.
+Auto-recall is permission-scoped FTS5 data before the question (not in system),
+<=6000 characters, <=4 memory and <=4 conversation hits. Search/read recheck room
+membership and never cross another member's private home or threads. Retrieved
+external provenance remains untrusted for later memory writes.
+Automatic recall stays in the current conversation; explicit session_search can
+retrieve that member's other conversations and currently joined rooms.
+
+See the phase-2 section of [Members](members.md) for memory tools, owner pending
+review, selected look scenes and the `memory-growth` native journey. Conversation
+context contracts live in `core/tests/memory/test_conversation.py`; shared harness
+wiring and recall order in `core/tests/agent/test_memory_turns.py`.

@@ -362,6 +362,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "background.questions.list": return { questions: [] };
       case "quota.list": return { quotas: data.allowances.quotas };
       case "memory.list": return { memories: p.space === "shared" ? data.sharedMemories : byMember(data.memories, p), summary: null };
+      case "memory.get": { const item = (p.space === "shared" ? data.sharedMemories : byMember(data.memories, p)).find(item => item.name === p.name); if (!item) throw new Error("Memory fixture not found"); return { ...item, body: item.body ?? item.text ?? item.description }; }
+      case "memory.update": { const item = data.memories.find(item => item.name === p.name && item.member_id === (p.member_id ?? 0)); if (!item) throw new Error("Memory fixture not found"); if (item.origin === "pending") data.memories = data.memories.filter(note => note !== item); else Object.assign(item, p); return { approved: true }; }
+      case "memory.delete": data.memories = data.memories.filter(item => item.name !== p.name || item.member_id !== (p.member_id ?? 0)); return { deleted: true };
       case "safety.rules.list": return { rules: data.safetyRules };
       case "routines.list": return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };

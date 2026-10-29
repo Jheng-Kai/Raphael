@@ -104,7 +104,7 @@ async function run(options) {
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });
+        await drive(journey.name, { page, result, capture, snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases });
         await capture("final");
       } catch (error) {
         result.failures.push(error.message);
