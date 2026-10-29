@@ -114,10 +114,17 @@ class HomeOverview:
         self.conn, self.router, self.members = conn, router, members
         self.now_ms, self.tz, self.calendar_events = now_ms, tz, calendar_events
         self.timezone_name = getattr(tz, "key", None)
+        self.timezone_changed = None
         self._allowance_task = None
 
     def register(self):
         self.router.register("home.overview", self.read)
+
+    async def _sync_timezone(self):
+        try:
+            await self.timezone_changed()
+        except Exception as exc:
+            logger.warning("Desktop time zone sync failed: %s", type(exc).__name__)
 
     async def _allowances(self):
         # Concurrent refreshes share one CLI read, without persisting a second allowance store.
@@ -137,7 +144,11 @@ class HomeOverview:
                 zone = ZoneInfo(params["tz"])
             except (ValueError, ZoneInfoNotFoundError):
                 raise invalid_params("tz must be an IANA time zone") from None
+            changed = self.timezone_name != zone.key
             self.timezone_name = zone.key
+            if changed and self.timezone_changed:
+                # Reconciling desktops can recreate a container; Home must answer without waiting for it.
+                self._timezone_task = asyncio.create_task(self._sync_timezone())
         now = self.now_ms()
         day = datetime.fromtimestamp(now / 1000, zone).replace(hour=0, minute=0, second=0, microsecond=0)
         start, tomorrow, end = [int((day + timedelta(days=n)).timestamp() * 1000) for n in (0, 1, 7)]

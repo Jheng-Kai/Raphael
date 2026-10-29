@@ -45,10 +45,13 @@ in the image/package; redistribution must preserve it.
 
 Upstream: https://github.com/novnc/noVNC
 
-The pinned Cua desktop image includes noVNC. Raphael uses the image's unmodified
-web client at `/vnc.html`. Its MPL-2.0 license and source notices remain in the
-image; source is available at the upstream URL. No noVNC JavaScript is copied
-into Raphael's frontend.
+The pinned Cua desktop image includes noVNC. Raphael proxies its `/vnc.html`,
+styles and unmodified RFB modules through a loopback bridge. The bridge replaces
+the standalone page's script entry with Raphael's own bootstrap in
+`core/src/raphael_core/computer/viewer.py`; the container files are unchanged.
+The original page copyright comments and image license/source notices remain.
+Source is available at the upstream URL. No noVNC JavaScript is copied into
+Raphael's frontend.
 
 ## Noto Sans CJK JP (SIL OFL-1.1)
 

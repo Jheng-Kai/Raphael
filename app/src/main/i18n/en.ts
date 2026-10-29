@@ -3,6 +3,15 @@ import { homeEn } from "./home-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "desktop.open": "Live desktop",
+  "desktop.take": "Take control",
+  "desktop.release": "Hand back control",
+  "desktop.owner": "You are controlling the computer",
+  "desktop.member": "The member is controlling the computer",
+  "desktop.connecting": "Connecting to the desktop…",
+  "desktop.stopped": "The computer is stopped",
+  "desktop.unavailable": "Docker is unavailable",
+  "desktop.busy": "Control could not be switched. Try again shortly.",
   "common.deleted": "Deleted",
   "common.showAll": "See all",
   "common.showLess": "Show less",

@@ -90,6 +90,7 @@ import { bindComposerLearning, learnComposerCorrections } from "../composer-lear
 import type { DictationBaseline } from "../composer-learning";
 import { createProblemNotice } from "../problem-notice";
 import { VoiceMode } from "../voice-mode";
+import { mountDesktopViewer } from "../desktop-viewer";
 import "../agent.css";
 import "../members.css";
 
@@ -258,6 +259,7 @@ export function createAgent(app: AppContext): Page {
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
+  const desktop = mountDesktopViewer(el.querySelector<HTMLElement>(".ra-tools")!, () => members.current());
   const find = el.querySelector<HTMLElement>(".ra-find")!;
   const findInput = el.querySelector<HTMLInputElement>(".ra-find-input")!;
   const findCount = el.querySelector<HTMLElement>(".ra-find-count")!;
@@ -404,10 +406,12 @@ export function createAgent(app: AppContext): Page {
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
+    if (visible) desktop.show();
   }, () => { if (visible) attachmentMedia.sync(); });
   el.append(roomPane.el);
   window.addEventListener("raphael:open-room", event => {
     if (!el.isConnected) return;
+    desktop.hide();
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
     void members.load();
@@ -1425,6 +1429,7 @@ export function createAgent(app: AppContext): Page {
    * closes, the composer and the card become that thread's, and nothing of the last thread moves in.
    */
   function switchThread(): void {
+    desktop.refresh();
     drawConversation();
     if (roomPane.active) roomPane.close();
     void slashMenu.refresh();
@@ -2235,6 +2240,7 @@ export function createAgent(app: AppContext): Page {
     show(arg) {
       const wasVisible = visible;
       visible = true;
+      if (!roomPane.active) desktop.show();
       problemNotice.show();
       messageResize?.observe(scroller);
       dropResize?.observe(stage);
@@ -2268,6 +2274,7 @@ export function createAgent(app: AppContext): Page {
       drawBackgroundQuestions();
     },
     hide() {
+      desktop.hide();
       hideTooltip();
       hideSelection();
       pacing.flush();

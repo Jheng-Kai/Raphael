@@ -2,6 +2,47 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "desktop-frame") {
+    const doc = document.querySelector('.desktop-viewer iframe')?.contentDocument ?? document;
+    const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
+    require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
+    const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
+    require(Math.min(Math.abs(box.width - width), Math.abs(box.height - height)) <= 2, "the canvas fills the frame on its limiting axis");
+    require(box.left >= -1 && box.top >= -1 && box.right <= width + 1 && box.bottom <= height + 1, "the whole desktop fits without clipping");
+    require(Math.abs(box.width / box.height - canvas.width / canvas.height) < 0.01, "the desktop keeps its framebuffer aspect ratio");
+    const controls = [...doc.querySelectorAll('[id^="noVNC_"]')].filter(el => /control|handle|button|panel|status|dlg|logo|hint/i.test(el.id) && el.checkVisibility({ checkVisibilityCSS: true }) && visible(el));
+    require(!controls.length, "no noVNC control element is visible");
+    for (let el = canvas; el; el = el.parentElement) {
+      const style = win.getComputedStyle(el);
+      require([style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius].every(value => parseFloat(value || "0") === 0), "no standalone noVNC background curve clips the desktop");
+    }
+    for (const x of [box.left + 2, box.right - 2]) for (const y of [box.top + 2, box.bottom - 2]) require(doc.elementFromPoint(x, y) === canvas, "every desktop corner is unobscured");
+    return { check: name, canvas: box.toJSON(), framebuffer: { width: canvas.width, height: canvas.height }, viewport: { width, height }, visibleControls: controls.length };
+  }
+  if (name.startsWith("desktop-")) {
+    const entry = document.querySelector('[data-desktop="open"]');
+    if (name === "desktop-absent") {
+      require(!visible(entry), "Docker absent has no desktop entry");
+      return { check: name };
+    }
+    require(visible(entry) && entry.getAttribute("aria-label") && entry.classList.contains("icon"), "the single desktop entry uses the accessible shared icon button");
+    require(document.querySelectorAll('[data-desktop="open"]').length === 1, "one entry per conversation");
+    if (name === "desktop-entry") return { check: name };
+    const viewer = document.querySelector('.desktop-viewer'), frame = viewer?.querySelector('iframe');
+    require(visible(viewer), "the existing dialog contains the desktop");
+    const calls = window.__look.calls;
+    require(calls.some(call => call.method === "computer.viewer_open" && call.params.member_id === 1), "the selected member opens its own desktop");
+    require(!frame.src.includes("password") && !viewer.outerHTML.includes("password="), "no VNC password in the DOM or URL");
+    if (name === "desktop-offline") {
+      require(!visible(frame) && !frame.hasAttribute("src"), "offline desktops have no blank frame");
+      require(viewer.querySelector('[data-dlg="control"]').disabled, "offline control is unavailable");
+    } else {
+      require(visible(frame), "the connected desktop is visible");
+      if (name === "desktop-owner" || name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === true), "take control acquires the core lease");
+      if (name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === false), "handback releases the lease");
+    }
+    return { check: name };
+  }
   if (name === "skill-learned-notice") {
     const notice = document.querySelector('.conversation-event-line'), reply = notice?.closest('.tn')?.querySelector('.ra');
     require(reply && !!(reply.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING), "learning review notices follow the reply that produced them");

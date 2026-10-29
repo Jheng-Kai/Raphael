@@ -1961,6 +1961,10 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
 
     monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
     app = make_app()
+    timezone_updates = []
+    async def refresh_timezone():
+        timezone_updates.append(app.vm.timezone())
+    app.home.timezone_changed = refresh_timezone
     assert app.vm.timezone() is None
     value = await app.call("home.overview", {"tz": "Asia/Taipei", "ui_language": "en"})
     assert app.vm.timezone() == "Asia/Taipei"
@@ -1969,9 +1973,29 @@ async def test_home_overview_is_wired_without_waiting_for_speech(make_app, monke
     assert app.vm.timezone() == "Asia/Taipei"
     await app.call("home.overview", {"tz": "Europe/Paris"})
     assert app.vm.timezone() == "Europe/Paris"
+    await app.home._timezone_task
+    assert timezone_updates == ["Asia/Taipei", "Europe/Paris"]
     assert value["today"] == value["reports"] == value["calendar"] == []
     assert len(value["usage"]["daily"]) == 14
     assert value["dictation"]["words"] == 0
+
+
+async def test_home_answers_while_desktops_reconcile_a_new_time_zone(make_app, monkeypatch):
+    # Recreating a desktop for a new zone takes seconds; Home stayed on its skeleton while it waited.
+    async def no_clis(brains):
+        return {"brains": []}
+
+    monkeypatch.setattr("raphael_core.agent.cli.allowances.read_allowances", no_clis)
+    app = make_app()
+    release = asyncio.Event()
+    async def slow_refresh():
+        await release.wait()
+    app.home.timezone_changed = slow_refresh
+    value = await asyncio.wait_for(app.call("home.overview", {"tz": "Asia/Taipei"}), timeout=5)
+    assert value["today"] == []
+    assert not app.home._timezone_task.done()
+    release.set()
+    await app.home._timezone_task
 
 
 ASSISTANT_METHODS = {

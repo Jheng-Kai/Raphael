@@ -114,6 +114,120 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
 
 
+@pytest.mark.parametrize("running", [True, False])
+async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, running):
+    vm, target, runtime = desktop
+    runtime.raw["State"]["Running"] = running
+    runtime.raw["Config"]["Env"].append("TZ=UTC")
+    target.workspace.mkdir(parents=True)
+    (target.workspace / "keep.txt").write_text("keep")
+    original = runtime.__call__
+
+    async def run(args, **kwargs):
+        if args[0] == "run":
+            runtime.raw = container(vm, target, runtime)
+            runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
+        return await original(args, **kwargs)
+
+    vm.run, vm.timezone = run, lambda: "Asia/Taipei"
+    assert (await vm.start(target))["ready"]
+    assert any(args == ["rm", target.name] for args, _ in runtime.calls)
+    assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
+    assert (target.workspace / "keep.txt").read_text() == "keep"
+    runtime.calls.clear()
+    await vm.start(target)
+    assert not any(args[0] in ("run", "stop", "rm") for args, _ in runtime.calls)
+
+
+@pytest.mark.parametrize("blocked", ["active", "held", "busy", None])
+async def test_home_timezone_refresh_recovers_old_vm_and_defers_busy_desktops(desktop, blocked):
+    vm, target, runtime = desktop
+    original = runtime.__call__
+
+    async def run(args, **kwargs):
+        if args[0] == "run":
+            runtime.raw = container(vm, target, runtime)
+            runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
+        return await original(args, **kwargs)
+
+    vm.run, vm.timezone = run, lambda: "Asia/Taipei"
+    vm.targets.clear()  # A fresh app instance must discover the pre-launch VM.
+    if blocked == "active": vm.active[target.key] = 1
+    if blocked == "held": vm.held.add(target.key)
+    if blocked == "busy": vm.busy = lambda key: True
+    await vm.refresh_timezone()
+    assert target.key in vm.targets
+    assert vm.timezone_pending == bool(blocked)
+    assert any(args[0] == "run" for args, _ in runtime.calls) == (blocked is None)
+    vm.active.clear(); vm.held.clear(); vm.busy = lambda key: False
+    await vm.refresh_timezone()
+    assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
+    assert not vm.timezone_pending
+
+
+async def test_timezone_refresh_does_not_replace_foreign_desktops(desktop):
+    vm, target, runtime = desktop
+    vm.timezone = lambda: "Asia/Taipei"
+    runtime.raw["Config"]["Labels"][f"{LABEL}.owner"] = "foreign"
+    await vm.refresh_timezone()
+    assert not any(args[0] in ("run", "start", "stop", "rm") for args, _ in runtime.calls)
+
+
+async def test_timezone_refresh_recreates_stopped_desktop_without_waking_it(desktop):
+    vm, target, runtime = desktop
+    vm.timezone = lambda: "Asia/Taipei"
+    runtime.raw["State"]["Running"] = False
+    original = runtime.__call__
+    async def run(args, **kwargs):
+        if args[0] == "create":
+            runtime.raw = container(vm, target, runtime)
+            runtime.raw["Config"]["Env"].append("TZ=Asia/Taipei")
+            runtime.raw["State"]["Running"] = False
+        return await original(args, **kwargs)
+    vm.run = run
+    await vm.refresh_timezone()
+    assert not runtime.raw["State"]["Running"]
+    assert "TZ=Asia/Taipei" in runtime.raw["Config"]["Env"]
+    assert not any(args[0] in ("run", "start", "stop") for args, _ in runtime.calls)
+
+
+async def test_timezone_recreation_rechecks_ownership_and_keeps_owner_hold(desktop):
+    vm, target, runtime = desktop
+    vm.timezone = lambda: "Asia/Taipei"
+    vm.held.add(target.key)
+    with pytest.raises(VmError, match="owner_holds_control"):
+        await vm.start(target)
+    vm.held.clear()
+    original = vm.inspect
+    inspections = 0
+    async def inspect(target):
+        nonlocal inspections
+        inspections += 1
+        if inspections == 2:
+            runtime.raw["Config"]["Labels"][f"{LABEL}.owner"] = "foreign"
+        return await original(target)
+    vm.inspect = inspect
+    with pytest.raises(VmError, match="incompatible"):
+        await vm.start(target)
+    assert not any(args[0] in ("run", "stop", "rm") for args, _ in runtime.calls)
+
+
+async def test_native_timezone_check_uses_vm_exec_after_home(desktop, tmp_path, monkeypatch):
+    from raphael_core.computer import vm as vm_module, vm_tools
+    from raphael_core.native_journeys import vm_timezone_smoke
+    vm, target, runtime = desktop
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    monkeypatch.setattr(vm_module, "LocalVm", lambda *args, **kwargs: vm)
+    commands = []
+    async def execute(target, command, timeout):
+        commands.append(command)
+        return {"exit_code": 0, "output": "+0800\n", "truncated": False}
+    monkeypatch.setattr(vm, "execute", execute)
+    monkeypatch.setattr(vm_tools, "VmTools", lambda *args, **kwargs: VmTools(*args, bridge=Bridge, **kwargs))
+    assert await vm_timezone_smoke(tmp_path) == {"command": "date +%z", "offset": "+0800"}
+    assert commands == ["date +%z"]
+
+
 def test_targets_share_by_default_and_are_isolated_per_bot(conn, tmp_path):
     settings = SettingsStore(conn)
     vm = LocalVm(tmp_path, settings=settings)
@@ -139,6 +253,7 @@ async def test_status_checks_real_health_and_hides_remote_binding(desktop):
     vm, target, runtime = desktop
     state = await vm.status(target)
     assert state["ready"] and state["viewer_url"].startswith("http://127.0.0.1:6080/vnc.html#")
+    assert "private" not in json.dumps(state) and "password" not in state["viewer_url"]
     runtime.raw["HostConfig"]["PortBindings"]["6901/tcp"][0]["HostIp"] = "0.0.0.0"
     assert (await vm.status(target))["state"] == "incompatible"
 

@@ -40,12 +40,17 @@ describe("maintained verification feature map", () => {
     const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(existsSync(staged) ? readdirSync(staged) : [])])];
     expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer"].map(name => `${name}.md`).sort());
   });
-  it("documents the Docker-only foundation through the native journey before its UI phase", () => {
+  it("maps the Docker-only foundation and live viewer through look and the native journey", () => {
     expect(readMap("features/README.md")).toContain("](member-computer.md)");
     const content = readMap("features/member-computer.md");
     expect(content).toContain("npm.cmd run native -- member-computer");
     expect(content).toContain("Phase A adds no application UI");
     expect(content).toContain("Phase B");
+    const command = content.match(/^npm run look -- (desktop-entry .+)$/m)?.[1];
+    expect(command).toBeTruthy();
+    expect(parseOptions(command.split(/\s+/), scenes).selected.map(scene => scene.name)).toEqual([
+      "desktop-entry", "desktop-viewer", "desktop-owner", "desktop-handback", "desktop-stopped", "desktop-unavailable", "desktop-absent",
+    ]);
   });
   it("retires deliberately removed owner controls", () => {
     for (const name of ["owner-menu", "owner-keyboard-menu", "owner-photo", "home-expand", "automations-list", "automation-example"])

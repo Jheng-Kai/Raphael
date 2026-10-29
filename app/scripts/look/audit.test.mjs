@@ -6,6 +6,14 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("allows the Docker brand in localized unavailable states and still rejects untranslated actions", () => {
+    const win = new Window();
+    win.document.body.innerHTML = '<p class="desktop-status">Docker 目前無法使用</p><button>Take control</button>';
+    for (const element of win.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 210, bottom: 40, width: 200, height: 30 });
+    const words = auditDocument(win.document, { width: 1120, height: 900 }, [], LATIN_NAMES.map(name => name.toLowerCase())).mixedLanguage.map(item => item.word);
+    expect(words).not.toContain("Docker");
+    expect(words).toContain("Take");
+  });
   it("rejects machine diagnostics in failure replies and sidebar previews, including Markdown italics", () => {
     const win = new Window();
     const natural = "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。";
