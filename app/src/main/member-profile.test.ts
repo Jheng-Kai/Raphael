@@ -310,7 +310,8 @@ test("a profile routine draft can be edited and deleted without sending a negati
 });
 
 
-test("learned skills show their date and reading the editor never writes or notifies", async () => {
+test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]] as const)("learned skills use the %s UI date and reading the editor never writes or notifies", async (locale, date) => {
+  setLocale(locale);
   const skill = { id: 12, name: "research-summary", description: "Check sources", source: "learned", provenance: "learned" as const, learned_at: "2026-10-29T12:00:00", enabled: true };
   vi.mocked(api.membersSkillsList).mockResolvedValue({ skills: [skill], undo: "revision-1" });
   vi.mocked(api.core).mockResolvedValue({ skill: { ...skill, revision: "document-hash" }, text: "Instructions" });
@@ -318,13 +319,17 @@ test("learned skills show their date and reading the editor never writes or noti
   const changed = vi.fn();
   const editor = mountMemberResources(root, { memberId: 7, tab: "skills", standalone: true, changed });
   await flush();
-  expect(root.textContent).toContain("自行學會");
+  expect(root.textContent).toContain(date);
   click(root, '[data-res="skill-menu"]');
   document.querySelector<HTMLButtonElement>('#app-popover [data-pick="skill-edit"]')!.click();
   await flush();
   expect(root.querySelector<HTMLTextAreaElement>("#mp-skill-text")!.value).toBe("Instructions");
   expect(api.core).toHaveBeenCalledExactlyOnceWith("members.skills.read", { member_id: 7, id: 12 });
   expect(changed).not.toHaveBeenCalled();
+  fill(root, "#mp-skill-text", "Unsaved instructions");
+  setLocale(locale === "en" ? "ja" : "en");
+  expect(root.textContent).toContain(locale === "en" ? "2026/10/29" : "Oct 29, 2026");
+  expect(root.querySelector<HTMLTextAreaElement>("#mp-skill-text")!.value).toBe("Unsaved instructions");
   fill(root, "#mp-skill-text", "Updated instructions");
   click(root, '[data-res="skill-save"]'); await flush();
   expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, id: 12, text: "Updated instructions", expected_hash: "document-hash" });

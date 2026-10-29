@@ -4,6 +4,7 @@ import {
   dayLabel,
   describeError,
   formatClock,
+  formatDate,
   formatLimit,
   formatRetention,
   formatSeconds,
@@ -11,6 +12,16 @@ import {
   keyReasonText,
   parseLimit,
 } from "./format";
+
+test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]] as const)("full dates follow %s rather than the browser locale", (locale, expected) => {
+  setLocale(locale);
+  try {
+    expect(formatDate("2026-10-29T10:00:00")).toBe(expected);
+    expect(formatDate("2026-10-29")).toBe(expected);
+    expect(formatDate("not a date")).toBe("");
+    expect(formatDate("")).toBe("");
+  } finally { setLocale("zh-TW"); }
+});
 
 test("formatUsd", () => {
   expect(formatUsd(3.42)).toBe("US$3.42");

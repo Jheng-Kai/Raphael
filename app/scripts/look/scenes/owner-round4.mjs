@@ -21,6 +21,8 @@ export function withOwnerRound4(scenes) {
     ...(original.name === "onboarding-abilities" ? [check("onboarding-abilities-hero")] : []),
     ...(original.name === "raphael-details" ? [check("details-quick-once")] : []),
     ...(original.name === "connector-reconnected" ? [check("conversation-scroll-edge")] : []),
+    ...(["quick-cleared", "conversation-delete-main", "member-delete", "composer-learn"].includes(original.name) ? [check("toast-clearance")] : []),
+    ...(original.name === "member-conversation-sections" ? [check("details-alignment")] : []),
     ...(original.name === "team-fit" ? [check("team-column-edges")] : []),
     ...(["team", "team-fit", "team-crisp-100", "team-crisp-150", "primary-team-board"].includes(original.name) ? [check("team-model-readable"), check("team-content-size")] : []),
     ...(["details", "raphael-details", "details-routines", "details-memory"].includes(original.name) ? [check("details-sheet")] : []),

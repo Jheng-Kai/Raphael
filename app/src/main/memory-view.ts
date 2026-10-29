@@ -14,7 +14,7 @@
 // Raphael's tab of Settings and every agent's 記憶 tab show the two sections, shared first.
 
 import { core } from "./api";
-import { describeError } from "./format";
+import { describeError, formatDate } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { DISCONNECT_CONFIRM_MS, actionRow, btn, closeMenu, esc, iconButton, note, openPopover, row, st, toaster } from "./ui";
@@ -123,7 +123,7 @@ function itemRows(v: MemoryView, list: MemoryList): string[] {
     const open = v.editing?.name === m.name;
     const inferred = m.origin === "pending" ? `<span class="mem-tag">${esc(t("mem.pending"))}</span>` : m.origin === "inferred" ? `<span class="mem-tag">${esc(t("mem.inferred"))}</span>` : "";
     // who the owner told it to and when, as every agent's prompt reads it
-    const told = m.member != null && v.nameOf ? `<span class="mem-from">${esc(`${v.nameOf(m.member)} · ${m.updated.slice(5, 10).replace("-", "/")}`)}</span>` : "";
+    const told = m.member != null && v.nameOf ? `<span class="mem-from">${esc(`${v.nameOf(m.member)} · ${formatDate(m.updated)}`)}</span>` : "";
     const line = row(
       `<span class="mem-line"><span class="mem-type">${esc(typeLabel(m.type))}</span><span class="mem-desc">${esc(m.description)}</span>${inferred}${told}</span>`,
       "",

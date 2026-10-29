@@ -25,6 +25,11 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const buttons = (html: string): string[] => [...html.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
 
 describe("the memory's rows", () => {
+  test.each([["zh-TW", "2026/10/22"], ["ja", "2026/10/22"], ["en", "Oct 22, 2026"]] as const)("memory provenance uses the %s UI date", (locale, date) => {
+    setLocale(locale);
+    const status = { ...LIST, memories: [{ ...LIST.memories[0], member: 1 }] };
+    expect(visible(memoryHTML(view({ expanded: true, status, nameOf: () => "Member" })))).toContain(`Member · ${date}`);
+  });
   test("pending proposals are distinct and read-only, with an explicit owner approval action", () => {
     const pending = { ...LIST.memories[0], origin: "pending", operation: "replace", target: "user-city", space: "own" };
     const html = memoryHTML(view({ expanded: true, status: { memories: [pending], summary: null }, editing: {
@@ -59,7 +64,7 @@ describe("the memory's rows", () => {
     const told = { ...LIST.memories[0], member: 0, updated: "2026-10-27T00:44:52+08:00" };
     const html = memoryHTML(view({ expanded: true, status: { memories: [told, LIST.memories[1]], summary: null },
       nameOf: (id) => (id === 0 ? "拉斐爾" : "") }));
-    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 拉斐爾 · 10/27 偏好 回答保持兩三句 推測 全部清除");
+    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 拉斐爾 · 2026/10/27 偏好 回答保持兩三句 推測 全部清除");
   });
 
   test("with no notes it says so and opens on nothing", () => {

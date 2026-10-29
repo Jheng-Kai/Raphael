@@ -5,11 +5,13 @@
 .ho-hero:has(> button) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ho-hero > .av { flex-shrink: 0; }
 .ho-date { margin: 0 0 var(--sp-1); font-size: var(--fs-sm); color: var(--text-3); }
-.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: anywhere; }
+.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: break-word; }
+.ho-phrase { display: inline-block; max-width: 100%; word-break: keep-all; }
 .ho-board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--sp-5); align-items: stretch; }
 .ho-card { min-width: 0; background: var(--panel); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
-.ho-today { grid-column: span 7; }
-.ho-inbox { grid-column: span 5; }
+.ho-today { grid-column: span 7; align-self: start; }
+.ho-inbox { grid-column: span 5; gap: var(--sp-3); }
+.ho-inbox .ho-row.btn { padding-block: 0; }
 .ho-stat { grid-column: span 4; }
 .ho-card > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 24px; }
 .ho-card h2 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); min-width: 0; }

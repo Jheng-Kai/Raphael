@@ -87,7 +87,8 @@ export function homeHTML(data: HomeOverview): string {
   const report = buildReport(data.report, data.generated_at_ms);
   // His emblem turns while the window allows motion (avatar.ts keeps it still otherwise); nothing sits right of his report but its fix.
   const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "numeric", day: "numeric", weekday: "short" });
-  const hero = `<section class="ho-hero">${avatarHTML({ size: 72, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${esc(report.text)}</h1></div>` +
+  const headline = report.text.split(/(?<=[。！？])(?=[^》])/u).map(phrase => `<span class="ho-phrase">${esc(phrase)}</span>`).join("");
+  const hero = `<section class="ho-hero">${avatarHTML({ size: 72, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${headline}</h1></div>` +
     (report.action ? iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"') : "") + `</section>`;
   const pending = data.today.filter(item => item.kind !== "routine");
   return hero + `<div class="ho-board">` +

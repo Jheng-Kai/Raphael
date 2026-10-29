@@ -1,5 +1,39 @@
 # Raphael feature map
 
+## Owner round 8 contracts
+
+Details controls, including the shared brain picker, fill the same panel content width.
+The conversation mask has a fully transparent top band before its fade in both themes.
+Home wraps its unchanged report at CJK sentence boundaries, sizes Today to its content,
+and keeps all three complete stat cards on the first 1280x800 screen. Compact dictation
+orders totals, activity, then a column-filling shortcut card; that card is a page-level
+overview section, exempt from the generic short-card cap, with exact column alignment
+checked by dictation-overview. Conversation toasts reserve the bottom composer's space; when
+details are open, the shared toaster also reserves the panel's responsive width,
+including for long or stacked notices. They never cover resource/conversation rows
+or the composer. Learned-skill
+notices follow the producing reply; member skills and memory provenance use formatDate
+from format.ts, with explicit zh-TW, ja and en expectations.
+
+The existing details-alignment, conversation-scroll-edge, home-lead-width,
+dictation-overview, dictation-layout, skill-learned-notice and growing-skills checks
+cover these contracts. toast-clearance covers quick-cleared, composer-learn,
+conversation-delete-main and member-delete. Native deletion audit uses the same
+rendered clearance check at every member checkpoint. Native skill-growth rejects a
+notice before its producing reply and checks the learned skill's Chinese date.
+No brain, tool, core or Rust behavior changed.
+
+```powershell
+npm run verify
+npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills details-memory global-private-memory centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
+npm run look -- home-many quick-cleared --theme both --width 1280x800
+$env:RAPHAEL_MODELS_DIR = 'D:/Documentation/github_repos/Raphael/.worktrees/.test-models'
+npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
+```
+
+Keep one heavy process at a time and Vitest at --maxWorkers=2. The owner explicitly
+prohibited design judge for round 8; record SKIP instead of design acceptance.
+
 Use [the verification workflow](../SKILL.md) first. Commands run from `app/` and
 request both themes; local UI handoffs select affected scenes at 720/1120/1920x1080.
 Reserve the full scene matrix for integration/release acceptance, CI, explicit

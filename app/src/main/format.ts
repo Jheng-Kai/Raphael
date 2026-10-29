@@ -1,6 +1,6 @@
 // Numbers, times and dates as the main window shows them. Times are local.
 
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { backendMessage } from "./i18n/backend";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
@@ -20,6 +20,16 @@ export function formatUsd(n: number): string {
 export function formatClock(ms: number): string {
   const d = new Date(ms);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A complete local calendar date in the UI language, independent of the OS locale. */
+export function formatDate(value: string | number): string {
+  const date = new Date(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const locale = getLocale();
+  return locale === "en"
+    ? date.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" })
+    : `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())}`;
 }
 
 /** The local calendar day `ms` falls on, as a number that grows by one with each day. */
