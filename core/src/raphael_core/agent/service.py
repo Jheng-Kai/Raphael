@@ -2168,16 +2168,17 @@ class AgentService:
             logger.info("Plugin tools left out of a request: the answer model %s takes no tools", model)
             return None
         try:
-            if len(offer.by_alias) > MAX_OFFERED:
+            selectable = offer.unpinned()
+            if len(selectable.by_alias) > MAX_OFFERED:
                 # More tools than fit: the request is shown the ones it needs, not the first few.
                 chosen = await self._picker.pick(
-                    offer,
+                    selectable,
                     ask.text,
                     self._context(PLAN_CONTEXT_TURNS, ask.speaker.id, ask.conversation_id),
                     model=model,
                     ledger=ledger,
                 )
-                offer = offer.only(chosen)
+                offer = offer.only([*offer.pinned_aliases, *chosen])
             return await self._planner.plan(
                 offer,
                 ask.text,

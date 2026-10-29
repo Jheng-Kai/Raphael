@@ -289,10 +289,10 @@ def take_snapshot(
         if clash:  # a plugin's tool never takes the name of one of Raphael's own
             pool = make_offer([tool for alias, tool in pool.by_alias.items() if alias not in clash])
         snapshot.pool = pool
-        everything = list(pool.by_alias)
-        snapshot.show(
-            everything if len(everything) <= MAX_OFFERED else widen(pool, shortlist(pool, question, PICK_MAX))
-        )
+        selectable = pool.unpinned()
+        everything = list(selectable.by_alias)
+        selected = everything if len(everything) <= MAX_OFFERED else widen(selectable, shortlist(selectable, question, PICK_MAX))
+        snapshot.show([*pool.pinned_aliases, *selected])
         if snapshot.hidden():
             refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
             definitions.append(
@@ -312,12 +312,16 @@ async def refine(
 ) -> None:
     """Replace the tools a task is shown with the ones the model chooses for `question`, when the
     plugins have more tools than fit. The keyword choice `take_snapshot` made stays if the model's
-    fails, and the rest can still be found."""
+    fails, and the rest can still be found. Core-pinned tools bypass both selection steps."""
     pool = snapshot.pool
-    if pool is None or len(pool.by_alias) <= MAX_OFFERED:
+    if pool is None:
         return
-    chosen = await picker.pick(pool, question, context, model=model, ledger=ledger)
-    keep = {alias: ref for alias, ref in snapshot.refs.items() if ref.kind != MCP}
+    selectable = pool.unpinned()
+    if len(selectable.by_alias) <= MAX_OFFERED:
+        return
+    chosen = await picker.pick(selectable, question, context, model=model, ledger=ledger)
+    pinned = set(pool.pinned_aliases)
+    keep = {alias: ref for alias, ref in snapshot.refs.items() if ref.kind != MCP or alias in pinned}
     snapshot.refs.clear()
     snapshot.refs.update(keep)
     snapshot.definitions[:] = [

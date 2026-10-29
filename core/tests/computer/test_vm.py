@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -224,6 +225,77 @@ class Bridge:
         return {"content": [{"type": "image", "data": base64.b64encode(b"\x89PNG\r\n\x1a\nimage").decode(), "mimeType": "image/png"}]}
 
 
+DRIVER_CATALOG = json.loads((Path(__file__).parent / "fixtures/cua-driver-0.37.0.json").read_text(encoding="utf-8"))
+CURATED = set("""get_guide get_desktop_state get_window_state get_cursor_position
+    click double_click right_click type_text press_key hotkey scroll drag move_cursor
+    launch_app list_apps list_windows bring_to_front clipboard_read clipboard_write verify_state
+    get_browser_state browser_prepare browser_navigate browser_click browser_type browser_select
+    browser_pointer browser_dialog browser_set_input_files browser_download vm_exec attach_file""".split())
+
+
+class CatalogBridge(Bridge):
+    async def request(self, method, params=None):
+        if method == "tools/list":
+            # The owner recorded names only. These schemas exercise discovery, not Linux arguments.
+            names = [name for name in DRIVER_CATALOG["names"] if name not in DRIVER_CATALOG["raphael_tools"]]
+            return {"tools": [{"name": name, "description": name, "inputSchema": {"type": "object"}}
+                              for name in [*names, "future_driver_admin_tool"]]}
+        return await super().request(method, params)
+
+
+async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_path):
+    vm, target, runtime = desktop
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
+    await hub.prepare()
+    assert DRIVER_CATALOG["reported_count"] == 67
+    assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
+    assert CURATED <= set(DRIVER_CATALOG["names"])
+    assert {tool.name for tool in hub.offered()} == CURATED
+    snapshot = take_snapshot(hub)
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED
+    assert not snapshot.hidden()
+    assert all(tool.pinned for tool in hub.offered())
+    assert hub.tier_of("mcp:computer-shared/install_extension") is None
+
+
+@pytest.mark.parametrize("count", [40, 65, 400])
+@pytest.mark.parametrize("question", ["", "hello", "search notion", "install_extension set_config replay_trajectory"])
+async def test_computer_set_survives_plugin_shortlists_and_refine(desktop, tmp_path, count, question):
+    from raphael_core.agent.plugins import PluginTool
+    from raphael_core.background.snapshot import refine
+
+    class ManyHub(EmptyHub):
+        def offered(self):
+            return [PluginTool(f"mcp:other/t{n}", "Other", f"t{n}", "Search notion", {"type": "object"}, Tier.T0)
+                    for n in range(count)]
+
+    class Picker:
+        calls = 0
+        async def pick(self, offer, *args, **kwargs):
+            self.calls += 1
+            assert len(offer.tools) == count
+            assert all(tool.server == "Other" for tool in offer.tools)
+            return [next(iter(offer.by_alias))]
+
+    vm, target, runtime = desktop
+    hub = VmTools(ManyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
+    await hub.prepare()
+    snapshot = take_snapshot(hub, question)
+    expected = {"computer__" + name for name in CURATED}
+    assert expected <= snapshot.refs.keys()
+    other = [ref for ref in snapshot.refs.values() if ref.server == "Other"]
+    if count <= 40:
+        assert len(other) == count
+    else:
+        assert len(other) < count
+    picker = Picker()
+    await refine(snapshot, picker, question, [], model="fake", ledger=None)
+    assert picker.calls == (0 if count <= 40 else 1)
+    assert expected <= snapshot.refs.keys()
+    assert expected.isdisjoint(snapshot.hidden())
+    assert {d["function"]["name"] for d in snapshot.definitions} == snapshot.refs.keys()
+
+
 @pytest.mark.parametrize("action_mode", ["direct", "ask"])
 async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tmp_path, action_mode):
     vm, target, runtime = desktop
@@ -303,7 +375,7 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
     png = b"\x89PNG\r\n\x1a\nimageIEND\xaeB`\x82"
     forwarded = []
 
-    class SmokeBridge(Bridge):
+    class SmokeBridge(CatalogBridge):
         async def request(self, method, params=None):
             if method == "tools/list":
                 return await super().request(method, params)

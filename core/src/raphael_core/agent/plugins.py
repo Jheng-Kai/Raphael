@@ -49,8 +49,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The most tools shown to a model in one request without choosing among them first, and the most
-# calls it may ask for.
+# The most unpinned plugin tools shown without choosing first, and the most calls.
 MAX_OFFERED = 40
 MAX_CALLS = 3
 # The most the arguments of one call may come to, as JSON, in characters.
@@ -81,6 +80,7 @@ class PluginTool:
     description: str
     schema: dict[str, Any]
     tier: Tier
+    pinned: bool = False  # Core-owned tools stay together and do not consume the plugin cap.
 
 
 @dataclass
@@ -160,6 +160,14 @@ class Offer:
         """The offer of just these tools, under the names they already have."""
         chosen = {alias: self.by_alias[alias] for alias in aliases if alias in self.by_alias}
         return Offer(tools=list(chosen.values()), by_alias=chosen)
+
+    @property
+    def pinned_aliases(self) -> list[str]:
+        return [alias for alias, tool in self.by_alias.items() if tool.pinned]
+
+    def unpinned(self) -> "Offer":
+        """The selectable plugin tools, keeping aliases from the complete offer."""
+        return self.only([alias for alias, tool in self.by_alias.items() if not tool.pinned])
 
 
 _EMPTY: dict[str, Any] = {"type": "object", "properties": {}}

@@ -5,6 +5,25 @@ selects a durable workspace per member. Host paths use pathlib and Docker CSV bi
 mounts; no host shell or alternate runtime is used. The core never starts Docker
 Desktop. No Docker CLI/engine means no additional tools in the snapshot.
 
+`computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
+`attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
+state, input, application/window discovery, clipboard, verification and the Linux
+CDP browser helpers are offered together, regardless of the question. Core-owned
+`PluginTool.pinned` metadata excludes them from the 40-plugin budget, keyword
+shortlists, model refinement and the foreground planner's selection. Other plugins
+keep their existing cap and discovery. Driver updates/installs, configuration,
+recording/replay, escalation, lifecycle and redundant script runners are excluded;
+unknown future driver names are excluded too. No backend-supplied flag can pin a
+normal plugin tool. The gate and owner-control lease still apply on every call.
+
+The recorded names fixture is `core/tests/computer/fixtures/cua-driver-0.37.0.json`.
+The owner's brief says 67 but lists 68 unique names (including the two Raphael
+tools); the fixture preserves all 68. The pinned Linux wheel was unavailable
+offline, so test schemas are explicitly synthetic objects, not captured schemas.
+Browser selection follows Cua's documented Linux CDP support; real image/browser
+operation remains pending the owner's native run. The native assertions are intact,
+and their fake-runtime test now replays the complete supplied catalog.
+
 The existing `AgentService`, background snapshots, ToolGate, approval cards and
 metadata-only audit remain authoritative. Cua MCP runs through `docker exec -i`
 as `cua`. The same authenticated `RaphaelMcp` implementation exposes a `computer`

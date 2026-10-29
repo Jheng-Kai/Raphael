@@ -20,8 +20,8 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
+from .vm_catalog import DRIVER_TOOLS, READS
 
-READS = frozenset({"get_desktop_state", "get_screenshot", "screenshot", "health_report", "get_cursor_position"})
 _SCOPE = ContextVar("computer_scope", default=None)
 
 
@@ -90,6 +90,8 @@ class VmTools:
                 definitions = {}
                 for item in listed:
                     name, schema = item.get("name"), item.get("inputSchema")
+                    if name not in DRIVER_TOOLS:
+                        continue
                     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,59}", name) or name in definitions:
                         raise VmError("invalid_tool")
                     if name in ("vm_exec", "attach_file") or not isinstance(schema, dict):
@@ -104,7 +106,7 @@ class VmTools:
                     key = tool_key(f"computer-{target.key}", name)
                     # Sandbox steps need no tier approval, even in the owner's global Ask mode.
                     tier = Tier.T0
-                    self.tools[key] = PluginTool(key, "computer", name, definition["description"], definition["parameters"], tier)
+                    self.tools[key] = PluginTool(key, "computer", name, definition["description"], definition["parameters"], tier, pinned=True)
                     self.routes[key] = target
                     self.schemas[key] = definition.get("validation", definition["parameters"])
                     keys.append(key)
