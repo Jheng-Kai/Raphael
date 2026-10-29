@@ -519,6 +519,7 @@ describe("Models", () => {
       expect(row).not.toContain('data-fallback');
     }
     expect(priceTexts(view()).note).toBe("價格來自 OpenRouter，今天更新。實際花費依 OpenRouter 選用的供應商而定。");
+    expect(tab("models")).not.toContain('data-price="note"');
   });
 
   test("gives each picker the catalog, what is chosen and the row's name", () => {
@@ -572,6 +573,7 @@ describe("Models", () => {
     expect(modelPickerLook(view({ catalog: "loading" }), "cleanup")).toMatchObject({ catalog: null, loading: true });
     expect(modelPickerLook(view({ catalog: "failed" }), "cleanup")).toMatchObject({ catalog: null, loading: false });
     expect(priceTexts(view({ catalog: "failed" }))).toEqual({ model: "", "agent-model": "", "quick-model": "", "stt-model": "", note: "目前無法取得模型價格。" });
+    expect(tab("models", { catalog: "failed" })).toContain('目前無法取得模型價格。');
   });
 
   test("shows a saved model the catalog does not have by its id, with an unknown price", () => {

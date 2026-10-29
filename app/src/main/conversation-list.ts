@@ -50,7 +50,7 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     const section = (kind: "quick" | "standard", label: string): string => {
       const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
       if (kind === "quick" && !items.length) return "";
-      return `<section class="conversation-section" data-conversation-section="${kind}"><div class="mb-dh">${esc(label)}</div>` + (items.length ? items.map(c => `<div class="conversation-row">` +
+      return `<section class="conversation-section" data-conversation-section="${kind}">${kind === "standard" ? `<div class="mb-dh">${esc(label)}</div>` : ""}` + (items.length ? items.map(c => `<div class="conversation-row">` +
       btn(`<span>${esc(conversationTitle(c))}</span><small>${esc(relativeTime(c.updated_at_ms))}</small>`, "conversation-open", ` data-conversation-open="${c.id}"`) +
       iconButton("more", t("chat.more"), ` data-conversation-more="${c.id}" aria-haspopup="menu"`, "conversation-more") + `</div>`).join("") : `<p class="conversation-empty">${esc(t("conversations.empty"))}</p>`) + `</section>`;
     };

@@ -286,3 +286,7 @@ remain independent interactions; they may intentionally go below 100%.
 WebView/SQLite run. Roster prerequisites use production RPC; opening, explicit
 Fit, conversation navigation and details controls use the real UI. Captures
 record their actual viewport dimensions.
+
+## Owner round 7 layout
+
+The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. The owner runs design judge from their shell for this round.

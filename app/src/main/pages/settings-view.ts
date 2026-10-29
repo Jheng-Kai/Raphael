@@ -717,7 +717,7 @@ function dataHTML(v: SettingsView): string {
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
-  const content = selected === "models" ? section(t("models.used"), [modelRow(v, MODEL_ROWS[0]), quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], priceSpan(v, "note")) +
+  const content = selected === "models" ? section(t("models.used"), [modelRow(v, MODEL_ROWS[0]), quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
     `<div data-usage-host></div><section class="sgroup" aria-label="${esc(t("models.usage"))}"><div class="slist">` + [
       keyRow(v),

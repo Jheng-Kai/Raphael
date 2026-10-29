@@ -34,7 +34,7 @@ separate checks.
 
 The primary footer action fills the available centered action row (R-UI-37),
 including welcome and completion, while secondary actions stay to its left.
-Step headings use the 28px onboarding scale; the welcome title uses 44px. The welcome and completion screens omit redundant
+Tutorial step headings use the 28px onboarding scale; welcome and abilities titles use 44px. The welcome and completion screens omit redundant
 subtitles; essential tutorial guidance remains visible (R-UI-02/37).
 
 `onboarding-abilities` and `onboarding-done` capture the intermediate choice and
@@ -66,3 +66,7 @@ regressions live in first_run.rs and window_state_tests in lib.rs.
 ## Owner round 6 contracts
 
 Owner round 6: onboarding keeps the welcome title at 44px (within the owner-requested 40–48px range). onboarding-abilities is a representative step consumer and retains its existing 28px heading and step layout. The 44px requirement applies only to the welcome title. welcome-alignment checks that rendered title size.
+
+## Owner round 7 contracts
+
+The abilities headline now shares the welcome hero size (44px), overriding the round 6 abilities exception. Its optional-setup helper paragraph is removed; the vertical checklist and primary action retain their existing flow. onboarding-abilities-hero checks the rendered headline and absence of the paragraph. Other tutorial step titles are unchanged.

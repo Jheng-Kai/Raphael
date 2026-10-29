@@ -126,3 +126,7 @@ and rejects overlap with Close.
 ## Owner round 6 contracts
 
 Owner round 6: profile, dictation, appearance, skins, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
+
+## Owner round 7 contracts
+
+Models omits the reference-price helper paragraph while retaining price/subscription information on each purpose row. Catalog failure remains an essential error. settings-concise rejects the redundant price note in the normal Models fixture; models-responsive retains the stacked narrow-row contract.

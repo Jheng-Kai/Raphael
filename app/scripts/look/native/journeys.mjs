@@ -107,18 +107,18 @@ export async function drive(name, context) {
     for (const [groupIndex, count] of [[1, 1], [2, 8]]) {
       const { group } = await context.rpc("groups.create", { name: `Layout group ${groupIndex}` });
       for (let index = 0; index < count; index++) await context.rpc("members.create", {
-        name: `Colleague ${groupIndex}-${index + 1}`, role: "Research", group_id: group.id,
+        name: `Colleague ${groupIndex}-${index + 1}`, role: index === 1 ? "Strategy and decisions" : "Research", group_id: group.id,
       });
     }
     await page.setViewport({ width: 1280, height: 800 });
     await click(page, '#nav [data-go="team"]');
     await wait(page, '.team-group-members .team-member'); await pause(250);
-    await inspect("team-opening-1280", ["team-readable", "content-width"]);
+    await inspect("team-opening-1280", ["team-readable", "team-card-lines", "content-width"]);
     await click(page, '[data-team="fit"]'); await pause(200);
     await inspect("team-explicit-fit-1280", ["team-canvas-fit", "content-width"]);
     await page.setViewport({ width: 1920, height: 1080 });
     await chat(page); await details(page); await pause(250);
-    await inspect("details-1920", ["details-alignment", "conversation-header"]);
+    await inspect("details-1920", ["details-alignment", "conversation-header", "details-quick-once", "conversation-scroll-edge"]);
     await click(page, '.mb-det [data-det="close"]');
     await page.setViewport({ width: 720, height: 900 }); await pause(250);
     await inspect("conversation-720", ["conversation-header"]);
@@ -132,6 +132,8 @@ export async function drive(name, context) {
       await inspect("details-dismissed-720", ["conversation-header"]);
     }
     await scrim?.dispose();
+    await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
+    await inspect("home-720", ["sidebar-count-alignment", "home-lead-width"]);
   } else if (name === "self-diagnosis") {
     await chat(page);
     await perform(page, { action: "member-column", collapsed: false });

@@ -380,7 +380,6 @@ export const zhTW = {
   "onboarding.welcomeTitle": "開始設定",
   "onboarding.rerunTitle": "重新導覽",
   "onboarding.abilitiesTitle": "想用拉斐爾做什麼？",
-  "onboarding.abilitiesLine": "沒勾的也能用，只是不帶你設定與練習",
   "onboarding.abilityDictate": "聽寫",
   "onboarding.abilityDictateDesc": "說話就打字",
   "onboarding.abilityCleanup": "整理語句",

@@ -258,3 +258,7 @@ substituted; fake brain remains enabled and no provider request is needed.
 ## Owner round 6 contracts
 
 Owner round 6: team/team-fit/team-crisp-100/team-crisp-150/primary-team-board assert that model and source text is fully visible. Explicit Fit clears free placement and returns the chief plus every group to the same automatic left/right edges; ordinary drag placement remains available. Group rows size to their content; toolbar zoom reveals the chief and first group instead of cropping the first card. team-panned/team-rearranged/team-zoom/team-crisp-50 retain spatial interaction coverage; small text at 50% remains intentional.
+
+## Owner round 7 contracts
+
+Team chat uses the shared named chat icon button and native tooltip. Model and source occupy separate unwrapped lines without a leading separator. Same-row cards use a row subgrid so variable-height identities share a divider and action baseline. Chief and groups share one explicitly bounded column at every zoom; cards retain the shared short-card cap. team-card-lines covers team/team-fit/team-crisp-100/team-crisp-150/team-panned/team-rearranged/team-zoom/primary-team-board. Explicit pan/zoom/Fit and intentional 50% text remain available.

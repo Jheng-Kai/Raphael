@@ -195,8 +195,9 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .lede { margin: var(--sp-2) 0 0; color: var(--text-2); font-size: var(--fs-sm); max-width: 64ch; text-wrap: pretty; }
 @media (max-width: 880px) {
   :root { --sidebar-width: 176px; }
-  /* In the narrower sidebar 連結應用程式 and its number do not fit on one line: the number is a badge on its icon, as in the rail. */
-  .side .nav-count { position: absolute; top: -1px; left: 22px; margin: 0; min-width: 14px; padding: 0 2px; line-height: 14px; box-shadow: 0 0 0 2px var(--side); }
+  .side .nav:has(.nav-count) { gap: var(--sp-1); }
+  .side .nav:has(.nav-count) .nav-t { margin-left: var(--sp-1); }
+  .side .nav-count { min-width: 18px; padding-inline: calc(var(--sp-1) / 2); }
   .page { padding: calc(var(--window-controls-height) + 8px) 24px 48px; }
 }
 .group { margin-top: var(--sp-5); }
@@ -563,7 +564,7 @@ body:has(.page-agent:not([hidden])) .toasts { bottom: 112px; }
 .ob:has([data-welcome]) { grid-template-rows: auto auto auto; align-content: center; }
 .ob:has([data-welcome]) .ob-top.quiet { display: none; }
 .ob:has([data-welcome]) .ob-col { margin: 0; }
-.ob [data-welcome] h2 { font-size: 44px; }
+.ob [data-welcome] h2, .ob-col:has(.ob-abilities) h2 { font-size: 44px; }
 .ob:has([data-welcome]) .ob-body { padding-bottom: 0; }
 .ob-actions { width: min(560px, 100%); margin-inline: auto; }
 .ob-foot .btn { min-height: 40px; }
