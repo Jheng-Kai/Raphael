@@ -29,12 +29,38 @@ if operation == "init":
     with connection:
         for key, value in settings.items():
             connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)", (key, json.dumps(value)))
+    if len(sys.argv) > 3 and sys.argv[3] == "bot-homes":
+        import shutil
+        from raphael_core.members.store import MemberStore
+        from raphael_core.memory.store import MemoryStore
+        member = MemberStore(connection).create_member(name="Alice", role="Reviewer", model="cli:codex")
+        seed = directory / "migration-copy"
+        for relative, name, text in (("memory", "reference-project", "Project review"),
+                                     ("memory/shared", "user-profile", "The owner speaks English"),
+                                     (f"memory/members/{member.id}", "reference-private-review", "private-review")):
+            MemoryStore(seed / relative).write(name, type=name.split("-")[0], description=text, body=text)
+        skill = "---\nname: Review\ndescription: Review work\n---\nRead carefully.\n"
+        with connection:
+            identifier = connection.execute("INSERT INTO member_skills(member_id,name,description,source) VALUES (?, 'Review', 'Review work', 'owner')", (member.id,)).lastrowid
+        path = seed / "member-skills" / str(member.id) / f"{identifier}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(skill, encoding="utf-8")
+        for name in ("memory", "member-skills"):
+            shutil.copytree(seed / name, directory / name)
     connection.close()
     print("{}")
 else:
     connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
-    if operation == "snapshot":
+    if operation == "homes":
+        paths = ("bots/0/memory/reference-project.md", "shared/memory/user-profile.md", "bots/1/memory/reference-private-review.md", "bots/1/skills/1/SKILL.md")
+        import hashlib
+        files = {name: (directory / name).read_text(encoding="utf-8") for name in paths}
+        manifest = json.loads((directory / "bot-state/migration.json").read_text(encoding="utf-8"))
+        verified = all(hashlib.sha256((directory / item["to"]).read_bytes()).hexdigest() == item["sha256"] for item in manifest["files"] if not item["to"].endswith("MEMORY.md"))
+        receipt = directory / "native-cli/receipt.json"
+        print(json.dumps({"files": files, "verified": verified, "receipt": json.loads(receipt.read_text()) if receipt.exists() else None}))
+    elif operation == "snapshot":
         tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]
         result = {}
         for table in tables:

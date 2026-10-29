@@ -461,10 +461,8 @@ class BackgroundService:
         return None if shared_reader is None else shared_reader()
 
     def _speaker(self, member_id: int) -> Speaker | None:
-        if member_id == 0:
-            return RAPHAEL
         if self._team is None:
-            return None
+            return RAPHAEL if member_id == 0 else None
         try:
             return self._team.speaker(member_id)
         except sqlite3.Error:
@@ -1005,12 +1003,13 @@ class BackgroundService:
         self._store.start(task.id)
         limits = self._limits
         ledger = Ledger(self._spend)
-        selected_model = self._models.pop(task.id, task.model_ref or DEFAULTS["agent_model"])
+        selected_model = self._models.pop(task.id, task.model_ref or self._settings.get("agent_model") or DEFAULTS["agent_model"])
+        selected_model = speaker.model or selected_model
         recovered = json.loads(task.continuation) if task.continuation else None
         # A conversation turn that consulted colleagues answers the owner with what came back, on
         # its own brain; any other continuation goes on from the run that paused.
         answering = recovered is not None and 'spec' not in recovered
-        room_cli = (task.scope == "room" or task.mode is not None or answering) and selected_model.startswith("cli:")
+        room_cli = selected_model.startswith("cli:")
         model = selected_model if room_cli else api_model(self._settings, selected_model)
         context = self._context(task)
         # A consultation is answered from what the asked member knows: its notes and its own

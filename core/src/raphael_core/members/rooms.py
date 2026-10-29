@@ -126,7 +126,7 @@ class RoomsService:
         room["member_ids"] = self._ids(room)
         room["roles"] = json.loads(room["roles"]) if isinstance(room.get("roles"), str) else room.get("roles", {})
         room.pop("meeting_pending", None)
-        if not room["is_team"] and (0 not in room["member_ids"] or not 2 <= len(room["member_ids"]) <= 6):
+        if not room["is_team"] and (self._members.primary_id() not in room["member_ids"] or not 2 <= len(room["member_ids"]) <= 6):
             room["membership_state"] = "needs_adjustment"
         if room["default_responder"].startswith("member:") and int(room["default_responder"][7:]) not in room["member_ids"]:
             room["default_responder"] = "auto"
@@ -134,9 +134,9 @@ class RoomsService:
 
     def _validated_ids(self, ids, *, team=False):
         if (not isinstance(ids, list) or any(type(i) is not int or not self._members.member_exists(i) for i in ids)
-                or len(set(ids)) != len(ids) or (not team and (0 not in ids or not 2 <= len(ids) <= 6))
+                or len(set(ids)) != len(ids) or (not team and (self._members.primary_id() not in ids or not 2 <= len(ids) <= 6))
                 or (team and len(ids) > 101)):
-            raise invalid_params("ordinary rooms require Raphael and 2 to 6 distinct members")
+            raise invalid_params("ordinary rooms require the chief and 2 to 6 distinct members")
         return ids
 
     def _thread(self, room, thread_id=None):
@@ -217,7 +217,7 @@ class RoomsService:
             if "roles" in params:
                 self._conn.execute("UPDATE rooms SET meeting_pending=? WHERE id=?", (int('moderator' in roles.values()), room['id']))
             if "member_ids" in params:
-                self._conn.execute("DELETE FROM room_members WHERE room_id = ? AND member_id != 0", (room["id"],))
+                self._conn.execute("DELETE FROM room_members WHERE room_id = ? AND member_id != ?", (room["id"], self._members.primary_id()))
                 self._conn.executemany("INSERT OR IGNORE INTO room_members VALUES (?, ?)", [(room["id"], i) for i in sorted(set(ids))])
         self._changed(room["id"])
         return {"room":self._view(self._conn.execute("SELECT * FROM rooms WHERE id = ?", (room["id"],)).fetchone())}
@@ -254,7 +254,7 @@ class RoomsService:
             room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
         names = {s.id: s.name or 'Raphael' for s in self._members.roster()}
         moderator = next((int(i) for i, role in roles.items() if role == 'moderator'), None)
-        order = list(dict.fromkeys(([moderator] if moderator is not None else []) + [i for i in ids if i != 0]))
+        order = list(dict.fromkeys(([moderator] if moderator is not None else []) + [i for i in ids if i != self._members.primary_id()]))
         text = agenda.strip() + '\n' + ' '.join('@' + names[i] for i in order)
         result = await self._send({'room_id': room['id'], 'text': text, 'ui_language': language,
                                   'request_id': f'meeting_{source_turn_id}'})
@@ -317,11 +317,12 @@ class RoomsService:
             text=f"### {conclusion}\n" + '\n'.join(lines)
             text+=f"\n\n### {decision}\n{reason_words.get(exchange['reason'],reason_words['worker'])}\n\n### {next_steps}\n{awaiting}"
             with self._conn:
-                turn=self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,source,member_id,scope,room_id,thread_id) VALUES (?,?,'','room','','','running','room',0,'room',?,?)",
-                    (self._now(),f'room-stop:{origin}',room_id,owner['thread_id'])).lastrowid
+                chief_id = self._members.primary_id()
+                turn=self._conn.execute("INSERT INTO agent_turns(created_at_ms,session_id,question,route,prefix,text,status,source,member_id,scope,room_id,thread_id) VALUES (?,?,'','room','','','running','room',?,'room',?,?)",
+                    (self._now(),f'room-stop:{origin}',chief_id,room_id,owner['thread_id'])).lastrowid
                 self._history.publish_terminal(turn,prefix='',text=text,detail=None,status='done',cost_usd=0,replies=[text],model=None)
-                self._conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,origin_message_id,kind) VALUES (?,?,0,?,?,?,?,'wrapup')",
-                    (room_id,owner['thread_id'],text,self._now(),turn,origin))
+                self._conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,origin_message_id,kind) VALUES (?,?,?,?,?,?,?,'wrapup')",
+                    (room_id,owner['thread_id'],chief_id,text,self._now(),turn,origin))
                 self._conn.execute('UPDATE room_exchanges SET wrapup_sent=1,active_turn=NULL WHERE origin_message_id=?',(origin,))
             self._changed(room_id)
 
@@ -523,7 +524,7 @@ class RoomsService:
             "disagree, add evidence, or @mention one colleague to hand over the next turn. Do not independently "
             "dispatch conversational member turns. Use the handoff tool for concrete work assignments: a mention is not work. "
             "Assigned work starts now; source document dates are never schedule authorization. Say exactly (pass) if you have nothing material to add. ")
-        if member_id == 0:
+        if speaker.is_chief:
             prompt += ("You are the chief of staff. For a discussion or planning request, briefly frame the question "
                        "and @mention the right lead by their actual name to continue, rather than answering for everyone. "
                        # Live, about half the time Raphael did work himself that the owner told him to hand off.
@@ -541,12 +542,12 @@ class RoomsService:
         if roles:
             prompt += '\nRoom-only roles (do not change your permanent persona): ' + json.dumps(roles)
             prompt += ('\nThe moderator runs two rounds; in each, every other member speaks once and answers a colleague\'s '
-                       'argument, and Raphael concludes after them. During the meeting give someone the floor only with an '
+                       'argument, and the chief concludes after them. During the meeting give someone the floor only with an '
                        '@mention: never use the hand-off tool to make a colleague speak, answer or check something. ')
             if target.get('meeting') and kind != 'wrapup':
                 # Live, a moderator who did not know the round kept asking, and replies kept handing the floor on.
                 names = {s.id: s.name for s in self._members.roster()}
-                prompt += '\n' + _meeting_words(target['meeting'], names, RAPHAEL_NAMES.get(exchange.language, 'Raphael'))
+                prompt += '\n' + _meeting_words(target['meeting'], names, self._members.name_of(self._members.primary_id()) or RAPHAEL_NAMES.get(exchange.language, 'Raphael'))
                 # Live, members read the mail inside the rounds and reported it as done, so the chief left their
                 # items out when the owner then asked for the work to start.
                 prompt += ('\nThis meeting only discusses who does what. Nobody does the work or reads its sources during '
@@ -581,7 +582,7 @@ class RoomsService:
                                    "AND recipient_id=? AND state='queued'", (turn_id, exchange.origin_message_id, member_id))
         try:
             task_id = self._background.submit(session_id=session, text=prompt, language=exchange.language,
-                model=self._settings.get("agent_model") or DEFAULTS["agent_model"], member_id=member_id,
+                model=speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"], member_id=member_id,
                 attachments=attachments, asked_by=replace(speaker, depth=MAX_DEPTH, chain=frozenset(self._ids(room))))
         except Refused as refused:
             self._history.resolve(turn_id, prefix="", text=phrase(exchange.language, refused.kind), status="error")

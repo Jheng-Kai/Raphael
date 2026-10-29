@@ -250,7 +250,9 @@ class MemoryStore:
     no memories. `now` is the local time with its offset. Use it on one thread (the event loop)."""
 
     def __init__(self, root: Path, *, now: Callable[[], datetime] | None = None,
-                 on_change: Callable[[], None] | None = None) -> None:
+                 on_change: Callable[[], None] | None = None, homes=None, member_id: int = 0) -> None:
+        self.homes = homes
+        self.member_id = member_id
         self._on_change = on_change
         self.root = root
         self._now = now or (lambda: datetime.now().astimezone())
@@ -517,7 +519,7 @@ class MemoryStore:
         if not valid_name(name):
             return False
         try:
-            (self.root / f"{name}.md").unlink()
+            self._delete_file(self.root / f"{name}.md")
         except FileNotFoundError:
             return False
         self._count_change(name)
@@ -530,7 +532,7 @@ class MemoryStore:
         deleted = 0
         for path in self._files():
             try:
-                path.unlink()
+                self._delete_file(path)
                 deleted += 1
             except OSError as exc:
                 logger.warning("Could not delete a memory: %s", type(exc).__name__)
@@ -546,10 +548,21 @@ class MemoryStore:
         return gone
 
     def _write_file(self, path: Path, text: str) -> None:
+        if self.homes is not None:
+            relative = "MEMORY.md" if path.name == INDEX_FILE else "memory/" + path.name
+            self.homes.keep(self.member_id, relative, text)
+            return
         self.root.mkdir(parents=True, exist_ok=True)
         part = path.with_name(path.name + ".part")
         part.write_text(text, encoding="utf-8", newline="\n")
         os.replace(part, path)
+
+    def _delete_file(self, path: Path) -> None:
+        if self.homes is None:
+            path.unlink()
+        else:
+            from ..bots.homes import digest
+            self.homes.delete(self.member_id, "memory/" + path.name, expected_hash=digest(path.read_bytes()))
 
     def _after_change(self) -> None:
         """Write the index to `MEMORY.md`, for whoever opens the folder. The prompt reads `index`."""
@@ -575,11 +588,37 @@ def move_note(name: str, source: MemoryStore, target: MemoryStore) -> bool:
     if not valid_name(name) or source.get(name) is None or target.get(name) is not None:
         return False
     target.root.mkdir(parents=True, exist_ok=True)
-    os.replace(source.root / f"{name}.md", target.root / f"{name}.md")
+    source_path = source.root / f"{name}.md"
+    target._write_file(target.root / f"{name}.md", source_path.read_text(encoding="utf-8"))
+    source._delete_file(source_path)
     for store in (source, target):
         store._count_change(name)
         store._after_change()
     return True
+
+
+class SharedMemoryStore(MemoryStore):
+    """Preserve imported note files and publish the shared owner/team documents."""
+
+    def __init__(self, homes, **kwargs):
+        self.shared_homes = homes
+        super().__init__(homes.root / "shared/memory", **kwargs)
+        self._after_change()
+
+    def _write_file(self, path: Path, text: str) -> None:
+        self.shared_homes.shared_keep("memory/" + path.name, text)
+
+    def _delete_file(self, path: Path) -> None:
+        if not path.exists():
+            raise FileNotFoundError(path)
+        self.shared_homes.shared_keep("memory/" + path.name, None)
+
+    def _after_change(self) -> None:
+        super()._after_change()
+        for filename, notes in (("USER.md", [m for m in self.all() if m.type != "ongoing"]),
+                                ("team.md", [m for m in self.all() if m.type == "ongoing"])):
+            text = "\n\n".join(f"## {m.name}\n{m.description}\n\n{m.body}" for m in notes)
+            self.shared_homes.shared_keep(filename, text + ("\n" if text else ""))
 
 
 @dataclass(frozen=True)

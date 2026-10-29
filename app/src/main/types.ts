@@ -805,7 +805,9 @@ export interface Member {
   avatar_crop?: { x: number; y: number; zoom: number };
   /** Null: 未分組. */
   group_id: number | null;
-  /** "" is the model that answers for Raphael. */
+  /** The chief capability is independent of the member's identity. */
+  chief?: boolean;
+  /** "" inherits the global answer brain. */
   model: string;
   /** The tool and plugin ids it may use; null is every one that is on (the core's default). */
   tools: string[] | null;

@@ -876,6 +876,8 @@ export const ja = {
   "languages.variantsOf": "{p0}の表記",
   "settings.agentKeys": "ラファエルに質問",
   "settings.agentModel": "ラファエルの回答",
+  "members.brain": "ブレイン",
+  "members.inheritBrain": "全体設定を使用",
   "settings.agentCityHint": "例：東京",
   "settings.agentCityEmpty": "都市名を入力してください",
   "settings.keyTaken": "このショートカットはすでに「{p0}」に使われています",

@@ -65,6 +65,11 @@ class Speaker:
     # Whether this speaker writes mail as a draft for the owner to edit and send (`agent.drafts`) rather
     # than sending it: on unless the owner turned it off. It never takes the owner's rules away.
     draft_first: bool = True
+    capabilities: frozenset[str] = frozenset()
+
+    @property
+    def is_chief(self) -> bool:
+        return "chief" in self.capabilities
 
     @property
     def is_raphael(self) -> bool:
@@ -95,4 +100,4 @@ class Speaker:
         return replace(self, depth=asker.depth + 1, chain=asker.chain | {asker.id})
 
 
-RAPHAEL = Speaker()
+RAPHAEL = Speaker(capabilities=frozenset({"chief"}))

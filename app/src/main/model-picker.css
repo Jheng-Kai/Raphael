@@ -2,7 +2,7 @@
 .mp-slot { display: inline-flex; min-width: 0; max-width: 100%; }
 .sel.mp-trigger { min-width: 190px; max-width: min(330px, 100%); height: auto; min-height: 54px; padding: var(--sp-2) var(--sp-3); text-align: left; gap: var(--sp-2); }
 .sel.mp-trigger:hover:not(:disabled) { background: var(--hover); }
-.mp-trigger .mono { flex: none; }
+.sel.mp-trigger > .mono { flex: 0 0 28px; width: 28px; height: 28px; }
 .mp-ttext { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; flex: 1; gap: var(--sp-1); }
 .mp-tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; line-height: 1.35; }
 .mp-source { color: var(--text-3); font-size: var(--fs-xs); line-height: 1.35; }

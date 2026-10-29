@@ -88,6 +88,22 @@ class Brains:
         return True
 
 
+async def test_private_member_task_uses_its_cli_brain_without_api_fallback(make_rig, monkeypatch, tmp_path):
+    from raphael_core.members.service import MembersService
+    rig = make_rig()
+    team = MembersService(rig.conn, tmp_path, background=rig.service)
+    member = team.store.create_member(name="Alice", model="cli:codex")
+    rig.service._team = team
+    rig.service.use_cli(Brains(tmp_path))
+    played = scripted_cli(monkeypatch, [Event("final", "Private task finished on Codex.")])
+    task = rig.service.submit(session_id="private-member", text="Review", language="en", model="api/global", member_id=member.id)
+    await until(lambda: rig.task(task).state in ("done", "failed"))
+    assert rig.task(task).state == "done"
+    assert played and rig.task(task).report_text == "Private task finished on Codex."
+    assert rig.client.chat_calls == []
+    await team.aclose()
+
+
 def scripted_cli(monkeypatch, *runs, waits=(0.0, 0.0)):
     """Each CLI run plays the next list of events (the last one repeats); returns the runs made."""
     played = []

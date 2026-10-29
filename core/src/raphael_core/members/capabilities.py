@@ -6,7 +6,6 @@ dependencies, redirects, or arbitrary URLs are accepted. Documents remain untrus
 
 import asyncio
 import json
-import os
 import re
 import sqlite3
 from pathlib import Path
@@ -15,6 +14,7 @@ from urllib.parse import quote, unquote, urlsplit
 import httpx
 
 from .store import MemberError, MemberStore, _text
+from ..bots.homes import BotHomes, HomeError, digest, redact_secrets
 
 MAX_SKILL_BYTES = 128 * 1024
 MAX_SKILLS = 40
@@ -190,9 +190,11 @@ class MemberCapabilities:
         self.conn = conn
         self.folder = folder
         self.members = members
+        self.homes = BotHomes(folder.parent)
+        self.homes.migrate()
 
     def check(self, member_id: int) -> None:
-        if type(member_id) is not int or member_id <= 0 or self.members.member(member_id) is None:
+        if type(member_id) is not int or member_id < 0 or not self.members.exists(member_id):
             raise MemberError("not_found", "no such member")
 
     def skills(self, member_id: int) -> list[dict]:
@@ -201,12 +203,21 @@ class MemberCapabilities:
         return [{**dict(row), "enabled": bool(row["enabled"])} for row in rows]
 
     def _path(self, member_id: int, skill_id: int) -> Path:
-        return self.folder / str(member_id) / f"{skill_id}.md"
+        return self.homes.path(member_id, f"skills/{skill_id}/SKILL.md")
+
+    def _mirror(self, member_id: int) -> None:
+        skills = []
+        for skill in self.skills(member_id):
+            path = self._path(member_id, skill["id"])
+            skills.append({**skill, "provenance": "owner" if skill["source"] == "owner" else "imported",
+                           "revision": digest(path.read_bytes()) if path.exists() else None})
+        self.homes.mirror(member_id, "skills.json", json.dumps(skills, ensure_ascii=False, indent=2) + "\n")
 
     def keep_skill(self, member_id: int, source: str, text: str) -> dict:
         self.check(member_id)
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES:
             raise MemberError("size", "skill document is too large")
+        text = redact_secrets(text)
         name, description = skill_metadata(text)
         if len(self.skills(member_id)) >= MAX_SKILLS:
             raise MemberError("full", "member skill limit reached")
@@ -218,12 +229,33 @@ class MemberCapabilities:
                 cursor = self.conn.execute("INSERT INTO member_skills (member_id, name, description, source) VALUES (?, ?, ?, ?)", (member_id, name, description, source))
                 path = self._path(member_id, int(cursor.lastrowid))
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(text, encoding="utf-8")
+                self.homes.keep(member_id, f"skills/{cursor.lastrowid}/SKILL.md", text)
         except OSError:
             if path is not None:
                 path.unlink(missing_ok=True)
             raise MemberError("io", "could not keep the skill document") from None
+        self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == cursor.lastrowid)
+
+    def revert_state(self, member_id: int, revision: str, *, expected_hash: str) -> None:
+        """Core-only metadata undo; documents must still match the restored revisions."""
+        self.check(member_id)
+        entry = next((item for item in self.homes.journal(member_id) if item["id"] == revision), None)
+        path = self.homes.safe(self.homes.state(member_id) / "skills.json")
+        if entry is None or entry.get("state") != "skills.json" or not entry.get("applied"):
+            raise HomeError("skill state revision does not exist")
+        if entry["after_hash"] != expected_hash or digest(path.read_bytes()) != expected_hash:
+            raise HomeError("skill state changed; read it again before reverting")
+        restored = json.loads(entry["before"] or "[]")
+        for skill in restored:
+            document = self._path(member_id, skill["id"])
+            if (digest(document.read_bytes()) if document.exists() else None) != skill["revision"]:
+                raise HomeError("restore the skill document revision first")
+        with self.conn:
+            self.conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
+            self.conn.executemany("INSERT INTO member_skills (id, member_id, name, description, enabled, source) VALUES (?, ?, ?, ?, ?, ?)",
+                                 [(skill["id"], member_id, skill["name"], skill["description"], skill["enabled"], skill["source"]) for skill in restored])
+        self._mirror(member_id)
 
     def update_skill(self, member_id: int, skill_id: int, enabled: object) -> dict:
         self.check(member_id)
@@ -233,6 +265,7 @@ class MemberCapabilities:
             raise MemberError("not_found", "no such member skill")
         with self.conn:
             self.conn.execute("UPDATE member_skills SET enabled = ? WHERE member_id = ? AND id = ?", (enabled, member_id, skill_id))
+        self._mirror(member_id)
         return next(skill for skill in self.skills(member_id) if skill["id"] == skill_id)
 
     def _skill(self, member_id: int, skill_id: int) -> dict:
@@ -264,7 +297,7 @@ class MemberCapabilities:
         self._skill(member_id, skill_id)
         if not isinstance(text, str):
             raise MemberError("skill", "skill must be a UTF-8 Markdown document")
-        text = text.replace("\r\n", "\n")
+        text = redact_secrets(text.replace("\r\n", "\n"))
         if len(text.encode("utf-8")) > MAX_SKILL_BYTES:
             raise MemberError("size", "skill document is too large")
         if not text.strip() or "\x00" in text:
@@ -273,16 +306,14 @@ class MemberCapabilities:
         if any(other["id"] != skill_id and other["name"].casefold() == name.casefold() for other in self.skills(member_id)):
             raise MemberError("taken", "a skill with that name already exists")
         path = self._path(member_id, skill_id)
-        temporary = path.with_suffix(".md.tmp")
         try:
             with self.conn:
                 self.conn.execute("UPDATE member_skills SET name = ?, description = ? WHERE member_id = ? AND id = ?", (name, description, member_id, skill_id))
                 path.parent.mkdir(parents=True, exist_ok=True)
-                temporary.write_text(text, encoding="utf-8", newline="\n")
-                os.replace(temporary, path)
+                self.homes.keep(member_id, f"skills/{skill_id}/SKILL.md", text)
         except OSError:
-            temporary.unlink(missing_ok=True)
             raise MemberError("io", "could not keep the skill document") from None
+        self._mirror(member_id)
         return self._skill(member_id, skill_id)
 
     def delete_skill(self, member_id: int, skill_id: int) -> bool:
@@ -290,11 +321,13 @@ class MemberCapabilities:
         if not any(skill["id"] == skill_id for skill in self.skills(member_id)):
             return False
         try:
-            self._path(member_id, skill_id).unlink(missing_ok=True)
+            path = self._path(member_id, skill_id)
+            self.homes.delete(member_id, f"skills/{skill_id}/SKILL.md", expected_hash=digest(path.read_bytes()) if path.exists() else None)
         except OSError:
             raise MemberError("io", "could not delete the skill document") from None
         with self.conn:
             cursor = self.conn.execute("DELETE FROM member_skills WHERE member_id = ? AND id = ?", (member_id, skill_id))
+        self._mirror(member_id)
         return bool(cursor.rowcount)
 
     def read_skill(self, member_id: int, name: object) -> str | None:

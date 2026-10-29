@@ -148,8 +148,9 @@ class RoomExchanges:
             return ids
         if choice.startswith("member:") and int(choice[7:]) in ids:
             return [int(choice[7:])]
-        if 0 in ids:
-            return [0]
+        chief = self.rooms._members.primary_id()
+        if chief in ids:
+            return [chief]
         return ids[:1]
 
     def transcript(self, room, thread_id=None):
@@ -247,7 +248,7 @@ class RoomExchanges:
             with self.conn:
                 self.conn.execute("UPDATE rooms SET meeting_pending=0 WHERE id=?", (room["id"],))
                 self.conn.execute("UPDATE room_exchanges SET meeting=1 WHERE origin_message_id=?", (origin,))
-            speakers = [moderator] + [i for i in self.rooms._ids(room) if i not in (0, moderator)]
+            speakers = [moderator] + [i for i in self.rooms._ids(room) if i not in (self.rooms._members.primary_id(), moderator)]
             plan = [{"member":i, "reply_to_member":None, "reply_to":origin, "handoff":False, "round":round_no}
                     for round_no in (1, 2) for i in speakers]
             self.update(origin, pending=json.dumps(plan))
@@ -405,19 +406,20 @@ class RoomExchanges:
                     "(SELECT turn_id FROM room_messages WHERE origin_message_id=?) AND mode IS NOT NULL",
                     (room_id,exchange.origin_message_id)).fetchall()
                 # Raphael called on once a meeting's rounds are over gives its one conclusion, not a reply before it.
-                closing = (intent is not None and intent['recipient_id'] == 0 and moderator is not None and
+                chief = self.rooms._members.primary_id()
+                closing = (intent is not None and intent['recipient_id'] == chief and moderator is not None and
                            not any(entry.get('round') for entry in planned) and not self.conn.execute(
-                               "SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='queued' AND recipient_id!=0",
-                               (exchange.origin_message_id,)).fetchone())
+                               "SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='queued' AND recipient_id!=?",
+                               (exchange.origin_message_id,chief)).fetchone())
                 if (not pending or closing) and any(row['state'] in ('queued','running','waiting') for row in work):
                     return
                 # A member's failed reply is named in the wrap-up; any other block ends the exchange without one.
-                wrapup = (exchange.turns_taken >= 1 and 0 in ids and not exchange.wrapup_sent and
+                wrapup = (exchange.turns_taken >= 1 and chief in ids and not exchange.wrapup_sent and
                           (not pending or closing) and not self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked' "
                               "AND reason!='worker' AND reason NOT LIKE 'cli!_%' ESCAPE '!'", (exchange.origin_message_id,)).fetchone())
                 if wrapup:
                     last = self.last_reply(exchange.origin_message_id)
-                    pending = [{"member":0,"reply_to_member":last[1] if last else None,
+                    pending = [{"member":chief,"reply_to_member":last[1] if last else None,
                                 "reply_to":last[0] if last else exchange.origin_message_id,"handoff":False,
                                 **({"intent_id":intent['id']} if closing else {})}]
                 if not pending or (exchange.turns_taken >= MAX_TURNS and not intent and not wrapup and not pending[0].get('round')):

@@ -439,7 +439,7 @@ class Creating:
         self.created = []
 
     def speaker(self, member_id):
-        return Speaker() if member_id == 0 else None
+        return Speaker(capabilities=frozenset({"chief"})) if member_id == 0 else None
 
     def has_members(self):
         return False

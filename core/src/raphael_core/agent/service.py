@@ -1325,7 +1325,8 @@ class AgentService:
             allowed.append(item)
         began = time.perf_counter()
         # A turn already written (every CLI call, a narrated one) is the note's provenance now.
-        applied = self._memory.apply_said(allowed, ask.turn_id or 0, ask.speaker.id)
+        from ..memory.service import explicitly_shared
+        applied = self._memory.apply_said(allowed, ask.turn_id or 0, ask.speaker.id, share=explicitly_shared(ask.text))
         for _ in applied.written:
             ask.steps.append(self._step("tool", "memory_write", BUILTIN_SERVER, "ok", began, None))
         for _ in applied.deleted:
@@ -1841,7 +1842,7 @@ class AgentService:
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
                     return ToolOutcome(False, "owner_confirmation_required")
-                if planned is not None and name in BATCH_TOOLS and ask.speaker.is_raphael and not ask.nested:
+                if planned is not None and name in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
                     screening = screened[0] if screened else await self._screen_call(ask, planned, ledger)
                     screened = [screening]
                     if screening.verdict == DENY:
@@ -2259,7 +2260,7 @@ class AgentService:
         asking: list[tuple[PlannedCall, Screening]] = []
         for call, screening in zip(calls, screenings):
             tier = self._tier_now(call)
-            if call.tool.key in BATCH_TOOLS and ask.speaker.is_raphael and not ask.nested:
+            if call.tool.key in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
                 creates = sum(queued.tool.key in ("member_create", "create_member") for queued in ask.admin_pending)
                 if call.tool.key in ("member_create", "create_member") and ask.member_creates + creates >= 10:
                     results.append(ToolResult(call.tool.key, False, None, "member_create_limit"))
@@ -2337,7 +2338,7 @@ class AgentService:
         result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
             from .harness_tools import definitions_for
-            definition = dict(definitions_for(ask.speaker.id)).get(call.tool.key)
+            definition = dict(definitions_for(ask.speaker)).get(call.tool.key)
             schema = definition["parameters"] if definition else call.tool.schema
             self._tool_observer(call.tool.key, call.arguments, self._loop_result(result),
                                 ask.speaker.id, ask.conversation_id, schema)
@@ -2404,7 +2405,7 @@ class AgentService:
         try:
             self._gate.check_for(action or Action(name, args), name, args, approval)
             if name in ADMIN_TOOLS:
-                if not ask.speaker.is_raphael or self._team is None:
+                if not ask.speaker.is_chief or self._team is None:
                     raise HarnessToolError("unavailable")
                 if name == "member_create" and ask.member_creates >= 10:
                     raise HarnessToolError("member_create_limit")
@@ -2805,7 +2806,8 @@ class AgentService:
         team = self._team
         if team is None or name not in TEAM_TOOLS or (name not in (SKILL_READ, "handoff") and not speaker.may_ask):
             return ToolResult(name, False, None, "blocked")
-        if name in (CREATE_MEMBER, "room_meeting") and (not speaker.is_raphael or speaker.depth):
+        current = self._speaker(speaker.id)
+        if name in (CREATE_MEMBER, "room_meeting") and (current is None or not current.is_chief or speaker.depth):
             return ToolResult(name, False, None, "blocked")
         try:
             self._gate.check_for(action or Action(name, dict(arguments)), name, arguments, approval)
@@ -3003,9 +3005,9 @@ class AgentService:
                 self._gate.record_builtin(operation["name"], outcome="ok", approver="user")
                 if self._tool_observer is not None:
                     from .harness_tools import definitions_for
-                    definition = dict(definitions_for(0)).get(operation["name"])
+                    definition = dict(definitions_for(followup.ask.speaker)).get(operation["name"])
                     self._tool_observer(operation["name"], operation["arguments"], ToolOutcome(True),
-                                        0, followup.ask.conversation_id, definition["parameters"] if definition else {})
+                                        followup.ask.speaker.id, followup.ask.conversation_id, definition["parameters"] if definition else {})
                 item = result.get("member") or result.get("group") or {}
                 name = item.get("name", "")
                 role = item.get("role", "")
@@ -4009,8 +4011,8 @@ class AgentService:
     # --- the parts every reply uses -------------------------------------------------------------
 
     def _read_settings(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None) -> _Settings:
-        """Global assistant settings, including for legacy profiles with a stored model."""
-        model = self._settings.get("agent_model")
+        """The member's selected brain, with the global answer brain as fallback."""
+        model = speaker.model or self._settings.get("agent_model")
         effort = "none"
         quick = bool(conversation_id and self.conversations.get(conversation_id, speaker.id)["kind"] == "quick")
         if quick:

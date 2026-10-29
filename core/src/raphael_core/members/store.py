@@ -16,8 +16,8 @@
 
 Raphael himself is not a row: he is member 0 everywhere, cannot be renamed or deleted, and has
 every tool. The primary contact is the member whose `primary_contact` is 1 (at most one, by the table's
-own index), or Raphael while none is: choosing another never touches the chief of staff, who is Raphael
-whoever the primary is, and a member that is hidden or deleted stops being it. A name, a role, a personality,
+own index), or Raphael while none is. It also owns the unique chief capability
+and a member that is hidden or deleted hands that role back to Raphael. A name, a role, a personality,
 an instruction, a title and a prompt are what the owner wrote, so
 nothing here logs one; a refusal says which field was wrong, never what was in it.
 
@@ -30,7 +30,7 @@ import sqlite3
 import unicodedata
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ..agent.speaker import Speaker, is_raphael_name
@@ -121,7 +121,7 @@ class Member:
             role=self.role,
             instructions=self.instructions,
             personality=self.personality,
-            model="",
+            model=self.model,
             blurb=self.blurb,
             reply_style=self.reply_style,
             ask_before_members=self.ask_before_members,
@@ -588,7 +588,7 @@ class MemberStore:
 
     def set_primary(self, member_id: Any) -> bool:
         """Make `member_id` the primary contact (0 is Raphael), and nobody else: whether that changed
-        anything. Only the flag moves. The chief of staff, the rooms, the tasks, the exchanges and
+        anything. The primary and chief capability move together. The rooms, tasks, exchanges and
         the conversations are not touched, so nothing under way is run again, handed on or ended.
         MemberError when it is not a whole number, nobody, or a member hidden from the sidebar."""
         if type(member_id) is not int or member_id < 0:
@@ -611,6 +611,7 @@ class MemberStore:
         """Delete a member's row, its routines and its unread mark; whether there was one. Its
         conversation, memory and picture are the service's to delete."""
         with self.transaction():
+            self._conn.execute("UPDATE members SET primary_contact = 0 WHERE id = ?", (member_id,))
             self._conn.execute("DELETE FROM routine_runs WHERE routine_id IN (SELECT id FROM routines WHERE member_id = ?)", (member_id,))
             self._conn.execute("DELETE FROM room_members WHERE member_id = ?", (member_id,))
             self._conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
@@ -626,10 +627,13 @@ class MemberStore:
 
     def speaker(self, member_id: int) -> Speaker | None:
         """The member `member_id` as the assistant takes it; Raphael for 0; None for nobody."""
-        if member_id == 0:
-            return Speaker()
-        member = self.member(member_id)
-        return None if member is None else member.speaker()
+        member = self.member(member_id) if member_id else None
+        speaker = Speaker() if member_id == 0 else (None if member is None else member.speaker())
+        return None if speaker is None else replace(speaker, capabilities=frozenset({"chief"}) if self.is_chief(member_id) else frozenset())
+
+    def is_chief(self, member_id: int) -> bool:
+        """Exactly one role holder; the existing unique primary-contact state owns it."""
+        return type(member_id) is int and self.exists(member_id) and member_id == self.primary_id()
 
     # --- routines ----------------------------------------------------------------------------------
 

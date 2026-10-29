@@ -68,6 +68,14 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
+  test("offers the shared brain picker in member details", async () => {
+    const panel = mount(); await flush();
+    const trigger = panel.el.querySelector<HTMLButtonElement>('[data-model-picker="answer"] button');
+    expect(trigger).not.toBeNull();
+    expect(trigger?.getAttribute("aria-label")).toContain("大腦");
+    trigger?.click(); await flush();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  });
   test("conversation slot loads the selected member, preserves search on redraw, navigates and collapses when empty", async () => {
     const panel = mount();
     const open = vi.fn();
@@ -231,10 +239,10 @@ describe("a member's panel", () => {
     expect(host.update).toHaveBeenCalledWith(3, { group_id: 21 });
   });
 
-  test("no member has a model of its own, and the group's places are chips", async () => {
+  test("the member brain uses the shared picker, and the group's places are chips", async () => {
     const panel = mount();
     await flush();
-    expect(panel.el.querySelector(".mb-model, .mp-trigger, .mb-brain")).toBeNull();
+    expect(panel.el.querySelectorAll(".mp-trigger")).toHaveLength(1);
     expect([...panel.el.querySelectorAll(".mb-chips .mb-chip")].map((c) => c.textContent)).toEqual(["example/app"]);
   });
 
@@ -401,7 +409,7 @@ describe("Raphael's panel", () => {
     expect(panel.el.querySelector(".mb-avbtn .av")!.innerHTML).toContain("app-emblem");
     expect(panel.el.querySelector("#mb-det-instr")).toBeNull();
     expect(panel.el.querySelector('[data-det="group"]')).toBeNull();
-    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["routines", "memory"]);
+    expect([...panel.el.querySelectorAll<HTMLElement>(".mb-panel-pages [data-tab]")].map(row => row.dataset.tab)).toEqual(["routines", "memory", "skills"]);
     expect(api.routinesList).toHaveBeenCalledWith(0);
   });
 

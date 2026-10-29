@@ -72,7 +72,7 @@
       {
         "id": 0,
         "name": "拉斐爾",
-        "role": "幕僚長",
+        "role": "核心助手",
         "group_id": null,
         "model": ""
       },
@@ -930,7 +930,7 @@
     {
       "id": 0,
       "name": "拉斐爾",
-      "role": "幕僚長",
+      "role": "核心助手",
       "instructions": "回答時請附上具體例子，並區分已確認的事實與推測。",
       "personality": "溫和、細心，重視資料來源。",
       "avatar": "",

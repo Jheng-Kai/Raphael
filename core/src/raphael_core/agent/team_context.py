@@ -5,7 +5,7 @@ inventory as `integrations.inventory` lists it for the window: one definition of
 (`integrations.inventory`), so a model, the sidebar and the connections page give the same number.
 
 `primary_id` is the owner's primary contact (the member store's own: Raphael, 0, until the owner chooses
-another) and `chief_id` the room coordinator, who is Raphael whoever the primary is. Both are in the
+another) and `chief_id` the same role holder, also the room coordinator. Both are in the
 content the `revision` is made of, so choosing another primary is a new revision, and each prompt reads
 them here, fresh, on every turn: no brain is told the primary from anywhere else.
 """
@@ -40,13 +40,13 @@ class TeamContextSnapshot:
 def snapshot(team, self_id, language, room_member_ids=None):
     members = [{"id": s.id, "name": RAPHAEL_NAMES[language] if s.id == 0 else s.name,
                 "role": ({'zh-TW':'核心助手／幕僚長','en':'Core assistant / Chief of staff','ja':'コアアシスタント／参謀長'}[language]
-                         if s.id == 0 else s.role), "blurb": s.blurb}
+                         if s.is_chief else s.role), "blurb": s.blurb}
                for s in team.roster()]
     # Only public metadata of each app is copied, never provider configuration or credentials.
     inventory = read_inventory(team._connections)
     primary_id = team.primary_id()
     content = {"members": members, "apps": inventory.apps, "inventory_state": inventory.state,
-               "connected": inventory.count, "primary_id": primary_id, "chief_id": 0}
+               "connected": inventory.count, "primary_id": primary_id, "chief_id": primary_id}
     revision = hashlib.sha256(json.dumps(content, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    return TeamContextSnapshot(1, revision, self_id, len(members), primary_id, 0, members, inventory.apps,
+    return TeamContextSnapshot(1, revision, self_id, len(members), primary_id, primary_id, members, inventory.apps,
                                inventory.state, room_member_ids, inventory.count)

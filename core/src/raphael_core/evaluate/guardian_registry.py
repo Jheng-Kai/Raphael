@@ -87,7 +87,9 @@ async def inventory(servers=()):
         return "raphael/core/" + name
 
     for role, member in (("chief", 0), ("member", 1)):
-        for name, item in {**_DEFINITIONS, **dict(definitions_for(member))}.items():
+        from ..agent.speaker import Speaker
+        speaker = Speaker(id=member, capabilities=frozenset({"chief"}) if role == "chief" else frozenset())
+        for name, item in {**_DEFINITIONS, **dict(definitions_for(speaker))}.items():
             register(builtin(name), name, item["parameters"], role)
         for name in TEAM_TOOLS:
             if name in ("create_member", "room_meeting") and member:
@@ -125,7 +127,8 @@ async def inventory(servers=()):
     alias_keys = {alias: external_keys[tool.key] for alias, tool in make_offer(plugins).by_alias.items()}
     for role, member in (("chief", 0), ("member", 1)):
         snapshot = take_snapshot(AllRegistered(), memory=True, attachments=True,
-                                 speaker=Speaker(id=member, name="Fixture", role="Assistant"),
+                                 speaker=Speaker(id=member, name="Fixture", role="Assistant",
+                                                 capabilities=frozenset({"chief"}) if role == "chief" else frozenset()),
                                  team=TEAM_TOOLS if not member else ("ask_member",),
                                  interactive=True, max_tier=Tier.T3)
         if snapshot.pool:

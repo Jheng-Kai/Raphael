@@ -50,7 +50,7 @@ async def test_an_edited_document_is_what_the_model_reads_next_and_its_words_fol
     prompt = roster_prompt(rig.service, rig.service.speaker(member), "en")
     assert "Use for a clear summary of a long mail thread" in prompt and "Use when the owner asks" not in prompt
     # No temporary file is left beside it.
-    assert [path.name for path in rig.service.capabilities._path(member, skill["id"]).parent.iterdir()] == [f"{skill['id']}.md"]
+    assert [path.name for path in rig.service.capabilities._path(member, skill["id"]).parent.iterdir()] == ["SKILL.md"]
 
 
 async def test_the_switch_and_the_document_change_together_or_not_at_all(rig):

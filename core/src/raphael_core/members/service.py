@@ -23,8 +23,8 @@ The RPC methods (the main window only, through the shell's allow-list):
   to and that hands it to the colleague it belongs to. Raphael (0) until the owner chooses another; exactly one
   at a time. The roster says who it is to every model and to the window (`members.list`'s `team_context`,
   `primary_id`), which is the one place it is read from. It is Raphael again when the member is hidden or
-  deleted. Raphael stays the chief of staff, in every room, whoever it is, and only the choice changes: no
-  room, task or conversation is touched.
+  deleted. This unique contact holds the chief capability; changing it transfers team administration
+  and the required room role without rewriting conversations or tasks.
 - `members.set_avatar {id, name, mime, data}` -> `{member}`: a picture of the owner's own, in
   base64, checked as the images of a request are (`services.attachments`), copied into
   `<local>\\avatars\\members\\` under a name of its own: the path it came from is never known here.
@@ -252,6 +252,20 @@ class MembersService:
         self._viewing: int | None = None
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
         self._ticking: asyncio.Task[None] | None = None
+        self.sync_homes()
+
+    def sync_homes(self) -> None:
+        """Refresh derived mirrors from the database, including the built-in member."""
+        from dataclasses import asdict
+        for identifier in [0, *(member.id for member in self.store.members())]:
+            speaker = self.speaker(identifier)
+            persona = {key: value for key, value in asdict(speaker).items()
+                       if key in ("name", "role", "personality", "instructions", "blurb", "reply_style")}
+            self.capabilities.homes.mirror(identifier, "SOUL.md", json.dumps(persona, ensure_ascii=False, indent=2) + "\n")
+            self.capabilities._mirror(identifier)
+            home = self.capabilities.homes.home(identifier)
+            if not (home / "MEMORY.md").exists():
+                self.capabilities.homes.keep(identifier, "MEMORY.md", "")
 
     def register(self, router: Router) -> None:
         methods = {
@@ -294,7 +308,7 @@ class MembersService:
 
     def speaker(self, member_id: int) -> Speaker | None:
         if member_id == 0:
-            return Speaker(**self.first_bot_profile())
+            return Speaker(**self.first_bot_profile(), capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
 
     def first_bot_profile(self) -> dict:
@@ -308,7 +322,7 @@ class MembersService:
         if is_raphael_name(name) or name.casefold() == self.first_bot_profile().get("name", "").casefold():
             return self.speaker(0)
         member = self.store.by_name(name)
-        return None if member is None else member.speaker()
+        return None if member is None else self.speaker(member.id)
 
     def named_in(self, text: str) -> list[Speaker]:
         """The members whose names `text` holds: a name in Latin letters as a whole word, any
@@ -324,17 +338,18 @@ class MembersService:
             else:
                 hit = len(name) >= 2 and name in folded
             if hit:
-                found.append(member.speaker())
+                found.append(self.speaker(member.id))
         return found
 
     def has_members(self) -> bool:
         return self._conn.execute("SELECT 1 FROM members LIMIT 1").fetchone() is not None
 
     def roster(self) -> list[Speaker]:
-        return [self.speaker(0)] + [
-            Speaker(id=member.id, name=member.name, role=member.role, blurb=member.blurb)
-            for member in self.store.members()
-        ]
+        """Public inventory never carries another member's private persona or brain."""
+        return [Speaker(id=speaker.id, name=speaker.name, role=speaker.role, blurb=speaker.blurb,
+                        capabilities=speaker.capabilities)
+                for identifier in [0, *(member.id for member in self.store.members())]
+                if (speaker := self.speaker(identifier)) is not None]
 
     def primary_id(self) -> int:
         """The owner's primary contact (0 for Raphael): the one place the roster, the window and the prompts read it from."""
@@ -363,6 +378,8 @@ class MembersService:
 
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
+        if method == "members.changed":
+            self.sync_homes()
         if self._notify is not None:
             self._notify(method, {} if member_id is None else {"member_id": member_id})
 
@@ -535,6 +552,7 @@ class MembersService:
         view: dict[str, Any] = {
             **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
+            "chief": self.store.is_chief(member.id),
             "name": member.name,
             "role": member.role,
             "personality": member.personality,
@@ -563,6 +581,7 @@ class MembersService:
             "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
             "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
             "id": 0,
+            "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],
             "role": "",
             "personality": "",
@@ -608,7 +627,7 @@ class MembersService:
         return self.capabilities.expand(member_id, text)
 
     def enabled_skills(self, member_id: int) -> list[dict]:
-        return [] if member_id == 0 else [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
+        return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
 
     def skill_read(self, member_id: int, name: object) -> str | None:
         try:
@@ -617,13 +636,16 @@ class MembersService:
             return None
 
     def _cap(self, method, *args):
+        from ..bots.homes import HomeError
         try:
             return method(*args)
         except MemberError as error:
             raise _rpc_error(error) from None
+        except HomeError as error:
+            raise invalid_params(str(error)) from None
 
     def _cap_member(self, params: dict) -> int:
-        member_id = _whole(params, "member_id", least=1)
+        member_id = _whole(params, "member_id")
         self._cap(self.capabilities.check, member_id)
         return member_id
 
@@ -984,13 +1006,13 @@ class MembersService:
         return routine_id
 
     async def routine_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """Raphael can select any member; peers stay within their own routines."""
+        """The current chief can select any member; peers stay within their own routines."""
         handlers = {"routine_list": self._routines_list, "routine_create": self._routine_create,
                     "routine_update": self._routine_update, "routine_delete": self._routine_delete}
         if name not in handlers:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
-        if member_id != 0 and target != member_id:
+        if not self.store.is_chief(member_id) and target != member_id:
             raise invalid_params("routine belongs to another speaker")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
@@ -1177,7 +1199,7 @@ class MembersService:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if member_id != 0 or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not self.store.is_chief(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1212,8 +1234,8 @@ class MembersService:
         """Adapt Raphael's registry to the same RPC handlers, defaults and notifications."""
         from ..agent.team_admin import DEFINITIONS
 
-        if type(member_id) is not int or member_id != 0 or name not in DEFINITIONS:
-            raise invalid_params("team administration requires Raphael")
+        if not self.store.is_chief(member_id) or name not in DEFINITIONS:
+            raise invalid_params("team administration requires the chief capability")
         schema = DEFINITIONS[name]["parameters"]
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):
@@ -1226,7 +1248,7 @@ class MembersService:
                 identifier = item["id"]
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
                                 "group": groups.get(item["group_id"]),
-                                "skills_count": len(self.capabilities.skills(identifier)) if identifier else 0,
+                                "skills_count": len(self.capabilities.skills(identifier)),
                                 "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
                                 "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
             return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
@@ -1449,7 +1471,7 @@ class MembersService:
             source="routine",
             member_id=routine.member_id,
         )
-        model = self._settings.get("agent_model")
+        model = speaker.model or self._settings.get("agent_model")
         with self._conn:
             self._conn.execute(
                 "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id) VALUES (?, ?, ?, 'running', ?)",

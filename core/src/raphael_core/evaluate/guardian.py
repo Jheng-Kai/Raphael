@@ -239,7 +239,8 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
         if not available:
             result.update(status="SKIP", reason="CLI missing or login unverified")
             return result
-    speaker = Speaker(id=member, name="測試員", role="助理")
+    speaker = Speaker(id=member, name="測試員", role="助理",
+                      capabilities=frozenset({"chief"}) if member == 0 else frozenset())
     files = attachments(scenario.attachment)
     tools = take_snapshot(None, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
     if cli:

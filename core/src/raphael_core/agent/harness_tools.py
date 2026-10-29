@@ -68,14 +68,14 @@ DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
 
 
-def definitions_for(member_id: int):
-    """Administration is never offered to peers; only Raphael can select routine targets."""
+def definitions_for(speaker):
+    """Administration and routine targeting belong to the chief capability."""
     for name, item in DEFINITIONS.items():
-        if name in ADMIN_TOOLS and member_id != 0:
+        if name in ADMIN_TOOLS and not speaker.is_chief:
             continue
-        if name in ROUTINE_TOOLS and member_id == 0:
+        if name in ROUTINE_TOOLS and speaker.is_chief:
             schema = item["parameters"]
-            item = {**item, "description": item["description"] + " Raphael may supply member_id to manage any member's routines.",
+            item = {**item, "description": item["description"] + " The chief may supply member_id to manage any member's routines.",
                     "parameters": {**schema, "properties": {**schema["properties"], "member_id": {"type": "integer", "minimum": 0}}}}
         yield name, item
 

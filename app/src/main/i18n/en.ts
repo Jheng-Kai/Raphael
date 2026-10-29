@@ -876,6 +876,8 @@ export const en = {
   "languages.variantsOf": "How {p0} is written",
   "settings.agentKeys": "Ask Raphael",
   "settings.agentModel": "Raphael's answers",
+  "members.brain": "Brain",
+  "members.inheritBrain": "Use global setting",
   "settings.agentCityHint": "e.g. Taipei",
   "settings.agentCityEmpty": "Enter a city",
   "settings.keyTaken": "This shortcut is already used for {p0}",

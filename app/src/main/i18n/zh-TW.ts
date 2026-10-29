@@ -875,6 +875,8 @@ export const zhTW = {
   "languages.variantsOf": "{p0}的寫法",
   "settings.agentKeys": "問拉斐爾",
   "settings.agentModel": "拉斐爾的回答",
+  "members.brain": "大腦",
+  "members.inheritBrain": "跟隨全域設定",
   "settings.agentCityHint": "例：台北",
   "settings.agentCityEmpty": "請輸入城市名稱",
   "settings.keyTaken": "這組按鍵已經是「{p0}」的快捷鍵",

@@ -31,6 +31,12 @@ When dependencies are shared read-only via a `node_modules` junction, Vite needs
 `--configLoader runner`: put `{"build":{"beforeBuildCommand":"npm run build -- --configLoader runner"}}`
 in `.native/build.json` and pass `--config .native/build.json` to the build command.
 
+`npm run native -- bot-homes` seeds three synthetic copied memories and an imported skill,
+checks their migration hashes, then answers as a member on `cli:codex` through an offline
+Python child at the CLI protocol boundary. The child verifies that its prompt contains
+that member's own memory and skill. It uses isolated fake CLI authentication and never
+reads the owner's CLI profile or sends provider requests.
+
 Every journey has fresh `run-*/<journey>/data`, including its own WebView2, device
 settings, logs and real `raphael.db`. `RAPHAEL_TEST_NATIVE=1` works only in debug
 builds and skips single-instance, global hotkeys/hooks, tray, overlay and autostart

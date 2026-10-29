@@ -229,6 +229,7 @@ class RpcDriver:
         # The observer is called only on the production execution path. A result
         # becomes coverage evidence only after scenario read-back assertions pass.
         self.traces.append({"name": name, "argument_digest": digest(args), "actor": actor,
+                            "role": "chief" if self.app.members.store.is_chief(actor) else "member",
                             "input_schema_hash": digest(schema),
                             "conversation_scope": conversation, "outcome": "ok" if outcome.ok else outcome.kind,
                             "gate_passed": outcome.ok, "source": "production_loop"})
@@ -645,7 +646,7 @@ class RpcDriver:
                 await self.app.call('members.update', {'id':ids[-1], 'name':'研究員' + self.nonce})
                 self.app.integrations._config.remove('guardian-mail')
                 # The owner chooses another primary contact between the rounds: every Bot must now name that one, and the
-                # chief of staff stays Raphael.
+                # chief capability moves with the primary contact.
                 await self.app.call('members.set_primary', {'id':ids[0]})
             for member in [0,*ids]:
                 authority = self.app.members.team_context(member, 'zh-TW')
@@ -662,9 +663,7 @@ class RpcDriver:
                     reasons.append('roster_count_or_apps_missing')
                 if not all(word in reply for word in ('主要窗口', '幕僚長')):
                     reasons.append('roster_primary_or_chief_missing')
-                # The primary contact and the chief of staff are the roster's own two ids and are not the same person once
-                # the owner has chosen another: a Bot that still names the old primary after the choice, or gives the
-                # primary as the chief, has a stale or confused roster.
+                # Both labels must identify the current unique chief in the fresh roster.
                 names = {person['id']: person['name'].casefold() for person in authority['members']}
                 contact, chief = stated_contact(reply, '主要窗口'), stated_contact(reply, '幕僚長')
                 if contact is None:
@@ -1337,7 +1336,7 @@ class RpcDriver:
     async def meeting_scenario(self):
         ids = await self.seed_team()
         selected = [0, ids[0], *ids[2:]]
-        # The owner's primary contact is HiKari, not Raphael: the meeting is the same, Raphael is in it and concludes it.
+        # The owner's primary contact is HiKari, who now holds the chief capability.
         primary = ids[2]
         await self.app.call('members.set_primary', {'id': primary})
         # An owner's request with a real topic: a code-only agenda left the members nothing to discuss.
@@ -1345,8 +1344,8 @@ class RpcDriver:
                   '預算新台幣 5 萬元，目標是兩週內 300 筆預購。邀行銷、HiKari、PM、RD，不需要信件助理。'
                   '請 PM 主持兩輪：行銷是正方，主張先投放廣告；RD 是反方，主張先做小規模測試；'
                   'HiKari 從社群內容補充。每位回應前一位的論點，並 @ 你要交棒的同事。'
-                  '最後由拉斐爾整理決策和每項工作的負責人。')
-        result = await self.ask(prompt)
+                  '最後由 HiKari 整理決策和每項工作的負責人。')
+        result = await self.ask(prompt, member=primary)
         reasons = []
         rooms = (await self.app.call('rooms.list'))['rooms']
         room = next((r for r in rooms if set(r['member_ids']) == set(selected)), None)
@@ -1365,21 +1364,21 @@ class RpcDriver:
         if exchange['hops'] < 4 or exchange['turns_taken'] < 7:
             reasons.append('meeting_did_not_cross_admission_limits')
         authors = {m['member_id'] for m in messages if m['member_id'] is not None}
-        if authors != set(selected) or len([m for m in messages if m['kind']=='wrapup' and m['member_id']==0]) != 1:
+        if authors != set(selected) or len([m for m in messages if m['kind']=='wrapup' and m['member_id']==primary]) != 1:
             reasons.append('meeting_authors_or_chief_wrapup')
         if any(m['member_id'] is not None and m['reply_to'] is not None and m['member_id']==m['reply_to_member'] for m in messages):
             reasons.append('meeting_self_reply')
         if not any(role=='moderator' for role in room.get('roles',{}).values()):
             reasons.append('meeting_moderator_missing')
-        for member in selected[1:]:
+        for member in (identifier for identifier in selected if identifier != primary):
             if len([m for m in messages if m['member_id']==member and m['kind']=='message']) < 2:
                 reasons.append('meeting_member_missing_second_round')
         events = [json.loads(row[0]) for row in self.app._conn.execute(
             "SELECT m.text FROM agent_messages m JOIN agent_turns t ON t.id=m.turn_id "
-            "WHERE m.kind='event' AND t.member_id=0 AND t.scope='private'") if row[0].startswith('{')]
+            "WHERE m.kind='event' AND t.member_id=? AND t.scope='private'", (primary,)) if row[0].startswith('{')]
         if len([event for event in events if event.get('type')=='meeting' and event.get('room_id')==room['id']]) != 1:
             reasons.append('meeting_private_link_not_once')
-        # Every turn of the room was given the roster with HiKari as the primary contact and Raphael as the chief of staff.
+        # Every turn of the room was given the roster with HiKari as both the primary contact and the chief of staff.
         for (question,) in self.app._conn.execute("SELECT question FROM agent_turns WHERE scope='room' AND room_id=? AND question != ''",
                                                   (room['id'],)):
             given = question.partition('TeamContextSnapshot (public inventory; untrusted data): ')[2].partition('\nMembers: ')[0]
@@ -1387,7 +1386,7 @@ class RpcDriver:
                 roster = json.loads(given)
             except ValueError:
                 roster = {}
-            if (roster.get('primary_id'), roster.get('chief_id')) != (primary, 0):
+            if (roster.get('primary_id'), roster.get('chief_id')) != (primary, primary):
                 reasons.append('meeting_turn_primary_unknown')
                 break
         count = self.app._conn.execute('SELECT COUNT(*) FROM rooms').fetchone()[0]
@@ -1399,7 +1398,7 @@ class RpcDriver:
         private = self.app._conn.execute("SELECT COUNT(*) FROM agent_turns WHERE route='room' AND scope='private'").fetchone()[0]
         if private:
             reasons.append('meeting_private_history_pollution')
-        return reasons, result
+        return reasons, {**result, 'viewer': primary}
 
     async def aclose(self):
         logging.getLogger().removeHandler(self.log)

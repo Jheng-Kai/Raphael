@@ -1,13 +1,14 @@
 // The open member's panel keeps its avatar and editable identity above the conversation slot,
 // personality/instruction folds and resource rows. Each resource opens a subpage with a back
 // button; fields being typed in survive live member updates. Raphael keeps his special avatar,
-// routines and memory, while every member uses the same global model and tool capabilities.
+// routines and memory. Members choose a brain through the shared model picker.
 
 import { openRoutineDialog } from "./routine-dialog";
 import { mountConversationList } from "./conversation-list";
 import { openActions } from "./member-column";
 import * as api from "./api";
 import { mountMemberResources } from "./member-profile-resources";
+import { mountModelPicker, type ModelPicker } from "./model-picker";
 import "./member-panel.css";
 import { changeRaphaelAvatar, resetRaphaelAvatar } from "./avatar-settings";
 import { currentAvatar } from "./avatar";
@@ -29,7 +30,7 @@ import {
   scheduleText,
   sourceLabel,
 } from "./members";
-import type { AppContext, AvatarPreset, Member, MemberPatch, MembersList, Routine, WireAttachment } from "./types";
+import type { AppContext, AvatarPreset, BrainSettings, CliBrain, Member, MemberPatch, MembersList, ModelCatalog, Routine, WireAttachment } from "./types";
 import { btn, esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
 export type DetailsTab = "details" | "memory" | "routines" | "skills" | "commands" | "voice";
@@ -85,6 +86,33 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let resources: ReturnType<typeof mountMemberResources> | null = null;
   let resourceKey = "";
   let memoryDraft = "";
+  let brainPicker: ModelPicker | null = null;
+  let catalog: ModelCatalog | null = null, clis: CliBrain[] = [], globalModel = "";
+  let brainLoaded = false;
+  async function loadBrains(): Promise<void> {
+    if (brainLoaded) return;
+    brainLoaded = true;
+    const result = await Promise.allSettled([
+      api.core<ModelCatalog>("models.catalog"),
+      api.core<{ clis: CliBrain[] }>("brains.cli"),
+      api.core<{ settings: BrainSettings }>("settings.get"),
+    ]);
+    catalog = result[0].status === "fulfilled" && Array.isArray(result[0].value?.llm) ? result[0].value : null;
+    clis = result[1].status === "fulfilled" ? result[1].value?.clis ?? [] : [];
+    globalModel = result[2].status === "fulfilled" ? result[2].value?.settings?.agent_model ?? "" : "";
+    draw();
+  }
+  function drawBrain(): void {
+    brainPicker?.close(); brainPicker = null;
+    const slot = body.querySelector<HTMLElement>('[data-member-brain]');
+    if (!slot) return;
+    const member = host.member();
+    brainPicker = mountModelPicker(slot, {
+      role: "answer", current: member.model || "", catalog, clis, label: t("members.brain"), key: "member-brain",
+      lead: { id: "", name: t("members.inheritBrain") }, inheritFrom: globalModel,
+      onChoose: model => { void host.update(member.id, { model }).then(() => draw()); },
+    });
+  }
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
@@ -106,7 +134,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   async function loadCounts(): Promise<void> {
     const epoch = ++countEpoch, id = host.member().id;
     const result = await Promise.allSettled([
-      id === RAPHAEL_ID ? Promise.resolve({skills: []}) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
+      api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
       id === RAPHAEL_ID ? Promise.resolve({commands: []}) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
       api.core<{ memories: unknown[] }>("memory.list", { member_id: id, space: "own" }),
     ]);
@@ -126,10 +154,10 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     return `<nav class="mb-panel-pages" aria-label="${esc(t("members.details"))}">` +
       pageRow("routines", t("members.routines"), "clock", t("members.panelActive", {p0: active})) +
       pageRow("memory", t("mem.title"), "memory", t("members.panelNotes", {p0: counts.memory})) +
-      (member.id === RAPHAEL_ID ? "" : pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
-      pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
-      pageRow("voice", t("members.panelVoice"), "voice") +
-      `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span>${ico("right")}</button>`) + `</nav>`;
+      pageRow("skills", t("members.panelSkills"), "sparkle", t("members.panelCount", {p0: counts.skills})) +
+      (member.id === RAPHAEL_ID ? "" : pageRow("commands", t("members.panelCommands"), "steps", t("members.panelCount", {p0: counts.commands})) +
+      pageRow("voice", t("members.panelVoice"), "voice")) +
+      (member.id === RAPHAEL_ID ? "" : `<button type="button" class="btn mb-panel-row" data-det="hide">${ico("eyeOff")}<span class="mb-panel-row-copy"><span>${esc(t("members.panelHide"))}</span><small>${esc(t("members.panelHideHint"))}</small></span>${ico("right")}</button>`) + `</nav>`;
   }
 
   const memoryHost = {
@@ -208,7 +236,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         `<textarea id="mb-det-instr" data-member="${member.id}" class="mb-fin mb-ta" rows="4" maxlength="${INSTRUCTIONS_MAX}">${esc(member.instructions ?? "")}</textarea>`) +
       `<section class="mb-field"><div class="mb-dh">${esc(t("members.group"))}</div>` +
       sel(groupChoices(list?.groups ?? []), groupValue(group ? group.id : null), t("members.group"), ' data-det="group" data-k="det-group"') +
-      `</section>` +
+      `</section>` + `<section class="mb-field"><div class="mb-dh">${esc(t("members.brain"))}</div><div data-member-brain data-model-picker="answer"></div></section>` +
       pageRows(member) +
       (sources.length
         ? `<section class="mb-field"><div class="mb-dh">${esc(t("members.sources"))}</div><div class="mb-chips">` +
@@ -267,6 +295,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       kept.before(...fresh.slice(0, at));
       kept.after(...fresh.slice(at + 1));
       drawConversations();
+      drawBrain();
       scroll.scrollTop = scrollTop;
       return;
     }
@@ -286,6 +315,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         `<div class="mb-addrow mb-panel-memory-add"><input id="mb-memory-new" class="mb-fin" maxlength="1200" value="${esc(memoryDraft)}" placeholder="${esc(t("members.panelMemoryHint"))}" aria-label="${esc(t("members.panelMemoryHint"))}">${btn(esc(t("members.panelMemoryAdd")), "", ' data-det="memory-add"')}</div>` + memoryHTML(shared.view()) + memoryHTML(own.view());
     }
     drawConversations();
+    drawBrain();
     if (sameMember && typingIn && typingIn !== "mb-det-name" && typingIn !== "mb-det-role") el.querySelector<HTMLElement>(`#${CSS.escape(typingIn)}`)?.focus({ preventScroll: true });
     else if (sameMember && focusKey) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
     if (sameMember && selection && typingIn) {
@@ -500,6 +530,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (space !== "shared" && memberId === host.member().id) void own.load();
     },
     showMember() {
+      void loadBrains();
       tab = "details";
       memoryDraft = ""; counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();

@@ -3,6 +3,7 @@ import os
 import re
 import json
 import tomllib
+import sys
 from pathlib import Path
 
 from .connectors.composio import KEY
@@ -17,6 +18,40 @@ def native_enabled(fake_llm: bool) -> bool:
 def gmail_enabled(fake_llm: bool) -> bool:
     return (native_enabled(fake_llm)
             and os.environ.get("RAPHAEL_TEST_NATIVE_GMAIL") == "1")
+
+
+def bot_homes_brain(fake_llm: bool, data: Path):
+    """An offline child at the CLI transport boundary of the isolated native journey."""
+    if not native_enabled(fake_llm) or os.environ.get("RAPHAEL_TEST_NATIVE_HOMES") != "1":
+        return None
+    from .agent.cli.discovery import CliBrains
+    home = data / "native-cli"
+    auth = home / ".codex/auth.json"
+    auth.parent.mkdir(parents=True, exist_ok=True)
+    auth.write_text("{}", encoding="utf-8")
+    child = home / "codex.py"
+    child.write_text('''import json, sys
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+if "--version" in sys.argv:
+    print("native-fake-codex 1"); sys.exit()
+for line in sys.stdin:
+    msg = json.loads(line)
+    method = msg.get("method")
+    if method == "initialize": send({"id":msg["id"], "result":{}})
+    elif method == "model/list": send({"id":msg["id"], "result":{"data":[]}})
+    elif method in ("thread/start", "thread/resume"):
+        prompt = msg["params"].get("developerInstructions", "")
+        assert "private-review" in prompt and "Review" in prompt
+        Path(sys.argv[1]).write_text(json.dumps({"member_home":True,"skills":True}), encoding="utf-8")
+        send({"id":msg["id"], "result":{"thread":{"id":"native-home"}}})
+    elif method == "turn/start":
+        send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "id":"final", "phase":"final_answer", "text":"Native Codex home verified."}}})
+        send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
+        break
+''', encoding="utf-8")
+    return CliBrains(home=home, environ={**os.environ, "CODEX_HOME": str(auth.parent), "PYTHONUTF8": "1"},
+                     commands={"codex": [sys.executable, str(child), str(home / "receipt.json")]})
 
 
 def native_consult(messages: list[dict], offered: set[str], seen: int) -> dict | None:

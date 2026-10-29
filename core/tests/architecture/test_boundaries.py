@@ -26,10 +26,13 @@ def test_members_and_rooms_do_not_create_brain_loops():
 
 
 def test_administration_is_raphael_only():
-    assert set(ADMIN) <= dict(definitions_for(0)).keys()
-    for member in (1, 2, 999):
-        assert not set(ADMIN) & dict(definitions_for(member)).keys()
-        assert "member_id" not in dict(definitions_for(member))["routine_create"]["parameters"]["properties"]
+    from raphael_core.agent.speaker import Speaker
+    for identifier in (0, 1, 999):
+        chief = Speaker(id=identifier, capabilities=frozenset({"chief"}))
+        peer = Speaker(id=identifier)
+        assert set(ADMIN) <= dict(definitions_for(chief)).keys()
+        assert not set(ADMIN) & dict(definitions_for(peer)).keys()
+        assert "member_id" not in dict(definitions_for(peer))["routine_create"]["parameters"]["properties"]
 
 
 def test_shared_loop_and_definition_sources():

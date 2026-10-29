@@ -18,9 +18,9 @@ import { esc, ico } from "./ui";
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
 
-/** Raphael's role is a localized identity label, independent of stored profile text. */
-export const memberRole = (member: { id: number; role?: string }): string =>
-  member.id === RAPHAEL_ID ? t("rooms.chief") : member.role ?? "";
+/** The unique chief has a localized role label; other members retain their profile role. */
+export const memberRole = (member: { id: number; role?: string; chief?: boolean }): string =>
+  (member.chief ?? member.id === RAPHAEL_ID) ? t("rooms.chief") : member.role ?? "";
 
 /** The longest name, role, instructions and group name the core takes (members.* and groups.*). */
 export const NAME_MAX = 16;
@@ -94,7 +94,7 @@ export const memberOf = (list: MembersList | null, id: number): Member | undefin
 /**
  * The member the owner chose as their primary contact: Raphael until another is chosen. It is read from the
  * roster the core gives with the list (`team_context.primary_id`), the one place it is kept, and it is
- * Raphael if the roster names nobody the list has. The chief of staff is Raphael whoever it is.
+ * Raphael if the roster names nobody the list has. This member also holds the unique chief capability.
  */
 export function primaryIdOf(list: MembersList | null): number {
   const id = list?.team_context?.primary_id;

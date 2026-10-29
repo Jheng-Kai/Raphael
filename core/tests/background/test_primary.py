@@ -18,8 +18,8 @@ def told(system):
 
 @pytest.mark.parametrize("selected,expected", [
     ("teacher", ["hand it to the primary contact", "ask_member"]),
-    ("coach", ["That is you", "hand such a request to him"]),
-    ("raphael", ["conclude each one and alone administer the team"]),
+    ("coach", ["That is you", "You administer members"]),
+    ("raphael", ["Only the chief administers"]),
 ])
 async def test_a_task_is_told_who_the_primary_contact_is_and_what_that_makes_of_it(make_rig, conn, tmp_path, selected, expected):
     rig = make_rig()
@@ -45,7 +45,7 @@ async def test_a_task_is_told_who_the_primary_contact_is_and_what_that_makes_of_
         assert told(system).startswith(f'"Coach" (id {coach.id}).'), system
         for words in expected:
             assert words in told(system)
-        assert f'"primary_id": {coach.id}' in system and '"chief_id": 0' in system
+        assert f'"primary_id": {coach.id}' in system and f'"chief_id": {coach.id}' in system
     finally:
         await members.aclose()
         await memory.aclose()
