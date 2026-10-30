@@ -551,6 +551,8 @@ class TaskRun:
             self._end_step(sent, **fields)  # the step written when the call was sent
         else:
             self._step(kind="tool", **fields)
+        if reply.get("kind") == "computer_permission_required":
+            raise stopped("failed", "computer_permission_required")
         return reply
 
     async def _screen(self, ref: ToolRef, arguments: dict) -> Screening:
@@ -586,6 +588,12 @@ class TaskRun:
     async def _plugin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
     ) -> tuple[dict, str, str | None, int | None]:
+        if ref.key.startswith("mcp:computer-access-"):
+            self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
+            return {"ok": False, "kind": "computer_permission_required", "content": (
+                "This member has no computer grant. This routine cannot start a computer. "
+                "Ask the owner to grant access in the member's private chat or press Start in its panel."),
+                "truncated": False}, "blocked", "T2", None
         now = self._gate.tier_now(ref.key, arguments)
         if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name, arguments)):
             # The owner said no to something in this task: this tool is not tried again, and no other that changes

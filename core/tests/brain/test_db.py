@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 44
+LATEST = 45
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -471,6 +471,10 @@ SCHEMA_V42 = {**SCHEMA_V39, "connect_cards": [*SCHEMA_V39["connect_cards"],
     "app_name TEXT NOT NULL DEFAULT ''", "provider TEXT NOT NULL DEFAULT 'google'"]}
 SCHEMA_V43 = {**SCHEMA_V42, "connect_cards": [*SCHEMA_V42["connect_cards"], "app_logo TEXT NOT NULL DEFAULT ''"]}
 SCHEMA_V44 = {**SCHEMA_V43, "rooms": [*SCHEMA_V43["rooms"], "read_message_id INTEGER NOT NULL DEFAULT 0", "pinned INTEGER NOT NULL DEFAULT 0", "hidden INTEGER NOT NULL DEFAULT 0"]}
+# Schema v45 persists the owner's member-specific computer permission and revocation.
+SCHEMA_V45 = {**SCHEMA_V44, "computer_grants": [
+    "member_id INTEGER PK", "granted INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
 
 
 def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):
@@ -590,7 +594,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V44) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V45) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -604,7 +608,7 @@ def test_connect_creates_the_latest_schema(conn):
         "worker_questions_task",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V44.items():
+    for table, columns in SCHEMA_V45.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

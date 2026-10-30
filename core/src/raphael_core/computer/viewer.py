@@ -140,6 +140,12 @@ class DesktopViewer:
         for name, handler in (("status", self.status), ("open", self.open), ("renew", self.renew),
                               ("control", self.control), ("close", self.close)):
             router.register(f"computer.viewer_{name}", handler)
+        router.register("computer.revoke", self.revoke)
+
+    async def revoke(self, params):
+        self.target(params)
+        self.vm.grants.set(params.get("member_id", 0), False)
+        return {"granted": False}
 
     def target(self, params):
         member = params.get("member_id", 0)
@@ -170,9 +176,12 @@ class DesktopViewer:
         token = secrets.token_urlsafe(32)
         if type(params.get("preview", False)) is not bool:
             raise invalid_params("preview must be a boolean")
+        if not params.get("preview"):
+            self.vm.grants.set(params.get("member_id", 0), True)
         self.sessions[token] = Session(target, self.vm.clock() + LEASE_SECONDS,
             member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
-        if not params.get("preview") and (await self.status_for(target))["state"] != "running":
+        if (not params.get("preview") and (await self.status_for(target))["state"] != "running"
+                and self.vm.grants.allowed(params.get("member_id", 0))):
             self.vm.launch(target)
         return {"session": token, "url": f"{self.origin}/{token}/vnc.html"}
 

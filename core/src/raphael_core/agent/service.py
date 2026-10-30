@@ -1990,6 +1990,13 @@ class AgentService:
                 loop.on_done = self._cli_loops.discard
             else:
                 loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), **common)
+            def refresh_computer():
+                snapshot.refresh_computer(self._plugins, ask.speaker.id)
+                loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
+                loop.tools.extend(item for item in snapshot.definitions if item["function"]["name"].startswith("computer__"))
+                if isinstance(loop, CliLoop):
+                    loop.catalog_changed = True
+            loop.refresh_computer = refresh_computer
         try:
             outcome = await loop.run()
             if isinstance(loop, CliLoop) and self._model_observer is not None:
@@ -2742,6 +2749,10 @@ class AgentService:
             tool=call.tool.name,
             what=parenthesized(language, shown),
         )
+        computer_request = call.tool.key.startswith("mcp:computer-access-")
+        if computer_request:
+            from ..computer.grants import request_question
+            question = request_question(language, ask.speaker.name or "Raphael", shown)
         text = asked_with(language, screening, question)
         if call.tool.key in CONFIRM_TOOLS and self._team is not None:
             text = asked_with(language, screening,
@@ -2752,6 +2763,8 @@ class AgentService:
             # it asked, and whether 一律允許 can take effect (not where a rule asks: Ask first wins).
             exact = phrase(language, "confirm_plugin", server=call.tool.server, tool=call.tool.name,
                            what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
+            if computer_request:
+                exact = question
             card = _CardSpec("tool", call.tool.server, call.tool.name, exact, rule_lead(language, screening),
                              self._always_offered(call, screening))
         action = Action(call.tool.key, dict(call.arguments))
@@ -2765,7 +2778,7 @@ class AgentService:
         only where nothing the owner wrote asks first or could not be read (a rule that asks, a judge that
         failed) and the tool can be undone."""
         tier = self._tier_now(call)
-        return (tier is not None and tier < Tier.T3 and call.tool.key.startswith(PLUGIN_PREFIX)
+        return (not call.tool.key.startswith("mcp:computer-access-") and tier is not None and tier < Tier.T3 and call.tool.key.startswith(PLUGIN_PREFIX)
                 and not screening.unchecked and (screening.verdict != ASK or screening.switch))
 
     def ask_in_background(self, ask: _Ask, ledger: Ledger) -> dict:
@@ -3198,6 +3211,8 @@ class AgentService:
         self._write(lambda: self._history.add_steps(pending.turn_id, steps))
         if followup.loop is not None:
             loop = followup.loop
+            if result.ok and call.tool.key.startswith("mcp:computer-access-"):
+                loop.refresh_computer()
             loop.seen.append(result)
             if result.ok and call.tool.key == CREATE_MEMBER:
                 self._message(followup.ask, "event", phrase(
@@ -3513,19 +3528,22 @@ class AgentService:
         if resolution.outcome is Outcome.EXPIRED:
             self._card_state(pending.id, "expired")
             self._drop_followup(pending, "expired")
-            return self._outcome(pending, "negative", phrase(language, "expired"), "expired")
+            return self._outcome(pending, "negative", self._computer_refusal(pending, "expired"), "expired")
         if resolution.outcome is Outcome.DENIED:
             followup = self._followups.get(pending.id)
             self._card_state(pending.id, "denied")
             if followup is not None:
                 # The owner said no: nothing else that needs their yes is asked, or made, in this request.
                 followup.ask.declined.append((followup.call.tool.key, followup.rule))
+            if followup is not None and followup.call.tool.key.startswith("mcp:computer-access-"):
+                self._drop_followup(pending, "denied")
+                return self._outcome(pending, "understood", self._computer_refusal(pending, "denied"), "denied")
             if followup is not None and isinstance(followup.loop, CliLoop):
                 self._followups.pop(pending.id)
                 followup.loop.permission_always = False
                 return await self._resume_narrated(pending, None, followup)
             self._drop_followup(pending, "denied")
-            return self._outcome(pending, "understood", phrase(language, "denied"), "denied")
+            return self._outcome(pending, "understood", self._computer_refusal(pending, "denied"), "denied")
         followup = self._followups.pop(pending.id, None)
         if followup is not None:
             made = False
@@ -3681,11 +3699,17 @@ class AgentService:
             self._drop_followup(pending, "denied")
             self._outcome(pending, "understood", phrase(pending.language, "denied"), "denied")
 
+    def _computer_refusal(self, pending, kind):
+        if pending.action.tool.startswith("mcp:computer-access-"):
+            return {"zh-TW": "未取得電腦使用授權，我無法使用電腦。", "ja": "許可を得ていないため、コンピューターを使用できません。"}.get(
+                pending.language, "Computer access was not granted, so I cannot use the computer.")
+        return phrase(pending.language, kind)
+
     def _expire(self, pendings: list[Pending]) -> None:
         for pending in pendings:
             self._card_state(pending.id, "expired")
             self._drop_followup(pending, "expired")
-            self._outcome(pending, "negative", phrase(pending.language, "expired"), "expired")
+            self._outcome(pending, "negative", self._computer_refusal(pending, "expired"), "expired")
 
     def _card_state(self, card_id: str, state: str) -> None:
         """What became of the question a permission card follows, as the history keeps it (once)."""

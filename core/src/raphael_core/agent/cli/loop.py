@@ -135,6 +135,7 @@ class CliLoop:
         self._repeats = RepeatGuard()
         self._failures = RepeatFailures()
         self.failure_reason = None
+        self.catalog_changed = False
         self.on_done = None
         self.expire = expire
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
@@ -337,6 +338,12 @@ class CliLoop:
                     session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
                     waits = list(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     failure = await self._attempt(name, command, model, server, session, workspace)
+                    while failure == "tools_changed":
+                        self.catalog_changed = False
+                        session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
+                        self.user = ("The owner granted computer access. Reload the computer MCP catalog and continue "
+                                     "the original task. Do not repeat completed actions.\n" + self.user)
+                        failure = await self._attempt(name, command, model, server, session, workspace)
                     # Running the request again is safe only while nothing of it has happened yet.
                     while failure in TRANSIENT and waits and not (self._acted or self._calls):
                         wait = waits.pop(0)
@@ -376,6 +383,9 @@ class CliLoop:
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
                 cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
             async for event in stream:
+                if self.catalog_changed and event.kind in ("tool_end", "text_delta", "final", "error"):
+                    await self.driver.interrupt()
+                    return "tools_changed"
                 if event.kind == "session" and self.resume_session:
                     self.sessions.put(self.member_id, self.model, event.text, self.conversation_id)
                 elif event.kind == "model":
@@ -412,6 +422,8 @@ class CliLoop:
                     return "unknown"
         if self._handed_off():
             return None
+        if self.catalog_changed:
+            return "tools_changed"
         self.failure_reason = classify("CLI stream ended before completion")
         return "unknown"
 
