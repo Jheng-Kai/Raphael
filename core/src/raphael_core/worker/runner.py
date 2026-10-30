@@ -68,7 +68,8 @@ class CoreHost:
             if isinstance(call, dict)
         ]
         content = reply.get("content")
-        return Turn(content if isinstance(content, str) else "", calls)
+        return Turn(content if isinstance(content, str) else "", calls,
+                    responses_output=reply.get("responses_output", []))
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         reply = await self._ask(

@@ -4,6 +4,7 @@ worker asks for, and the limits, the tiers and the audit they are held to."""
 import asyncio
 import json
 import logging
+from dataclasses import asdict
 from datetime import timezone
 
 import pytest
@@ -93,6 +94,15 @@ async def stop_of(awaitable):
 
 
 # --- the model ------------------------------------------------------------------------------------
+
+
+async def test_responses_continuation_is_forwarded_without_entering_the_public_steps(rig):
+    answer = turn("Looking.", [call("weather", {"city": "Taipei"}, "c1")])
+    answer.responses_output = [{"type": "reasoning", "encrypted_content": "opaque-reasoning"}]
+    rig.client.replies = [answer]
+    reply = await rig.chat()
+    assert reply["responses_output"] == answer.responses_output
+    assert "opaque-reasoning" not in json.dumps([asdict(step) for step in rig.steps()])
 
 
 async def test_a_model_call_is_made_with_the_tools_of_the_snapshot_and_paid_into_the_spend(rig):

@@ -17,7 +17,7 @@ import re
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
@@ -145,6 +145,8 @@ class ChatTurn:
     # Whether the reply supplied a usable cost (or a provider adapter priced its usage). When
     # unknown, cost_usd 0.0 is not a price: a spending guard must charge an estimate for it.
     usage_known: bool = True
+    # Ephemeral Responses continuation items; never published as public narration/history.
+    responses_output: list[dict] = field(default_factory=list, repr=False)
 
 
 @dataclass

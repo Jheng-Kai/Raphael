@@ -97,6 +97,7 @@ class Turn:
 
     content: str
     calls: list[Call] = field(default_factory=list)
+    responses_output: list[dict] = field(default_factory=list, repr=False)
 
 
 @dataclass
@@ -164,6 +165,8 @@ async def _until(
 
 def _assistant_message(turn: Turn) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": turn.content or None}
+    if turn.responses_output:
+        message["responses_output"] = turn.responses_output
     if turn.calls:
         message["tool_calls"] = [
             {

@@ -43,6 +43,7 @@ from ..device.models import LOCAL_STT_MODELS
 from ..languages import DEFAULT_LANGUAGES, checked_languages
 
 DEFAULTS: dict[str, Any] = {
+    "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
     "owner_name": "",
     "owner_about": "",

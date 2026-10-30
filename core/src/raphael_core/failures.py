@@ -7,7 +7,8 @@ from collections import deque
 from dataclasses import dataclass
 
 KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
-                   "network", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown"))
+                   "network", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown",
+                   "chatgpt_unavailable", "chatgpt_plan_unavailable", "chatgpt_scope"))
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout"))
 RETRY_WAITS = (1.0, 3.0, 8.0)
 RECENT = deque(maxlen=40)
@@ -64,6 +65,23 @@ _OWNER_MESSAGES = {
         "unknown": "{name} could not complete this task. Check the settings and try once more.",
     },
 }
+
+
+_OWNER_MESSAGES["en"].update({
+    "chatgpt_unavailable": "{name} cannot check ChatGPT plan availability right now. Try again later.",
+    "chatgpt_plan_unavailable": "{name} cannot use the selected account's ChatGPT plan. Check account and workspace eligibility.",
+    "chatgpt_scope": "{name} has no permission to use your ChatGPT plan. Sign in again and enable plan usage.",
+})
+_OWNER_MESSAGES["zh-TW"].update({
+    "chatgpt_unavailable": "{name} 目前無法確認訂閱方案是否可用，請稍後重試。",
+    "chatgpt_plan_unavailable": "{name} 無法使用所選帳號的訂閱方案，請確認帳號與工作區資格。",
+    "chatgpt_scope": "{name} 尚未獲准使用訂閱方案，請重新登入並啟用方案使用權限。",
+})
+_OWNER_MESSAGES["ja"].update({
+    "chatgpt_unavailable": "{name} は現在サブスクリプションの利用可否を確認できません。後でもう一度お試しください。",
+    "chatgpt_plan_unavailable": "{name} は選択されたアカウントのサブスクリプションを利用できません。アカウントとワークスペースの条件を確認してください。",
+    "chatgpt_scope": "{name} にサブスクリプションの利用権限がありません。再ログインしてプランの利用を許可してください。",
+})
 
 
 def redact(value: object, *, secrets=(), limit=240) -> str:

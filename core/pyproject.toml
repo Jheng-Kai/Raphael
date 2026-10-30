@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=2",
     "opencc==1.4.2",
     "pypdf==6.21.2",
+    "pyjwt[crypto]==2.15.1",
     "sherpa-onnx==1.13.8",
     # The libraries sherpa-onnx loads (onnxruntime.dll among them). Its wheels name this package as a
     # dependency, but uv locks from the metadata of the first wheel listed (linux_armv7l), which

@@ -75,6 +75,28 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def private_default_cli_home(tmp_path, monkeypatch):
+    """Default discovery/imports must never inspect the machine owner's CLI profiles."""
+    from raphael_core.agent.cli.discovery import CliBrains
+    from raphael_core.integrations.imports import McpImports
+
+    original_brains, original_imports = CliBrains.__init__, McpImports.__init__
+
+    def brains_init(self, *, home=None, environ=None, **kwargs):
+        if home is None:
+            home = tmp_path / "default-cli-home"
+            if environ is None:
+                environ = {key: value for key, value in os.environ.items() if key != "CODEX_HOME"}
+        original_brains(self, home=home, environ=environ, **kwargs)
+
+    def imports_init(self, home=None):
+        original_imports(self, home=tmp_path / "default-cli-home" if home is None else home)
+
+    monkeypatch.setattr(CliBrains, "__init__", brains_init)
+    monkeypatch.setattr(McpImports, "__init__", imports_init)
+
+
+@pytest.fixture(autouse=True)
 def memory_keyring():
     """A new, empty in-memory keyring for each test; the previous backend comes back afterwards."""
     backend = MemoryKeyring()

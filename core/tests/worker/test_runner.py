@@ -98,6 +98,17 @@ async def test_a_task_is_carried_out_by_asking_the_core_for_every_model_reply_an
     assert sent_back["role"] == "tool" and "green" in sent_back["content"]
 
 
+async def test_responses_continuation_survives_the_worker_ipc_boundary(core):
+    continuation = [{"type": "reasoning", "id": "rs", "encrypted_content": "opaque-reasoning"}]
+    core.chats = [{**calling(), "responses_output": continuation}, final()]
+    core.tools = [{"ok": True, "content": "green"}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done"
+    assistant = next(message for message in core.chat_requests[1]["messages"] if message["role"] == "assistant")
+    assert assistant["responses_output"] == continuation
+    assert "opaque-reasoning" not in result["final"]
+
+
 async def test_a_refusal_of_the_core_ends_the_task_with_what_it_said(core):
     core.chats = [RpcError(WORKER_STOPPED, "no", {"stop": "limit_cost"})]
     result = await core.a.request("task.run", spec())

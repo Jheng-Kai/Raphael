@@ -350,6 +350,8 @@ def conversation_block(summary: str, turns: Sequence[Turn], index: str = "") -> 
 
 def _assistant_message(turn: ChatTurn) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": turn.content or None}
+    if getattr(turn, "responses_output", None):
+        message["responses_output"] = turn.responses_output
     if turn.calls:
         message["tool_calls"] = [
             {

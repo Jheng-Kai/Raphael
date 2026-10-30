@@ -1,5 +1,29 @@
 # Raphael architecture and checked boundaries
 
+## ChatGPT plan provider (backend, 2026-10-30)
+
+`@chatgpt:<slug>` resolves through ProviderRegistry to the public Responses API.
+It uses the same NarratedLoop, worker loop, production tool definitions and gates
+as other API brains. Responses output and encrypted reasoning travel only in the
+ephemeral loop/worker continuation, never in public narration or saved history.
+HTTP inference requires store=false, stream=true and response.completed; system
+instructions become instructions and local function tools share a namespace.
+
+`chatgpt.status`, `chatgpt.sign_in`, `chatgpt.cancel`, `chatgpt.sign_out` and
+`chatgpt.models` use the existing Router/core_call allowlist. Sign-in owns a bounded
+127.0.0.1 callback with state, nonce and S256 PKCE; OpenAI JWKS verifies signature,
+issuer, issued-client audience and expiry before account activation. The existing
+settings table stores nonsecret host/client/verified identity registrations only;
+each registration has separate vault-only access/refresh/ID tokens. Refresh uses
+a per-host Windows mutex and saves the rotating set before use; sign-out attempts
+renewable-session revocation and invalidates in-flight results.
+Missing plan permission, quota and availability failures stop the selected model;
+there is no model/billing fallback or invented remaining-quota meter. Offline
+contracts: `core/tests/brain/test_chatgpt.py`. No live OAuth/inference acceptance
+is implied. UI is owned separately and has no new scene in this backend change.
+
+## Runtime boundaries
+
 The Windows Tauri shell owns windows, overlay, global hotkeys, audio/paste and the
 Python sidecar lifecycle. The TypeScript main window uses `app/src/main/api.ts`
 to call the shell's allowlisted commands and `core_call` bridge. The Python core
@@ -13,7 +37,7 @@ recipients and use that same agent. Background services persist tasks and supply
 the worker's guarded `run_task` loop. Connectors own account state and scoped MCP
 tool availability. Tool snapshots share production definitions and tool gates
 remain authoritative at execution. API providers implement `ModelProvider` and
-use `NarratedLoop`; subscriptions use `CliLoop` and the single `RaphaelMcp` server.
+use `NarratedLoop`; CLI subscriptions use `CliLoop` and the single `RaphaelMcp` server.
 The evaluator replaces only execution with a recorder, not the loops or schemas.
 
 SQLite (`brain/db.py`, versioned migrations) owns settings, history, members,

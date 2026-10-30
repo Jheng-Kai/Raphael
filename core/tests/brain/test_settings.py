@@ -63,6 +63,7 @@ def test_the_defaults_are_the_documented_ones():
         "stt_local_model": "qwen3-asr",
         "model_favorites": {"cleanup": [], "answer": [], "stt": []},
         "disconnected_clis": [],
+        "chatgpt.registrations.v1": {},
         "web_search_service": "openrouter",
         "web_read_service": "builtin",
         "vision_model": "",

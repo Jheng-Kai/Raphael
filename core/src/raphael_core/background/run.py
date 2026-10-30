@@ -486,6 +486,7 @@ class TaskRun:
                 self._progress(text)
         return {
             "content": turn.content,
+            **({"responses_output": turn.responses_output} if getattr(turn, "responses_output", None) else {}),
             "calls": [
                 {"id": c.id, "name": c.name, "arguments": c.arguments, "raw": c.raw_arguments}
                 for c in turn.calls
