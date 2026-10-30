@@ -75,7 +75,7 @@ export function mountDesktopTimeline(host: HTMLElement, member: () => number, co
       card.el.dataset.workState = work.state;
       card.el.querySelector(".desktop-card-state")!.textContent = desktopWorkText(work);
       const action = card.el.querySelector<HTMLButtonElement>("[data-desktop-card-open]")!;
-      action.textContent = t(work.state === "waiting_control" ? "desktop.take" : "desktop.open");
+      action.textContent = t(work.state === "waiting_control" ? "desktop.take" : "desktop.expand");
       action.classList.toggle("pri", work.state === "waiting_control");
       if (card.el.parentElement !== slot) slot.append(card.el);
       // Never stream the owner's password/2FA/payment entry into an inline preview.
