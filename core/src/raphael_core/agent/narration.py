@@ -187,7 +187,7 @@ class NarratedLoop:
         self.batch_calls = answer.calls
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
-        ])
+        ], responses_output=getattr(answer, "responses_output", []))
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         self.acted = True

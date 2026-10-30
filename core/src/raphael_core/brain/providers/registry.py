@@ -27,6 +27,8 @@ from .clients import AnthropicProvider, CompatibleProvider, is_transcription, mo
 from .bedrock import BedrockProvider
 from .vertex import VertexProvider
 from .secrets import ProviderCredentialStore
+from .chatgpt import ChatGPTProvider
+from .chatgpt_auth import ChatGPTAuth
 
 CONFIG_KEY = "providers.config.v1"
 MODELS_KEY = "providers.models.v1"
@@ -66,6 +68,7 @@ class ProviderRegistry:
         self._models = self._load(MODELS_KEY, {})
         self._successful_models = self._load(SUCCESSES_KEY, {})
         self.settings = SettingsStore(conn)
+        self.chatgpt = ChatGPTProvider(ChatGPTAuth(conn, self._credential, http=self._http))
 
     def record_success(self, reference):
         """Remember only models that actually answered, never model-list discoveries."""
@@ -96,6 +99,8 @@ class ProviderRegistry:
                                    (key, json.dumps(value)))
 
     def config(self, pid):
+        if pid == "chatgpt":
+            return {"id": pid, "kind": pid, "name": "ChatGPT", "base_url": "https://api.openai.com/v1", "enabled": True}
         if pid == "openrouter":
             return {"id": pid, "kind": pid, "name": "OpenRouter", "base_url": BY_KIND[pid]["default_base_url"],
                     "enabled": True, **self._configs.get(pid, {})}
@@ -107,7 +112,8 @@ class ProviderRegistry:
         return self.keys if pid == "openrouter" else self._credential(pid)
 
     def ids(self):
-        return ["openrouter", *(pid for pid in self._configs if pid != "openrouter")]
+        chatgpt = ["chatgpt"] if self.chatgpt.auth._state().get("accounts") else []
+        return ["openrouter", *chatgpt, *(pid for pid in self._configs if pid not in ("openrouter", "chatgpt"))]
 
     def configured_fallbacks(self, purpose):
         """None preserves legacy defaults; an explicitly saved empty array disables them."""
@@ -137,6 +143,11 @@ class ProviderRegistry:
             return False
 
     def _has_credential(self, pid, config):
+        if pid == "chatgpt":
+            state = self.chatgpt.auth._state()
+            account_id = state.get("active", "")
+            tokens = self.chatgpt.auth._tokens(account_id) if account_id else {}
+            return bool(tokens.get("refresh_token")) and "chatgpt.tokens.use.direct" in tokens.get("scope", "").split()
         value = self._secret(pid).get()
         if config["kind"] == "bedrock":
             try:
@@ -153,6 +164,8 @@ class ProviderRegistry:
             raise OpenRouterError(0, "error", "Provider is disabled")
         if pid == "openrouter":
             return OpenRouterProvider(self.openrouter)
+        if pid == "chatgpt":
+            return self.chatgpt
         if pid not in self._clients:
             cls = {"anthropic": AnthropicProvider, "vertex": VertexProvider,
                    "bedrock": BedrockProvider}.get(config["kind"], CompatibleProvider)
@@ -175,6 +188,9 @@ class ProviderRegistry:
 
     def register(self, router):
         self._notify = router.notify
+        async def chatgpt_models(params):
+            return {"models": await self.discover("chatgpt")}
+        self.chatgpt.auth.register(router, chatgpt_models)
         handlers = {"kinds": self.kinds, "list": self.list, "add": self.add, "update": self.update,
                     "remove": self.remove, "test": self.test, "models": self.models}
         for name, handler in handlers.items():
@@ -279,6 +295,8 @@ class ProviderRegistry:
 
     async def update(self, params):
         pid = _text(params["id"])
+        if pid == "chatgpt":
+            raise ValueError("Use ChatGPT sign-in RPCs")
         config = self._checked(params, self.config(pid))
         await self._write(pid, config, params)
         return {"provider": self.view(pid)}
@@ -313,6 +331,8 @@ class ProviderRegistry:
 
     async def remove(self, params):
         pid = _text(params["id"])
+        if pid == "chatgpt":
+            raise ValueError("Use ChatGPT sign-out RPC")
         self.config(pid)
         secret, previous, old_models = self._secret(pid), dict(self._configs), dict(self._models)
         old_key = secret.get()
@@ -366,7 +386,7 @@ class ProviderRegistry:
         rows = await self.discover(pid)
         selected = {self.settings.get("agent_model"), *self.settings.get("agent_fallbacks")}
         selected.update(row[0] for row in self._conn.execute("SELECT model FROM members WHERE model != ''"))
-        local = BY_KIND[self.config(pid)["kind"]]["local_context_hint"]
+        local = BY_KIND.get(self.config(pid)["kind"], {}).get("local_context_hint", False)
         return {"models": [{**row, "context_warning": bool(local and row["context"] is not None
                            and row["context"] < 65_536 and f"@{pid}:{row['id']}" in selected)} for row in rows]}
 
@@ -376,7 +396,7 @@ class ProviderRegistry:
             if pid == "openrouter" or not self.config(pid)["enabled"]:
                 continue
             config = self.config(pid)
-            for row in self._models.get(pid, []):
+            for row in (self.chatgpt.auth.model_rows if pid == "chatgpt" else self._models.get(pid, [])):
                 caps = {"structured_output", "reasoning", "reasoning_off", "max_tokens"}
                 if row["tools"]:
                     caps.add("tool_calling")
@@ -395,7 +415,8 @@ class ProviderRegistry:
             except (OpenRouterError, TimeoutError):
                 pass  # A failed refresh keeps the last known metadata and never resets choices.
         await asyncio.gather(*(fetch(pid) for pid in self.ids()
-            if pid != "openrouter" and self.config(pid)["enabled"]))
+            if pid != "openrouter" and self.config(pid)["enabled"] and
+            (pid != "chatgpt" or self.available("@chatgpt:catalog"))))
 
     def record_result(self, pid, error=None):
         kind = getattr(error, "kind", None)
@@ -403,6 +424,7 @@ class ProviderRegistry:
                              "offline" if kind in ("offline", "network", "timeout") else "unknown")
 
     async def aclose(self):
+        await self.chatgpt.aclose()
         clients, self._clients = list(self._clients.values()), {}
         for client in clients:
             await client.aclose()
@@ -442,6 +464,10 @@ class ProviderRouter:
         return api_model(self.registry.settings, reference) if reference.startswith("cli:") else reference
 
     def available(self, model):
+        if self.model_for(model).startswith("@chatgpt:"):
+            # The provider reports missing sign-in/scope locally with the selected model's
+            # classified failure, rather than the legacy OpenRouter missing-key message.
+            return True
         references = [self.model_for(model), *self.owner_fallbacks()]
         if self.purpose == "cleanup":
             fallback = self.cleanup_fallback(model)
@@ -460,7 +486,7 @@ class ProviderRouter:
 
     def cleanup_fallback(self, primary):
         """The mandatory cleanup retry follows the owner's provider preference order."""
-        api_providers = {pid for pid in self.registry.ids() if BY_KIND[self.registry.config(pid)["kind"]]["group"] != "local"}
+        api_providers = {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
         candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=api_providers),
                       *self.registry.settings.get("cleanup_fallbacks")]
         for pid in self.registry.ids():
@@ -500,6 +526,8 @@ class ProviderRouter:
         if self.purpose == "cleanup" and configured is None and not reference.startswith("@"):
             fallbacks = implicit
         chain = list(dict.fromkeys([reference, *fallbacks]))
+        if reference.startswith("@chatgpt:"):
+            chain = [reference]
         # Each selected model receives the complete caller budget, never a fraction
         # determined by the number of possible alternatives.
         timeout = kwargs["timeout_s"]

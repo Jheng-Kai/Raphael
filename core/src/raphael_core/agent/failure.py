@@ -21,6 +21,11 @@ _KIND_OF_OPENROUTER = {
     "network": "offline",
     "offline": "offline",
     "timeout": "timeout",
+    "usage_limit": "usage_limit",
+    "auth_expired": "auth_expired",
+    "chatgpt_unavailable": "chatgpt_unavailable",
+    "chatgpt_plan_unavailable": "chatgpt_plan_unavailable",
+    "chatgpt_scope": "chatgpt_scope",
 }
 
 

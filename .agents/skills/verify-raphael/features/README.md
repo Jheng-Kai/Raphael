@@ -360,3 +360,22 @@ RAPHAEL_CORE_PYTHON=D:/Documentation/github_repos/Raphael/core/.venv/Scripts/pyt
 One heavy process at a time; check other worktrees with Get-CimInstance Win32_Process
 before every heavy step. Vitest uses --maxWorkers=2, native CARGO_BUILD_JOBS=2 and the
 shared .worktrees/.target. Judge/OpenRouter are explicitly SKIP by owner instruction.
+
+## Backend: Sign in with ChatGPT
+
+`@chatgpt:<slug>` uses Raphael's shared guarded API loop. The backend RPC contract
+is `chatgpt.status`, `chatgpt.sign_in`, `chatgpt.cancel`, `chatgpt.sign_out`,
+`chatgpt.models`. `sign_in` accepts optional `account_id` (empty adds an account),
+`enable_plan` (explicit consent) and `timeout_s` (greater than 0, at most 540, default 180).
+Status reports signed_in, account_id, email, plan_scope_granted, models,
+signing_in and separate saved registrations. Models preserve server ordering and
+only visibility=list. Sign-out reports whether remote revocation was confirmed.
+
+Offline evidence lives in `core/tests/brain/test_chatgpt.py`: loopback callback,
+JWT validation, account separation, rotation-before-use, Responses tool round trip
+through NarratedLoop/run_task, gate rejection, terminal stream errors, classified
+turn failures, redaction and revocation. Select these core tests plus the existing
+provider, worker and architecture consumers, then `npm run verify -- --core`.
+No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference and
+live tool round trips require separately authorized acceptance; fake HTTP is not
+live proof. Never run the owner probe or borrow another application's credentials.
