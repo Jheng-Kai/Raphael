@@ -1156,6 +1156,14 @@ export function checkRendered(name) {
       poll();
     });
   }
+  if (name === "home-hover-content") {
+    const block = document.querySelector('.ho-spend'), layer = block.querySelector(':scope > .ho-target');
+    require(block.matches(':hover'), "the pointer is over the spend block");
+    const paint = getComputedStyle(layer).backgroundColor;
+    require(paint === 'rgba(0, 0, 0, 0)' || paint === 'transparent', `the click layer stays transparent on hover, got ${paint}`);
+    require(getComputedStyle(block).backgroundColor !== 'rgba(0, 0, 0, 0)', "the block itself shows the hover surface");
+    return { check: name, layer: paint };
+  }
   if (name === "home-overview") {
     for (const panel of document.querySelectorAll('.page-home .ho-card, .page-home .ho-card *')) {
       const style = getComputedStyle(panel);

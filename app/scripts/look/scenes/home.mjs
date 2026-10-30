@@ -1,4 +1,4 @@
-import { scene, click, wait, check, scroll, page, key } from "./steps.mjs";
+import { scene, click, wait, check, scroll, page, key, hover } from "./steps.mjs";
 
 const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-overview"), check("home-redesign")];
 export default [
@@ -9,6 +9,7 @@ export default [
   scene("home-report", "A member report opens its conversation at the reported turn", [...ready, click('.ho-row[data-home-item="report:2"]'), wait('.page-agent:not([hidden]) .tn[data-id="2"]'), check("home-report")]),
   scene("home-routine", "A marked calendar day opens the full calendar", [...ready, click('.ho-calendar > .ho-target'), wait('.au-page:not([hidden]) .au-occurrence'), check("calendar-shell")]),
   scene("home-calendar", "The mini calendar opens the full calendar", [...ready, click('.ho-calendar [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-occurrence'), check("calendar-shell")]),
+  scene("home-hover", "Hovering a Home block keeps its content visible; only the block background changes", [...ready, hover(".ho-spend"), check("home-hover-content")]),
   scene("home-many", "Many pending questions stay within their card", ready, { homeManyQuestions: true }),
   scene("home-block-navigation", "Every Home block navigates from both distant corners, preserving inner report controls", [
     ...ready,

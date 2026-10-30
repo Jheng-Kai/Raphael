@@ -11,7 +11,9 @@
 .ho-card, .ho-calendar { position: relative; border-radius: var(--r-lg); }
 .ho-card:hover, .ho-calendar:hover { background: var(--hover); }
 .ho-card:has(> .ho-target:active), .ho-calendar:has(> .ho-target:active) { background: var(--pressed); }
-.ho-target.btn, .ho-target.btn:hover, .ho-target.btn:active { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.ho-target.btn { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+/* The block's own background shows hover; the shared .btn:hover:not(:disabled) must never paint this layer over the content. */
+.ho-target.btn:hover:not(:disabled), .ho-target.btn:active:not(:disabled) { background: transparent; border-color: transparent; }
 .ho-target:focus { outline: none; }
 :root[data-keys] .ho-target:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ho-card button:not(.ho-target) { position: relative; z-index: 2; }
