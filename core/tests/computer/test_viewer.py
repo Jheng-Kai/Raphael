@@ -100,9 +100,9 @@ async def test_per_bot_viewers_hold_the_selected_target_and_never_another_member
     from types import SimpleNamespace
     bridge, runtime, _ = viewer
     bridge.vm.settings = SimpleNamespace(get=lambda key: "per-bot")
-    opened = await bridge.open({"member_id": 1})
     target = bridge.vm.target(1)
     runtime.raw = container(bridge.vm, target, runtime)
+    opened = await bridge.open({"member_id": 1})
     assert bridge.sessions[opened["session"]].target == target
     assert target != bridge.vm.target(0)
     await bridge.control({**opened, "held": True})

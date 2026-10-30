@@ -2,8 +2,9 @@
 
 The optional Docker desktop is shared by default. `computer_vm_mode=per-bot`
 selects a durable workspace per member. Host paths use pathlib and Docker CSV bind
-mounts; no host shell or alternate runtime is used. The core never starts Docker
-Desktop. No Docker CLI/engine means no additional tools in the snapshot.
+mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter when preparing
+the computer. Docker absent means no computer entry or tools; the existing Settings
+computer area has one requirement line and an official download button.
 
 `computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
 `attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
@@ -68,8 +69,9 @@ npm.cmd run verify -- --core
 npm.cmd run native -- member-computer
 ```
 
-The native journey requires the owner to start Docker Desktop and build the pinned
-image first (`python -m raphael_core.computer.vm_cli build`). It uses an isolated
+The native journey starts installed Docker Desktop and builds the pinned image
+through the shared lifecycle when needed. It requires explicit authorization and
+an idle machine before running. It uses an isolated
 journey database and a deterministic fake brain through the real worker loop,
 snapshot, gate and Cua tool transport. It checks the shared VM, a valid screenshot,
 a click and guest exec without approval, attachment bytes, owner-control refusal
@@ -91,7 +93,7 @@ worker suites. Attribution: `THIRD_PARTY_NOTICES.md` and `licenses/Apache-2.0.tx
 One monitor icon in the selected private conversation opens the container's own
 noVNC vnc.html inside the existing shared dialog. Docker absent hides the entry;
 a stopped desktop or unavailable engine shows a localized state without a blank
-frame. The viewer never starts Docker or the computer. The same session reconnects
+frame. Opening the viewer starts preparation through the shared VM lifecycle. The same session reconnects
 after the member restarts its desktop, including a changed loopback port.
 
 The dialog deliberately uses the shared thread-width maximum rather than the
@@ -121,7 +123,7 @@ viewer; returning to a private conversation resumes entry polling. A hold owned
 by another surface is never cleared.
 
 ```powershell
-npm run look -- desktop-entry desktop-viewer desktop-owner desktop-handback desktop-stopped desktop-unavailable desktop-absent --theme both --width 1120,720,1920x1080
+npm run look -- desktop-entry desktop-viewer desktop-owner desktop-handback desktop-stopped desktop-unavailable desktop-starting desktop-building desktop-preparing desktop-absent desktop-install --theme both --width 1120,720,1920x1080
 ```
 
 These scenes drive the real app, shared icon and dialog through the IPC mock.
@@ -149,8 +151,11 @@ Home's timezone notification reconciles recovered running containers: a mismatch
 Busy/held desktops defer reconciliation until the next tool start or monitor pass;
 stopped containers are recreated with `docker create`, retaining their stopped
 state. The next tool start also reconciles the zone, covering starts racing Home.
-The phase B brief reserves this Docker journey for the owner and prohibits
-starting Docker, running judge or spending OpenRouter during implementation.
+Run this native journey only when explicitly authorized and no other heavy process
+is running; stop Docker afterward if this run started it. The connect-and-Docker
+owner deferred this journey because memory was low, so its current acceptance is
+SKIP. Judge and OpenRouter remain prohibited for that brief. Other native journeys
+disable the computer adapter.
 
 Unit evidence: core/tests/computer/test_viewer.py and
 app/src/main/desktop-viewer.test.ts. The existing test_vm.py suite retains the

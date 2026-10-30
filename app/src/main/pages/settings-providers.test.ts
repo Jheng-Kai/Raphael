@@ -8,6 +8,7 @@ import type { UsageRequest } from "../usage-analytics-types";
 
 const api = vi.hoisted(() => ({
   settingsGet: vi.fn(), settingsSet: vi.fn(), secretsStatus: vi.fn(), statusGet: vi.fn(), audioDevices: vi.fn(),
+  desktopStatus: vi.fn(),
   keyboardHasAltgr: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
   providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(), usageAnalytics: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
@@ -78,6 +79,7 @@ beforeEach(() => {
   api.secretsStatus.mockResolvedValue({ has_key: true });
   api.statusGet.mockResolvedValue({ openrouter: null, spend: null });
   api.audioDevices.mockResolvedValue({ devices: [], default_id: null });
+  api.desktopStatus.mockResolvedValue({ state: "absent", ready: false, control: "member" });
   api.keyboardHasAltgr.mockResolvedValue(false);
   api.languagesList.mockResolvedValue({ groups: [] });
   api.modelsLocal.mockResolvedValue({ models: [] });

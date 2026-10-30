@@ -450,3 +450,23 @@ scenes in both themes at 1120,720,1920x1080 for five consecutive ordinary passes
 LOOK_CPU_SLOWDOWN labels additional CDP stress evidence separately from ordinary
 machine timing; see the shared look README. Neither kind proves native/provider
 timing, or the cause of a historical failure without its CPU samples.
+
+
+## Composio request compatibility (2026-10-30)
+
+The v3.1 session PATCH accepts the session configuration, without
+expected_config_version. Keep the local session lock and fail closed on provider
+conflicts. HTTP 400/422 is invalid_request with plain owner copy, never unknown or
+a transient server retry. Session creation, enabled toolkit update and link creation
+must succeed before authorizing is accepted as a real pending provider link.
+
+```powershell
+npm run look -- connector-invalid-request connector-slack connector-slack-authorizing connector-authorizing plugins-store --theme both --width 1120,720,1920x1080
+npm run native -- catalog-connect
+```
+
+Run catalog-connect with RAPHAEL_NATIVE_APP=slack and gmail separately. It uses the
+fake brain with the real core, policy, cards, Composio and Settings join flow, for
+Raphael and a new member. It stops before consent and never reads account data.
+The browser's provider page still needs separate visual inspection; pending alone
+is not proof of an external page. No CLI brain or OpenRouter is used.

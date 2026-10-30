@@ -7,7 +7,7 @@ from collections import deque
 from dataclasses import dataclass
 
 KINDS = frozenset(("credits", "usage_limit", "rate_limit", "overloaded", "server", "auth_expired",
-                   "network", "permission_denied", "not_found", "tool_broken", "timeout", "refused", "unknown"))
+                   "network", "permission_denied", "not_found", "tool_broken", "invalid_request", "timeout", "refused", "unknown"))
 TRANSIENT = frozenset(("rate_limit", "overloaded", "server", "network", "timeout"))
 RETRY_WAITS = (1.0, 3.0, 8.0)
 RECENT = deque(maxlen=40)
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Owner copy never interpolates provider reasons; those remain in wire diagnostics.
 _OWNER_MESSAGES = {
     "zh-TW": {
+        "invalid_request": "{name} 無法接受連線請求的格式，需要更新連線功能。",
         "credits": "{name} 的點數用完了，補充後就能繼續。",
         "usage_limit": "{name} 的用量已達上限，請等額度重設或選擇其他模型。",
         "rate_limit": "{name} 暫時收到太多請求，請稍後再試。",
@@ -31,6 +32,7 @@ _OWNER_MESSAGES = {
         "unknown": "{name} 未能完成這項工作，請檢查設定後再試一次。",
     },
     "ja": {
+        "invalid_request": "{name} への接続リクエストに互換性がありません。接続機能の更新が必要です。",
         "credits": "{name} のクレジットがなくなりました。追加すると続けられます。",
         "usage_limit": "{name} の利用上限に達しました。利用枠のリセットを待つか、別のモデルを選んでください。",
         "rate_limit": "{name} へのリクエストが一時的に多すぎます。しばらくしてから再試行してください。",
@@ -46,6 +48,7 @@ _OWNER_MESSAGES = {
         "unknown": "{name} はこの作業を完了できませんでした。設定を確認してからもう一度試してください。",
     },
     "en": {
+        "invalid_request": "Raphael's connection request is incompatible with {name}. The connection feature needs updating.",
         "credits": "{name} has run out of credits. Add credits to continue.",
         "usage_limit": "{name} has reached its usage limit. Wait for it to reset or choose another model.",
         "rate_limit": "{name} is receiving too many requests right now. Try again shortly.",

@@ -229,6 +229,63 @@ async def test_daily_tidy_can_split_a_single_mixed_topic(growing):
     assert {note.body for note in store.all()} == {"Build uses amber.", "Review uses violet."}
 
 
+async def test_first_bots_cli_brain_handles_background_consolidation_without_api(growing, monkeypatch):
+    from types import SimpleNamespace
+    from raphael_core.agent.cli import loop as cli
+
+    memory, _ = growing
+    memory._settings.set("agent_model", "cli:codex")
+    memory._keys.set("api-key-that-must-not-be-used")
+    memory.update_memory(0, {"op": "add", "name": "reference-build", "body": "Build uses amber."})
+    calls = []
+
+    class Brains:
+        def available(self, name):
+            return name == "codex"
+
+    class Loop:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+        async def run(self):
+            return SimpleNamespace(kind="done", final='{"actions": []}')
+        async def aclose(self):
+            pass
+
+    async def forbidden(**kwargs):
+        pytest.fail("Background memory called the API instead of the first Bot's CLI")
+
+    memory._cli_brains = Brains()
+    monkeypatch.setattr(cli, "CliLoop", Loop)
+    monkeypatch.setattr(memory._base_client, "complete_json", forbidden)
+    assert not (await memory.consolidate()).failed
+    assert calls and all(call["model"] == "cli:codex" and call["tools"] == [] for call in calls)
+
+
+@pytest.mark.parametrize("kind, final", [("error", ""), ("done", "not JSON")])
+async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing, monkeypatch, kind, final):
+    from types import SimpleNamespace
+    from raphael_core.agent.cli import loop as cli
+    from raphael_core.memory.brain import MemoryBrain, MemoryBrainError
+
+    memory, _ = growing
+
+    class Loop:
+        def __init__(self, **kwargs):
+            assert kwargs["tools"] == [] and kwargs["resume_session"] is False
+        async def run(self):
+            return SimpleNamespace(kind=kind, final=final)
+        async def aclose(self):
+            pass
+
+    async def forbidden(**kwargs):
+        pytest.fail("A CLI failure fell back to the API")
+
+    monkeypatch.setattr(cli, "CliLoop", Loop)
+    monkeypatch.setattr(memory._base_client, "complete_json", forbidden)
+    with pytest.raises(MemoryBrainError):
+        await MemoryBrain(memory, 1).complete_json(model="cli:codex", system="Tidy", user="Private notes", schema={})
+
+
 async def test_daily_split_keeps_source_when_a_replacement_is_refused(growing):
     from raphael_core.memory.reflection import Reflector
     memory, _ = growing

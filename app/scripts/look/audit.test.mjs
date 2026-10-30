@@ -20,11 +20,13 @@ describe("rendered look checks", () => {
   });
   it("allows the Docker brand in localized unavailable states and still rejects untranslated actions", () => {
     const win = new Window();
-    win.document.body.innerHTML = '<p class="desktop-status">Docker 目前無法使用</p><button>Take control</button>';
+    win.document.body.innerHTML = '<p class="desktop-status">Docker 目前無法使用</p><p>需要 Docker Desktop。</p><button>Take control</button><button>Desktop</button>';
     for (const element of win.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 210, bottom: 40, width: 200, height: 30 });
-    const words = auditDocument(win.document, { width: 1120, height: 900 }, [], LATIN_NAMES.map(name => name.toLowerCase())).mixedLanguage.map(item => item.word);
+    const findings = auditDocument(win.document, { width: 1120, height: 900 }, [], LATIN_NAMES.map(name => name.toLowerCase())).mixedLanguage;
+    const words = findings.map(item => item.word);
     expect(words).not.toContain("Docker");
     expect(words).toContain("Take");
+    expect(findings.filter(item => item.word === "Desktop").map(item => item.text)).toEqual(["Desktop"]);
   });
   it("rejects machine diagnostics in failure replies and sidebar previews, including Markdown italics", () => {
     const win = new Window();

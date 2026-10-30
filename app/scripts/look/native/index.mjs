@@ -59,6 +59,13 @@ async function run(options) {
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;
+      delete env.RAPHAEL_TEST_NATIVE_COMPUTER;
+      delete env.RAPHAEL_TEST_NATIVE_MODEL_PICKER;
+      if (journey.name === "model-picker") {
+        if (!process.env.RAPHAEL_NATIVE_MODEL_CATALOG) throw new Error("Set RAPHAEL_NATIVE_MODEL_CATALOG to a recorded public GET /api/v1/models response");
+        env.RAPHAEL_TEST_NATIVE_MODEL_PICKER = "1";
+      }
+      if (journey.name === "member-computer") env.RAPHAEL_TEST_NATIVE_COMPUTER = "1";
       if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {
@@ -119,7 +126,8 @@ async function run(options) {
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack" });
+        await drive(journey.name, { page, result, capture, computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+          modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {
         if (error.code === "NATIVE_MODEL_MISSING") result.blocked = { reason: error.message, models: error.models };

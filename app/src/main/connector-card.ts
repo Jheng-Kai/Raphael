@@ -11,6 +11,7 @@ import type { AgentTurn, ConnectorCard } from "./types";
 import { btn, esc, ico } from "./ui";
 
 const FAILURES: Record<string, MessageKey> = {
+  invalid_request: "conn.err.invalid_request",
   denied: "card.denied",
   timeout: "card.timeout",
   scope: "card.scope",

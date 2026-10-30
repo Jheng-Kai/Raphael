@@ -194,6 +194,7 @@ const FAILURES: Record<string, MessageKey> = {
   gone: "conn.err.gone",
   denied: "conn.err.denied",
   toolkit_not_allowed: "conn.err.toolkit_not_allowed",
+  invalid_request: "conn.err.invalid_request",
   error: "conn.err.error",
 };
 

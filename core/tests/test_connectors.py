@@ -94,6 +94,36 @@ def setup_service(tmp_path, conn, responder, **options):
     return router, service, hub, vault
 
 
+async def test_v31_patch_omits_the_rejected_expected_config_version():
+    sent = []
+
+    def respond(request):
+        body = json.loads(request.content)
+        sent.append(body)
+        if "expected_config_version" in body:
+            return httpx.Response(400, json={"error": {"code": 10400, "slug": "HTTP_BadRequest",
+                "message": "Validation error while processing request",
+                "errors": ["Error in payload: Unrecognized key(s) in object: 'expected_config_version'"]}})
+        return httpx.Response(200, json={"config_version": 2})
+
+    client = ComposioClient(lambda: "private", transport=httpx.MockTransport(respond))
+    assert await client.patch("trs_test", {"toolkits": {"enable": ["slack"]}}, 1) == {"config_version": 2}
+    assert sent == [{"toolkits": {"enable": ["slack"]}}]
+
+
+async def test_composio_validation_is_non_transient_and_explains_the_bad_connection_request():
+    from raphael_core.failures import classify
+
+    client = ComposioClient(lambda: "private", transport=httpx.MockTransport(lambda request:
+        httpx.Response(400, json={"error": {"code": 10400, "slug": "HTTP_BadRequest",
+            "message": "Validation error while processing request"}})))
+    with pytest.raises(ConnectorFailure) as caught:
+        await client.patch("trs_test", {}, 1)
+    failure = classify(caught.value)
+    assert failure.kind == "invalid_request" and not failure.transient
+    assert "連線請求" in failure.sentence("Composio", "zh-TW")
+
+
 class Platform:
     def __init__(self, statuses=None):
         self.requests = []
@@ -374,7 +404,7 @@ async def test_failed_sign_in_restores_prior_session_permissions(tmp_path, conn,
 @pytest.mark.parametrize("status, payload, expected", [
     (400, {"error": {"slug": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "toolkit_not_allowed"),
     (400, {"error": {"code": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "toolkit_not_allowed"),
-    (400, {"error": {"slug": "OtherError", "message": "private"}}, "http_error"),
+    (400, {"error": {"slug": "OtherError", "message": "private"}}, "invalid_request"),
     (403, {"error": {"slug": "ToolRouterV2_ToolkitNotAllowed", "message": "private"}}, "auth"),
 ])
 async def test_toolkit_refusal_has_a_value_free_dedicated_failure(status, payload, expected):
@@ -435,7 +465,7 @@ async def test_conflict_keeps_local_restrictions_and_entire_tools_map(tmp_path, 
         if request.method == "PATCH":
             body = json.loads(request.content)
             assert body["tools"]["slack"] == {"disable": ["SLACK_SEND"]}
-            assert "expected_config_version" in body
+            assert "expected_config_version" not in body
             return httpx.Response(409, json={"error": {"message": "secret"}})
         return fake(request)
 

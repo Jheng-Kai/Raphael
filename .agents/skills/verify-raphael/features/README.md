@@ -39,7 +39,7 @@ request both themes; local UI handoffs select affected scenes at 720/1120/1920x1
 Reserve the full scene matrix for integration/release acceptance, CI, explicit
 requests or genuinely app-wide changes. Shared components select representative
 affected consumers rather than unrelated features. Scene definitions in `app/scripts/look/scenes/`
-are the executable source: 330 scenes, 1980 combinations across both themes and
+are the executable source: 351 scenes, 2106 combinations across both themes and
 1120, 720 and 1920x1080. Explicit viewport heights use the shared `options.heights`
 parser; a plain width retains the default 900px height. Native journeys cover
 behavior the fixture cannot prove.
@@ -227,3 +227,18 @@ member home. Its implementation and selected memory-pane scenes are mapped in
 ## Owner round 7 contracts
 
 Owner round 7 extends the existing affected journeys with sidebar-count-alignment, home-lead-width, team-card-lines, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800. Judge is intentionally left to the owner for this handoff.
+
+
+## Connect and Docker acceptance (2026-10-30)
+
+The current matrix has 351 scenes and 2106 combinations. CI groups three images
+per judge request, with an admission limit of 702. This local brief prohibits judge
+and OpenRouter; it selects only the affected connections and member-computer scenes.
+See member-computer.md and connections-mcp.md for the lifecycle and native steps.
+The host adapter is the sole OS-specific Docker launch boundary. Native catalog
+journeys disable the computer adapter, so they cannot start Docker incidentally.
+
+The additional OpenRouter owner report uses the existing settings/quick/member
+chooser scenes and the explicit native `model-picker` journey. See
+settings-appearance.md for model identity, effort, price and fake-provider boundaries.
+Only a public model-list read is authorized; no paid OpenRouter request is accepted.

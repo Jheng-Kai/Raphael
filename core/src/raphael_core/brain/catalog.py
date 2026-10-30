@@ -185,6 +185,13 @@ def refusal(entry: CatalogEntry, role: Role) -> str | None:
 
 def find(entries: Iterable[CatalogEntry], kind: str, model_id: object) -> CatalogEntry | None:
     """The entry of the model `model_id` of `kind`, if the catalog lists it."""
+    from .model_ref import split_api_ref
+    if not isinstance(model_id, str):
+        return None
+    try:
+        model_id, _ = split_api_ref(model_id)
+    except ValueError:
+        return None
     return next((e for e in entries if e.kind == kind and e.id == model_id), None)
 
 
@@ -203,7 +210,14 @@ def choice_problem(
     if model_id in (current, role.default):
         return None
     entry = find(entries, role.kind, model_id)
-    return "not_listed" if entry is None else refusal(entry, role)
+    if entry is None:
+        return "not_listed"
+    from .model_ref import split_api_ref
+    _, effort = split_api_ref(model_id)
+    if effort is not None and (role.name != "answer" or "reasoning" not in entry.capabilities
+            or entry.reasoning_efforts is not None and effort not in entry.reasoning_efforts):
+        return "unsupported_effort"
+    return refusal(entry, role)
 
 
 # --- reading the model list ---------------------------------------------------------------------

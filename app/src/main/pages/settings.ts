@@ -212,6 +212,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let devices: AudioDevices | null = null;
   let altgr = false;
   let version = "";
+  let desktopRequired = false;
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
@@ -282,7 +283,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog, checkingOpenrouter, devices, altgr, version,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog, checkingOpenrouter, devices, altgr, version, desktopRequired,
     replacingKey, confirmingKeyRemoval, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), confirmingClear, localModels, localDownload,
   });
@@ -1266,6 +1267,9 @@ export function createSettings(app: AppContext): SettingsPage {
         }
         break;
       }
+      case "docker-download":
+        void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
+        break;
       case "clear-dictation":
         clear("dictation");
         break;
@@ -1390,7 +1394,7 @@ export function createSettings(app: AppContext): SettingsPage {
       render();
       paintNav();
       el.querySelector<HTMLElement>("#set-title")?.focus();
-      const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult] = await Promise.allSettled([
+      const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, desktopResult] = await Promise.allSettled([
         api.settingsGet(),
         api.secretsStatus(),
         api.statusGet(),
@@ -1398,6 +1402,7 @@ export function createSettings(app: AppContext): SettingsPage {
         api.keyboardHasAltgr(),
         getVersion(),
         api.languagesList(),
+        api.desktopStatus(0),
         // Read again: the settings may have changed since the window started. `refreshDevice` puts
         // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
         app.refreshDevice(),
@@ -1410,6 +1415,7 @@ export function createSettings(app: AppContext): SettingsPage {
       devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
       altgr = altgrResult.status === "fulfilled" && altgrResult.value;
       version = versionResult.status === "fulfilled" ? versionResult.value : "";
+      desktopRequired = desktopResult.status === "fulfilled" && desktopResult.value.state === "absent";
       if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
       replacingKey = false;
       keyError = null;

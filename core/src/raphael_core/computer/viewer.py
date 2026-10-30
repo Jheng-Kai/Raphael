@@ -101,19 +101,9 @@ class DesktopViewer:
 
     async def status(self, params):
         target = self.target(params)
-        if not self.vm.enabled:
+        if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False}
-        try:
-            state = await self.vm.status(target, probe=False)
-        except (VmError, OSError, TimeoutError):
-            state = {"state": "unavailable", "ready": False}
-        if state["state"] == "unavailable":
-            # Distinguish a missing CLI from a stopped engine without starting either.
-            import shutil
-            if shutil.which("docker") is None:
-                state = {"state": "absent", "ready": False}
-        return {"state": state["state"], "ready": state["state"] == "running",
-                "control": "owner" if target.key in self.vm.held else "member"}
+        return await self.status_for(target)
 
     async def open(self, params):
         async with self.open_lock:
@@ -129,6 +119,8 @@ class DesktopViewer:
             self.monitor = asyncio.create_task(self._monitor())
         token = secrets.token_urlsafe(32)
         self.sessions[token] = Session(target, self.vm.clock() + LEASE_SECONDS)
+        if (await self.status_for(target))["state"] != "running":
+            self.vm.launch(target)
         return {"session": token, "url": f"{self.origin}/{token}/vnc.html"}
 
     def session(self, params):
@@ -148,10 +140,12 @@ class DesktopViewer:
     async def status_for(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.
         try:
-            state = await self.vm.status(target, probe=False)
+            state = self.vm.preparation.get(target.key) or await self.vm.status(target, probe=False)
         except (VmError, OSError, TimeoutError):
             state = {"state": "unavailable"}
         return {"state": state["state"], "ready": state["state"] == "running",
+                **({"progress": state["progress"]} if state.get("progress") else {}),
+                **({"error": state["error"]} if state.get("error") else {}),
                 "control": "owner" if target.key in self.vm.held else "member"}
 
     async def control(self, params):

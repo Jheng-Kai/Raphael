@@ -6,6 +6,10 @@ from ..agent.cli.discovery import brain_ref
 from ..brain.openrouter import Completion, OpenRouterError
 
 
+class MemoryBrainError(OpenRouterError):
+    """Subscription memory failure; no OpenRouter request was made on this path."""
+
+
 class MemoryBrain:
     def __init__(self, memory, member_id):
         self.memory, self.member_id = memory, member_id
@@ -37,13 +41,13 @@ class MemoryBrain:
         try:
             outcome = await loop.run()
             if outcome.kind != "done":
-                raise OpenRouterError(0, "unavailable", "Memory brain unavailable")
+                raise MemoryBrainError(0, "unavailable", "Memory brain unavailable")
             text = outcome.final.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0]
             data = json.loads(text)
             return Completion(data=data, model=model, cost_usd=0, prompt_tokens=0, completion_tokens=0, latency_ms=0)
         except (ValueError, TypeError, KeyError) as exc:
-            raise OpenRouterError(0, "bad_response", "Memory brain returned invalid JSON") from exc
+            raise MemoryBrainError(0, "bad_response", "Memory brain returned invalid JSON") from exc
         finally:
             await loop.aclose()

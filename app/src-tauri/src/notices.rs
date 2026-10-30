@@ -140,6 +140,13 @@ pub const CORE_DOWN: Notice = Notice {
     ja: "《否。コアが動作していません。ラファエルを再起動してください。》",
 };
 
+/// The supervisor recovered the core; the interrupted work must be requested again.
+pub const CORE_RECOVERED: Notice = Notice {
+    zh: "《告。服務剛才意外中斷，已重新啟動。請重新提出剛才的請求。》",
+    en: "《Notice. The service stopped unexpectedly and has restarted. Please repeat your last request.》",
+    ja: "《告。サービスが予期せず停止しましたが、再起動しました。直前のリクエストをもう一度送ってください。》",
+};
+
 /// The agent could not answer a question (it did not reply in time, or its reply cannot be shown).
 /// The core's own refusals (no key, over budget, offline) arrive as answers and are shown as such.
 pub const ASK_FAILED: Notice = Notice {
@@ -202,7 +209,8 @@ pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
 mod tests {
     use super::*;
 
-    const ALL: [Notice; 13] = [
+    const ALL: [Notice; 14] = [
+        CORE_RECOVERED,
         ELEVATED,
         FOCUS_CHANGED,
         BUDGET,

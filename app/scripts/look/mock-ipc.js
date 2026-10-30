@@ -469,7 +469,7 @@ export function installMock(fixture, config = {}, target = window) {
         }
         if (variant.cardSignIn === "fail") {
           setTimeout(() => {
-            Object.assign(card, { state: "failed", error: "not_configured" });
+            Object.assign(card, { state: "failed", error: variant.cardFailureKind || "not_configured" });
             const continuation = structuredClone(data.connectorResume);
             Object.assign(continuation, { member_id: turn.member_id, conversation_id: turn.conversation_id,
               prefix: turn.prefix, text: variant.cardFailureText, resumed_apps: [],

@@ -1,7 +1,7 @@
 """Docker-only local desktops. Lifecycle and hardening ported from OpenMausBot.
 
 See THIRD_PARTY_NOTICES.md. The engine owns containers; only the workspace survives
-removal. No host shell, daemon startup, path translation or alternate runtime.
+removal. No host shell, path translation or alternate runtime.
 """
 
 import asyncio
@@ -41,7 +41,7 @@ class Result:
 
 
 class Docker:
-    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT):
+    async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None):
         process = await asyncio.create_subprocess_exec(
             "docker", *args, stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -49,9 +49,18 @@ class Docker:
 
         async def drain(stream):
             kept, size = bytearray(), 0
+            pending = b""
             while chunk := await stream.read(65536):
                 size += len(chunk)
                 kept.extend(chunk[:max(0, limit * 4 - len(kept))])
+                if progress:
+                    lines = (pending + chunk).replace(b"\r", b"\n").split(b"\n")
+                    pending = lines.pop()[-2048:]
+                    for line in lines:
+                        if line.strip():
+                            progress(line.decode("utf-8", errors="replace"))
+            if progress and pending.strip():
+                progress(pending.decode("utf-8", errors="replace"))
             text = kept.decode("utf-8", errors="replace")
             return text[:limit], size > len(kept) or len(text) > limit
 
@@ -165,6 +174,53 @@ class LocalVm:
         self.busy = lambda key: False
         self.timezone = lambda: None
         self.timezone_pending = False
+        from .desktop_host import DockerDesktop
+        # Injected Docker runners never launch a real host application in tests.
+        self.desktop = DockerDesktop() if runner is None else None
+        self.preparation, self.preparing = {}, {}
+        self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
+
+    async def installed(self):
+        return self.enabled and (self.desktop.installed() if self.desktop else await self.available())
+
+    def _progress(self, target, state, text=""):
+        # Only fixed-image pull/build output is passed here, never exec output.
+        self.preparation[target.key] = {"state": state, "ready": False,
+                                        "progress": " ".join(text.split())[:180]}
+
+    async def ensure_engine(self, target):
+        if not self.enabled:
+            raise VmError("absent")
+        async with self.engine_lock:
+            if await self.available():
+                return
+            if not await self.installed():
+                raise VmError("absent")
+            self._progress(target, "starting")
+            try:
+                await self.desktop.start()
+            except (OSError, AttributeError):
+                raise VmError("docker_start_failed") from None
+            try:
+                async with asyncio.timeout(120):
+                    while not await self.available():
+                        await asyncio.sleep(1)
+            except TimeoutError:
+                raise VmError("docker_start_timeout") from None
+
+    def launch(self, target):
+        """Viewer opens immediately; preparation belongs to the shared VM lifecycle."""
+        if target.key not in self.preparing or self.preparing[target.key].done():
+            self._progress(target, "preparing")
+
+            async def prepare():
+                try:
+                    await self.start(target)
+                except (VmError, OSError, TimeoutError) as error:
+                    self.preparation[target.key] = {"state": "unavailable", "ready": False,
+                        "error": str(error) if isinstance(error, VmError) else "start_failed"}
+
+            self.preparing[target.key] = asyncio.create_task(prepare())
 
     def target(self, member_id=0):
         mode = "shared" if self.settings is None else self.settings.get("computer_vm_mode")
@@ -241,20 +297,30 @@ class LocalVm:
         password = next((x[7:] for x in raw["Config"].get("Env", []) if x.startswith("VNC_PW=")), "")
         return port, password
 
-    async def build(self):
+    async def build(self, *, progress=None):
         if not await self.available():
             raise VmError("unavailable")
-        result = await self.run(["pull", BASE], timeout=1800)
+        result = await self.run(["pull", BASE], timeout=1800, **({"progress": progress} if progress else {}))
         if result.code:
             raise VmError("pull_failed")
         context = Path(__file__).parent / "image"
-        result = await self.run(["build", "--tag", IMAGE, str(context)], timeout=1800)
+        result = await self.run(["build", "--progress=plain", "--tag", IMAGE, str(context)], timeout=1800,
+                                **({"progress": progress} if progress else {}))
         if result.code or not await self.image():
             raise VmError("build_failed")
 
     async def start(self, target):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
-            return await self._start(target)
+            try:
+                await self.ensure_engine(target)
+                async with self.build_lock:
+                    if not await self.image():
+                        self._progress(target, "building")
+                        await self.build(progress=lambda text: self._progress(target, "building", text))
+                self._progress(target, "preparing")
+                return await self._start(target)
+            finally:
+                self.preparation.pop(target.key, None)
 
     async def _start(self, target):
         state = await self.status(target, probe=False)
@@ -439,6 +505,10 @@ print(base64.b64encode(data).decode())
             return
 
     async def aclose(self):
+        for pending in self.preparing.values():
+            pending.cancel()
+        await asyncio.gather(*self.preparing.values(), return_exceptions=True)
+        self.preparing.clear()
         if self.task:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)

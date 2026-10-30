@@ -24,6 +24,7 @@ import logging
 import math
 import threading
 import time
+from contextlib import contextmanager
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -180,13 +181,26 @@ def _pick_device(name: str | None) -> tuple[dict, bool]:
 # PortAudio reads the list of devices once, when sounddevice is imported. A microphone plugged in
 # since, or a new default microphone, shows only after it is read again, which closes every open
 # stream. So a recorder reads it again before it opens, and the list of microphones does, but only
-# when none of ours is recording.
+# when none of our input or output streams is open.
 _active = 0
 _active_lock = threading.Lock()
 # Held while a stream is being opened and while the devices are read again, so that neither pulls
 # the ground from under the other: a stream that is still opening is not yet counted in `_active`.
 # Taken before `_active_lock`, never the other way round.
 _devices_lock = threading.Lock()
+
+
+@contextmanager
+def output_stream_lifetime():
+    """Keep device refresh from terminating PortAudio during output, including open/close."""
+    global _active
+    with _devices_lock, _active_lock:
+        _active += 1
+    try:
+        yield
+    finally:
+        with _active_lock:
+            _active -= 1
 
 
 def _read_devices_again() -> bool:

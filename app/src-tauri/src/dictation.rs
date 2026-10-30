@@ -834,7 +834,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             "agent.progress" => self.on_agent_progress(&notification.params),
             "dictation.silence" => drop(self.on_silence(&notification.params, now_ms)),
             "speech.state" => self.on_speech_state(&notification.params),
-            CORE_RESTARTED => self.on_core_restarted(),
+            CORE_RESTARTED => {
+                self.on_core_restarted();
+                self.overlay.notice(notices::CORE_RECOVERED.text(&self.language.get()));
+            }
             CORE_DOWN => self.on_core_down(),
             _ => {}
         }
@@ -4516,6 +4519,15 @@ mod tests {
         run(&c, HotkeyEvent::DictationUp, 300).await;
         run(&c, HotkeyEvent::DictationDown, 5000).await;
         assert_eq!(c.overlay().events().last().unwrap(), "hide");
+    }
+
+    #[test]
+    fn a_supervisor_recovery_notification_explains_the_interruption_once() {
+        let c = controller(FakeCore::default(), FakePaster::pasting("notepad.exe"));
+        c.on_notification(&Notification { method: CORE_RESTARTED.into(), params: json!({}) }, 0);
+        let expected = notice(notices::CORE_RECOVERED.zh);
+        assert_eq!(c.overlay().events().iter().filter(|event| **event == expected).count(), 1);
+        assert_eq!(c.phase(), Phase::Idle);
     }
 
     #[tokio::test]

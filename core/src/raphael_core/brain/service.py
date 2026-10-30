@@ -611,6 +611,9 @@ class Brain:
         key = _str(params, "key")
         value = _required(params, "value")
         with _store_call():
+            if key in ("agent_model", "quick_model") and isinstance(value, str) and value.strip():
+                from .model_ref import api_ref
+                value = api_ref(value.strip())
             role = ROLE_OF_SETTING.get(key)
             if role is not None:
                 self._check_model(role, value)

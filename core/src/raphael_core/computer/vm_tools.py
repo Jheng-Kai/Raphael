@@ -65,7 +65,7 @@ class VmTools:
 
     async def prepare(self, member_id=0):
         if self.vm.clock() - self._checked_at > 10:
-            self._available = await self.vm.available()
+            self._available = await self.vm.installed()
             self._checked_at = self.vm.clock()
         if not self._available:
             return
@@ -74,8 +74,6 @@ class VmTools:
             if target.key in self.catalogs:
                 return
             try:
-                if not await self.vm.image():
-                    return
                 await self.vm.start(target)
                 async with self.bridge(self.vm, target) as client:
                     listed, cursor = [], None

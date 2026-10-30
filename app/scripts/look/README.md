@@ -88,7 +88,7 @@ run log fails the cost guard, except declared Composio hosts in explicitly selec
 `gmail-connect`, `store-finder` and `catalog-connect` journeys. Provider clients are fake;
 connectors also use offline transport except these opt-in journeys.
 
-For real store performance and non-Gmail authorization, run from the owner's normal
+For real store performance and catalog authorization, run from the owner's normal
 PowerShell (the restricted agent shell cannot read Windows Credential Manager):
 
 ```powershell
@@ -108,13 +108,28 @@ the old category dropdown for a before-fix measurement and the new All chip afte
 `catalog-connect` scripts only the fake brain's `find_app` then `connect_app` choice;
 the UI, core tools, policy, cards, database and Composio sign-in are real. It checks
 both Raphael and a new member, requires exactly those two successful tool steps,
-and checks pending/authorizing state without resumption. Raphael's pending login is
-cancelled before testing the member; the member's login stops at authorizing. The
-runner never drives an external consent page. Choose another available non-Gmail
-catalog slug with `RAPHAEL_NATIVE_APP` if Slack cannot start a new authorization.
+and waits for a real Composio pending link before accepting authorizing without
+resumption. Both card logins are cancelled before checking Settings' Store join
+flow. The runner never drives an external consent page; inspect that page separately.
+Use `RAPHAEL_NATIVE_APP=slack` and `gmail` for the connect-and-Docker acceptance.
+Gmail uses Composio when the isolated run has no private Google configuration.
 The runner sets `RAPHAEL_TEST_NATIVE_CATALOG=1` only for these two explicit journeys.
 They do not use a CLI model or OpenRouter. Missing Credential Manager access is a
 prerequisite failure, never evidence that the owner's key is missing.
+
+Only `member-computer` enables the real computer adapter in native fake-brain
+journeys. Its shared lifecycle can start installed Docker Desktop and build the
+pinned image, so run it only with explicit Docker authorization and no other heavy
+process. Stop Docker afterward if the journey started it.
+
+`npm run native -- model-picker` requires `RAPHAEL_NATIVE_MODEL_CATALOG` to name a
+saved public OpenRouter `/api/v1/models` JSON response. It seeds only the isolated
+catalog cache, selects two listed reasoning models and one non-reasoning model
+through the real shared chooser, then checks persisted answer/quick/member settings,
+reopened selections, prices and the next turn's model/effort. The fake provider
+records only public model/effort metadata in that run's `data/model-requests.jsonl`.
+This journey makes no provider request and never enables Docker. A public catalog
+read and mocked HTTP-body tests remain separate from paid provider acceptance.
 
 Native captures wait for finite entrance animations before taking screenshots;
 click-to-paint measurements are retained from the original event interval. Infinite

@@ -23,6 +23,7 @@ fd 1 goes to stderr, with the log.
 """
 
 import logging
+import faulthandler
 import os
 import sys
 from pathlib import Path
@@ -34,6 +35,9 @@ LIBRARIES_TIMEOUT_S = 60.0
 
 
 def main() -> None:
+    # stderr is drained into the shell's log for the entire sidecar lifetime.
+    # Enable before importing native audio, ONNX, SQLite or credential modules.
+    faulthandler.enable(file=sys.stderr, all_threads=True)
     if "--worker" in sys.argv[1:]:
         from raphael_core.worker.runner import main as worker_main  # light: no native libraries
 

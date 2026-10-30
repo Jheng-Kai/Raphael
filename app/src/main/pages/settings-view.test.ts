@@ -188,6 +188,13 @@ test.each(["zh-TW", "en", "ja"] as const)("About exposes localized help and feed
 test.each([catalog, "loading", "failed"] as const)("a CLI answer is priced as subscription regardless of API catalog availability", (source) => {
   expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "cli:codex" } }))["agent-model"]).toBe("訂閱");
 });
+
+test("answer and inherited quick prices keep the catalog identity when effort is selected", () => {
+  const plain = priceTexts(view());
+  const selected = priceTexts(view({ brain: { ...brain, agent_model: brain.agent_model + "?effort=high", quick_model: "" } }));
+  expect(selected["agent-model"]).toBe(plain["agent-model"]);
+  expect(selected["quick-model"]).toBe(plain["agent-model"]);
+});
 const IDS = PANES.map((p) => p.id);
 const LOCALES = ["zh-TW", "en", "ja"] as const;
 
@@ -782,6 +789,13 @@ describe("電腦操作", () => {
     expect(source).toContain('case "computer-menu"');
     expect(source).toContain("removeComputerApp(exe)");
     expect(source).not.toContain("computer_apps: computerAppsWithout");
+  });
+
+  test("an absent Docker runtime has one download action in the existing computer area", () => {
+    const html = tab("agent", { desktopRequired: true });
+    expect(html.match(/data-act="docker-download"/g)).toHaveLength(1);
+    expect(html).toContain("成員電腦需要 Docker Desktop。");
+    expect(tab("agent", { desktopRequired: false })).not.toContain("docker-download");
   });
 
   test("the search finds the section by its name in any language", () => {

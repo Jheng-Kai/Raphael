@@ -49,7 +49,8 @@ describe("maintained verification feature map", () => {
     const command = content.match(/^npm run look -- (desktop-entry .+)$/m)?.[1];
     expect(command).toBeTruthy();
     expect(parseOptions(command.split(/\s+/), scenes).selected.map(scene => scene.name)).toEqual([
-      "desktop-entry", "desktop-viewer", "desktop-owner", "desktop-handback", "desktop-stopped", "desktop-unavailable", "desktop-absent",
+      "desktop-entry", "desktop-viewer", "desktop-owner", "desktop-handback", "desktop-stopped", "desktop-unavailable",
+      "desktop-starting", "desktop-building", "desktop-preparing", "desktop-absent", "desktop-install",
     ]);
   });
   it("retires deliberately removed owner controls", () => {
