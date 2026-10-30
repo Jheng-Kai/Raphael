@@ -399,6 +399,9 @@ class EmptyHub:
     def offered(self): return []
     def tier_of(self, key): return None
     def kind_of(self, server, name): return None
+    # Like the real hub: it cannot answer for tools it does not know.
+    def tier_for_call(self, key, arguments): return None
+    def kind_for_call(self, server, name, arguments): return None
     def record_unrun(self, *args, **kwargs): pass
 
 
@@ -502,8 +505,10 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
     execute = next(tool for tool in hub.offered() if tool.name == "vm_exec")
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     calls = [(shot, {}), (click, {}), (execute, {"command": "printf hello"})]
+    assert gate.reads_only("computer", "get_desktop_state", {}) and not gate.reads_only("computer", "vm_exec", {"command": "x"})
     for tool, arguments in calls:
         assert gate.tier(tool.key) == Tier.T0
+        assert gate.tier_now(tool.key, arguments) == Tier.T0
         assert not gate.needs_confirmation(tool.key)
         assert (await gate.call_plugin(tool.key, arguments)).ok
     vm.hold(target, True)
