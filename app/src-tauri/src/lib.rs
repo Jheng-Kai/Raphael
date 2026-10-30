@@ -35,9 +35,10 @@ const MAIN_WINDOW: &str = "main";
 /// Label of the overlay window. It is created in Rust, never by the config.
 const OVERLAY_WINDOW: &str = "overlay";
 
-/// Restore remembered bounds; launch policy and the native frame stay under app control.
+/// Nothing is restored: every launch opens at the designed 1280x800, centred (owner, 2026-10-30), even
+/// after the window was maximized last time. Launch policy and the native frame stay under app control.
 fn main_window_state_flags() -> StateFlags {
-    StateFlags::all() & !(StateFlags::VISIBLE | StateFlags::DECORATIONS)
+    StateFlags::empty()
 }
 
 /// Writes a panic to the log. The release build aborts on a panic (`panic = "abort"`) and has no
@@ -542,17 +543,13 @@ mod window_state_tests {
     use super::*;
 
     #[test]
-    fn restoring_saved_geometry_cannot_restore_a_native_titlebar_or_show_the_window() {
+    fn every_launch_opens_at_the_designed_size_not_the_last_maximized_window() {
+        // A maximized last session reopened full screen; the owner expects the designed small window.
         let flags = main_window_state_flags();
+        assert!(!flags.intersects(
+            StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN
+        ));
         assert!(!flags.intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS));
-        assert!(flags.contains(StateFlags::MAXIMIZED | StateFlags::FULLSCREEN));
-    }
-
-    #[test]
-    fn remembered_bounds_win_after_the_first_launch() {
-        // The designed defaults apply before window-state has saved bounds.
-        let flags = main_window_state_flags();
-        assert!(flags.contains(StateFlags::SIZE | StateFlags::POSITION));
     }
 
     #[test]

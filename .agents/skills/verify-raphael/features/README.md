@@ -163,8 +163,8 @@ the unchanged 2000-request hard cap; the monetary limit is unchanged.
 
 ## Owner round 4 acceptance
 
-The designed default is 1280x800, retaining the 720x480 minimum and remembered
-window-state bounds. The unspecified look viewport reads the main-window size
+The designed default is 1280x800 with the 720x480 minimum; every launch opens at it,
+centred, and window-state restores nothing. The unspecified look viewport reads the main-window size
 from tauri.conf.json. Plain --width entries still use a 900px height. Candidate
 comparison covers every main page at 1180x780, 1280x800, 1280x840 and 1366x860 in
 both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 desktop;

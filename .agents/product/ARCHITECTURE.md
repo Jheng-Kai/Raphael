@@ -68,8 +68,8 @@ The recording composer's Stop uses the existing agentVoice down/up native path.
 It is excluded from generic task cancellation; task repaint preserves the voice
 flyer. Escape alone uses cancelSession and the shared two-press gesture.
 First and single-instance manual launches share first_run::opens_at_start(args);
-only explicit --autostart stays hidden. Remembered bounds remain window-state's
-responsibility. Conversation content never depends on profile_ready.
+only explicit --autostart stays hidden. Every launch opens at the designed 1280x800,
+centred; window-state restores nothing (owner, 2026-10-30). Conversation content never depends on profile_ready.
 
 
 ## Growing member memory (phase 2, 2026-10-29)

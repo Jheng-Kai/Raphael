@@ -60,7 +60,8 @@ npm run look -- no-naming onboarding after-onboarding --theme both --width 1120,
 
 Welcome content and Start form one centered block with a consistent gap. Manual
 initial and second launches reveal/focus the main window; only --autostart stays
-hidden. Window-state still restores remembered size and position. Rust policy
+hidden. Every launch opens at the designed 1280x800, centred; window-state restores
+nothing, not even a last maximized window. Rust policy
 regressions live in first_run.rs and window_state_tests in lib.rs.
 
 ## Owner round 6 contracts
