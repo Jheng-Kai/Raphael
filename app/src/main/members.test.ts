@@ -20,6 +20,7 @@ import {
   raphaelOf,
   scheduleText,
   sourceLabel,
+  plainLine,
 } from "./members";
 import type { Member, MembersList } from "./types";
 
@@ -92,6 +93,12 @@ describe("the column's sections", () => {
 });
 
 describe("primary display order", () => {
+  test("a preview says what a message says, without its Markdown", () => {
+    expect(plainLine("### 結論\n先完成 **測試**，再看 [上線清單](https://example.test) 與 `npm run look`。\n\n### 下一步\n- 小晴：檢查")).toBe("結論 先完成 測試，再看 上線清單 與 npm run look。 下一步 小晴：檢查");
+    expect(plainLine("C# 與 issue #5 不變")).toBe("C# 與 issue #5 不變");
+    expect(plainLine("比較如下\n| 方案 | 費用 |\n|---|:--:|\n| A | 10 |\n```mermaid\nflowchart TD\n A-->B\n```\n結束")).toBe("比較如下 方案 費用 A 10 結束");
+  });
+
   test("swaps identities without mutating the source, including group and pinned placement", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true } : m), team_context: { primary_id: 3 } } as MembersList;
     const before = JSON.stringify(list), display = memberDisplayList(list);

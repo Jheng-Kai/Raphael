@@ -14,7 +14,7 @@ import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { teamMentions } from "./team-mentions";
 import { roomWrapupHTML } from "./room-wrapup";
 import { filesHTML, messageActionsHTML } from "./timeline";
-import { primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
+import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffLineHTML } from "./handoff-line";
 import type { HandoffView } from "./types";
@@ -326,7 +326,7 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
       .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(replyBody(room.preview ?? "").replace(/\s+/g, " "))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(plainLine(replyBody(room.preview ?? "")))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
       }).join("");
   };
   const load = async (): Promise<void> => {

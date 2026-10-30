@@ -128,8 +128,23 @@ export function orderedMembers(list: MembersList | null): Member[] {
  * owner there, that line in gold after 「等你處理：」 (the waiting turn is the thread's last, so its
  * line is what is asked), 「等你處理」 alone when there is none.
  */
+/** One line of a message for a preview: what it says, without the Markdown only a full message renders. */
+export function plainLine(text: string): string {
+  return text
+    .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, "")
+    .replace(/^[ \t]*\|(.*)\|?[ \t]*$/gm, (_, cells: string) => cells.replace(/\|/g, " "))
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/^[ \t]*(?:>[ \t]?|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?)/gm, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function previewOf(member: Member, last: string | undefined): { text: string; waiting: boolean } {
-  const line = (last ?? "").replace(/\s+/g, " ").trim();
+  const line = plainLine(last ?? "");
   if (member.waiting) return { text: line ? t("members.waiting", { p0: line }) : t("members.waitingShort"), waiting: true };
   return { text: line, waiting: false };
 }
