@@ -84,6 +84,40 @@ export function checkRendered(name) {
     } else require(getComputedStyle(count).position === 'absolute', "icon rail keeps its icon badge");
     return { check: name, rail };
   }
+  if (name === "message-no-inner-scroll") {
+    for (const node of document.querySelectorAll('.chat-message, .chat-message .bubble, .chat-message .ans, .message-text, .message-code pre')) {
+      if (!visible(node)) continue;
+      const style = getComputedStyle(node);
+      require(!['auto', 'scroll'].includes(style.overflowY) || node.scrollHeight <= node.clientHeight + 1, `message has an inner vertical scrollbar: ${node.className}`);
+      require(!['auto', 'scroll'].includes(style.overflowX) || node.scrollWidth <= node.clientWidth + 1, `message has an inner horizontal scrollbar: ${node.className}`);
+    }
+    return { check: name };
+  }
+  if (name === "message-no-raw-envelope") {
+    for (const node of document.querySelectorAll('.ra .message-text')) {
+      let value;
+      try { value = JSON.parse(node.textContent.trim()); } catch { continue; }
+      require(!value || Array.isArray(value) || typeof value !== 'object' || !('text' in value || 'messages' in value), "a conversation never renders a raw reply envelope");
+    }
+    return { check: name };
+  }
+  if (["message-preview", "message-expanded", "message-preview-member", "message-expanded-member"].includes(name)) {
+    const message = [...document.querySelectorAll('.chat-message')].find(node => node.textContent.includes('整理每日新聞素材') && (!name.endsWith('-member') || node.closest('.ra')));
+    require(!!message, "the long numbered workflow is visible");
+    const text = message.querySelector('.message-text'), toggle = message.querySelector('[data-act="expand-message"]');
+    require(visible(toggle), "a long message has one visible expand control");
+    require(message.querySelectorAll('[data-act="expand-message"]').length === 1, "a long message has only one expand control");
+    const expanded = name.startsWith("message-expanded");
+    require(message.classList.contains('is-expanded') === expanded && toggle.getAttribute('aria-expanded') === String(expanded), "the expanded state and accessible control agree");
+    const style = getComputedStyle(text);
+    if (message.classList.contains('owner-message')) require(text.innerText.includes('\n\n'), "owner paragraphs retain their rendered line breaks");
+    if (expanded) require(text.clientHeight >= text.scrollHeight - 1 && style.maskImage === 'none', "expanded text displays its complete body without a fade");
+    else {
+      require(text.scrollHeight > text.clientHeight + 1 && text.clientHeight <= parseFloat(style.lineHeight) * 8 + 1, "a preview shows at most eight lines");
+      require(style.maskImage.includes('linear-gradient'), "the cut edge fades");
+    }
+    return { check: name, expanded, height: text.clientHeight, fullHeight: text.scrollHeight };
+  }
   if (name === "home-lead-width") {
     const lead = document.querySelector('.ho-hero'), copy = lead.querySelector('h1').parentElement;
     require(Math.abs(copy.getBoundingClientRect().right - lead.getBoundingClientRect().right) < 1, "Home report uses all width beside its emblem");
@@ -268,14 +302,31 @@ export function checkRendered(name) {
   if (name === "home-redesign") {
     const page=document.querySelector('.page-home'), lead=page.querySelector('.ho-hero'), stats=[...page.querySelectorAll('.ho-stat')];
     require(!!lead.querySelector('h1') && getComputedStyle(lead).backgroundColor === 'rgba(0, 0, 0, 0)', "the report is the page headline without a card");
-    require(page.querySelectorAll('.ho-card').length === 5 && !!page.querySelector('.ho-inbox .ho-pending') && !!page.querySelector('.ho-inbox .ho-reports'), "one inbox combines pending and reports beside Today");
+    require(page.querySelectorAll('.ho-card').length === 4 && !!page.querySelector('.ho-inbox'), "four equal blocks hold attention, spend, allowances and dictation");
     require(stats.length === 3, "three stats share one skeleton");
     require(parseFloat(getComputedStyle(page).maxWidth)===1080,"Home retains the supplied 1080px page measure");
     const boxes=stats.map(el=>el.getBoundingClientRect());
     const emblem=lead.querySelector('.av').getBoundingClientRect(), copy=lead.querySelector('.ho-lead-copy').getBoundingClientRect();
     require(copy.left >= emblem.right - 1 && copy.top < emblem.bottom && copy.bottom > emblem.top, "Home emblem and report stay side by side at narrow widths");
-    if(innerWidth>760) require(boxes.every(b=>Math.abs(b.top-boxes[0].top)<1 && Math.abs(b.bottom-boxes[0].bottom)<1), "stats fill one complete aligned row");
-    for(const chart of page.querySelectorAll('.ho-chart')) require(Math.abs(chart.getBoundingClientRect().height-48)<1,"charts keep their shared 48px height");
+    const cards = [...page.querySelectorAll('.ho-card')].map(card => card.getBoundingClientRect());
+    require(cards.every(box => Math.abs(box.width - cards[0].width) < 1 && Math.abs(box.height - cards[0].height) < 1), "all four blocks share their dimensions regardless of data");
+    require(Math.abs(cards[0].top - cards[1].top) < 1 && Math.abs(cards[2].top - cards[3].top) < 1 && cards[2].top > cards[0].bottom, "four blocks retain their two-by-two positions");
+    require(page.querySelectorAll('.ho-day').length === 7 && page.querySelectorAll('.ho-day[aria-current="date"]').length === 1, "a compact seven-day calendar marks today");
+    require(page.querySelector('.ho-calendar').getBoundingClientRect().top >= cards[3].bottom, "the mini calendar stays below the four blocks");
+    const blocks = [...page.querySelectorAll('.ho-card, .ho-calendar')];
+    for (const block of blocks) {
+      const target = block.querySelector(':scope > .ho-target');
+      require(target?.tagName === 'BUTTON' && target.tabIndex === 0 && !!target.getAttribute('aria-label'), "each whole block has one named keyboard target");
+      const box = block.getBoundingClientRect(), hit = target.getBoundingClientRect();
+      require(['left', 'top', 'right', 'bottom'].every(edge => Math.abs(box[edge] - hit[edge]) <= 1), "the navigation target covers the entire block");
+      require(!target.querySelector('button, a, input'), "inner controls remain separate from the block target");
+      for (const x of [.1, .5, .9]) for (const y of [.1, .5, .9]) {
+        const px = box.x + box.width * x, py = box.y + box.height * y;
+        if (py >= innerHeight || py < 0) continue;
+        const at = document.elementFromPoint(px, py);
+        require(at === target || !!at?.closest('[data-home-item]'), "every sampled point opens the block or its own inner action");
+      }
+    }
     return {check:name,stats:boxes.map(b=>({top:b.top,bottom:b.bottom}))};
   }
   if(name === "dictation-layout") {
@@ -360,6 +411,10 @@ export function checkRendered(name) {
     require(new Set(paragraphs).size===paragraphs.length,"each details paragraph is presented once");
     return {check:name,title,paragraphs:paragraphs.length};
   }
+  if (name === "overlay-working-no-stop") {
+    require(!visible(document.querySelector('#overlay-stop')), "ordinary working orb has no floating Stop button");
+    return { check: name };
+  }
   if(name === "overlay-stop-content") {
     const stop=document.querySelector('#overlay-stop'),label=stop?.querySelector('.overlay-stop-label');
     require(visible(stop)&&visible(label)&&!!label.textContent.trim(),"desktop Stop has a visible localized label instead of a lone empty square");
@@ -443,7 +498,7 @@ export function checkRendered(name) {
         if (!row) rows.push(row = { top: card.top, count: 0 });
         row.count++;
       }
-      require(cards.length === 5 && rows.at(-1).count === (innerWidth > 760 ? 3 : 1), `Home summary rows fill their columns: ${JSON.stringify(rows)}`);
+      require(cards.length === 4 && rows.length === 2 && rows.every(row => row.count === 2), `Home summary rows fill their columns: ${JSON.stringify(rows)}`);
       home = { heroWidth: lead.width, available, columns: rows[0].count, rows: rows.map(row => row.count) };
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
@@ -1092,7 +1147,14 @@ export function checkRendered(name) {
     });
   }
   if (name === "home-overview") {
+    for (const panel of document.querySelectorAll('.page-home .ho-card, .page-home .ho-card *')) {
+      const style = getComputedStyle(panel);
+      require(!['auto', 'scroll'].includes(style.overflowY) || panel.scrollHeight <= panel.clientHeight + 1, `Home has no scrolling inner panels: ${panel.className}`);
+    }
     const home = document.querySelector('.page-home:not([hidden])');
+    for (const card of home.querySelectorAll('.ho-card')) require(card.scrollHeight <= card.clientHeight + 1, `Home block content fits its stable size: ${card.className}`);
+    for (const bars of home.querySelectorAll('.ho-bars')) require([...bars.querySelectorAll('rect')].some(rect => Number(rect.getAttribute('height')) > 2), "Home never draws a flat zero chart");
+    require(![...home.querySelectorAll('.ho-big, .ho-meter-row b')].some(node => /^[—–-]$/.test(node.textContent.trim())), "Home never presents a lone dash as a stat");
     const emblem = home?.querySelector('.ho-hero > .av');
     require(visible(emblem) && emblem.getBoundingClientRect().width >= 60, "Raphael's emblem is large on Home");
     require(!!home.querySelector('h1.ho-said'), "Raphael reports in the page headline");
@@ -1135,9 +1197,17 @@ export function checkRendered(name) {
     require(window.__look.calls.some(call => call.method === "agent.history.list" && call.params.conversation_id === 11 && call.params.around_id === 2), "The reported conversation was loaded around its exact turn");
     return { check: name, turnId: 2, memberId: 1 };
   }
+  if (name === "calendar-all-day") {
+    require(visible(document.querySelector('.au-all-day-event')), "all-day events remain in the pinned header");
+    return { check: name };
+  }
   if (name === "calendar-shell") {
     const grid = document.querySelector('.au-page:not([hidden]) .au-calendar-scroll'), side = document.querySelector('.au-page:not([hidden]) .au-calendar-side');
     require(visible(grid), "the calendar grid is visible");
+    const hour = grid.querySelector('.au-slot').getBoundingClientRect().height;
+    const header = grid.querySelector('.au-grid-head').getBoundingClientRect();
+    require(hour <= 54 && hour * 11 <= grid.clientHeight - header.height + 1, "eleven working hours fit the calendar viewport without a long vertical scroll");
+    require(visible(grid.querySelector('.au-all-day')), "the all-day row stays at the top of the calendar");
     require(grid.scrollWidth <= grid.clientWidth + 1, "the calendar never scrolls horizontally");
     const box = grid.getBoundingClientRect(), columns = [...grid.querySelectorAll('.au-day-col')];
     for (const column of columns) {

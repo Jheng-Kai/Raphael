@@ -1,6 +1,7 @@
 """The home RPC aggregates existing records without changing read state or storage."""
 
 import pytest
+import asyncio
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.home import HomeOverview
@@ -44,6 +45,23 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert value["dictation"]["daily"] == list(range(11, 25))
     assert value["report"]["openrouter"]["state"] == "no_key"
     assert rig.conn.total_changes == before
+
+
+async def test_local_home_does_not_wait_for_live_allowances_or_calendar(home, rig, monkeypatch):
+    calls = []
+    async def allowances(params):
+        calls.append(params)
+        if params.get("refresh", True):
+            await asyncio.sleep(2)
+        return {"brains": [{"id": "codex", "name": "Codex", "windows": []}]}
+    async def calendar(start, end):
+        await asyncio.sleep(2)
+        return []
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", allowances)
+    home.calendar_events = calendar
+    value = await asyncio.wait_for(rig.call("home.overview"), .2)
+    assert value["usage"]["allowances"]["brains"][0]["id"] == "codex"
+    assert calls == [{"refresh": False}]
 
 
 async def test_pending_in_different_conversations_and_latest_unread_report(home, rig):
@@ -106,7 +124,7 @@ async def test_calendar_seam_and_invalid_timezone(home, rig):
     async def events(start, end):
         return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": start + 1000, "member_id": 0, "name": "Raphael", "avatar_url": None, "turn_id": None, "conversation_id": None, "routine_id": None}]
     home.calendar_events = events
-    assert (await rig.call("home.overview"))["calendar"][0]["title"] == "Planning"
+    assert (await rig.call("home.overview", {"refresh": True}))["calendar"][0]["title"] == "Planning"
     with pytest.raises(RpcError) as caught:
         await rig.call("home.overview", {"tz": "invalid/timezone"})
     assert caught.value.code == INVALID_PARAMS
@@ -144,7 +162,7 @@ async def test_worker_question_keeps_its_conversation_and_connector_failure_is_i
         raise ConnectionError("Calendar unavailable")
 
     home.calendar_events = unavailable
-    value = await rig.call("home.overview")
+    value = await rig.call("home.overview", {"refresh": True})
     assert value["today"][0]["turn_id"] == turn
     assert value["today"][0]["conversation_id"] is not None
     assert value["calendar"] == []

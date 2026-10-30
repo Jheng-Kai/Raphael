@@ -5,15 +5,16 @@
 Startup and first-run landing, Raphael's status report, pending questions across
 conversations, today's routines, latest unread member reports, today's calendar,
 monthly spend/budget, fourteen-day spend series, subscription allowances and 
-dictation charts. The twelve-column grid includes Today, a combined inbox and three stat cards. Today contains routine occurrences and connected
-calendar events for the current date. Pending contains questions/approvals; unread
-reports belong in Reports.
+dictation charts. Four equal blocks contain needs-you, monthly spend, allowances and
+dictation in a stable two-by-two grid. A seven-day mini calendar below marks today
+and event dots. Empty, sparse and full data retain identical block positions and
+sizes. Needs-you combines pending questions/approvals and unread member reports.
 
 ## How to get to it (user POV)
 
 Launch the app, complete onboarding, click Home (first in the rail), or click the
 Raphael brand. A report opens its member's conversation at that exact turn;
-routines open Automations. Spend and allowance buttons open Usage, and the dictation card icon opens Dictation. The Today icon and timeline items open the calendar. The status report keeps Raphael's emblem visible and turning: it plays his loop (the one of the 拉斐爾 page) while the window allows motion and is the still picture under reduced motion, following the preference as it changes. Nothing sits right of the report except its one fixing icon when something is wrong: asking Raphael is done on his own page (owner, 2026-10-25), so the hero has no ask icon.
+routines open Automations. Each whole summary block and the mini calendar is one named, keyboard-focusable navigation button. Spend and allowances open Usage; dictation opens Dictation; the mini calendar opens the full calendar. Separate report/question controls retain their own actions. Whole blocks use hover/pressed tokens and a focus ring only in keyboard modality; chevrons are decorative hints. The status report keeps Raphael's emblem visible and turning: it plays his loop (the one of the 拉斐爾 page) while the window allows motion and is the still picture under reduced motion, following the preference as it changes. Nothing sits right of the report except its one fixing icon when something is wrong: asking Raphael is done on his own page (owner, 2026-10-25), so the hero has no ask icon.
 The bottom of the sidebar holds 連結應用程式, above Settings, with the number of connected apps
 (at the row end beside its label; a badge on its icon only in the 拉斐爾 page's rail); it opens
 Settings > Connections (see [Connections and MCP](connections-mcp.md)).
@@ -22,20 +23,25 @@ Settings > Connections (see [Connections and MCP](connections-mcp.md)).
 
 ```powershell
 npm run look -- home home-empty home-720 home-report home-routine home-calendar home-many home-motion --theme both --width 1120,720,1920x1080
+npm run look -- home home-empty home-sparse home-many home-block-navigation home-block-interactions --theme both --width 1120,720,1920x1080,1280x800
 ```
 
 Scenes run with reduced motion, so every home scene above shows the emblem's still picture, and its `home-overview` check asserts that (and that the hero has no ask icon).
 `home-motion` allows motion (`motion: true`, with `freeze-motion` for the CSS animations) and asserts that the page asks for the loop and that the loop is an animation (a WebP of 144 frames over 6 s):
 the loop plays by itself, which a canvas cannot sample, so its screenshot shows whichever frame the clock was at. A refresh of Home does not replace the emblem's node, so his turn is not started over (pages/home.test.ts).
 
-Owner round 4 follows the supplied Home mockup: a borderless 72px emblem/date/headline
-lead, Today (7/12) and one inbox (5/12) with pending/report sections, followed by
-three equal stat cards. The page is capped at 1080px including 56/40/48 padding;
-section/card gaps are 32/24px. At <=1100px the agenda and inbox stack, and at
-<=760px all cards stack. Stats share 28px figures and bottom-aligned 48px charts;
-CLI meters show used percentages, with unknown windows displayed as an em dash.
-Agenda rows use 56px time tracks, a 3px accent tick and 44px row height.
-The report remains the widest first element and the three stats fill their row.
+Owner round 9 supersedes the earlier Today/inbox/three-stat arrangement. The page
+keeps its borderless 72px emblem/date/headline and 1080px maximum. Four equal blocks
+use two columns at every requested size, 16px gaps, and a fixed 200px height (224px
+at <=760px). Calm empty copy replaces flat zero charts and isolated dashes. At most
+three inbox items and one representative window per CLI keep content within the
+blocks; the whole block opens the complete view. No Home descendant scrolls internally.
+The mini week is one navigation target with noninteractive date markers. The shared
+rendered check measures all five full-surface buttons and hit-tests a three-by-three
+sample of each surface. home-block-navigation clicks both opposite corners of every
+block, verifies real destinations and then exercises the inner report control.
+home-block-interactions checks hover, pressed, pointer focus and keyboard focus on
+all five blocks, retaining the calendar focus ring for visual inspection.
 Cached data redraws on every locale change without replacing the emblem node.
 
 Inspect every contact sheet and the full-size home/report images. The home-720
@@ -49,7 +55,13 @@ Timeline actions keep visible token-based frames (R-UI-18), including calendar e
 
 ## Gotchas
 
-All records come from home.overview; no new persistent store is introduced. Counts
+All records come from home.overview; no new persistent store is introduced. Its
+default refresh=false returns local records and persisted allowance windows without
+starting a CLI or connected-calendar call. Home paints that response before requesting
+refresh=true, coalescing live reads and retaining the same emblem. Read-only allowance
+refreshes persist reported windows with notify=false, so they never trigger reload loops.
+Connected events use an in-memory last-read cache and are filled by the live request.
+Counts
 cover all available records; payload limits are 12 today items, 8 reports and 24
 calendar occurrences. Subscription windows can be unavailable and show that state.
 Google Calendar uses connectors.status with refresh=false and the existing private
@@ -87,3 +99,9 @@ Owner round 6: home/home-empty/home-many keep the emblem and report copy side by
 ## Owner round 7 contracts
 
 The expanded sidebar keeps its connected-app count after the label, vertically centred with the same label inset as other rows, including at 720px; only the icon rail overlays the icon. Home uses pretty line wrapping and two hero columns when no fixing action exists, giving the report all remaining width beside the emblem. A fixing action retains its own third column. home/home-empty/home-many assert the report right edge; home/team/automations-calendar/dictation-overview/chat cover the shared count in expanded and icon-only navigation.
+
+## Owner round 9 regression coverage
+
+```powershell
+npm run look -- home-sparse --theme both --width 1120,720,1920x1080,1280x800
+```

@@ -30,6 +30,7 @@ class HomeItem(TypedDict):
     turn_id: int | None
     conversation_id: int | None
     routine_id: int | None
+    all_day: bool
 
 
 class DictationNumbers(TypedDict):
@@ -104,7 +105,7 @@ class ConnectedCalendar:
                 title = event.get("summary") or "Untitled event"
                 events.append({"id": f"event:{event['id']}", "kind": "event", "title": " ".join(title.split())[:120],
                                "summary": "", "at_ms": at, "member_id": 0, "name": "Google Calendar", "avatar_url": None,
-                               "turn_id": None, "conversation_id": None, "routine_id": None})
+                               "turn_id": None, "conversation_id": None, "routine_id": None, "all_day": "dateTime" not in start})
         return events
 
 
@@ -116,6 +117,9 @@ class HomeOverview:
         self.timezone_name = getattr(tz, "key", None)
         self.timezone_changed = None
         self._allowance_task = None
+        self._calendar_task = None
+        self._calendar_key = None
+        self._calendar = []
 
     def register(self):
         self.router.register("home.overview", self.read)
@@ -126,16 +130,39 @@ class HomeOverview:
         except Exception as exc:
             logger.warning("Desktop time zone sync failed: %s", type(exc).__name__)
 
-    async def _allowances(self):
+    async def _allowances(self, refresh):
+        if not refresh:
+            return await self.router.call("usage.allowances", {"refresh": False})
         # Concurrent refreshes share one CLI read, without persisting a second allowance store.
         if self._allowance_task is None or self._allowance_task.done():
             self._allowance_task = asyncio.create_task(self.router.call("usage.allowances"))
         try:
             return await asyncio.wait_for(asyncio.shield(self._allowance_task), timeout=12)
         except (RpcError, TimeoutError):
-            return {"brains": []}
+            return await self.router.call("usage.allowances", {"refresh": False})
+
+    async def _events(self, start, end, refresh):
+        key = (start, end)
+        if not refresh:
+            return self._calendar if self._calendar_key == key else []
+        if self._calendar_task is None or self._calendar_task.done() or self._calendar_key != key:
+            if self._calendar_key != key:
+                self._calendar = []
+            self._calendar_key = key
+            self._calendar_task = asyncio.create_task(self.calendar_events(start, end))
+        try:
+            events = await asyncio.wait_for(asyncio.shield(self._calendar_task), timeout=12)
+            if self._calendar_key == key:
+                self._calendar = events
+            return events
+        except (ConnectionError, TimeoutError):
+            logger.warning("Home calendar is temporarily unavailable")
+            return []
 
     async def read(self, params: dict) -> Overview:
+        refresh = params.get("refresh", False)
+        if type(refresh) is not bool:
+            raise invalid_params("refresh must be a boolean")
         zone = self.tz
         if "tz" in params:
             try:
@@ -160,7 +187,7 @@ class HomeOverview:
             return {"id": f"{kind}:{key}", "kind": kind, "title": " ".join(title.split())[:120],
                     "summary": " ".join(summary.split())[:160], "at_ms": at, "member_id": mid,
                     "name": member["name"], "avatar_url": member.get("avatar_url"),
-                    "turn_id": turn, "conversation_id": conversation, "routine_id": routine}
+                    "turn_id": turn, "conversation_id": conversation, "routine_id": routine, "all_day": False}
 
         reports = []
         # Rank completed reports, rather than the latest turn, which can still be a question.
@@ -202,17 +229,12 @@ class HomeOverview:
                     if due < tomorrow:
                         today.append(occurrence)
                 due = next_run(routine.schedule, due, tz=zone)
-        try:
-            events = await self.calendar_events(start, end)
-        except (ConnectionError, TimeoutError):
-            logger.warning("Home calendar is temporarily unavailable")
-            events = []
+        events, allowances = await asyncio.gather(self._events(start, end, refresh), self._allowances(refresh))
         calendar.extend(event for event in events if start <= event["at_ms"] < end)
         today.sort(key=lambda r: (0 if r["kind"] == "question" else 1, r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
         status = await self.router.call("status.get")
         stats = await self.router.call("stats.summary", {"days": 14})
-        allowances = await self._allowances()
         spend = status["spend"]
         return {"generated_at_ms": now, "report": status, "today": today[:TODAY_LIMIT], "reports": reports[:REPORT_LIMIT],
                 "calendar": calendar[:CALENDAR_LIMIT], "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},

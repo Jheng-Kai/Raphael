@@ -163,12 +163,38 @@ export function installMock(fixture, config = {}, target = window) {
       title: id === 3 ? "確認資料來源範圍" : "核准後續研究安排" })));
     data.home.counts.today = data.home.today.length;
   }
-  if (variant.homeEmpty) {
+  if (variant.calendarSparse) data.routines = data.routines.slice(0, 1);
+  if (variant.calendarAllDay) {
+    const event = data.home.calendar.find(item => item.kind === "event");
+    if (event) data.home.calendar.push({ ...event, id: "event:all-day", title: "素材整理日", all_day: true });
+  }
+  if (variant.longOwner || variant.longReply || variant.rawReplyEnvelope) {
+    const turn = data.turns.find(turn => turn.member_id === (variant.longReply ? 1 : 0) && turn.conversation_id !== 4);
+    const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：先閱讀來源與發表日期，再核對事件發生時間。保留原始連結、重點摘要與尚待確認的資訊。\n\n將已確認的素材依主題整理，為下一次編輯保留完整脈絡。`).join("\n\n");
+    if (variant.longOwner) turn.question = text;
+    if (variant.longReply || variant.rawReplyEnvelope) {
+      turn.text = variant.rawReplyEnvelope ? JSON.stringify({ text: "Gmail 需要先連線。", messages: ["Gmail 需要先連線。"], say_ja: "接続が必要です。" }) : text;
+      turn.messages = [{ seq: 1, kind: "reply", text: turn.text, at_ms: turn.created_at_ms }];
+    }
+  }
+  if (variant.longRoomMessages) {
+    const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：核對來源、日期與重點，再保留下一次編輯需要的完整脈絡。\n\n完成後依主題整理，確認所有素材都有可追溯的來源。`).join("\n\n");
+    for (const message of data.messages.slice(0, 2)) message.text = text;
+  }
+  if (variant.homeSparse || variant.homeEmpty) {
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
     data.home.counts = { today: 0, reports: 0, calendar: 0 };
     data.home.usage = { month_usd: 0, limit_usd: 20, daily: Array(14).fill(0), allowances: { brains: [] } };
     data.status.spend = { ...data.status.spend, month_usd: 0, today_usd: 0, daily: Array(14).fill(0) };
     data.home.dictation = { words: 0, audio_seconds: 0, time_saved_seconds: 0, speed_wpm: null, daily: Array(14).fill(0) };
+    if (variant.homeSparse) {
+      data.home.usage.month_usd = .88;
+      data.home.usage.allowances.brains = [
+        { id: "codex", name: "Codex", windows: [{ period: "weekly", remaining_percent: 0, resets_at: 1793109600 }, { period: "fiveHour", remaining_percent: 60, resets_at: 1792821600 }] },
+        { id: "claude", name: "Claude", windows: [] },
+      ];
+      data.status.spend.month_usd = .88;
+    }
   }
   function usageBill(period) {
     // The shared fixture clock and browser run in Asia/Taipei.
@@ -192,7 +218,7 @@ export function installMock(fixture, config = {}, target = window) {
     return { cost_usd: total, purposes: Object.entries(amounts).map(([purpose, cost_usd]) => ({ purpose, cost_usd, share: total ? cost_usd / total : 0 })) };
   }
   // Sidebar and overview use the same ledger rows, including floating-point totals.
-  if (!variant.homeEmpty) data.status.spend.month_usd = usageBill("month").cost_usd;
+  if (!variant.homeEmpty && !variant.homeSparse) data.status.spend.month_usd = usageBill("month").cost_usd;
   const state = { data, calls: [], errors: [], urls: [], sent: [], exported: null, channel: null, emit(event) {
     if (event.type === "AgentTurn" && arrivals.has(event.turn_id)) { data.turns.push(arrivals.get(event.turn_id)); arrivals.delete(event.turn_id); }
     state.channel?.onmessage(event);

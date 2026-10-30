@@ -169,8 +169,10 @@ export async function run(options) {
         result.viewport=page.viewport();
         Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
         if (scene.entry !== "overlay.html") {
-          try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "content-width")); }
-          catch (value) { error("layout", value.message); }
+          for (const name of ["content-width", "message-no-inner-scroll", "message-no-raw-envelope"]) {
+            try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
+            catch (value) { error("layout", value.message); }
+          }
         }
         const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);

@@ -46,7 +46,7 @@
 .au-drag-members { display: flex; flex-direction: column; gap: var(--sp-1); }
 .au-drag-members .btn { border: 0; background: transparent; justify-content: flex-start; gap: var(--sp-2); height: auto; min-height: 36px; padding: var(--sp-1) var(--sp-2); cursor: grab; white-space: normal; text-align: left; font-size: var(--fs-sm); }
 .au-drag-members .btn:hover { background: var(--hover); }
-.au-calendar-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.au-calendar-scroll { --au-hour: inherit; flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; }
 .au-grid { display: grid; grid-template-columns: 46px repeat(var(--au-days), minmax(0, 1fr)); min-width: 0; position: relative; }
 .au-grid-head { grid-column: 1 / -1; position: sticky; top: 0; z-index: 3; background: var(--content); display: grid; grid-template-columns: 46px repeat(var(--au-days), minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
 .au-grid-head > span { font-size: var(--fs-2xs); color: var(--text-3); padding-top: var(--sp-4); text-align: center; }
@@ -54,18 +54,25 @@
 .au-grid-head strong { display: block; margin: var(--sp-1) auto 0; font-size: var(--fs-lg); color: var(--text); width: 32px; height: 32px; line-height: 32px; border-radius: var(--r-pill); }
 .au-grid-head .is-today strong { background: var(--accent); color: var(--on-accent); }
 .au-hours { color: var(--text-3); font-size: var(--fs-2xs); text-align: right; }
-.au-hours > div { height: 64px; padding: var(--sp-1) var(--sp-1) 0 0; }
+.au-hours > div { height: var(--au-hour, 48px); padding: var(--sp-1) var(--sp-1) 0 0; }
 .au-day-col { position: relative; min-width: 0; border-left: 1px solid var(--line); container: calendar-day / inline-size; }
-.au-slot { height: 64px; border-bottom: 1px solid var(--line); }
+.au-slot { height: var(--au-hour, 48px); border-bottom: 1px solid var(--line); }
 .au-slot:hover { background: var(--hover); }
-.au-occurrence.btn { position: absolute; display: block; height: 62px; min-width: 0; padding: var(--sp-1); background: var(--selected); border: 0; border-left: 3px solid var(--accent-icon); border-radius: var(--r-sm); z-index: 1; overflow: hidden; }
+.au-occurrence.btn { position: absolute; display: block; height: calc(var(--au-hour, 54px) - 2px); min-height: 0; min-width: 0; padding: calc(var(--sp-1) / 2) var(--sp-1); background: var(--selected); border: 0; border-left: 3px solid var(--accent-icon); border-radius: var(--r-sm); z-index: 1; overflow: hidden; }
+.au-all-day-label, .au-all-day { min-height: 28px; padding: var(--sp-1); border-top: 1px solid var(--line); font-size: var(--fs-2xs); color: var(--text-3); }
+.au-all-day-label { align-self: end; text-align: right; }
+.au-all-day { border-left: 1px solid var(--line); }
+.au-all-day-event { display: block; padding: 2px var(--sp-1); border-radius: var(--r-sm); background: var(--selected); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-calendar-event { position: absolute; left: 2px; right: 2px; padding: var(--sp-1); border-left: 3px solid var(--ok); border-radius: var(--r-sm); background: var(--panel); font-size: var(--fs-2xs); line-height: 1.4; overflow-wrap: anywhere; }
+.au-calendar-event time, .au-calendar-event b { display: block; }
+.au-calendar-event b { font-weight: 500; }
 .au-occurrence > .au-occurrence-copy { min-width: 0; flex: 1; text-align: left; }
-.au-occurrence b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--fs-xs); font-weight: 500; line-height: 1.25; overflow: hidden; white-space: normal; overflow-wrap: anywhere; }
-.au-occurrence time { display: block; min-height: 20px; padding-right: 20px; font-size: var(--fs-2xs); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.au-occurrence b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--fs-xs); font-weight: 500; line-height: 1.15; overflow: hidden; white-space: normal; overflow-wrap: anywhere; }
+.au-occurrence time { display: block; min-height: 18px; line-height: 18px; padding-right: 20px; font-size: var(--fs-2xs); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); }
 .au-history-mark[data-status="done"] { background: var(--ok); }
 .au-history-mark[data-status="skipped"] { background: var(--text-3); }
-.au-occurrence.btn > .av { position: absolute; top: var(--sp-1); right: var(--sp-1); width: 20px; height: 20px; --av: 20px !important; }
+.au-occurrence.btn > .av { position: absolute; top: calc(var(--sp-1) / 2); right: var(--sp-1); width: 20px; height: 20px; --av: 20px !important; }
 @container calendar-day (max-width: 96px) {
   .au-occurrence.btn { padding-inline: calc(var(--sp-1) / 2); }
   .au-occurrence.btn > .av { right: calc(var(--sp-1) / 2); }

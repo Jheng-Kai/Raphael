@@ -65,7 +65,8 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
 // ---------- status ----------
 
 export const statusGet = (): Promise<Status> => core("status.get");
-export const homeOverview = (): Promise<HomeOverview> => core("home.overview", {
+export const homeOverview = (refresh = false): Promise<HomeOverview> => core("home.overview", {
+  refresh,
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   ui_language: document.documentElement.lang || "zh-TW",
 });

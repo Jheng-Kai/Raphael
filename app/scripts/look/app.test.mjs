@@ -33,9 +33,9 @@ describe("real app entry with the shared look fixture", () => {
       await vi.waitFor(() => expect(document.querySelector(`#nav .nav[data-go="${destination}"]`).getAttribute("aria-current"), destination).toBe("page"));
     }
     document.querySelector('#nav .nav[data-go="home"]').click();
-    await vi.waitFor(() => expect(document.querySelector('.ho-today [data-home-go="calendar"]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.ho-calendar [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
-    document.querySelector('.ho-today [data-home-go="calendar"]').click();
+    document.querySelector('.ho-calendar [data-home-go="calendar"]').click();
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
     expect(document.querySelector('#nav .nav[aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();

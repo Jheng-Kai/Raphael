@@ -31,6 +31,16 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("stored CLI envelopes never render as JSON in a conversation reply", () => {
+  const envelope = JSON.stringify({ text: "Gmail needs a connection.", messages: ["Gmail needs a connection."], say_ja: "接続が必要です。" });
+  for (const messages of [[], [{ seq: 1, kind: "reply" as const, text: envelope, at_ms: T0 }]]) {
+    const html = turnHTML(turn(20, { text: envelope, messages }), emptyTimelineState(), false, LOOK);
+    expect(visible(html)).toContain("Gmail needs a connection.");
+    expect(visible(html)).not.toContain('"messages"');
+    expect(visible(html)).not.toContain('"say_ja"');
+  }
+});
+
 test("a learned skill renders one localized event without exposing its internal payload", () => {
   const html = turnHTML(turn(20, { messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: T0 }] }), emptyTimelineState(), false, LOOK);
   const lines = html.match(/<div class="conversation-event-line">.*?<\/div>/g)!;
@@ -76,7 +86,7 @@ test("a spoken quick answer with public progress shows its answer after the work
   expect(visible(html)).toContain("下午兩點有專案會議。");
   expect(html.indexOf("work-section")).toBeLessThan(html.indexOf("下午兩點有專案會議。"));
   const stopped = turnHTML({ ...spoken, status: "running", text: "" }, emptyTimelineState(), false, { face: () => "" });
-  expect(stopped).not.toContain("data-expandable");
+  expect(stopped).not.toContain('class="ans"');
 });
 
 test("a live turn renders ordered public bubbles and event chips without raw steps", () => {
@@ -108,7 +118,7 @@ test("Raphael's stored replies and progress read plainly in the window", () => {
     { seq: 2, kind: "reply", text: "《答。下午兩點有專案會議，", at_ms: T0 + 1 },
     { seq: 3, kind: "reply", text: "記得帶《三體》。》", at_ms: T0 + 2 },
   ] }), emptyTimelineState(), false, { face: () => "" });
-  const answers = [...html.matchAll(/<div class="message-text">([\s\S]*?)<\/div>/g)].map(([, inner]) => visible(inner));
+  const answers = [...html.matchAll(/<div class="ans"><div class="message-text">([\s\S]*?)<\/div>/g)].map(([, inner]) => visible(inner));
   expect(answers).toEqual(["下午兩點有專案會議，", "記得帶《三體》。"]);
   expect(visible(html)).toContain("正在查看今天下午的行程。");
   expect(visible(html)).not.toMatch(/《[答告]/);
@@ -417,7 +427,7 @@ describe("a turn", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-act="edit-message"');
-    expect(html).toContain('<div class="bubble">台北天氣如何，順便記到行事曆</div>');
+    expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div></div>');
     expect(html).toContain('<span class="ra-face" title="gpt-6-luna · US$0.0012"><i class="face"></i></span>');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
@@ -460,7 +470,7 @@ describe("a turn", () => {
 
   test("a turn that is not in the history yet: the words typed, or a shimmer for words being heard, and Raphael thinking", () => {
     const typed = pendingTurnHTML("明天會下雨嗎？", "app", LOOK);
-    expect(typed).toContain('<div class="bubble">明天會下雨嗎？</div>');
+    expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div></div>');
     expect(typed).toContain('<i class="face loop">');
     expect(typed).toContain('class="think" role="img" aria-label="思考中…"');
     expect(pendingTurnHTML(null, "voice", LOOK)).toContain('<span class="shimmer">正在辨識…</span>');

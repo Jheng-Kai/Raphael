@@ -7,7 +7,7 @@ destination/end conditions, edit/delete and calendar drop prefill.
 
 ## How to get to it (user POV)
 
-From Home click Today's icon or a timeline item. Home remains highlighted in the rail; there is no separate Automations entry. Switch Day/Week in the toolbar. Use Add, an event, or a member drop onto a calendar slot. All seven days fit the content width without horizontal scrolling. Above 760px of content width, including a 1120px window, the month, draggable members and Keep awake sit on the right. At smaller widths a calendar icon in the toolbar opens the same controls in a dismissible popover. Picking a date or starting a member drag dismisses it. Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Visible event faces remain 20px squares. Advanced
+From Home click the mini week or its detail icon. Home remains highlighted in the rail; there is no separate Automations entry. Switch Day/Week in the toolbar. Use Add, an event, or a member drop onto a calendar slot. All seven days fit the content width without horizontal scrolling. Above 760px of content width, including a 1120px window, the month, draggable members and Keep awake sit on the right. At smaller widths a calendar icon in the toolbar opens the same controls in a dismissible popover. Picking a date or starting a member drag dismisses it. Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Visible event faces remain 20px squares. Advanced
 fields are under More. Member details also exposes routines; aggregate usage and CSV are in
 Settings > Models > Usage.
 
@@ -65,4 +65,19 @@ Owner round 6: automations-calendar/automations-day/automations-tools/automation
 
 ## Owner round 7 contracts
 
-Every event keeps a fixed visible 20px avatar at the top right. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Event height is 62px within the 64px hour; narrow-day horizontal padding is reduced so time and avatar fit at their existing sizes. calendar-chips asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
+Every event keeps a fixed visible 20px avatar at the top right. Titles use up to two lines across the full event width below the time/avatar row, with the complete title in the existing accessible name and tooltip. Owner round 9 replaces the old 62px event/64px hour with viewport-derived compact hours and corresponding time/title spacing; narrow-day horizontal padding lets the time and avatar fit at their existing sizes. calendar-chips still asserts the two-line clamp, title bounds, complete time, fixed face and non-overlap. Cover week/day/tools/hover/primary-calendar-members at 1120,720,1920x1080,1280x800.
+
+## Owner round 9 regression coverage
+
+Day and week share a viewport-derived hour height (28-54px), fitting eleven working
+hours below the sticky date/all-day header at 1280x800. Initial position shows 08:00
+through the working day, or focuses the current/first event hour for off-hours.
+Navigation resets the position; refresh and resize retain the viewed hour. All-day
+connected events stay above timed events. The existing cached Home event window is
+reused; this change does not add another provider query or calendar persistence store.
+calendar-shell enforces hour density, working-day fit and the pinned all-day row;
+calendar-all-day checks its visible event. Cover empty/sparse/full day and week.
+
+```powershell
+npm run look -- automations-day-empty automations-sparse automations-day-sparse automations-all-day --theme both --width 1120,720,1920x1080,1280x800
+```

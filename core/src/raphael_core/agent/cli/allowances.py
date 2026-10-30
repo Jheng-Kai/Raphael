@@ -8,6 +8,19 @@ from .process import Child
 from ..quota import credit_state
 
 
+def cached_allowances(brains, quotas):
+    """Use stored windows and local login metadata without starting any CLI process."""
+    rows = []
+    for name, label in (("codex", "Codex"), ("claude", "Claude"), ("gemini", "Antigravity")):
+        command = brains.command(name)
+        disconnected = brains.disconnected(name) if hasattr(brains, "disconnected") else False
+        windows = quotas.allowances(name)
+        signed_in = brains.logged_in(name) if command and not disconnected else False
+        if cli_available(command, signed_in, disconnected) or command and not disconnected and signed_in is None and windows:
+            rows.append({"id": name, "name": label, "windows": windows, "source": "reported" if windows else "unavailable"})
+    return {"brains": rows, "quotas": quotas.list()}
+
+
 async def read_allowances(brains):
     rows = []
     for name, label in (("codex", "Codex"), ("claude", "Claude"), ("gemini", "Antigravity")):

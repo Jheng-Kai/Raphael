@@ -165,3 +165,15 @@ without stretching a stat beyond 384px. dictation-layout asserts those edges.
 ## Owner round 6 contracts
 
 Owner round 6: dictation removes the spoken-languages helper while retaining the setting. dictation-overview uses the shared pencil icon button for changing shortcuts, with an accessible localized name and matching tooltip. compact-action checks this alongside Usage export at the same widths/themes.
+
+## Owner round 9 regression coverage
+
+Ordinary listening/working orb states show no Stop button (owner, 2026-10-30).
+Focused two-Escape cancellation uses the orb as its gesture target and still sends
+the existing cancellation IPC. Alt hotkeys remain in the existing Rust controller.
+Permission/question cards keep their current actions and expansion. This supersedes
+any earlier ordinary-orb Stop wording; composer and permission Stop controls remain.
+
+```powershell
+npm run look -- overlay-working-cancel --theme both --width 1120,720,1920x1080,1280x800
+```

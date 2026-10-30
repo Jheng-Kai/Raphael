@@ -272,7 +272,6 @@ def test_japanese_and_english_are_not_converted():
         {"prefix": "答", "text": 5, "detail": ""},
         {},
         [],
-        "text",
         None,
     ],
 )

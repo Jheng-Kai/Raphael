@@ -3,6 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
@@ -82,6 +83,17 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "home-timing") {
+    await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
+    result.homeTiming = await page.evaluate(() => window.__homeTiming);
+    await capture("first-paint");
+    await page.waitForFunction(() => document.querySelector('.ho-allowance')?.textContent.includes('40%'), { timeout: 15000 });
+    result.homeTiming.liveVisibleMs = await page.evaluate(() => performance.now());
+    await capture("live-allowance");
+    if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
+    if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
+    return;
+  }
   if (name === "member-computer") {
     // The pre-launch smoke deliberately creates a desktop before Home knows TZ.
     // Await the real app's timezone propagation before checking that same VM.
@@ -335,7 +347,22 @@ export async function drive(name, context) {
     }
     await scrim?.dispose();
     await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-count-alignment", "home-lead-width"]);
+    await inspect("home-720", ["sidebar-count-alignment", "home-lead-width", "home-overview", "home-redesign"]);
+    await page.setViewport({ width: 1280, height: 800 });
+    await click(page, '.ho-calendar > .ho-target'); await wait(page, '.au-day-col'); await pause(200);
+    await inspect("calendar-week-1280", ["calendar-shell"]);
+    await click(page, '[data-period="day"]');
+    await inspect("calendar-day-1280", ["calendar-shell"]);
+    const conversation = await newConversation(context);
+    if (await page.$('.conversation-trigger[aria-expanded="true"]')) await click(page, '.mb-det [data-det="close"]');
+    const workflow = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：先確認來源與日期，再將背景、事實與引用分成段落。\n\n保留可查核的出處與摘要，下一步請繼續整理後續素材。`).join('\n\n');
+    await typed(context, workflow, conversation);
+    await inspect("long-owner-preview-1280", ["message-no-inner-scroll", "message-preview", "message-no-raw-envelope"]);
+    const expand = '.tn:last-child .owner-message [data-act="expand-message"]';
+    await click(page, expand);
+    await inspect("long-owner-expanded-1280", ["message-no-inner-scroll", "message-expanded"]);
+    await click(page, expand);
+    await inspect("long-owner-collapsed-1280", ["message-no-inner-scroll", "message-preview"]);
   } else if (name === "self-diagnosis") {
     await chat(page);
     await perform(page, { action: "member-column", collapsed: false });

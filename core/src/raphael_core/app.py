@@ -938,8 +938,8 @@ class App(Router):
             drafts=self.drafts,
         )
         self.agent.register(self)
-        from .native_journeys import bot_homes_brain
-        native_brain = bot_homes_brain(fake_llm, data_dir)
+        from .native_journeys import bot_homes_brain, home_timing_brain
+        native_brain = bot_homes_brain(fake_llm, data_dir) or home_timing_brain(fake_llm, data_dir)
         if native_brain is not None:
             self.agent._cli_brains = native_brain
             self.memory._cli_brains = native_brain

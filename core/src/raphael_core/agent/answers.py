@@ -330,7 +330,53 @@ def loose_reply(text: str) -> dict | None:
         return {"text": match[1]}
 
 
-def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False) -> Reply:
+MESSAGE_BREAK = "<<<next message>>>"
+
+
+def _reply_input(value: str, default_prefix: str | None = None) -> dict:
+    """Accept an envelope (including a fenced one) or ordinary prose at one boundary."""
+    text = value.strip()
+    decoder = json.JSONDecoder()
+    envelopes = []
+    cursor = 0
+    while (start := text.find("{", cursor)) >= 0:
+        try:
+            obj, end = decoder.raw_decode(text, start)
+        except ValueError:
+            cursor = start + 1
+            continue
+        if isinstance(obj, dict) and ("text" in obj or "messages" in obj):
+            envelopes.append(obj)
+        cursor = end
+    if envelopes:
+        return envelopes[-1]
+    if loose := loose_reply(text):
+        return loose
+    if text.startswith(("{", "[")) or re.match(r'^```(?:json)?\s*[\{\[]', text):
+        raise AgentFailure("error")
+    parts = [part.strip() for part in re.split(rf"^\s*{re.escape(MESSAGE_BREAK)}\s*$", text, flags=re.M) if part.strip()]
+    if len(parts) > 4:
+        parts = parts[:3] + ["\n\n".join(parts[3:])]
+    return {"prefix": default_prefix, "text": text, "messages": parts}
+
+
+def _reply_words(value: Any) -> str:
+    """Unwrap a mistakenly nested envelope without consuming ordinary authored JSON or code."""
+    body = _one_line_text(value)
+    for _ in range(4):
+        try:
+            nested = json.loads(body)
+        except ValueError:
+            return body
+        if not isinstance(nested, dict) or not ("text" in nested or "messages" in nested):
+            return body
+        messages = nested.get("messages")
+        words = [item for item in messages if isinstance(item, str) and item.strip()] if isinstance(messages, list) else []
+        body = "\n\n".join(words) if words else _one_line_text(nested.get("text"))
+    return ""
+
+
+def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = False, default_prefix: str | None = None) -> Reply:
     """The model's JSON as Raphael's words. AgentFailure if it says nothing (an empty text is
     taken only beside a note to write or delete, or a lookup to make).
 
@@ -343,16 +389,19 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     it was written, its lines too, up to MEMBER_TEXT_MAX characters: it is read in the app, not on
     the overlay.
     """
+    if isinstance(data, str):
+        data = _reply_input(data, default_prefix)
     if not isinstance(data, Mapping):
         raise AgentFailure("error")
     memory = _memory_items(data.get("memory"))
     read, search = _need(data.get("need"))
     items = data.get("messages")
     messages = (
-        [text for item in items[:4] if (text := _plain_text(item))]
+        [text for item in items[:4] if (text := _plain_text(_reply_words(item)))]
         if (plain or long) and isinstance(items, list) else []
     )
-    full = _plain_text(data.get("text")) if plain or long else " ".join(_one_line_text(data.get("text")).split())
+    words = _reply_words(data.get("text"))
+    full = _plain_text(words) if plain or long else " ".join(words.split())
     prefix = data.get("prefix")
     if long and not plain:
         # Some CLI models supply the display frame despite being asked for bare message bodies.

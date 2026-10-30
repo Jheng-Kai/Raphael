@@ -533,3 +533,20 @@ localized conversation-event-line using the shared eventLineHTML (quiet text and
 icon), and excluded from public work narration. member-text
 asserts the notice and absence of internal event data. Native skill-growth verifies the
 notice after production background review, then reads that skill in the next task.
+
+## Owner round 9 regression coverage
+
+Owner, member and room messages share message-preview.ts and data-act=expand-message.
+Owner text preserves numbered paragraphs and blank lines. Room toggles update the
+existing button and message node so keyboard focus survives expansion and collapse.
+Collapsed text shows at most eight lines with a two-line fade. One framed action
+expands the complete body in place and collapses it again; no message or code block
+has its own vertical or horizontal scroll container. Page/thread scrolling remains.
+The runner checks every main-entry scene for message-no-inner-scroll and
+message-no-raw-envelope. Shared CLI parsing covers normal, quick, resumed, failed
+continuation, room and background replies. Legacy stored envelopes are unwrapped
+at rendering without rewriting historical data. Authored code remains plain content.
+
+```powershell
+npm run look -- long-owner long-owner-expanded long-member-reply long-member-expanded long-room-messages reply-envelope --theme both --width 1120,720,1920x1080,1280x800
+```

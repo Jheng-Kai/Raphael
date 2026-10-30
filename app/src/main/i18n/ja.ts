@@ -1222,6 +1222,7 @@ export const ja = {
   "auto.done": "完了",
   "auto.error": "未完了",
   "auto.today": "今日",
+  "auto.allDay": "終日",
   "auto.day": "日",
   "auto.week": "週",
   "auto.previous": "前へ",

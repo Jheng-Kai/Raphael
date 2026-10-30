@@ -44,6 +44,7 @@ import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
+import { measureMessagePreviews } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { ReplyPacing } from "../reply-pacing";
@@ -773,7 +774,7 @@ export function createAgent(app: AppContext): Page {
           : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
     );
     if (!(searching && query.trim() !== "")) {
-      for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs) });
+      for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
       if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     }
     return out;
@@ -832,11 +833,7 @@ export function createAgent(app: AppContext): Page {
 
   /** Re-check wrapped lines when the window or the member details panel changes width. */
   function measureMessages(): void {
-    for (const message of thread.querySelectorAll<HTMLElement>("[data-expandable]")) {
-      const text = message.querySelector<HTMLElement>(".message-text")!;
-      const toggle = message.querySelector<HTMLButtonElement>('[data-act="expand-message"]')!;
-      if (text.clientHeight > 0) toggle.hidden = !message.classList.contains("is-expanded") && text.scrollHeight <= text.clientHeight + 1;
-    }
+    measureMessagePreviews(thread);
   }
 
   function render(follow = false): void {
@@ -1959,8 +1956,9 @@ export function createAgent(app: AppContext): Page {
         break;
       case "expand-message": {
         const source = messageSource(act);
-        if (!source) break;
-        const key = `${source.turn.id}:${source.key}`;
+        const session = act.closest<HTMLElement>('.tn[data-session]')?.dataset.session;
+        if (!source && !session) break;
+        const key = source ? `${source.turn.id}:${source.key}` : `pending:${session}:question`;
         if (state.expandedMessages.has(key)) state.expandedMessages.delete(key);
         else state.expandedMessages.add(key);
         render();
