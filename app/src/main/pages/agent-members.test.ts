@@ -669,9 +669,8 @@ describe("a member's thread", () => {
     expect(button.classList.contains("vm-away")).toBe(false);
     expect(button.getAttribute("aria-label")).toBe("停止");
     send({type:"Hotkey",kind:"cancel_key"});
-    expect(button.dataset.cancelArmed).toBe("true");
-    expect(api.cancelSession).not.toHaveBeenCalled();
-    send({type:"Hotkey",kind:"cancel_key"});await flush();
+    expect(button.dataset.cancelArmed).toBeUndefined();
+    await flush();
     expect(api.cancelSession).toHaveBeenCalledOnce();
     send({type:"Dictation",phase:"cancelled",agent:true,member_id:3});
     expect(button.dataset.cancelArmed).toBeUndefined();agent.hide();
@@ -685,6 +684,18 @@ describe("a member's thread", () => {
     await pick(4); await pick(3);
     expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
     agent.hide();
+  });
+
+  test("one Escape cancels voice transcription before an agent turn exists", async () => {
+    api.agentHistoryList.mockResolvedValue({turns:[]});
+    const agent=mount();await flush();await pick(3);
+    send({type:"Dictation",phase:"processing",agent:true,member_id:3});
+    expect(document.querySelector('[data-key="hearing"]')).not.toBeNull();
+    $(".cmp-input").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+    await flush();
+    expect(api.cancelSession).toHaveBeenCalledOnce();
+    expect($(".cmp-voice").dataset.cancelArmed).toBeUndefined();
+    expect(api.workerCancel).not.toHaveBeenCalled();agent.hide();
   });
 
   test("the search looks through the open thread alone", async () => {

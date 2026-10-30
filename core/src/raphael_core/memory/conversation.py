@@ -57,7 +57,7 @@ from ..agent.attribution import labelled_lines, turn_speakers
 from ..agent.history import AgentHistory, Turn
 from ..agent.conversations import Conversations
 from ..agent.ledger import Ledger
-from ..brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from ..clock import wall_clock_ms
@@ -484,7 +484,7 @@ class Conversation:
             completion = await asyncio.wait_for(
                 self._client.complete_json(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=_SUMMARY_SYSTEM.format(max_tokens=SUMMARY_MAX_TOKENS),
                     user=user,
                     schema=_SUMMARY_SCHEMA,

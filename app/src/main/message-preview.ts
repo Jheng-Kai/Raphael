@@ -1,4 +1,4 @@
-// One preview and one in-place expand action for owner and assistant messages.
+// One preview and one in-place expand action for owner messages.
 import { t } from "./i18n";
 import { btn, esc } from "./ui";
 

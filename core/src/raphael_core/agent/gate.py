@@ -95,6 +95,7 @@ class ToolGate:
         self._registry = ToolRegistry(
             {name: command.tier for name, command in COMMANDS.items()},
             plugin_tier=None if plugins is None else plugins.tier_of,
+            plugin_action_tier=getattr(plugins, "tier_for_call", None),
             ask_first=lambda name, tier: self.ask_first and tier > Tier.T0 and name != "ask_member",
         )
         for name in (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS):
@@ -127,11 +128,11 @@ class ToolGate:
         """The tier of a tool or command now. UnknownTool if it has none."""
         return self._registry.tier(name)
 
-    def tier_now(self, name: str) -> Tier | None:
+    def tier_now(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier | None:
         """The tier a tool has now, or None if it has none (a plugin's tool that was blocked, whose
         plugin was turned off or that the plugin describes differently since)."""
         try:
-            return self._registry.tier(name)
+            return self._registry.tier(name, arguments)
         except UnknownTool:
             return None
 
@@ -173,7 +174,7 @@ class ToolGate:
         undone: its questions of the tier T2 and of the global 先詢問 switch are waived. The rules that ask
         and forbid are the screening's (`screen`), which every path asks before it makes a call that
         changes something."""
-        tier = self.tier_now(action.tool)
+        tier = self.tier_now(action.tool, action.args)
         if self._safety is None or tier is None or tier >= Tier.T3:
             return False
         try:
@@ -226,7 +227,7 @@ class ToolGate:
             return Screening("ask", result.rule if asked else None, unchecked=result.unchecked, switch=not asked)
         return result
 
-    def reads_only(self, server: str, tool: str) -> bool:
+    def reads_only(self, server: str, tool: str, arguments: Mapping[str, Any] | None = None) -> bool:
         """Whether the server of a plugin's tool says that the tool only reads (`readOnlyHint` and
         not destructive). Such a tool is never judged by the rules. A hub that cannot say, or a
         tool it does not know, changes things."""
@@ -234,7 +235,9 @@ class ToolGate:
         if kind_of is None:
             return False
         try:
-            return kind_of(server, tool) == "read"
+            kind_for_call = getattr(self._plugins, "kind_for_call", None)
+            return (kind_for_call(server, tool, arguments) if arguments is not None and kind_for_call is not None
+                    else kind_of(server, tool)) == "read"
         except Exception:
             return False
 

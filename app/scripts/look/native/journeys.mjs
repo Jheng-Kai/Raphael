@@ -5,6 +5,7 @@ import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, black persistence and narrow rows at three native sizes" },
   { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
+  { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
@@ -683,6 +684,74 @@ export async function drive(name, context) {
     }
     const wrong = result.visits.filter(visit => visit.issues.length);
     if (wrong.length) result.failures.push(`Wrong-language UI in ${wrong.length} visits; exact elements in visits[].issues`);
+  } else if (name === "owner-round10") {
+    const conversation = await newConversation(context);
+    await typed(context, Array.from({length: 55}, (_, i) => `Review step ${i + 1}: retain this complete owner instruction.`).join("\n"), conversation);
+    await capture("long-owner");
+    await click(page, '.owner-message [data-act="expand-message"]');
+    await capture("long-owner-expanded");
+    if (await page.$('.ra [data-act="expand-message"]')) throw new Error("A native reply still exposes collapse");
+    await perform(page, {action:"conversation-position",position:"up"});
+    await page.evaluate(checkRendered,"conversation-up");
+    await capture("scrolled-up");
+    await click(page,'.conversation-latest:not([hidden])');
+    await pause(700);
+    await page.evaluate(checkRendered,"conversation-bottom");
+    await capture("at-bottom");
+    await type(page,".composer .cmp-input","[native-round10:wait] Hold this synthetic answer until I stop it.");
+    await click(page,".composer .cmp-send");
+    await page.waitForSelector('.composer [data-task-state], .composer[data-task-state="running"], .composer[data-task-state="ack"]');
+    await pause(500);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('[data-cancel-armed="true"]');
+    result.firstEscape = (await snapshot()).agent_turns.find(turn => turn.question.includes("[native-round10:wait]"));
+    if (result.firstEscape?.status !== "running") throw new Error("The first Escape stopped the native answer");
+    await page.evaluate(checkRendered, "cancel-armed");
+    await capture("answer-first-escape");
+    await page.keyboard.press("Escape");
+    for (let i=0;i<60;i++) {
+      result.secondEscape = (await snapshot()).agent_turns.find(turn => turn.id === result.firstEscape.id) ?? null;
+      if (result.secondEscape?.status !== "running") break;
+      await pause(100);
+    }
+    if (result.secondEscape && result.secondEscape.status !== "denied") throw new Error(`The second Escape did not cancel the native answer: ${JSON.stringify(result.secondEscape)}`);
+    await page.waitForSelector('.composer[data-task-state="idle"]');
+    result.afterAnswerStop = await snapshot();
+    if (!result.afterAnswerStop.agent_turns.some(turn => turn.conversation_id === conversation && turn.status === "done")) throw new Error("Stopping the pending answer removed the previous completed answer");
+    await capture("answer-stopped");
+    const learned = await context.learnedPage();
+    if (!learned) throw new Error("Native learned notification target is missing");
+    result.beforeLearning = await snapshot();
+    result.focusBefore = await context.windows();
+    const before = "Please ask Allice and Cloude to review the next release notes carefully.";
+    const middle = before.replace("Allice","Alice"), after = middle.replace("Cloude","Claude");
+    const edits = [{before,after:middle},{before:middle,after}];
+    result.batch = await context.rpc("dictionary.correct",{edits});
+    if (JSON.stringify([...result.batch.learned].sort()) !== JSON.stringify(["Alice","Claude"])) throw new Error(`Native Tracker did not learn the complete batch: ${JSON.stringify(result.batch)}`);
+    await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
+    await learned.hover('#learned-pill');
+    await pause(6200);
+    if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
+    result.focusDuring = await context.windows();
+    const pillWindow = result.focusDuring.windows.find(window => window.title === "Raphael learned word");
+    if (!pillWindow || !(pillWindow.style & 0x08000000) || (pillWindow.style & 0x20) || !pillWindow.rounded) throw new Error(`Native learned pill is not passive with its rounded click region: ${JSON.stringify(pillWindow)}`);
+    const [left,top,right,bottom] = pillWindow.rect, work = result.focusBefore.workArea;
+    if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || Math.abs(top-(work[1]+(work[3]-work[1])*0.56))>1) throw new Error(`Native pill is not centered below the active monitor midpoint: ${JSON.stringify({pill:pillWindow.rect,work})}`);
+    if (result.focusBefore.foreground !== result.focusDuring.foreground) throw new Error("Publishing the learned pill changed the foreground window");
+    await capture("learned-hover",learned);
+    await learned.click('.learned-undo');
+    await learned.waitForSelector('#learned-pill[hidden]');
+    result.afterUndo = await snapshot();
+    for (const table of ["dictionary","dictionary_evidence"]) if (JSON.stringify(result.beforeLearning[table]) !== JSON.stringify(result.afterUndo[table])) throw new Error(`Native Undo did not restore ${table} exactly`);
+    result.focusAfter = await context.windows();
+    if (result.focusBefore.foreground !== result.focusAfter.foreground) throw new Error("Undo stole the foreground focus");
+    result.expiringBatch = await context.rpc("dictionary.correct",{edits});
+    await learned.waitForSelector('#learned-pill:not([hidden])',{visible:true});
+    await learned.mouse.move(-20,-20);
+    await learned.waitForSelector('#learned-pill[hidden]',{timeout:9000});
+    result.afterExpiry = await context.windows();
+    if (!(result.afterExpiry.windows.find(window => window.title === "Raphael learned word").style & 0x20)) throw new Error("Expired learned window is not click-through");
+    await capture("learned-expired");
   } else if (name === "voice-conversation") {
     const conversation = await newConversation(context);
     const before = new Set((await snapshot()).agent_turns.map(row => row.id));
@@ -707,6 +776,15 @@ export async function drive(name, context) {
     const misplaced = spoken.filter(row => row.conversation_id !== conversation);
     if (misplaced.length) throw new Error(`Composer voice expected conversation ${conversation}; stored turns ${misplaced.map(row => `${row.id} in conversation ${row.conversation_id} (${result.stored.conversations.find(c => c.id === row.conversation_id)?.kind})`).join(", ")}`);
     await page.waitForFunction(ids => ids.some(id => document.querySelector(`.tn[data-id="${id}"]`)), {}, spoken.map(row => row.id));
+    const beforeCancel = (await snapshot()).agent_turns.length;
+    await click(page,".composer .cmp-voice");
+    await page.waitForSelector(".is-voice",{timeout:15000});
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector(".is-voice"),{timeout:15000});
+    await pause(700);
+    result.recordingEscape = await snapshot();
+    if (result.recordingEscape.agent_turns.length !== beforeCancel) throw new Error("One Escape created a voice answer instead of cancelling capture");
+    await capture("recording-one-escape");
   } else if (name === "delete-conversation") {
     await deletionAudit(context, { click, wait, type, pause, details, typed, newConversation, remaining });
     await perform(page, { action: "member", id: 0 });

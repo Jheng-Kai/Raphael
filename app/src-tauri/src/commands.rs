@@ -726,7 +726,7 @@ pub async fn core_call(
     app: AppHandle,
     webview: Webview,
     method: String,
-    params: Value,
+    mut params: Value,
 ) -> Result<Value, String> {
     require_main(&webview)?;
     if !is_allowed_method(&method) {
@@ -736,6 +736,10 @@ pub async fn core_call(
     let core = app
         .try_state::<Arc<CoreProcess>>()
         .ok_or(CORE_NOT_RUNNING)?;
+    let method = if method == "dictionary.correct" {
+        params = crate::learned::composer_params(params)?;
+        "dictionary.learn".to_owned()
+    } else { method };
     let monitor = (method == "audio.monitor")
         .then(|| params.get("on").and_then(Value::as_bool))
         .flatten();
@@ -743,6 +747,11 @@ pub async fn core_call(
         .call(&method, params)
         .await
         .map_err(|err| err.to_string())?;
+    if method == "dictionary.learn" {
+        let words = result.get("learned").and_then(Value::as_array).map(|words| words.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
+        let language = app.try_state::<LanguageCell>().map(|cell| cell.get()).unwrap_or_else(|| "zh-TW".to_owned());
+        crate::learned::publish(&app, &words, result.get("undo").and_then(Value::as_str), &language);
+    }
     if let Some(on) = monitor {
         MONITORING.store(on, Ordering::Relaxed);
     }

@@ -35,7 +35,7 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ..brain.catalog import LLM, TOOL_CALLING, CatalogEntry, find
-from ..brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.pricing import builtin_catalog
 from ..memory.conversation import turn_text
@@ -358,7 +358,7 @@ class Planner:
             plan = await asyncio.wait_for(
                 self._client.plan_tools(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=_PLANNER_SYSTEM,
                     user=build_plan_message(question, context),
                     tools=offer.definitions(),

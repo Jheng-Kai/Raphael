@@ -88,7 +88,7 @@ from ..agent.policy import (
 )
 from ..agent.steps import Step, reason_of
 from ..background.run import estimate_cost
-from ..brain.openrouter import CLEANUP_FALLBACKS, ChatTurn, OpenRouterError
+from ..brain.openrouter import ChatTurn, OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..clock import wall_clock_ms
 from ..memory.conversation import turn_text
@@ -667,7 +667,7 @@ class ComputerRun:
             turn = await self._until(
                 self._client.chat_tools(
                     model=self.model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     messages=messages,
                     tools=definitions,
                     timeout_s=timeout,

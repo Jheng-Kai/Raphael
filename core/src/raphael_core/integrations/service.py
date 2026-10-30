@@ -594,6 +594,13 @@ class IntegrationsService:
                         return "read" if said else "write"
         return "write"
 
+    def kind_for_call(self, server_name: str, tool_name: str, arguments: Mapping[str, Any]) -> str:
+        for server in self._config.servers():
+            if server.name == server_name and server.managed_by and self.managed is not None:
+                tier = self.managed.tier(server.id, tool_name, arguments)
+                return "read" if tier is not None and tier < Tier.T2 else "write"
+        return self.kind_of(server_name, tool_name)
+
     def _tool_views(self, server: ServerConfig) -> list[dict[str, Any]]:
         return [self._tool_view(server, tool) for tool in server.tools]
 
@@ -786,6 +793,15 @@ class IntegrationsService:
             return None
         server, tool = usable
         return self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool)
+
+    def tier_for_call(self, key: str, arguments: Mapping[str, Any]) -> Tier | None:
+        usable = self._usable(key)
+        if usable is None:
+            return None
+        server, tool = usable
+        if server.managed_by:
+            return self.managed.tier(server.id, tool.name, arguments)
+        return self.tier_of(key)
 
     def _names(self, key: str) -> tuple[str, str]:
         """What the audit calls a tool: its server's name and its own, as far as they are known."""

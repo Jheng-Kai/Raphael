@@ -149,6 +149,13 @@ def native_enabled(fake_llm: bool) -> bool:
     return fake_llm and os.environ.get("RAPHAEL_TEST_NATIVE") == "1"
 
 
+async def wait_for_native_cancel(messages):
+    """Only the isolated fake brain can hold an answer for the native Escape journey."""
+    if native_enabled(True) and any(message.get("role") == "user" and "[native-round10:wait]" in str(message.get("content")) for message in messages):
+        import asyncio
+        await asyncio.Event().wait()
+
+
 def record_model_request(model, effort):
     """Record only public model/effort metadata at the fake provider boundary."""
     if native_enabled(True) and os.environ.get("RAPHAEL_TEST_NATIVE_MODEL_PICKER") == "1":

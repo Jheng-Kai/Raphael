@@ -104,6 +104,10 @@ _CJK_FUNCTION_WORDS = frozenset(
     """.split()
 )
 
+# Offline fallback vocabulary: the application ships no word-frequency corpus.
+# Keep common correction targets here for both learning and rule distinctiveness.
+_CJK_FUNCTION_WORDS |= frozenset("步驟 步骤 一些 一样 一樣 一直 一起 不会 不再 不是 不會 不能 不要 为什么 什么 什麼 今天 今年 他们 他們 但是 你们 你們 只是 可以 可是 可能 因为 因為 她们 她們 如何 如果 就是 已是 已經 已经 应该 怎么 怎麼 感到 感覺 感觉 應該 我们 我們 所以 明天 明年 昨天 沒有 没有 為什麼 能够 能夠 自己 虽然 覺得 觉得 記得 记得 还是 这个 这些 這些 這個 還是 那个 那些 那個 雖然 需要".split())
+
 
 def _is_cjk(char: str) -> bool:
     """Whether `char` is a Han, kana or Hangul letter (punctuation of those blocks is not)."""

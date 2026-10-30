@@ -8,8 +8,9 @@ import { askGroupName, confirmDelete, openDialog } from "./member-dialogs";
 import { openActions } from "./member-column";
 import { createChatComposer } from "./chat-composer";
 import { messageHTML } from "./message-content";
+import { mountConversationScroll } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
-import { replyBody } from "../shared/anime";
+import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { teamMentions } from "./team-mentions";
 import { roomWrapupHTML } from "./room-wrapup";
 import { filesHTML, messageActionsHTML } from "./timeline";
@@ -215,6 +216,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let handoffs: HandoffView[] = [];
   const drafts=new Map<number,string>();
   const expandedMessages = new Set<number>();
+  mountConversationScroll(scroll);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread)) : null;
   messageResize?.observe(thread);
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
@@ -259,12 +261,12 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         const member=person(m.member_id);
         return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><span class="ra-face">${member?faceHTML(member,30):""}</span><span>${esc(t("rooms.speaking",{p0:member?.name??t("members.title")}))}</span></li>`;
       }
-      const member=person(m.member_id),owner=m.member_id===null,words=(owner ? m.text : replyBody(m.text))||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
+      const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
-      const actions=messageExpandHTML(words, expandedMessages.has(m.id)) + messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
+      const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words)}</div></div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div><div class="chat-message${expanded}"${preview}><div class="ans"><div class="message-text">${m.kind==="wrapup"?roomWrapupHTML(words,list.members.map(member=>member.name)):messageHTML(words,"",true)}</div></div>${actions}</div></div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}"><div class="ans"><div class="message-text">${m.kind==="wrapup"?roomWrapupHTML(part,list.members.map(member=>member.name)):messageHTML(part,"",true)}</div></div>${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
     measureMessagePreviews(thread);
     scroll.scrollTop=follow?scroll.scrollHeight:top;composer.draw();onRender();

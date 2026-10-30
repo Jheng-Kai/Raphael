@@ -400,7 +400,7 @@ async def test_the_language_model_is_asked_for_the_same_outputs_as_json(router, 
     result = await router.ask_luna("音量調大", "openai/gpt-6-luna", ledger)
     call = client.json_calls[0]
     assert call["model"] == "openai/gpt-6-luna"
-    assert call["fallbacks"] == CLEANUP_FALLBACKS
+    assert call["fallbacks"] == []
     assert call["schema_name"] == "raphael_route"
     assert call["reasoning_effort"] == "none"
     assert call["user"] == "<utterance>\n音量調大\n</utterance>"
@@ -614,7 +614,7 @@ async def test_the_model_is_shown_the_request_and_the_apps_and_answers_with_a_ki
     assert call["model"] == "m"
     assert call["schema_name"] == "raphael_open"
     assert call["reasoning_effort"] == "none"
-    assert call["fallbacks"] == CLEANUP_FALLBACKS
+    assert call["fallbacks"] == []
     assert call["user"] == "<utterance>\nopen reddit\n</utterance>\n\n<apps>\nNotepad\n計算機\n</apps>"
     schema = call["schema"]
     assert schema["required"] == ["kind", "name", "url"] and schema["additionalProperties"] is False

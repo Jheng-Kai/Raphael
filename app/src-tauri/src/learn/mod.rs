@@ -20,7 +20,7 @@
 
 mod apps;
 mod cjk_words;
-mod corrections;
+pub(crate) mod corrections;
 mod keystrokes;
 #[cfg(all(test, windows))]
 mod native_tests;
@@ -417,7 +417,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                 log::error!("learn: the watch ended without an answer");
                 return;
             };
-            let words = learn(core.as_ref(), &corrections).await;
+            let (words, undo) = learn(core.as_ref(), &corrections).await;
             if words.is_empty() {
                 return;
             }
@@ -425,7 +425,7 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                 log::info!("learn: a new dictation is under way; no notice");
                 return;
             }
-            overlay.learned_notice(&notices::learned(&words, &language.get()));
+            overlay.learned_batch(&notices::learned(&words, &language.get()), &words, undo.as_deref(), &language.get());
         }))
     }
 }
@@ -455,18 +455,19 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> AfterPaste for Learner<C, O, P> {
 }
 
 /// Hands the corrections to the core; the words it learned. Nothing is sent if there are none.
-async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> Vec<String> {
+async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> (Vec<String>, Option<String>) {
     if corrections.is_empty() {
-        return Vec::new();
+        return (Vec::new(), None);
     }
     let params = json!({
+        "undoable": true,
         "corrections": corrections
             .iter()
             .map(|c| json!({ "word": c.word, "misheard": c.misheard }))
             .collect::<Vec<_>>(),
     });
     match core.call("dictionary.learn", params).await {
-        Ok(reply) => reply
+        Ok(reply) => (reply
             .get("learned")
             .and_then(Value::as_array)
             .map(|words| {
@@ -476,10 +477,10 @@ async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> Vec<String> 
                     .map(str::to_owned)
                     .collect()
             })
-            .unwrap_or_default(),
+            .unwrap_or_default(), reply.get("undo").and_then(Value::as_str).map(str::to_owned)),
         Err(err) => {
             log::warn!("learn: dictionary.learn failed: {err}");
-            Vec::new()
+            (Vec::new(), None)
         }
     }
 }
@@ -922,7 +923,7 @@ mod tests {
         run(&learner, &target("LINE.exe")).await;
         assert_eq!(
             core.calls("dictionary.learn"),
-            [json!({"corrections": [{"word": "手提電話", "misheard": "首機"}]})]
+            [json!({"undoable": true, "corrections": [{"word": "手提電話", "misheard": "首機"}]})]
         );
         assert_eq!(
             *overlay.0.lock().unwrap(),

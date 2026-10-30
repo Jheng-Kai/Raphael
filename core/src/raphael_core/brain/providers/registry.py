@@ -442,7 +442,7 @@ class ProviderRouter:
         return api_model(self.registry.settings, reference) if reference.startswith("cli:") else reference
 
     def available(self, model):
-        references = [self.model_for(model), *self.registry.settings.get(self.purpose + "_fallbacks")]
+        references = [self.model_for(model), *self.owner_fallbacks()]
         if self.purpose == "cleanup":
             fallback = self.cleanup_fallback(model)
             if fallback:
@@ -483,16 +483,26 @@ class ProviderRouter:
         """Cleanup owns its two-attempt deadline; do not nest the generic fallback chain."""
         return await self._attempt("complete_json", kwargs)
 
+    def owner_fallbacks(self):
+        # Conversation fallback controls were removed. Hidden legacy settings do not
+        # authorize switching the owner's chosen conversation or routing model.
+        if self.purpose in ("agent", "router"):
+            return []
+        return self.registry.configured_fallbacks(self.purpose) or []
+
     async def _call(self, method, kwargs):
         reference = self.model_for(kwargs["model"])
         configured = self.registry.configured_fallbacks(self.purpose)
-        explicit = configured or []
-        # Legacy curated fallbacks stay within OpenRouter. Cross-provider attempts are
-        # possible only through the owner's ordered settings, never an implicit default.
+        explicit = self.owner_fallbacks()
+        # Only dictation cleanup retains its documented legacy retry behavior.
         implicit = [ref for ref in kwargs.get("fallbacks", []) if not ref.startswith("@")]
-        fallbacks = explicit if configured is not None else implicit if not reference.startswith("@") else []
+        fallbacks = explicit
+        if self.purpose == "cleanup" and configured is None and not reference.startswith("@"):
+            fallbacks = implicit
         chain = list(dict.fromkeys([reference, *fallbacks]))
-        timeout = kwargs["timeout_s"] / len(chain)
+        # Each selected model receives the complete caller budget, never a fraction
+        # determined by the number of possible alternatives.
+        timeout = kwargs["timeout_s"]
         for index, target in enumerate(chain):
             attempt = {**kwargs, "model": target, "timeout_s": timeout}
             try:

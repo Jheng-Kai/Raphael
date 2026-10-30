@@ -158,7 +158,7 @@ test("the room voice target seeds correction learning while preserving reply del
   create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Open Mouse Bot");
   draft("Please use OpenMausBot");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
   expect(api.roomSend).toHaveBeenCalledWith(1,"Please use OpenMausBot",expect.any(String),"en",[],7);
-  expect(api.core).toHaveBeenCalledExactlyOnceWith("dictionary.learn",{corrections:[{word:"OpenMausBot",misheard:"Open Mouse Bot"}]});
+  expect(api.core).toHaveBeenCalledExactlyOnceWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
   expect(document.querySelector('.cmp-quote')!.textContent).toBe("");
  } finally { create.mockRestore(); }
 });
@@ -193,7 +193,7 @@ test("compact rooms menu opens an existing room and offers creation",async()=>{
 
 test("room thread uses owner bubbles and keeps room turns out of private navigation",async()=>{
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:"Hello",created:1,status:"done"},{id:2,member_id:1,text:"Done",created:2,status:"done",turn_id:23}]});
- await pane();expect(document.querySelector('.me .bubble')!.textContent).toBe("Hello");expect(document.querySelector('.ra .au-room-author')!.textContent).toBe("Alice");
+ await pane();expect(document.querySelector('.me .bubble .message-text')!.textContent).toBe("Hello");expect(document.querySelector('.ra .au-room-author')!.textContent).toBe("Alice");
  expect(document.querySelector('[data-room-act="turn"]')).toBeNull();expect(document.querySelector('.cmp-attach')).not.toBeNull();expect(document.querySelector('.cmp-voice')).not.toBeNull();expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
@@ -319,4 +319,16 @@ test("room rename and delete require their management dialogs",async()=>{
 test("attachment-only owner messages hydrate through the shared media renderer without a running bubble",async()=>{
  api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:"",created:1,status:"done",attachments:[{id:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",name:"chart.png",mime:"image/png",size:10}]}]});
  const rendered=vi.fn(),view=createRoomPane(app,vi.fn(),rendered);document.body.append(view.el);await view.open(1);expect(rendered).toHaveBeenCalled();expect(view.el.querySelector('img[data-attachment="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"]')).not.toBeNull();expect(view.el.querySelector('.me .bubble')).toBeNull();
+});
+
+
+test("authored room reply messages render separate full bubbles without splitting Markdown", async () => {
+ const parts = ["First paragraph.", "- Keep this list\n- Together", "```ts\nconst done = true;\n```"];
+ api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:JSON.stringify({text:parts[2],messages:parts}),created:2,status:"done",turn_id:23}]});
+ await pane();
+ const bubbles = document.querySelectorAll('.ra .chat-message');
+ expect(bubbles).toHaveLength(3);
+ expect(bubbles[1].querySelectorAll('li')).toHaveLength(2);
+ expect(bubbles[2].querySelector('pre')).not.toBeNull();
+ expect(document.querySelector('.ra [data-expandable]')).toBeNull();
 });

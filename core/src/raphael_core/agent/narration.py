@@ -10,7 +10,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 
-from ..brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..background.run import estimate_cost
@@ -116,7 +116,7 @@ class NarratedLoop:
         self.system, self.user, self.tools = system + NARRATION_RULES, user, list(tools)
         self.progress, self.execute = progress, execute
         self.thinking = thinking
-        self.fallbacks = list(CLEANUP_FALLBACKS if fallbacks is None else fallbacks)
+        self.fallbacks = list(fallbacks or ())
         self.model_calls = self.tool_calls = 0
         self.remaining_s = 1800.0
         self.messages: list[dict] | None = None
@@ -146,7 +146,7 @@ class NarratedLoop:
                 except Exception as error:
                     self.last_failure = classify(error)
                     wait = next(waits, None)
-                    if self.acted or not self.last_failure.transient or wait is None:
+                    if self.acted or self.last_failure.kind == "timeout" or not self.last_failure.transient or wait is None:
                         raise
                     await asyncio.sleep(wait)
         except Stop:
@@ -233,7 +233,7 @@ class NarratedLoop:
     def reply(self, outcome: Outcome) -> Reply:
         if outcome.status != "done":
             if self.last_failure is not None and outcome.kind == "failed":
-                raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure)
+                raise AgentFailure(self.last_failure.kind, diagnostic=self.last_failure, model=self.model)
             raise AgentFailure(outcome.detail or "error")
         objects, prose = _content(outcome.final)
         data = next((obj for obj in reversed(objects) if "text" in obj or "messages" in obj),

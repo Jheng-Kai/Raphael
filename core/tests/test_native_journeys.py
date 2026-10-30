@@ -118,3 +118,19 @@ def test_native_computer_scripts_only_the_real_takeover_sequence_when_explicitly
     assert native_computer([], names, 0) is None
     monkeypatch.delenv("RAPHAEL_TEST_NATIVE")
     assert native_computer(messages, names, 0) is None
+
+
+async def test_cancel_wait_is_inert_outside_native_and_cancellable_inside(monkeypatch):
+    import asyncio
+    from raphael_core.native_journeys import wait_for_native_cancel
+    messages = [{"role": "user", "content": "[native-round10:wait]"}]
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    await asyncio.wait_for(wait_for_native_cancel(messages), 0.1)
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    await asyncio.wait_for(wait_for_native_cancel([{"role": "user", "content": "An ordinary turn"}]), 0.1)
+    pending = asyncio.create_task(wait_for_native_cancel(messages))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    pending.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await pending

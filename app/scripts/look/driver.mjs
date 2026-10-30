@@ -1,3 +1,4 @@
+import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
 
 export function finiteMotionSettled() {
@@ -39,6 +40,7 @@ export function findVisibleElement(selector) {
 }
 
 export async function perform(page, step) {
+  let stableAssertion;
   // A collapsed work section can precede the visible reply with the same selector.
   const visible = async selector => {
     const inDrawer = await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && [...document.querySelectorAll(selector)].some(el => el.closest("#nav")), selector);
@@ -269,7 +271,24 @@ export async function perform(page, step) {
         return { check: "surface-interactions", selector: step.selector, hovered, pressed, pointer, focus };
       } finally { await element.dispose(); }
     }
-    case "click": await click(step.selector); break;
+    case "stable-click":
+    case "click": {
+      const enabled = step.action === "stable-click" || await page.evaluate(({ selector, selectors }) => [...document.querySelectorAll(selector)].some(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0 && node.matches(selectors) && !node.closest('#nav, .page-home')), { selector: step.selector, selectors: stableControls });
+      if (!enabled) { await click(step.selector); break; }
+      const target = await visible(step.selector);
+      await target.evaluate(node => node.scrollIntoView({ block: "nearest", inline: "nearest" }));
+      await target.dispose();
+      const before = await page.evaluate(stableSnapshot, step.selector);
+      await click(step.selector);
+      for (const action of step.then ?? []) await perform(page, action);
+      if (step.ready) await visible(step.ready);
+      await new Promise(resolve => setTimeout(resolve, 150));
+      await settleMotion(page);
+      const after = await page.evaluate(stableSnapshot, step.selector, before.map(item => item.selector));
+      try { stableAssertion = assertStableClick(before, after); }
+      catch (error) { error.assertion = { check: "stable-click", selector: step.selector, before, after, failed: true }; throw error; }
+      break;
+    }
     case "upload": {
       const input = await page.$(step.selector);
       if (!input) throw new Error(`No file input: ${step.selector}`);
@@ -374,6 +393,11 @@ export async function perform(page, step) {
       break;
     }
     case "focus": await page.focus(step.selector); break;
+    case "conversation-position": {
+      const element = await visible('.ra-scroll');
+      await element.evaluate((node, position) => node.scrollTo({ top: position === "up" ? Math.max(1, (node.scrollHeight - node.clientHeight) / 2) : node.scrollHeight, behavior: "instant" }), step.position);
+      await element.dispose(); break;
+    }
     case "scroll": { const element = await visible(step.selector); await element.evaluate(element => element.scrollIntoView({ block: "end", inline: "nearest" })); await element.dispose(); break; }
     case "wait-scroll-end": {
       const element = await visible(step.selector);
@@ -414,6 +438,7 @@ export async function perform(page, step) {
       if (measured.durationMs > step.measure.budgetMs) reject(`${step.measure.name}: ${measured.durationMs.toFixed(1)}ms exceeds ${step.measure.budgetMs}ms event-to-paint budget`);
       if (step.measure.maxLongTaskMs && measured.longTasks.some(task => task.duration > step.measure.maxLongTaskMs)) reject(`${step.measure.name}: long task exceeds ${step.measure.maxLongTaskMs}ms: ${JSON.stringify(measured.longTasks)}`);
     }
-    return assertion;
+    return { ...assertion, ...(stableAssertion ? { stableClick: stableAssertion } : {}) };
   }
+  return stableAssertion;
 }

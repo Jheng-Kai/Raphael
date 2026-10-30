@@ -68,11 +68,11 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   const el=document.createElement("form");el.className="composer";el.noValidate=true;el.innerHTML=composerHTML();
   const input=el.querySelector<HTMLTextAreaElement>("textarea")!,send=el.querySelector<HTMLButtonElement>(".cmp-send")!,voice=el.querySelector<HTMLButtonElement>(".cmp-voice")!,picker=el.querySelector<HTMLInputElement>(".cmp-picker")!;
   const learning=bindComposerLearning(input);
-  let taskRun=0, discardVoice=false;
+  let taskRun=0, discardVoice=false, transcribing=false;
   let revision=0, taskState: ComposerTaskState = "idle", stoppingTask = false;
   el.addEventListener("click",e=>e.stopPropagation());
   let files:WireAttachment[]=[],busy=false,attaching=false,recording=false,starting=false,stream:MediaStream|undefined,recorder:MediaRecorder|undefined;
-  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching||recording||starting||(!input.value.trim()&&!files.length);voice.innerHTML=avatarHTML({size:32,avatar:null,loop:recording});voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||busy;drawTaskSlot(el,recording?"running":taskState,stoppingTask);el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.innerHTML=files.map((f,i)=>`<span class="cmp-chip"><span>${esc(f.name)}</span>${iconButton("x",t("common.cancel"),` data-file="${i}"`)}</span>`).join("");};
+  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching||recording||starting||(!input.value.trim()&&!files.length);voice.innerHTML=avatarHTML({size:32,avatar:null,loop:recording});voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||(busy&&!transcribing);drawTaskSlot(el,recording||transcribing?"running":taskState,stoppingTask);el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.innerHTML=files.map((f,i)=>`<span class="cmp-chip"><span>${esc(f.name)}</span>${iconButton("x",t("common.cancel"),` data-file="${i}"`)}</span>`).join("");};
   const fit=():void=>{input.style.height="auto";input.style.height=`${Math.min(180,input.scrollHeight)}px`;draw();};
   el.addEventListener("submit",e=>{e.preventDefault();if(send.disabled)return;const text=input.value,snapshot=files,submitted=revision,dictation=learning.snapshot(),corrections=learning.take(text);busy=true;if(options.stopTask)taskState="ack";draw();void options.send(text.trim(),snapshot).then(()=>{void learnComposerCorrections(corrections);if(submitted===revision){if(input.value===text)input.value="";if(files===snapshot)files=[];}}).catch(error=>{if(submitted===revision&&!learning.snapshot())learning.restore(dictation);taskState="idle";toaster.info(describeError(error));}).finally(()=>{busy=false;fit();input.focus();});});
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
@@ -81,8 +81,37 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   picker.addEventListener("change",()=>{attaching=true;draw();void(async()=>{const picked=[...picker.files??[]];if(files.length+picked.length>4||picked.some(f=>f.size>50*1024*1024)||picked.reduce((n,f)=>n+f.size,files.reduce((n,f)=>n+f.data.length*0.75,0))>100*1024*1024)throw new Error(t("rooms.fileLimit"));const added=await Promise.all(picked.map(async f=>({name:f.name,mime:f.type||"application/octet-stream",data:base64(new Uint8Array(await f.arrayBuffer()))})));files=[...files,...added];})().catch(error=>toaster.info(describeError(error))).finally(()=>{attaching=false;draw();});});
   const release=():void=>{stream?.getTracks().forEach(track=>track.stop());stream=undefined;recording=false;draw();};
   const stop=():void=>{if(recorder?.state==="recording")recorder.stop();};
-  voice.addEventListener("click",()=>{if(taskState!=="idle"){if(stoppingTask)return;stoppingTask=true;draw();void options.stopTask?.().catch(error=>toaster.info(describeError(error))).finally(()=>{stoppingTask=false;draw();});return;}if(recording){stop();return;}if(starting)return;starting=true;const transcript=options.transcriptTarget?.()??((text:string)=>{input.value+=(input.value?" ":"")+text;learning.seed(input.value,text);});draw();void(async()=>{stream=await navigator.mediaDevices.getUserMedia({audio:true});const chunks:Blob[]=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};recorder.onerror=()=>{release();toaster.info(t("rooms.voiceFailed"));};recorder.onstop=()=>{release();if(discardVoice){discardVoice=false;return;}busy=true;draw();void(async()=>{const audio=new AudioContext();try{const decoded=await audio.decodeAudioData(await new Blob(chunks).arrayBuffer());const data=wavBytes(Array.from({length:decoded.numberOfChannels},(_,i)=>decoded.getChannelData(i)),decoded.sampleRate);const result=await api.roomTranscribe(base64(data), getLocale());transcript(result.text);fit();}finally{await audio.close();}})().catch(error=>toaster.info(describeError(error))).finally(()=>{busy=false;draw();});};discardVoice=false;taskRun++;recorder.start(1000);recording=true;})().catch(error=>{release();toaster.info(describeError(error));}).finally(()=>{starting=false;draw();});});
-  cancelGesture().register(() => (recording || taskState !== "idle") ? { key: `composer:${revision}:${taskRun}:${recording}`, button: voice, hint: t("common.cancelAgain"), cancel: () => { if(recording){discardVoice=true;stop();}else voice.click(); } } : null);
+  const cancelTranscription=():void=>{taskRun++;transcribing=false;busy=false;draw();};
+  voice.addEventListener("click",()=>{
+    if(transcribing){cancelTranscription();return;}
+    if(taskState!=="idle"){if(stoppingTask)return;stoppingTask=true;draw();void options.stopTask?.().catch(error=>toaster.info(describeError(error))).finally(()=>{stoppingTask=false;draw();});return;}
+    if(recording){stop();return;}if(starting)return;
+    starting=true;const run=++taskRun;
+    const transcript=options.transcriptTarget?.()??((text:string)=>{input.value+=(input.value?" ":"")+text;learning.seed(input.value,text);});
+    draw();void(async()=>{
+      stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const chunks:Blob[]=[];recorder=new MediaRecorder(stream);
+      recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+      recorder.onerror=()=>{release();toaster.info(t("rooms.voiceFailed"));};
+      recorder.onstop=()=>{
+        release();if(discardVoice){discardVoice=false;return;}
+        busy=true;transcribing=true;draw();
+        void(async()=>{
+          const audio=new AudioContext();
+          try{
+            const decoded=await audio.decodeAudioData(await new Blob(chunks).arrayBuffer());
+            if(run!==taskRun)return;
+            const data=wavBytes(Array.from({length:decoded.numberOfChannels},(_,i)=>decoded.getChannelData(i)),decoded.sampleRate);
+            const result=await api.roomTranscribe(base64(data),getLocale());
+            if(run!==taskRun)return;
+            transcript(result.text);fit();
+          }finally{await audio.close();}
+        })().catch(error=>{if(run===taskRun)toaster.info(describeError(error));}).finally(()=>{if(run===taskRun){busy=false;transcribing=false;draw();}});
+      };
+      discardVoice=false;recorder.start(1000);recording=true;
+    })().catch(error=>{release();toaster.info(describeError(error));}).finally(()=>{starting=false;draw();});
+  });
+  cancelGesture().register(() => (recording || transcribing || taskState !== "idle") ? { key: `composer:${revision}:${taskRun}:${recording}:${transcribing}`, immediate: recording || transcribing, button: voice, hint: t("common.cancelAgain"), cancel: () => { if(recording){discardVoice=true;stop();}else voice.click(); } } : null);
   onLocaleChange(draw);draw();
   return {el,input,draw,setTaskState(state:ComposerTaskState){if(taskState==="idle"&&state!=="idle")taskRun++;taskState=state;draw();},stopVoice:stop,seedDictation(text:string){learning.seed(input.value,text);},setDraft(text:string){learning.clear();revision++;input.value=text;files=[];fit();}};
 }

@@ -120,6 +120,8 @@ describe("buttons", () => {
     const allowlist: readonly string[] = [
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
+      // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
+      "agent.css: .page-agent .btn.conversation-latest:hover:not(:disabled)",
     ];
     const violations = (css: string): string[] => [...strip(css).matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, selectors, body]) => {
       const surfaces = [...body!.matchAll(/(?:^|;)\s*background(?:-color|-image)?\s*:\s*([^;]+)/g)]

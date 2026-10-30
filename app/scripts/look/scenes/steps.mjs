@@ -1,3 +1,4 @@
+export const stableClick = (selector, then = []) => ({ action: "stable-click", selector, then });
 export const click = selector => ({ action: "click", selector });
 export const hover = selector => ({ action: "hover", selector });
 export const type = (selector, text) => ({ action: "type", selector, text });

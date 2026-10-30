@@ -549,8 +549,8 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
 }
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
-function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div></div>` : "";
+function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null, expand = ""): string {
+  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div>${expand}</div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
@@ -567,9 +567,8 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false): string {
   if (reply) text = plainReplies([text])[0];
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
-  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-expandable="true"' : ""}>` +
+  return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     `<div class="ans${reply ? "" : " progress"}"><div class="message-text">${messageHTML(text, query, reply)}</div></div>` +
-    (reply ? messageExpandHTML(text, expanded) : "") +
     messageActionsHTML(time, regenerate, undefined, reply) + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 
@@ -817,7 +816,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (asked
       ? `<div class="me">${ownerFaceHTML()}` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote) + messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
@@ -854,7 +853,7 @@ export function pendingTurnHTML(question: string | null, _source: string, look: 
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim());
   return (
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
-    `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote)}${messageExpandHTML(question ?? "", expanded)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
+    `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
     `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
     `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML(Math.max(0, Math.round((nowMs - start) / 1000)))}</div></div>` +
     `</div></div></li>`

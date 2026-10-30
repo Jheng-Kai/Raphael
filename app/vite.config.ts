@@ -34,6 +34,7 @@ export default defineConfig(() => ({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         overlay: resolve(import.meta.dirname, "overlay.html"),
+        learned: resolve(import.meta.dirname, "learned.html"),
       },
     },
   },

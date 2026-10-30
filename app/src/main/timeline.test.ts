@@ -427,7 +427,7 @@ describe("a turn", () => {
     const html = turnHTML(turn(5), emptyTimelineState(), false, LOOK);
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-act="edit-message"');
-    expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div></div>');
+    expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).toContain('<span class="ra-face" title="gpt-6-luna · US$0.0012"><i class="face"></i></span>');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
@@ -470,7 +470,7 @@ describe("a turn", () => {
 
   test("a turn that is not in the history yet: the words typed, or a shimmer for words being heard, and Raphael thinking", () => {
     const typed = pendingTurnHTML("明天會下雨嗎？", "app", LOOK);
-    expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div></div>');
+    expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div><button');
     expect(typed).toContain('<i class="face loop">');
     expect(typed).toContain('class="think" role="img" aria-label="思考中…"');
     expect(pendingTurnHTML(null, "voice", LOOK)).toContain('<span class="shimmer">正在辨識…</span>');
@@ -673,4 +673,17 @@ describe("Raphael operating an app", () => {
     setLocale("zh-TW");
     expect(reasonText(step({ outcome: "error", reason: "denied" }))).toBe("登入被拒");
   });
+});
+
+
+test("only owner messages have an expand action, placed inside their bubble", () => {
+  const text = "A long message. ".repeat(100);
+  const html = turnHTML(turn(20, { question: text, text }), emptyTimelineState(), false, LOOK);
+  expect(html.match(/data-expandable="true"/g)).toHaveLength(1);
+  expect(html.match(/data-act="expand-message"/g)).toHaveLength(1);
+  expect(html).toMatch(/class="bubble"><div class="message-text">[\s\S]+?<\/div><button[^>]+data-act="expand-message"/);
+  const reply = html.slice(html.indexOf('<div class="ra"'));
+  expect(reply).not.toContain("data-expandable");
+  expect(reply).not.toContain('data-act="expand-message"');
+  expect(visible(reply)).toContain(text.trim());
 });

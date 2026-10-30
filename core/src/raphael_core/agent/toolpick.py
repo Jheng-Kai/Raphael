@@ -21,7 +21,6 @@ import logging
 import re
 from collections.abc import Sequence
 
-from ..brain.openrouter import CLEANUP_FALLBACKS
 from ..brain.providers.base import ModelProvider
 from .history import Turn
 from .ledger import Ledger
@@ -201,7 +200,7 @@ class ToolPicker:
             plan = await asyncio.wait_for(
                 self._client.plan_tools(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=_PICK_SYSTEM.format(limit=PICK_MAX),
                     user=user,
                     tools=[definition],

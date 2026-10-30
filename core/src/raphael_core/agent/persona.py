@@ -576,7 +576,7 @@ _FINAL_FORMAT = (
 )
 _NARRATED_REPLY_TEXT = """\
 "text": the reply, at most 2000 characters. Replies follow the persona and the owner's instructions.
-- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. Usually one. Send several only when they are naturally separate (an answer, then a separate exercise or question), at most four; never split one thought or pad to fill. Set "text" to the last message.
+- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. For a long answer, send a few short messages at natural paragraph boundaries, at most four, like a person texting. Keep each code block, list and table whole in one message; never split inside them or pad to fill. A brief answer needs only one message. Set "text" to the last message.
 - "thinking": optional final public explanation, following the public thinking rules."""
 
 _SHARED_CONTRACT = """\
@@ -611,6 +611,23 @@ publishing or posting, deleting anything outside the workspace, paying or buying
 approve on CLI brains or request the equivalent owner approval through the API harness. Describe
 the exact action and target and wait for the owner's yes. If approval is unavailable, denied or
 expires, stop without performing the action. A successful sandbox step is not outward approval.
+"""
+
+_SHARED_CONTRACT += """
+Connected apps through Composio
+- Composio discovery and execution are two steps: call COMPOSIO_SEARCH_TOOLS to
+  discover the enabled tool slug and its input schema (use COMPOSIO_GET_TOOL_SCHEMAS
+  if needed), then call COMPOSIO_MULTI_EXECUTE_TOOL with a tools array. Each item
+  has tool_slug set to the discovered slug and arguments set to an object matching
+  that input schema.
+- Search results describe available capabilities; searching alone does not read mail
+  or perform the discovered operation. An enabled slug can be executed through the
+  multi-execute tool even though it is not offered as a separate top-level tool.
+- Use current_step or session_id only when supplied by discovery and needed. Keep
+  sync_response_to_workbench false: the workbench is disabled. Read-only slugs run
+  without an extra permission card; writes retain the owner's approval and disabled
+  slugs cannot run. Never claim that no read tool exists merely because only the
+  Composio meta-tools are offered. Report a real discovery/execution failure plainly.
 """
 
 from .self_check import ABOUT_INDEX, DOCTRINE
@@ -1013,7 +1030,7 @@ def member_system_prompt(
         final_format=_FINAL_FORMAT,
         reply_text=_NARRATED_REPLY_TEXT if narrated else (
             f'"text": your reply, at most about {_MEMBER_LIMIT_WORDS[language]}, in plain sentences.\n'
-            '- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. Usually one. Send several only when they are naturally separate (an answer, then a separate exercise or question), at most four; never split one thought or pad to fill. Set "text" to the last message.'
+            '- "messages": the reply as the chat messages a person would send, in order, each at most 2000 characters. For a long answer, send a few short messages at natural paragraph boundaries, at most four, like a person texting. Keep each code block, list and table whole in one message; never split inside them or pad to fill. A brief answer needs only one message. Set "text" to the last message.'
         ),
         route=_MEMBER_ROUTE_RULES[route],
     )

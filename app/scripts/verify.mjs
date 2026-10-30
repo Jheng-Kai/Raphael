@@ -1,10 +1,28 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { coreCheck, coreEnvironment } from "./guardian.mjs";
 
 const app = resolve(import.meta.dirname, ".."), root = resolve(app, "..");
+const execute = promisify(execFile);
+// Shared Windows worktrees can opt into a fresh process check before each boundary.
+async function waitForIdle() {
+  if (process.env.RAPHAEL_VERIFY_WAIT_FOR_IDLE !== "1") return;
+  if (process.platform !== "win32") throw new Error("RAPHAEL_VERIFY_WAIT_FOR_IDLE requires Windows");
+  const query = `Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -match '^(cargo|rustc|pytest|vitest)(\\.exe)?$' -or
+    ($_.Name -match '^(python|node|app|raphael)' -and $_.CommandLine -match
+      '([p]ytest|[v]itest|scripts[/\\\\][l]ook|[t]auri.+dev|[c]argo.+(build|test|run)|[.]worktrees.+[\\\\/](app|raphael)[.]exe)')
+  } | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress`;
+  for (;;) {
+    const { stdout } = await execute("powershell.exe", ["-NoProfile", "-Command", query], { windowsHide: true });
+    if (!stdout.trim()) return;
+    console.log(`Waiting for other heavy processes: ${stdout.trim()}`);
+    await new Promise(resolve => setTimeout(resolve, 20000));
+  }
+}
 const args = process.argv.slice(2);
 const outIndex = args.indexOf("--out");
 const outValue = outIndex < 0 ? undefined : args[outIndex + 1];
@@ -42,13 +60,14 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   process.on("SIGTERM", interrupted);
   for (const check of checks) {
     if (process.exitCode) break;
+    await waitForIdle();
     console.log(`Running ${check.name}...`);
     const start = performance.now(), log = join(directory, `${check.name}.log`);
     const handle = await open(log, "w");
     let exitCode, error;
     try {
       const result = await new Promise(resolve => {
-        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, ...coreEnvironment(), ...check.env, NO_COLOR: "1", PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: join(output, "cargo-target") } });
+        activeChild = spawn(check.command, check.args, { cwd: check.cwd, windowsHide: true, shell: false, stdio: ["ignore", handle.fd, handle.fd], env: { ...process.env, ...coreEnvironment(), ...check.env, NO_COLOR: "1", PYTHONDONTWRITEBYTECODE: "1", UV_CACHE_DIR: join(directory, "uv-cache"), CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR || join(output, "cargo-target") } });
         activeChild.once("error", value => resolve({ exitCode: 1, error: value.message }));
         activeChild.once("close", (code, signal) => resolve({ exitCode: code ?? 1, ...(signal ? { error: `Terminated by ${signal}` } : {}) }));
       });

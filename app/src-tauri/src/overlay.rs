@@ -237,6 +237,10 @@ pub trait OverlayApi: Send + Sync + 'static {
     fn learned_notice(&self, text: &str) {
         self.notice(text);
     }
+    /// New learned batches carry an opaque undo token; fakes retain their ordinary notice route.
+    fn learned_batch(&self, text: &str, _words: &[String], _undo: Option<&str>, _language: &str) {
+        self.learned_notice(text);
+    }
     /// Raphael answers: the emblem appears with 《`prefix`。`text`》 as one subtitle line, then
     /// vanishes after a time that depends on the length of `text`.
     fn say(&self, prefix: &str, text: &str);
@@ -808,6 +812,10 @@ impl OverlayApi for Overlay {
         });
     }
 
+    fn learned_batch(&self, _text: &str, words: &[String], undo: Option<&str>, language: &str) {
+        crate::learned::publish(&self.app, words, undo, language);
+    }
+
     fn say(&self, prefix: &str, text: &str) {
         self.keep_in_sight_now_and_then();
         self.publish(OverlayEvent::Say {
@@ -1003,7 +1011,7 @@ fn passive_ex_style(style: isize) -> isize {
 /// The change is made on the main thread, which owns the window: from any other thread
 /// `SetWindowLongPtrW` would wait for the main thread, and that is a deadlock waiting to happen.
 #[cfg(windows)]
-fn apply_passive_style(window: &WebviewWindow) {
+pub(crate) fn apply_passive_style(window: &WebviewWindow) {
     use windows::Win32::Foundation::HWND;
 
     let hwnd = match window.hwnd() {
@@ -1024,7 +1032,7 @@ fn apply_passive_style(window: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn apply_passive_style(_window: &WebviewWindow) {}
+pub(crate) fn apply_passive_style(_window: &WebviewWindow) {}
 
 /// Gives the window [`passive_ex_style`] if it lost it, and says whether it had.
 ///

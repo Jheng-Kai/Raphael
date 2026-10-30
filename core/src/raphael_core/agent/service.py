@@ -1122,7 +1122,8 @@ class AgentService:
         try:
             return await asyncio.wait_for(self._answer(ask), VOICE_TURN_TIMEOUT_S)
         except TimeoutError:
-            return self._failed(ask, "answer", "timeout", ask.ledger or Ledger(self._spend))
+            model = self._read_settings(ask.speaker, ask.conversation_id).model
+            return self._failed(ask, "answer", AgentFailure("timeout", model=model), ask.ledger or Ledger(self._spend))
 
     async def _answer(self, ask: _Ask) -> dict:
         """One request, from the router to the reply. Never raises for a failure of the world."""
@@ -1952,7 +1953,7 @@ class AgentService:
                     return ToolOutcome(False, "already_done", instruction=(
                         "This exact action was already done before the pause. Do not do it again."))
                 result = await execute(call_id, name, args)
-                reads = ref is not None and (self._gate.reads_only(ref.server, ref.name) if ref.kind == MCP else ref.tier == Tier.T0)
+                reads = ref is not None and (self._gate.reads_only(ref.server, ref.name, args) if ref.kind == MCP else ref.tier == Tier.T0)
                 if result.ok and digest and not reads:
                     ask.made.append((key, digest))
                 if self._tool_observer is not None and plan(name, args) is None:
@@ -2244,7 +2245,7 @@ class AgentService:
 
     def _tier_now(self, call: PlannedCall) -> Tier | None:
         """The tier the user has given the tool of `call` now; None if it has none any more."""
-        return self._gate.tier_now(call.tool.key)
+        return self._gate.tier_now(call.tool.key, call.arguments)
 
     async def _carry_out(
         self, ask: _Ask, calls: list[PlannedCall], results: list[ToolResult], ledger: Ledger,
@@ -2275,7 +2276,7 @@ class AgentService:
             refused_keys = {key for key, _ in ask.declined}
             refused = [index for index, call in enumerate(calls)
                        if call.tool.key in refused_keys
-                       or (call.tool.key.startswith(PLUGIN_PREFIX) and not self._gate.reads_only(call.tool.server, call.tool.name))]
+                       or (call.tool.key.startswith(PLUGIN_PREFIX) and not self._gate.reads_only(call.tool.server, call.tool.name, call.arguments))]
             for index in refused:
                 results.append(self._declined(ask, calls[index]))
             if refused:
@@ -2365,7 +2366,7 @@ class AgentService:
             if tool.key != CREATE_MEMBER:
                 return PASS
             proposed = Proposed(CREATE_MEMBER, tool.description, summarize(call.arguments), narrow_scope(CREATE_MEMBER))
-        elif self._gate.reads_only(tool.server, tool.name):
+        elif self._gate.reads_only(tool.server, tool.name, call.arguments):
             return PASS
         else:
             proposed = Proposed(f"{tool.server} / {tool.name}", tool.description, summarize(call.arguments), narrow_scope(tool.key))
@@ -4199,8 +4200,12 @@ class AgentService:
 
     def _failed(self, ask: _Ask, route: str, kind: str, ledger: Ledger) -> dict:
         """The 否 reply for a request that could not be answered, with the reason."""
+        model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if model:
+            diagnostic = diagnostic or classify(kind, record=False)
+            return self._finish(ask, route, "negative", diagnostic.sentence(model, ask.language), ledger, status="error")
         if diagnostic is not None:
             name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")
