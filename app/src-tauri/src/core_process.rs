@@ -69,6 +69,9 @@ pub fn timeout_for(method: &str) -> Duration {
         // Managed app OAuth leaves time for a human browser round trip and final tool discovery.
         "connectors.connect" => 780,
         "connectors.google.connect" => 180,
+        // Waits for the owner to sign in in the browser; the core ends it at 180 s by default.
+        "chatgpt.sign_in" => 600,
+        "chatgpt.models" => 30,
         "connectors.catalog"
         | "connectors.categories"
         | "connectors.status"

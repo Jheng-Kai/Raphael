@@ -84,14 +84,18 @@ test("a hidden room keeps unread messages until its visible history is acknowled
  view.close();
 });
 
-test("Everyone has one stable sidebar identity for both a persisted room and its creation entry", async () => {
- for (const rooms of [[], [{...room,is_team:1}]]) {
+test("the sidebar offers no everyone group: an empty former team room is gone, one with a conversation stays", async () => {
+ const rows=async(rooms:unknown[])=>{
   api.roomsList.mockResolvedValue({rooms});
   const section=createRoomsSection();document.body.append(section);await flush();
-  expect(section.querySelectorAll('[data-room-everyone]')).toHaveLength(1);
-  expect(section.querySelector('[data-room-everyone]')?.textContent).toContain('Everyone');
+  const names=[...section.querySelectorAll('[data-room] b')].map(el=>el.textContent);
   section.remove();
- }
+  return names;
+ };
+ expect(await rows([])).toEqual([]);
+ expect(await rows([{...room,id:2,is_team:1}])).toEqual([]);
+ expect(await rows([room,{...room,id:2,is_team:1,last_at:5}])).toEqual(["Launch","Everyone"]);
+ expect(api.roomsCreate).not.toHaveBeenCalled();
 });
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
 test("a primary changes room picker order and becomes the required chief", async () => {

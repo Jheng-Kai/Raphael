@@ -45,7 +45,7 @@ export function checkRendered(name, context = {}) {
     require(rows.length <= 1 && (rows.length === 1 || searching), `only the current destination is selected, found ${rows.length}`);
     if (!rows.length) return 'filtered';
     if (home) require(rows[0].classList.contains('brand'), "Home selects only the brand");
-    else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room], [data-room-team]'), "chat selects only its conversation");
+    else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
     return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
   };
   if (name === "sidebar-selection") return {check:name, selected:selection()};
@@ -67,8 +67,9 @@ export function checkRendered(name, context = {}) {
     const header=nav.querySelector('.mb-top');
     require(header.querySelector('.brand')&&header.querySelector('[data-col="search"]')&&header.querySelector('[data-col="add"]'),'brand, search and plus share the top row');
     require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,dictation','footer has owner on the left and dictation on the right');
+    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!visible(nav.querySelector('.side-foot [data-go="dictation"] .nav-t')),'dictation is one named icon');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account svg.i:not(.owner-face svg.i), .sidebar-account-name'),'account has no separate gear or visible name');
+    require(!nav.querySelector('.sidebar-account svg.i:not(.owner-face svg.i)')&&visible(nav.querySelector('.sidebar-account-name')),'account shows its face and name without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     if (compact) {
@@ -80,8 +81,8 @@ export function checkRendered(name, context = {}) {
     }
     const chief = column.querySelector('.mb-chief');
     if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('.mb-row-main') && chief.querySelector('.av'), "chief uses the same conversation row");
-    if(chief)require(chief.querySelector('.mb-star')&&chief.querySelector('.mb-row-t i'),'chief retains its role and one star badge');
-    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1,'chief and colleagues share 40px faces');
+    if(chief)require(!document.querySelector('.mb-star')&&chief.querySelector('.mb-row-t i'),'chief retains its role without a star');
+    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-52)<1&&chief.getBoundingClientRect().height>=76,'chief is the larger box above 40px colleagues');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');
@@ -1674,14 +1675,14 @@ export function checkRendered(name, context = {}) {
     const box = menu.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
     require(window.__look.calls.every(call => call.method !== "members.set_primary"), "opening the menu sets nothing");
-    require(document.querySelector('#nav .mb-chief .mb-star')&&!document.querySelector('.mb-det .mb-star'),'only the sidebar chief carries a star');
+    require(!document.querySelector('.mb-star'),'no member carries a star');
     return { check: name, items: picks.length };
   }
   if (name.startsWith("primary-")) {
     const data = window.__look.data, calls = window.__look.calls;
     const sets = calls.filter(call => call.method === "members.set_primary");
     const column = document.querySelector('.mb-col');
-    require(document.querySelector('#nav .mb-chief .mb-star')&&!document.querySelector('.mb-det .mb-star'),'only the sidebar chief carries a star');
+    require(!document.querySelector('.mb-star'),'no member carries a star');
     const order = nodes => [...nodes].map(node => Number(node.dataset.member ?? node.dataset.id ?? node.dataset.value ?? node.dataset.dragMember));
     const swapped = ids => {
       const result = [...ids], chief = result.indexOf(0), primary = result.indexOf(data.primaryId);

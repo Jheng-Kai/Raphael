@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn() }));
+const api = vi.hoisted(() => ({ brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
+  chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })) }));
 vi.mock("./api", () => api);
 import { createCliBrains, cliBrainsHTML, cliModels } from "./cli-brains";
 import { closeMenu } from "./ui";
@@ -29,7 +30,7 @@ test("subscription cards show readiness and only their applicable action; login 
   const root = document.createElement("div"); document.body.append(root);
   const controller = createCliBrains({ visible: () => true, redraw: () => { root.innerHTML = cliBrainsHTML(controller.view()); } });
   await controller.load();
-  const cards = root.querySelectorAll(".cli-card");
+  const cards = root.querySelectorAll(".cli-card:not([data-chatgpt-card])");
   expect(cards).toHaveLength(3);
   expect(cards[0].textContent).toContain("已登入 · v2.1.69");
   expect(cards[0].querySelector('[data-cli-menu="claude"]')).not.toBeNull();

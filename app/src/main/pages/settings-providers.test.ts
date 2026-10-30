@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   keyboardHasAltgr: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
   providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(), usageAnalytics: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
+  chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })),
   usageRuns: vi.fn(), usageExport: vi.fn(), usageAllowances: vi.fn(), saveUsageCsv: vi.fn(),
 }));
 vi.mock("../api", () => api);
@@ -142,7 +143,7 @@ test("models in use precede subscription accounts and providers, login uses the 
   expect(api.brainsCliLogin).toHaveBeenCalledWith("claude");
   api.brainsCli.mockResolvedValue({ clis: [{ ...claude, logged_in: true, available: true, version: "2.1", models: [{ id: "cli:claude:sonnet", name: "Claude Sonnet", is_default: true }] }] });
   send({ type: "BrainsChanged" }); await flush();
-  expect(page.el.querySelector('.cli-card')!.textContent).toContain("Signed in · v2.1");
+  expect(page.el.querySelector('.cli-card:not([data-chatgpt-card])')!.textContent).toContain("Signed in · v2.1");
   expect(page.el.querySelector('[data-cli="claude"]')).toBeNull();
   click('[data-model-picker="answer"] .mp-trigger');
   expect(document.querySelector('[data-source="cli:claude"]')).not.toBeNull();

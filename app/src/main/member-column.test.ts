@@ -80,7 +80,7 @@ describe("the column, drawn", () => {
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
     expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
-    expect(el.querySelectorAll('.mb-star')).toHaveLength(1);
+    expect(el.querySelector('.mb-star')).toBeNull();
     expect(LIST.members[3].group_id).toBe(20);
   });
 

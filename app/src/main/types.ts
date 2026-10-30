@@ -67,6 +67,14 @@ export interface ProviderKind {
   local_context_hint?: boolean;
 }
 /** Public provider metadata. Secrets never come back from the core. */
+/** The owner's ChatGPT sign-in; tokens never reach the window. */
+export interface ChatGptStatus {
+  signed_in: boolean;
+  email?: string | null;
+  plan_scope_granted?: boolean;
+  signing_in?: boolean;
+}
+
 export interface ModelProvider {
   id: string;
   kind: string;

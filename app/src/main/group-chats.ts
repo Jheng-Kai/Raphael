@@ -97,14 +97,6 @@ export async function openNewGroupChat(opts: { onCreated?(room: Room): void } = 
   } catch (error) { toaster.info(describeError(error)); }
 }
 
-export async function openEveryoneChat(): Promise<void> {
-  try {
-    const existing = (await api.roomsList()).rooms.find(room => room.is_team);
-    const room = existing ?? (await api.roomsCreate({ name: t("rooms.team"), member_ids: [], is_team: true })).room;
-    await openGroupChat(room.id);
-  } catch (error) { toaster.info(describeError(error)); }
-}
-
 /** Up to four actual member faces share a square grid everywhere. */
 export function roomAvatarHTML(room: Pick<Room, "member_ids">, list: MembersList, size = 40): string {
   const members = room.member_ids.map(id => list.members.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).slice(0, 4);
@@ -329,13 +321,12 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
   const el = document.createElement("section"); el.className = "au-rooms-section";
   let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0, query = "";
   const draw = (): void => {
-    const team = rooms.find(room => room.is_team);
-    const items = [...(team ? [] : [{ id: 0, name: t("rooms.team"), is_team: 1, member_ids: list.members.map(m => m.id) } as Room]), ...rooms];
-    el.innerHTML = items
-      .filter(room => (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
+    // Groups are the owner's own; a former team room stays only for the conversation it already holds.
+    el.innerHTML = rooms
+      .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row"${room.is_team ? " data-room-everyone" : ""} ${room.id ? `data-room="${room.id}"` : 'data-room-team'} aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(replyBody(room.preview ?? "").replace(/\s+/g, " "))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(replyBody(room.preview ?? "").replace(/\s+/g, " "))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
       }).join("");
   };
   const load = async (): Promise<void> => {
@@ -346,10 +337,9 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
   listeners.add(() => void load()); onLocaleChange(() => { draw(); void load(); });
   el.addEventListener("sidebar-search", event => { query = (event as CustomEvent<string>).detail.trim().toLocaleLowerCase(); draw(); });
   el.addEventListener("click", e => {
-    const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-team], [data-room-new], [data-room-more]");
+    const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
     if (!target) return;
-    if (target.hasAttribute("data-room-team")) void openEveryoneChat();
-    else if (target.hasAttribute("data-room-new")) void openNewGroupChat();
+    if (target.hasAttribute("data-room-new")) void openNewGroupChat();
     else if (target.dataset.room) void openGroupChat(Number(target.dataset.room));
     else { const room = rooms.find(r => r.id === Number(target.dataset.roomMore)); if (room) roomActions(target,room); }
   });

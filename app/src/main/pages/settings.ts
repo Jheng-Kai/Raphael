@@ -1195,7 +1195,7 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
 
-    if (target.closest("[data-cli], [data-cli-menu]")) { void cliBrains.click(target); return; }
+    if (target.closest("[data-cli], [data-cli-menu], [data-chatgpt], [data-chatgpt-menu]")) { void cliBrains.click(target); return; }
     if (providers.click(target)) return;
     // the usage view opens its own dropdowns' menus (usage-analytics.ts)
     const choose = target.closest<HTMLElement>(".sel");

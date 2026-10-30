@@ -2,7 +2,7 @@
 import { onLocaleChange, t } from "./i18n";
 import { navHomeHTML, navItemHTML } from "./nav-items";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
-import { ico } from "./ui";
+import { esc, ico } from "./ui";
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement): { close(): void } {
   nav.classList.add("sidebar");
@@ -29,17 +29,18 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     nav.setAttribute("aria-label", t("nav.pages"));
     const brand = nav.querySelector<HTMLElement>(".brand")!;
     brand.setAttribute("aria-label", t("nav.home")); brand.title = t("nav.home");
-    nav.querySelector('[data-go="dictation"] .nav-t')!.textContent = t("nav.dictation");
+    const dictation = nav.querySelector<HTMLElement>('[data-go="dictation"]')!;
+    dictation.querySelector(".nav-t")!.textContent = t("nav.dictation");
+    dictation.setAttribute("aria-label", t("nav.dictation")); dictation.dataset.tooltip = t("nav.dictation");
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
-    account.innerHTML = ownerFaceHTML(40);
+    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);
-    account.title = account.getAttribute('aria-label')!;
     toggle.innerHTML = ico("menu"); toggle.setAttribute("aria-label", t("nav.pages"));
     nav.querySelector('[data-sidebar="close"]')?.setAttribute("aria-label", t("common.close"));
   };
   toggle.addEventListener("click", () => setOpen(!document.documentElement.hasAttribute("data-sidebar-open")));
   nav.addEventListener("click", event => {
-    if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-member], [data-room], [data-room-team]')) close();
+    if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-member], [data-room]')) close();
   });
   scrim.addEventListener("click", close);
   document.addEventListener("keydown", event => {

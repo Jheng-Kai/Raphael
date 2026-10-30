@@ -140,7 +140,8 @@ function statusNote(provider: ModelProvider): string {
 }
 
 export function providersHTML(v: ProvidersView): string {
-  const rows = v.providers.map((p) => `<div class="pv-card pv-item">` +
+  // ChatGPT is a sign-in, shown with the subscription accounts rather than as an API key.
+  const rows = v.providers.filter((p) => p.id !== "chatgpt").map((p) => `<div class="pv-card pv-item">` +
     btn(`<span class="ic">${providerMark(p.kind)}</span><span class="tx"><span class="nm">${esc(p.name)}</span><span class="ds">${esc(statusNote(p))}</span></span><span class="chev" aria-hidden="true">${ico("right")}</span>`, "cs-open", ` data-pv="open" data-id="${esc(p.id)}" data-k="pv-open:${esc(p.id)}" aria-haspopup="dialog"`) +
     tg(p.enabled, t("providers.switch", { p0: p.name }), ` data-pv="toggle" data-id="${esc(p.id)}" data-k="pv-toggle:${esc(p.id)}"${v.busy ? " disabled" : ""}`) +
     `</div>`).join("");

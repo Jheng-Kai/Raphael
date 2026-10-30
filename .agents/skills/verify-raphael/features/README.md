@@ -3,11 +3,12 @@
 ## Sidebar redesign (2026-10-30)
 
 One fixed 296px sidebar has Home brand and round search/plus controls. Search opens
-in place without moving either control. The chief, with role and star, leads one
-continuous list of 48px member rows and unframed group face grids (up to four faces).
+in place without moving either control. The chief, with its role and no star, leads in a
+larger always-visible box above one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
-appear on hover, and current-page selection remains unique. The footer has the
-owner avatar and a wide dictation pill, without a gear or separator.
+appear on hover, and current-page selection remains unique. The footer is one row, without a
+gear or separator: the owner's face and name open Settings, a single mic icon opens dictation.
+Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
 Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and
 focus containment. Team route/canvas are removed. Settings > Connections owns apps;
 Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
@@ -15,7 +16,7 @@ existing picker/crop component and presets; footer and owner messages share iden
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-search, sidebar-plus, sidebar-group-avatar,
-sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, sidebar-everyone, chat, details, profile, plugins-installed,
+sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --core`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and

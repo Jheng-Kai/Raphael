@@ -3,7 +3,7 @@ import * as api from "./api";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import { openActions } from "./member-column";
-import type { CatalogModel, CliBrain, CliBrainId, MainEvent } from "./types";
+import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, MainEvent } from "./types";
 import { btn, esc, iconButton } from "./ui";
 
 export const CLIS = [
@@ -16,8 +16,10 @@ export interface CliBrainsView {
   state: "loading" | "ready" | "failed";
   busy: CliBrainId | null;
   error: boolean;
+  chatgpt: ChatGptStatus | null;
+  chatgptError: boolean;
 }
-export const emptyCliBrainsView = (): CliBrainsView => ({ clis: [], state: "loading", busy: null, error: false });
+export const emptyCliBrainsView = (): CliBrainsView => ({ clis: [], state: "loading", busy: null, error: false, chatgpt: null, chatgptError: false });
 export function cliBrainLine(ref: string): string {
   const cli = CLIS.find((c) => ref === `cli:${c.id}` || ref.startsWith(`cli:${c.id}:`));
   return cli ? `<span class="mb-brain">${providerMark(cli.mark)}<span>${esc(cli.name)} · ${esc(t("brains.subscription"))}</span></span>` : "";
@@ -33,8 +35,21 @@ export function cliModels(clis: readonly CliBrain[], availableOnly = true): Cata
     }));
   });
 }
+function chatgptCardHTML(v: CliBrainsView): string {
+  const account = v.chatgpt;
+  const signing = !!account?.signing_in;
+  const signedIn = !!account?.signed_in && !signing;
+  const status = v.state !== "ready" ? t(v.state === "loading" ? "common.loading" : "providers.error") :
+    signing ? t("brains.chatgptSigning") : !signedIn ? t("brains.signedOut") :
+    account?.plan_scope_granted === false ? t("brains.chatgptNoPlan") : account?.email || t("brains.ready");
+  const action = v.state !== "ready" ? "" : signing ?
+    btn(esc(t("common.cancel")), "", ' data-chatgpt="cancel" data-k="chatgpt:cancel"') : signedIn ?
+    iconButton("more", t("members.more", { p0: "ChatGPT" }), ' data-chatgpt-menu data-k="chatgpt-menu" aria-haspopup="menu" aria-expanded="false"') :
+    btn(esc(t("brains.chatgptSignIn")), "", ' data-chatgpt="sign-in" data-k="chatgpt:sign-in"');
+  return `<div class="pv-card cli-card" data-chatgpt-card><span class="ic">${providerMark("openai")}</span><span class="tx"><span class="nm">ChatGPT</span><span class="ds">${esc(status)}</span></span>${action}</div>`;
+}
 export function cliBrainsHTML(v: CliBrainsView): string {
-  return `<section class="sgroup cli-accounts"><h2>${esc(t("brains.accounts"))}</h2><div class="pv-grid">` + CLIS.map((known) => {
+  return `<section class="sgroup cli-accounts"><h2>${esc(t("brains.accounts"))}</h2><div class="pv-grid">` + chatgptCardHTML(v) + CLIS.map((known) => {
     const cli = v.clis.find((c) => c.id === known.id);
     const status = v.state !== "ready" ? t(v.state === "loading" ? "common.loading" : "providers.error") :
       t(cli?.disconnected ? "brains.disconnected" : !cli?.installed ? "brains.missing" : cli.available ? "brains.ready" : "brains.signedOut");
@@ -44,7 +59,7 @@ export function cliBrainsHTML(v: CliBrainsView): string {
       iconButton("more", t("members.more", { p0: known.name }), ` data-cli-menu="${known.id}" data-k="cli-menu:${known.id}" aria-haspopup="menu" aria-expanded="false"${v.busy ? " disabled" : ""}`) :
       btn(esc(label), "", ` data-cli="${known.id}" data-k="cli:${known.id}" aria-label="${esc(label + " " + known.name)}"${v.busy ? " disabled" : ""}`);
     return `<div class="pv-card cli-card"><span class="ic">${providerMark(known.mark)}</span><span class="tx"><span class="nm">${esc(known.name)}</span><span class="ds">${esc(status)}${version ? ` · v${esc(version)}` : ""}</span></span>${action}</div>`;
-  }).join("") + `</div>${v.error ? `<p class="note" role="alert">${esc(t("providers.error"))}</p>` : ""}</section>`;
+  }).join("") + `</div>${v.error ? `<p class="note" role="alert">${esc(t("providers.error"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(t("brains.chatgptFailed"))}</p>` : ""}</section>`;
 }
 
 export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
@@ -54,9 +69,9 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
   async function load(): Promise<void> {
     const mine = ++generation;
     try {
-      const { clis } = await api.brainsCli();
+      const [{ clis }, chatgpt] = await Promise.all([api.brainsCli(), api.chatgptStatus().catch(() => null)]);
       if (mine !== generation) return;
-      value = { ...value, clis, state: "ready" };
+      value = { ...value, clis, chatgpt, state: "ready" };
     } catch {
       if (mine !== generation) return;
       value = { ...value, state: "failed" };
@@ -70,6 +85,31 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     catch { value = { ...value, error: true }; }
     finally { value = { ...value, busy: null }; if (host.visible()) host.redraw(); }
   }
+  async function signIn(): Promise<void> {
+    value = { ...value, chatgpt: { signed_in: false, ...value.chatgpt, signing_in: true }, chatgptError: false }; host.redraw();
+    try {
+      await api.chatgptSignIn();
+      // The plan's models join the picker as soon as the owner is signed in.
+      await api.chatgptModels().catch(() => undefined);
+    } catch (error) {
+      // Cancelling is not a failure.
+      if (value.chatgpt?.signing_in) value = { ...value, chatgptError: !(error instanceof Error && /cancel/i.test(error.message)) };
+    }
+    await load();
+  }
+  async function chatgptClick(button: HTMLButtonElement): Promise<void> {
+    if (button.dataset.chatgptMenu !== undefined) {
+      openActions(button, [{ id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], () => {
+        void api.chatgptSignOut().catch(() => undefined).then(load);
+      });
+    } else if (button.dataset.chatgpt === "cancel") {
+      await api.chatgptCancel().catch(() => undefined);
+      value = { ...value, chatgpt: value.chatgpt && { ...value.chatgpt, signing_in: false }, chatgptError: false };
+      host.redraw();
+    } else if (button.dataset.chatgpt === "sign-in") {
+      await signIn();
+    }
+  }
   return {
     view: () => value,
     load,
@@ -81,6 +121,8 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     stop() { if (timer) clearInterval(timer); timer = null; generation++; },
     followEvent(event: MainEvent) { if (event.type === "BrainsChanged" && host.visible()) void load(); },
     async click(target: Element): Promise<boolean> {
+      const account = target.closest<HTMLButtonElement>("button[data-chatgpt], button[data-chatgpt-menu]");
+      if (account) { await chatgptClick(account); return true; }
       const button = target.closest<HTMLButtonElement>("button[data-cli], button[data-cli-menu]");
       const known = CLIS.find((c) => c.id === (button?.dataset.cli ?? button?.dataset.cliMenu));
       if (!known) return false;

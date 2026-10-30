@@ -45,6 +45,7 @@ import type {
   MainEvent,
   MicAccess,
   ModelCatalog,
+  ChatGptStatus,
   ModelProvider,
   ProviderKind,
   ProviderModel,
@@ -97,6 +98,11 @@ export async function usageAnalytics(params: UsageRequest): Promise<UsageAnalyti
 /** Every OpenRouter model Raphael could use, with its price and what each role can make of it. */
 export const modelsCatalog = (): Promise<ModelCatalog> => core("models.catalog");
 export const brainsCli = (): Promise<{ clis: CliBrain[] }> => core("brains.cli");
+export const chatgptStatus = (): Promise<ChatGptStatus> => core("chatgpt.status");
+export const chatgptSignIn = (): Promise<ChatGptStatus> => core("chatgpt.sign_in", { enable_plan: true });
+export const chatgptCancel = (): Promise<{ cancelled: boolean }> => core("chatgpt.cancel");
+export const chatgptSignOut = (): Promise<{ signed_out: boolean }> => core("chatgpt.sign_out");
+export const chatgptModels = (): Promise<{ models: unknown[] }> => core("chatgpt.models");
 export const brainsCliLogin = (id: CliBrainId): Promise<{ started: boolean; reconnected?: boolean }> => core("brains.cli_login", { id });
 export const brainsCliDisconnect = (id: CliBrainId): Promise<{ disconnected: true }> => core("brains.cli_disconnect", { id });
 
@@ -465,7 +471,7 @@ export const saveUsageCsv = (csv: string): Promise<boolean> => invoke("save_usag
 // Group threads reuse the same worker and safety gate as individual conversations.
 export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; total?: number }> => core("routines.runs", { routine_id: routineId });
 export const roomsList = (): Promise<{ rooms: Room[] }> => core("rooms.list");
-export const roomsCreate = (room: { name?: string; member_ids: number[]; group_id?: number | null; is_team?: boolean; default_responder?: string; request_id?: string }): Promise<{ room: Room }> => core("rooms.create", room);
+export const roomsCreate = (room: { name?: string; member_ids: number[]; group_id?: number | null; default_responder?: string; request_id?: string }): Promise<{ room: Room }> => core("rooms.create", room);
 export const roomsDelete = (roomId: number): Promise<{ deleted: boolean }> => core("rooms.delete", { room_id: roomId });
 export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string>; pinned?: boolean; hidden?: boolean; read?: boolean; read_through?: number }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
 export const roomTranscribe = (data: string, uiLanguage: string): Promise<{ text: string }> => core("rooms.transcribe", { data, ui_language: uiLanguage });

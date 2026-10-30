@@ -19,7 +19,7 @@ The look IPC boundary derives preview, timestamp and unread from room messages,
 matching the production rooms.list projection. Reading preserves preview and time.
 Home selects only the brand; only a visible conversation selects its member or room.
 
-Run `sidebar-group-avatar`, `sidebar-everyone`, room-text, room-mentions and the
+Run `sidebar-group-avatar`, room-text, room-mentions and the
 affected room action scenes. Native readable-layout, locale-sweep and
 delete-conversation use the shared sidebar. Keep fake brain, isolated data and one
 heavy process at a time. No judge or paid/live requests are authorized for this brief.
@@ -46,7 +46,7 @@ Open a room in the global sidebar; use the menu button in a compact window.
 ## Driving it with look
 
 ```powershell
-npm run look -- sidebar-folders sidebar-folded sidebar-group-avatar sidebar-everyone room-text room-mentions --theme both --width 1120,720,1920x1080,1280x800
+npm run look -- sidebar-folders sidebar-folded sidebar-group-avatar room-text room-mentions --theme both --width 1120,720,1920x1080,1280x800
 npm run look -- sidebar-group-avatar-hover sidebar-group-avatar-pair sidebar-group-avatar-four sidebar-room-home --theme both --width 1120,720,1920x1080
 ```
 

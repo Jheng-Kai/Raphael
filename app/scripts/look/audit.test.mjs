@@ -126,7 +126,7 @@ describe("rendered look checks", () => {
   });
   it("checks visible primary calendar choices without counting the hidden responsive copy", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<nav id="nav"><button class="mb-chief"><i class="mb-star"></i></button></nav><aside hidden><button data-drag-member="0"></button><button data-drag-member="1"></button></aside><div><button data-drag-member="1"></button><button data-drag-member="0"></button></div>';
+    window.document.body.innerHTML = '<nav id="nav"><button class="mb-chief"></button></nav><aside hidden><button data-drag-member="0"></button><button data-drag-member="1"></button></aside><div><button data-drag-member="1"></button><button data-drag-member="0"></button></div>';
     for (const element of window.document.querySelectorAll('div button')) element.getBoundingClientRect = () => ({ width: 100, height: 30 });
     window.__look = { data: { primaryId: 1, members: [{ id: 0 }, { id: 1 }] }, calls: [] };
     vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
