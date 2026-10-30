@@ -4,7 +4,7 @@ import type { AppContext, Member } from "./types";
 import * as chatComposer from "./chat-composer";
 const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn()}));
 vi.mock("./api",()=>api);
-import { configureRooms, openNewGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
+import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { setLocale } from "./i18n";
 const flush=async():Promise<void>=>{for(let i=0;i<24;i++)await Promise.resolve();};
 const room={id:1,name:"Launch",member_ids:[0,1],group_id:null,created:1,is_team:0};
@@ -12,6 +12,49 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("room rows render the RPC summary and select only the visible conversation page", async () => {
+ let active = true;
+ const last_at = Date.UTC(2026, 9, 30, 9, 10);
+ api.roomsList.mockResolvedValue({rooms:[{...room,preview:"Latest room reply",last_at,unread:true}]});
+ const section=createRoomsSection(() => active);document.body.append(section);await flush();
+ expect(section.querySelector('[data-room="1"] .mb-row-p')?.textContent).toBe('Latest room reply');
+ expect(section.querySelector('time')?.dateTime).toBe(new Date(last_at).toISOString());
+ expect(section.querySelector('[data-room="1"] .is-unread')).not.toBeNull();
+ openGroupChat(1);await flush();
+ expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
+ active=false;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ expect(section.querySelector('[aria-current="true"]')).toBeNull();
+ active=true;section.dispatchEvent(new CustomEvent('sidebar-search',{detail:""}));
+ expect(section.querySelector('[data-room="1"]')?.getAttribute('aria-current')).toBe('true');
+});
+
+test("a room update during opening never draws an incomplete room before the newer refresh finishes", async () => {
+ let first!: (value: unknown) => void, next!: (value: unknown) => void;
+ api.roomsList.mockReturnValueOnce(new Promise(resolve => {first=resolve;})).mockReturnValueOnce(new Promise(resolve => {next=resolve;}));
+ const view=createRoomPane(app,vi.fn());document.body.append(view.el);
+ const opening=view.open(1);
+ const refreshing=view.refresh();
+ first({rooms:[room]});
+ await expect(opening).resolves.toBeUndefined();
+ expect(view.el.querySelector('.au-room-heading')?.textContent).toBe('');
+ next({rooms:[room]});await refreshing;await flush();
+ expect(view.el.querySelector('.au-room-heading b')?.textContent).toBe('Launch');
+ view.close();
+});
+
+test("a message sent while room details load keeps the requested room identity", async () => {
+ let release!: (value: unknown) => void;
+ api.roomsList.mockReturnValueOnce(new Promise(resolve => {release=resolve;}));
+ const view=createRoomPane(app,vi.fn());document.body.append(view.el);
+ const opening=view.open(1);
+ draft("Sent while loading");document.querySelector('form.composer')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+ await flush();
+ expect(api.roomSend.mock.calls[0]?.slice(0,2)).toEqual([1,"Sent while loading"]);
+ release({rooms:[room]});await opening;await flush();
+ expect(view.el.querySelector('.au-room-heading b')?.textContent).toBe('Launch');
+ view.close();
+});
 
 test("an open room deleted elsewhere closes before its missing history can produce an error", async () => {
  const view=await pane();
@@ -28,6 +71,27 @@ test("deletion racing the history request rechecks existence before reporting an
  api.roomMessages.mockRejectedValue(new Error("room not found"));
  event({type:"RoomsChanged"});await flush();
  expect(view.active).toBe(false);expect(document.body.textContent).not.toContain("room not found");
+});
+test("a hidden room keeps unread messages until its visible history is acknowledged", async () => {
+ const hidden = document.createElement("div"); hidden.hidden = true; document.body.append(hidden);
+ const view = createRoomPane(app, vi.fn()); hidden.append(view.el);
+ api.roomsList.mockResolvedValue({rooms:[{...room,unread:true}]});
+ api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:1,text:"Ready",created:1,status:"done"}]});
+ await view.open(1);
+ expect(api.roomsUpdate).not.toHaveBeenCalled();
+ hidden.hidden = false; await view.refresh();
+ expect(api.roomsUpdate).toHaveBeenCalledWith(1, {read:true,read_through:12});
+ view.close();
+});
+
+test("Everyone has one stable sidebar identity for both a persisted room and its creation entry", async () => {
+ for (const rooms of [[], [{...room,is_team:1}]]) {
+  api.roomsList.mockResolvedValue({rooms});
+  const section=createRoomsSection();document.body.append(section);await flush();
+  expect(section.querySelectorAll('[data-room-everyone]')).toHaveLength(1);
+  expect(section.querySelector('[data-room-everyone]')?.textContent).toContain('Everyone');
+  section.remove();
+ }
 });
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
 test("a primary changes room picker order and becomes the required chief", async () => {
@@ -144,7 +208,7 @@ test("room rows expose rename, membership and confirmed deletion through more",a
  expect(section.querySelector('[data-room-delete]')).toBeNull();
  const more=section.querySelector<HTMLButtonElement>('[data-room-more="1"]')!;
  expect(more.getAttribute('aria-haspopup')).toBe('menu');more.click();
- expect([...document.querySelectorAll('#app-popover [data-pick]')].map(el=>(el as HTMLElement).dataset.pick)).toEqual(['rename','members','roles','delete']);
+ expect([...document.querySelectorAll('#app-popover [data-pick]')].map(el=>(el as HTMLElement).dataset.pick)).toEqual(['pin','hide','rename','members','roles','delete']);
  document.querySelector<HTMLElement>('[data-pick="delete"]')!.click();await flush();
  expect(api.roomsDelete).not.toHaveBeenCalled();
  document.querySelector<HTMLElement>('[data-dlg="cancel"]')!.click();await flush();

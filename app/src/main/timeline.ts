@@ -1,3 +1,4 @@
+import { ownerFaceHTML } from "./owner-avatar";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
@@ -814,7 +815,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (routine ? routineLineHTML(turn) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
-      ? `<div class="me">` +
+      ? `<div class="me">${ownerFaceHTML()}` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
         bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote) + messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
         `</div>`
@@ -852,7 +853,7 @@ export function pendingTurnHTML(question: string | null, _source: string, look: 
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim());
   return (
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
-    `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote)}${messageExpandHTML(question ?? "", expanded)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
+    `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote)}${messageExpandHTML(question ?? "", expanded)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
     `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
     `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML(Math.max(0, Math.round((nowMs - start) / 1000)))}</div></div>` +
     `</div></div></li>`

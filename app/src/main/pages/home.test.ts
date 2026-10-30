@@ -67,10 +67,38 @@ async function mount() {
   document.body.append(page.el);
   page.show();
   await flush();
-  return { page, emit: (event: MainEvent) => heard.forEach((handler) => handler(event)) };
+  return { page, app, emit: (event: MainEvent) => heard.forEach((handler) => handler(event)) };
 }
 
 describe("the hero", () => {
+  test("the month has weekday headings, today and schedule dots, and opens the chosen day", async () => {
+    const sample = overview(5);
+    sample.calendar_days = ["2026-10-02", "2026-10-30"];
+    queue.splice(0, queue.length, sample);
+    const { page, app } = await mount();
+    expect(page.el.querySelectorAll('.ho-weekday')).toHaveLength(7);
+    expect(page.el.querySelectorAll('.ho-day')).toHaveLength(42);
+    expect(page.el.querySelectorAll('.ho-day[aria-current="date"]')).toHaveLength(1);
+    expect(page.el.querySelectorAll('.ho-dots i')).toHaveLength(2);
+    expect(page.el.querySelector('.ho-week')).toBeNull();
+    page.el.querySelector<HTMLButtonElement>('[data-home-select="2026-10-30"]')!.click();
+    expect(app.go).not.toHaveBeenCalled();
+    expect(page.el.querySelector('.ho-agenda')?.getAttribute("data-selected-day")).toBe("2026-10-30");
+    page.el.querySelector<HTMLButtonElement>('.ho-calendar > .ho-target')!.click();
+    expect(app.go).toHaveBeenCalledWith("automations", "2026-10-30");
+    page.hide(); page.el.remove();
+  });
+  test("month arrows request the selected month while a vertical wheel leaves it unchanged", async () => {
+    const { page, app } = await mount();
+    const { homeOverview } = await import("../api");
+    page.el.querySelector<HTMLButtonElement>('[data-home-month="1"]')!.click(); await flush();
+    expect(page.el.querySelector('.ho-calendar')?.getAttribute('data-month')).toBe('2026-11');
+    expect(homeOverview).toHaveBeenCalledWith(true, '2026-11');
+    page.el.querySelector('.ho-calendar')!.dispatchEvent(new WheelEvent('wheel', {bubbles:true,deltaY:100,deltaX:0}));
+    expect(page.el.querySelector('.ho-calendar')?.getAttribute('data-month')).toBe('2026-11');
+    expect(app.go).not.toHaveBeenCalled();
+    page.hide(); page.el.remove();
+  });
   test("paints local records before the shared live refresh and does not reload on its completion", async () => {
     const { homeOverview } = await import("../api");
     let finish!: (value: HomeOverview) => void;
@@ -101,7 +129,7 @@ describe("the hero", () => {
       for (const locale of ["en", "ja", "zh-TW"] as const) {
         setLocale(locale);
         // Settings retains the page DOM. Translation must not wait for another RPC or show().
-        expect(page.el.querySelector(".ho-calendar h2")!.textContent).toContain(t("overview.calendar"));
+        expect(page.el.querySelector(".ho-calendar h2")!.textContent).toBe(new Date(sample.generated_at_ms).toLocaleDateString(locale, { year: "numeric", month: "long" }));
         for (const [card, key] of [["inbox", "overview.needsYou"], ["spend", "overview.month"], ["allowance", "overview.allowance"], ["dictation", "nav.dictation"]] as const) {
           expect(page.el.querySelector(`.ho-${card} :is(h2, h3)`)!.textContent).toContain(t(key));
         }
@@ -114,7 +142,7 @@ describe("the hero", () => {
         expect(page.el.querySelector(".ho-dictation .ho-chart")!.textContent).toBe(t("overview.noDictation"));
         expect(page.el.querySelector(".ho-dictation .ho-big small")!.textContent).toBe(t("home.003"));
         expect(page.el.querySelector(".ho-dictation .ho-sub")!.textContent).toBe(`${t("home.005")} 0${t("unit.seconds")}`);
-        for (const target of page.el.querySelectorAll(".ho-target")) expect(target.getAttribute("aria-label")).toBe(target.parentElement!.querySelector("h2")!.childNodes[0].textContent);
+        for (const target of page.el.querySelectorAll(".ho-target")) expect(target.getAttribute("aria-label")).toBe(target.closest(".ho-calendar") ? t("overview.calendar") : target.parentElement!.querySelector("h2")!.childNodes[0].textContent);
       }
       expect(vi.mocked(homeOverview).mock.calls.length).toBe(calls);
       expect(page.el.querySelector(".ho-hero > .av")).toBe(emblem);

@@ -56,12 +56,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const description = describe(element);
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
-    // Moving a group extends these spatial wrappers; the clipped viewport owns panning.
-    // Actual cards/text and document overflow remain subject to the ordinary checks.
-    const canvas = element.matches('.team-board, .team-groups') && element.closest('.team-board-scroll');
-    const canvasStyle = canvas && win.getComputedStyle(canvas);
-    const spatialWrapper = canvasStyle && /hidden|clip/.test(canvasStyle.overflowX || canvasStyle.overflow);
-    if (!spatialWrapper && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
@@ -72,16 +67,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
         const sizes = element.matches('.cmp-send') ? [32] : [16, 20];
-        // A board the owner zooms scales its glyphs too; the shared size is the unzoomed one.
+        // CSS zoom scales glyphs too; compare their shared size before scaling.
         let zoom = 1;
         for (let parent = element; parent; parent = parent.parentElement) {
           const parentStyle = win.getComputedStyle(parent);
           zoom *= parseFloat(parentStyle.zoom) || 1;
-          if (parent.matches('.team-board')) {
-            const matrix = /^matrix\(\s*([^,]+),\s*([^,]+)/.exec(parentStyle.transform);
-            const scale = /scale\(\s*([\d.]+)/.exec(parentStyle.transform);
-            zoom *= matrix ? Math.hypot(Number(matrix[1]), Number(matrix[2])) : Number(scale?.[1] ?? 1);
-          }
         }
         if (!sizes.some(size => Math.abs(rect.width / zoom - size) <= .5 && Math.abs(rect.height / zoom - size) <= .5)) violation('R-UI-19', 'Action glyph does not use the shared icon sizes');
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
@@ -155,7 +145,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-week, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
+      const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
       if (element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       if (!navigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');

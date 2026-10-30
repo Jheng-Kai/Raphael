@@ -1,4 +1,9 @@
-# Plugins, connections and MCP
+# Connections and MCP
+
+Owner decision 2026-10-30: Settings > Connections is the only connected-app entry.
+The sidebar has no app entry or badge. The installed tab retains the shared inventory
+count and its unknown/loading state; connection and permission behavior is unchanged.
+
 
 ## Sub-features
 
@@ -14,8 +19,7 @@ The rows sit under three headings: 應用程式 (their tools can be called now),
 (waiting for sign-in, failed, a duplicate of another connection, all tools off or
 unreadable, each with its reason) and 私人技能. An app is connected only when its tools
 can be called now, and the core defines that once (`integrations/inventory.py`); the
-sidebar's 連結應用程式 entry (a count beside its label, or a badge on its icon only in the rail), the tab's number, the rows
-under 應用程式 and the roster every model is given (`TeamContextSnapshot.connected`)
+Settings > Connections tab's number and its installed rows
 all show that one count. An unreadable inventory shows 「—」 instead of a number (the
 entry's accessible name says it cannot be read), and an app whose state cannot be read
 says 「無法讀取」 on its row.
@@ -56,8 +60,7 @@ and does not prove remote image availability.
 
 ## How to get to it (user POV)
 
-Press 連結應用程式 at the bottom of the sidebar (the plug with a count at the bottom
-of the rail), or open Settings > Connections. Use 已連結 to open a service
+Open Settings > Connections from the account footer. Use 已連結 to open a service
 detail or a private skill, change their switches or open an overflow. Add offers custom command/URL, pasted JSON and import.
 Use Store to search and Add a built-in service without configuring Composio;
 complete its existing login, then return to 已連結. Optionally use the setup row at
@@ -101,7 +104,7 @@ Core tests cover cursor paging, concurrent cache reads, one-hour expiry, atomic
 failure fallback, key invalidation, repeated cursors and the 3,000-entry cap.
 
 The last command in the broader list above is the apps and skills set (`scenes/apps.mjs`). Each scene enters
-through the sidebar's 連結應用程式; `apps-count` compares the badge, the tab's
+through Settings > Connections; `apps-count` compares the tab's
 number, the rows and the roster, and `apps-unreadable` checks that an unreadable
 inventory shows no count.
 
@@ -132,7 +135,7 @@ RPCs and then expands the individual list. Its sign-in failure step checks the
 dedicated toolkit-not-allowed words. All scenes retain the shared real entry and
 synthetic IPC boundary.
 
-`skill-page` checks the action order and that the document is whole and starts at its first line. Also run `home` (the sidebar entry on the wide
+`skill-page` checks the action order and that the document is whole and starts at its first line. Also run `home` (the global sidebar on the wide
 and compact layouts) and the `plugins-*` scenes above for regressions.
 
 Inspect every contact sheet and detail/store/key/menu full-size image, especially
@@ -201,7 +204,7 @@ enabled private calendar_list_events tool. From a chat, ask for a nonce mail, co
 cancel once, finish once and reconnect once; only that task resumes and reads the mail. Test a custom local MCP server with
 add/test/edit/paste/discover, a harmless call and removal; stop only that test server.
 
-Count the connected apps by hand against the sidebar: connect one, let a sign-in expire, add
+Count the connected apps by hand against Settings: connect one, let a sign-in expire, add
 the same service twice and uninstall one, and watch the number follow each time; ask a CLI
 and an API brain how many apps are connected. Switch a tool off, start a new turn and a
 running one, and confirm neither brain offers or runs it; do the same after uninstalling,
@@ -261,7 +264,7 @@ capability lists outside Settings retain their own reading cap.
 
 ## Owner round 7 contracts
 
-The connected-app count stays at the row end beside the label in every expanded sidebar, including 720px. Only the icon-only rail places the count over the plug icon. sidebar-count-alignment checks both modes using representative Home, Team, calendar, dictation and conversation scenes; inventory semantics remain unchanged.
+Settings retains the connected-app inventory count; the sidebar has no app entry or count. `apps-count` and `apps-unreadable` check the installed tab against the shared inventory.
 ## Search-first catalog and chat discovery (2026-10-29)
 
 Built-in and managed apps share the vocabulary in connectors/finder-data.json:
@@ -328,7 +331,7 @@ A pending chat connection card shows its app name and Connect action without a
 helper line (R-UI-02). Reconnect errors, authorization status and tool counts remain
 essential states. Authorizing copy has no literal ellipsis, uses the available text
 width and stays fully visible before Cancel. The turn remains paused while the
-card owns cancellation; composer Stop, rail selection and details-panel placement
+card owns cancellation; composer Stop, sidebar selection and details-panel placement
 are unchanged by this fix.
 
 ```powershell

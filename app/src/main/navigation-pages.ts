@@ -8,7 +8,7 @@ export function resolvePage(id: Exclude<PageId, "settings">): { page: MainPageId
   return { page: id };
 }
 
-type Area = "automations" | "team";
+type Area = "automations";
 const factories: Partial<Record<Area, (ctx: AppContext) => Page>> = {};
 export function registerNavigationPages(pages: Record<Area, (ctx: AppContext) => Page>): void { Object.assign(factories, pages); }
 export function createNavigationPage(id: Area, ctx: AppContext): Page {

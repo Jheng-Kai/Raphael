@@ -41,6 +41,8 @@ export function findVisibleElement(selector) {
 export async function perform(page, step) {
   // A collapsed work section can precede the visible reply with the same selector.
   const visible = async selector => {
+    const inDrawer = await page.evaluate(selector => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open") && [...document.querySelectorAll(selector)].some(el => el.closest("#nav")), selector);
+    if (inDrawer) await page.click('[data-sidebar="open"]');
     try { return (await page.waitForFunction(findVisibleElement, { timeout: 6000 }, selector)).asElement(); }
     catch (error) { throw new Error(`No visible match: ${selector}`, { cause: error }); }
   };
@@ -59,11 +61,6 @@ export async function perform(page, step) {
     const element = await visible(selector);
     await element.evaluate((input, value) => { input.focus(); input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, text);
     await element.dispose();
-  };
-  const compact = () => page.evaluate(() => getComputedStyle(document.querySelector(".mb-pick")).display !== "none");
-  const roomsMenu = async () => {
-    if (await compact()) { await click(".mb-pick"); await click('#app-popover [data-action="1"]'); }
-    else { await click("[data-room-new]"); await page.keyboard.press("Escape"); }
   };
   // Measure the real event through its next painted frame, excluding automation transport time.
   if (step.measure) await page.evaluate(({ selector, action, measure }) => {
@@ -165,21 +162,10 @@ export async function perform(page, step) {
       if (await page.evaluate(() => document.querySelector('[data-au="tools"]').getBoundingClientRect().width > 0)) await click('[data-au="tools"]');
       break;
     }
-    case "member-picker": {
-      if (await compact()) await click('.mb-pick');
-      else {
-        if (await page.$eval('.mb-col', column => column.classList.contains('is-collapsed'))) await click('[data-col="collapse"]');
-        await click('[data-col="add"]'); await click('#app-popover [data-pick="conversation"]');
-      }
-      break;
-    }
+    case "member-picker": await click('[data-col="add"]'); await click('#app-popover [data-pick="conversation"]'); break;
     case "member-column": {
-      const collapsed = await page.$eval('.mb-col', column => column.classList.contains('is-collapsed'));
-      if (collapsed !== step.collapsed) await click('[data-col="collapse"]');
-      else if (await page.evaluate(() => localStorage.getItem('raphael.members.collapsed')) !== String(collapsed)) {
-        await click('[data-col="collapse"]');
-        await click('[data-col="collapse"]');
-      }
+      if (step.collapsed) throw new Error("Icon strips were removed; use sidebar drawer scenes");
+      if (await page.evaluate(() => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open"))) await page.click('[data-sidebar="open"]');
       break;
     }
     case "settle-motion":
@@ -254,18 +240,25 @@ export async function perform(page, step) {
         const measure = () => element.evaluate(button => {
           const style = getComputedStyle(button), surface = getComputedStyle(button.parentElement);
           const color = token => { const probe = document.createElement('span'); probe.style.color = `var(${token})`; button.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; };
-          return { background: surface.backgroundColor, hover: color('--hover'), pressed: color('--pressed'), outline: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+          const visual = [button.parentElement, ...button.parentElement.querySelectorAll('*')].map(node => {
+            const box = node.getBoundingClientRect(), css = getComputedStyle(node);
+            return [box.x, box.y, box.width, box.height, css.color, node === button.parentElement ? "" : css.borderColor, css.borderWidth, css.boxShadow, css.transform];
+          });
+          return { background: surface.backgroundColor, border: surface.borderColor, layer: style.backgroundColor, hoverEdge: color('--hover-edge'), outline: style.outlineStyle, width: parseFloat(style.outlineWidth), visual };
         });
+        await page.mouse.move(0, 100);
+        await new Promise(resolve => setTimeout(resolve, 180));
+        const normal = await measure();
         const box = await element.boundingBox();
         await page.mouse.move(box.x + box.width * .98, box.y + box.height * .02);
         await new Promise(resolve => setTimeout(resolve, 180));
         const hovered = await measure();
-        if (hovered.background !== hovered.hover) throw new Error('Whole block hover needs the hover token');
+        await page.evaluate(checkRendered, 'home-hover-content', { normal, hovered });
         await page.mouse.down();
         let pressed;
         try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
         finally { await page.mouse.move(0, 100); await page.mouse.up(); }
-        if (pressed.background !== pressed.pressed) throw new Error('Whole block press needs the pressed token');
+        if (pressed.background !== normal.background || pressed.layer !== 'rgba(0, 0, 0, 0)') throw new Error('Whole block press preserves its background and transparent target');
         await element.focus();
         const pointer = await measure();
         if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');
@@ -277,6 +270,12 @@ export async function perform(page, step) {
       } finally { await element.dispose(); }
     }
     case "click": await click(step.selector); break;
+    case "upload": {
+      const input = await page.$(step.selector);
+      if (!input) throw new Error(`No file input: ${step.selector}`);
+      try { await input.uploadFile(step.path); } finally { await input.dispose(); }
+      break;
+    }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
     case "wait": { const element = await visible(step.selector); await element.dispose(); break; }
@@ -309,31 +308,40 @@ export async function perform(page, step) {
           try { const rect = await target.boundingBox(); deltaY = Math.max(0, rect.y + rect.height + (step.marginBottom ?? 0) - box.y - box.height); }
           finally { await target.dispose(); }
         }
-        const point = await page.$eval('.team-board', (board, at) => {
-          const box = board.getBoundingClientRect(), scale = new DOMMatrix(getComputedStyle(board).transform).a;
-          return { x: (at.x - box.x) / scale, y: (at.y - box.y) / scale };
-        }, { x, y });
         await page.mouse.move(x, y);
         if (step.ctrl) await page.keyboard.down('Control');
         try { await page.mouse.wheel({ deltaY, deltaX: step.deltaX ?? 0 }); }
         finally { if (step.ctrl) await page.keyboard.up('Control'); }
         await new Promise(resolve => setTimeout(resolve, 100));
-        if (step.ctrl) {
-          const after = await page.$eval('.team-board', (board, at) => {
-            const box = board.getBoundingClientRect(), scale = new DOMMatrix(getComputedStyle(board).transform).a;
-            return { x: (at.x - box.x) / scale, y: (at.y - box.y) / scale, scale };
-          }, { x, y });
-          if (Math.abs(after.x - point.x) > 1 || Math.abs(after.y - point.y) > 1 || after.scale <= 1) throw new Error('Ctrl+wheel must zoom at the pointer');
-        }
       } finally { await element.dispose(); }
       break;
     }
-    case "team-zoom": {
-      for (let i = 0; i < 12; i++) {
-        const current = await page.$eval('.team-zoom > span', node => parseInt(node.textContent));
-        if (current === step.percent) break;
-        await click(`[data-team="zoom-${current < step.percent ? "in" : "out"}"]`);
+    case "home-day": {
+      const calendar = await visible('.ho-calendar');
+      const expanded = await calendar.evaluate(node => getComputedStyle(node).getPropertyValue('--home-calendar-expanded').trim() === '1');
+      await calendar.dispose();
+      await click(`[data-home-select="${step.date}"]`);
+      if (!expanded) {
+        const selected = await visible(`.ho-agenda[data-selected-day="${step.date}"]`); await selected.dispose();
+        const block = await visible('.ho-calendar');
+        await block.scrollIntoView();
+        if (step.open) { const box = await block.boundingBox(); await page.mouse.click(box.x + 6, box.y + 6); }
+        await block.dispose();
       }
+      if (expanded || step.open) { const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose(); }
+      return {check:'home-day-selection',expanded,date:step.date,opened:expanded || Boolean(step.open)};
+    }
+    case "touch-swipe": {
+      const element = await visible(step.selector), client = await page.createCDPSession();
+      try {
+        await element.scrollIntoView();
+        const box = await element.boundingBox(), x = box.x + box.width / 2, y = box.y + box.height / 2;
+        await client.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+        await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 1 }] });
+        for (let i = 1; i <= 8; i++) await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + step.dx * i / 8, y, id: 1 }] });
+        await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await new Promise(resolve => setTimeout(resolve, 450));
+      } finally { await client.send('Emulation.setTouchEmulationEnabled', { enabled: false }); await client.detach(); await element.dispose(); }
       break;
     }
     case "pointer-drag": {
@@ -342,7 +350,6 @@ export async function perform(page, step) {
         const box = await element.boundingBox();
         const x = box.x + box.width * (step.x ?? 0.5), y = box.y + box.height * (step.y ?? 0.5);
         const before = await element.evaluate(node => node.getBoundingClientRect().toJSON());
-        await page.evaluate(() => { const m = new DOMMatrix(getComputedStyle(document.querySelector('.team-board')).transform); window.__look.teamPan = {x:m.e,y:m.f}; });
         await page.mouse.move(x, y); await page.mouse.down({ button: step.button ?? "left" });
         try { await page.mouse.move(x + step.dx, y + step.dy, { steps: 12 }); }
         finally { await page.mouse.up({ button: step.button ?? "left" }); }
@@ -374,40 +381,17 @@ export async function perform(page, step) {
       finally { await element.dispose(); }
       break;
     }
-    case "member":
-      if (await compact()) { await click(".mb-pick"); await click(`#app-popover [data-value="${step.id}"]`); }
-      else await click(`.mb-col [data-member="${step.id}"]`);
-      break;
-    case "room":
-      if (await compact()) { await roomsMenu(); await click(`#app-popover [data-value="${step.id}"]`); }
-      else await click(`[data-room="${step.id}"]`);
-      break;
-    case "new-room":
-      if (await compact()) { await roomsMenu(); await click('#app-popover [data-action="0"]'); }
-      else await click("[data-room-new]");
-      break;
-    case "room-row-menu":
-      if (await compact()) {
-        await roomsMenu(); await click(`#app-popover [data-value="${step.id}"]`);
-        await click("[data-room-menu]");
-      } else {
-        const more = await visible(`[data-room-more="${step.id}"]`);
-        try { await more.hover(); await more.click(); } finally { await more.dispose(); }
-      }
-      break;
-    case "rooms-menu":
-      if (await compact()) await roomsMenu();
-      else await page.waitForSelector(".mb-col [data-room]", { visible: true });
-      break;
-    case "search":
-      if (await compact()) { await click(".mb-pick"); await click('#app-popover [data-action="0"]'); await fill("#app-popover input", step.text); }
-      else { await click('[data-col="search"]'); await fill(".mb-find-input", step.text); }
-      break;
+    case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
+    case "room": await click(`[data-room="${step.id}"]`); break;
+    case "new-room": await click("[data-room-new]"); break;
+    case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
+    case "rooms-menu": await visible(".mb-col [data-room]"); break;
+    case "search": await fill(".mb-find-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);
       await element.evaluate((element, options) => {
         const transfer = new DataTransfer();
-        transfer.setData("application/x-raphael-member", String(options.memberId ?? element.dataset.teamMember));
+        transfer.setData("application/x-raphael-member", String(options.memberId ?? element.dataset.memberItem));
         element.dispatchEvent(new DragEvent(options.action === "drop" ? "drop" : options.action === "drag-over" ? "dragover" : "dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer }));
       }, step);
       await element.dispose(); }

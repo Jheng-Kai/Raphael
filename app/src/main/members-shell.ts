@@ -1,7 +1,7 @@
 // The members of the 拉斐爾 page, put together: the list the core keeps (`members.list`), the column
 // on the left (member-column.ts), the details panel on the right (member-details.ts), the dialogs
 // (member-dialogs.ts) and the member identity used by the stacked conversation title.
-// Below 860 px the column gives way to a dropdown at the left of that row.
+// The main window mounts this column globally; below 860 px it opens in the same sidebar drawer.
 //
 // A new member of a group with places to look comes with the routine the core offers
 // (「每天早上的進度」): the owner is asked, and only 「加入」 makes it.
@@ -34,7 +34,7 @@ import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf }
 import type { AppContext, AvatarPreset, MainEvent, Member, MemberGroup, MemberPatch, MembersList, WireAttachment } from "./types";
 import { type Choice, btn, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
 
-/** Below this width details start collapsed: rail, member list and details leave too little thread space. */
+/** Below this width details start closed to leave a readable conversation column. */
 export const DETAILS_COLUMN_MIN_PX = 1440;
 /** Events that come together (a task's step and its turn) read the list once. */
 const REFRESH_DELAY_MS = 300;
@@ -115,7 +115,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   const column = createMemberColumn({
     openMessage: (member, conversation, turn) => host.onOpenConversation?.(member, conversation, turn),
-    view: () => ({ list, current: currentRoomId() === null ? current : -1, previews, fresh }),
+    view: () => ({ list, active: host.visible(), current: currentRoomId() === null ? current : -1, previews, fresh }),
     select: (id) => select(id),
     newMember: (groupId) => newMember(groupId),
     newGroup: () => void newGroup(),
@@ -127,6 +127,19 @@ export function createMembers(host: MembersHost): MembersShell {
     renameGroup: (id) => void renameGroup(id),
     editSources: (id) => void sources(id),
     deleteGroup: (id) => void deleteGroup(id),
+    async dropMember(id, groupId, beforeId) {
+      const peers = (list?.members ?? []).filter(m => m.id !== id && m.id !== 0 && m.group_id === groupId).sort((a, b) => a.position - b.position);
+      const at = beforeId === undefined ? peers.length : peers.findIndex(m => m.id === beforeId);
+      const moving = list?.members.find(m => m.id === id); if (!moving) return;
+      peers.splice(at < 0 ? peers.length : at, 0, moving);
+      await groupChange(async () => { for (const [position, m] of peers.entries()) await api.membersUpdate(m.id, { group_id: groupId, position }); });
+    },
+    async reorderGroup(id, beforeId) {
+      const groups = [...(list?.groups ?? [])].sort((a, b) => a.position - b.position);
+      const moving = groups.find(g => g.id === id); if (!moving) return;
+      const next = groups.filter(g => g.id !== id); next.splice(next.findIndex(g => g.id === beforeId), 0, moving);
+      await groupChange(async () => { for (const [position, group] of next.entries()) await api.groupsUpdate(group.id, { position }); });
+    },
   });
 
   const details = createDetails({
@@ -170,6 +183,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   async function load(): Promise<void> {
     const mine = ++loads;
+    column.draw();
     // the panel reads Raphael's routines the first time the page is on screen, not when the app starts
     if (!panelRead) {
       panelRead = true;
@@ -254,10 +268,10 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- choosing ----------
 
   function select(id: number): void {
+    if (!host.visible()) host.app.go("agent");
     if (id === current) {
       if (currentRoomId() !== null) { host.onSelect(id); drawAll(); }
-      // Selecting the current member reopens its details without leaving the thread.
-      setDetails(true);
+      // Reopening the same conversation preserves its details state.
       return;
     }
     current = id;
@@ -500,7 +514,6 @@ export function createMembers(host: MembersHost): MembersShell {
       if (host.visible() && memberId === current) details.refreshRoutines();
     },
     follow(event) {
-      if (!host.visible()) return;
       if (event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
@@ -513,9 +526,9 @@ export function createMembers(host: MembersHost): MembersShell {
     },
     hide() {
       refreshOnShow = true;
+      column.draw();
       if (refreshTimer !== null) clearTimeout(refreshTimer);
       refreshTimer = null;
-      loads++;
       tellViewing(null);
     },
   };

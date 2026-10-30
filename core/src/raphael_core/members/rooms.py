@@ -157,7 +157,23 @@ class RoomsService:
                 "author_member_id":row["member_id"]}
 
     async def _list(self, params):
-        return {"rooms":[self._view(r) for r in self._conn.execute("SELECT * FROM rooms ORDER BY id")]}
+        rooms = []
+        for row in self._conn.execute("SELECT * FROM rooms ORDER BY pinned DESC, id"):
+            room = self._view(row)
+            room.update(preview="", last_at=None, unread=False)
+            for message in self._conn.execute("SELECT * FROM room_messages WHERE room_id=? ORDER BY id DESC", (room["id"],)):
+                visible = self._message(message)
+                if visible["member_id"] is not None and (visible["status"] != "done" or is_pass(visible["text"])):
+                    continue
+                room["preview"] = visible["text"][:300]
+                room["last_at"] = visible["created"]
+                break
+            room["unread"] = any(
+                (visible := self._message(message))["status"] == "done" and not is_pass(visible["text"])
+                for message in self._conn.execute("SELECT * FROM room_messages WHERE room_id=? AND id>? AND member_id IS NOT NULL", (room["id"], room["read_message_id"]))
+            )
+            rooms.append(room)
+        return {"rooms": rooms}
 
     async def _create(self, params):
         request_id = params.get("request_id")
@@ -198,6 +214,19 @@ class RoomsService:
 
     async def _update(self, params):
         room = self._room(params)
+        for key in ("pinned", "hidden", "read"):
+            if key in params and type(params[key]) is not bool:
+                raise invalid_params(f"{key} must be boolean")
+        if params.get("read"):
+            last = self._conn.execute("SELECT COALESCE(MAX(id),0) FROM room_messages WHERE room_id=?", (room["id"],)).fetchone()[0]
+            if "read_through" in params:
+                through = params["read_through"]
+                if type(through) is not int or through < 0 or (through and not self._conn.execute("SELECT 1 FROM room_messages WHERE room_id=? AND id=?", (room["id"], through)).fetchone()):
+                    raise invalid_params("read_through must identify a message in this room")
+                last = max(room["read_message_id"], through)
+            if last == room["read_message_id"] and set(params) <= {"room_id", "read", "read_through"}:
+                return {"room": self._view(room)}
+            room["read_message_id"] = last
         name = params.get("name", room["name"])
         try:
             name = clean_group_name(name)
@@ -212,6 +241,7 @@ class RoomsService:
         responder = self._responder(responder, ids)
         roles = self._roles(params.get("roles", {i:role for i, role in json.loads(room["roles"]).items() if int(i) in ids}), ids)
         with self._conn:
+            self._conn.execute("UPDATE rooms SET pinned=?, hidden=?, read_message_id=? WHERE id=?", (int(params.get("pinned", bool(room["pinned"]))), int(params.get("hidden", bool(room["hidden"]))), room["read_message_id"], room["id"]))
             self._conn.execute("UPDATE rooms SET name = ?, default_responder = ?, membership_state='ready' WHERE id = ?", (name, responder, room["id"]))
             self._conn.execute("UPDATE rooms SET roles=? WHERE id=?", (json.dumps(roles), room['id']))
             if "roles" in params:

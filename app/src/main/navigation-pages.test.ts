@@ -5,12 +5,10 @@ import type { AppContext, Page } from "./types";
 
 test("both rail destinations use their registered production factories", () => {
   const ctx = {} as AppContext;
-  const page = (id: "team" | "automations") => ({ id, el: document.createElement("section"), show() {}, hide() {} }) as Page;
-  const team = page("team"), automations = page("automations");
+  const page = (id: "automations") => ({ id, el: document.createElement("section"), show() {}, hide() {} }) as Page;
+  const automations = page("automations");
   registerNavigationPages({
-    team: received => { expect(received).toBe(ctx); return team; },
     automations: received => { expect(received).toBe(ctx); return automations; },
   });
-  expect(createNavigationPage("team", ctx)).toBe(team);
   expect(createNavigationPage("automations", ctx)).toBe(automations);
 });

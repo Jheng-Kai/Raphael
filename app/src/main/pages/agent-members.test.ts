@@ -441,7 +441,7 @@ test("routine notifications refresh the open panel immediately and keep the rout
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
+  $(".conversation-trigger").click();
   $('[data-tab="routines"]').click();
   const routine: Routine = { id: 9, member_id: 3, title: "Daily review", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
@@ -471,7 +471,7 @@ test("a chat event refreshes routines even when its explicit change notification
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
+  $(".conversation-trigger").click();
   $('[data-tab="routines"]').click();
   const routine = { id: 9, member_id: 3, title: "Created from chat", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
@@ -505,7 +505,7 @@ test("memory notifications refresh the visible own and shared lists with correct
   mount();
   await flush();
   await pick(3);
-  $(".mb-col [data-member][aria-current=\"true\"]").click();
+  $(".conversation-trigger").click();
   $('[data-tab="memory"]').click();
   await flush();
   api.core.mockClear();
@@ -543,7 +543,7 @@ describe("Raphael's thread", () => {
   test("the member column lists the members, each with the last line of its thread from the list", async () => {
     mount();
     await flush();
-    expect([...document.querySelectorAll(".mb-col .mb-row b")].map((b) => b.textContent)).toEqual(["拉斐爾", "日文老師", "行程管家"]);
+    expect([...document.querySelectorAll(".mb-col .mb-list .mb-row b")].map((b) => b.textContent)).toEqual(["拉斐爾", "日文老師", "行程管家"]);
     expect($('.mb-col [data-member="3"] .mb-row-p').textContent).toBe("今天的單字");
     // no thread but the open one is read
     expect(api.agentHistoryList.mock.calls.every(([q]) => q.member_id === undefined)).toBe(true);
@@ -992,14 +992,16 @@ describe("the details panel", () => {
     await vi.runOnlyPendingTimersAsync();
     const panel = $(".mb-det");
     const open = panel.hidden === false;
-    if (!open) $(".mb-col [data-member][aria-current=\"true\"]").click();
+    if (!open) $(".conversation-trigger").click();
     expect($(".mb-det").hidden).toBe(false);
     expect($(".page-agent").dataset.det).toBe("open");
     $('[data-det="close"]').click();
     await vi.advanceTimersByTimeAsync(200);
     expect($(".mb-det").hidden).toBe(true);
     expect($(".page-agent").dataset.det).toBeUndefined();
-    $(".mb-col [data-member][aria-current=\"true\"]").click();
+    await pick(0);
+    expect($(".mb-det").hidden).toBe(true);
+    $(".conversation-trigger").click();
     expect($(".mb-det").hidden).toBe(false);
   });
 
@@ -1007,7 +1009,7 @@ describe("the details panel", () => {
     mount();
     await flush();
     await pick(3);
-    if ($(".mb-det").hidden) $(".mb-col [data-member][aria-current=\"true\"]").click();
+    if ($(".mb-det").hidden) $(".conversation-trigger").click();
     api.membersUpdate.mockResolvedValue({ member: { ...LIST.members[1], name: "嚴格老師" } });
     api.membersList.mockResolvedValue({
       ...structuredClone(LIST),
@@ -1027,8 +1029,8 @@ test("a core without the members: Raphael alone, and the page works as before", 
   api.membersList.mockRejectedValue("mock: members.list");
   mount();
   await flush();
-  expect(document.querySelectorAll(".mb-col .mb-row")).toHaveLength(1);
-  expect($(".mb-col .mb-chief").textContent).toBe("拉斐爾");
+  expect(document.querySelectorAll(".mb-col .mb-list .mb-row")).toHaveLength(1);
+  expect($(".mb-col .mb-chief b").textContent).toBe("拉斐爾");
   expect($(".thread").textContent).toContain("回答 2");
 });
 

@@ -8,7 +8,7 @@ export const journeys = [
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "member-computer", description: "Docker desktop with fake brain, real MCP screenshot, exec, attachment and noVNC; no host desktop actions" },
-  { name: "readable-layout", description: "Inspect readable Team opening, aligned details and compact identity in the real WebView" },
+  { name: "readable-layout", description: "Inspect the shared sidebar, aligned details and compact drawer in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
@@ -29,11 +29,16 @@ async function details(page) {
   await wait(page, "[data-conversation-new]");
 }
 async function chat(page) {
-  await click(page, '#nav [data-go="agent"]');
+  await click(page, '.mb-chief');
   await wait(page, ".composer .cmp-input");
 }
-async function newConversation(context) {
-  await chat(context.page); await details(context.page);
+async function newConversation(context, member = 0) {
+  await chat(context.page);
+  if (member !== 0) {
+    await perform(context.page, { action: "member", id: member });
+    await wait(context.page, ".composer .cmp-input");
+  }
+  await details(context.page);
   const before = new Set((await context.snapshot()).conversations.map(row => row.id));
   await click(context.page, "[data-conversation-new]");
   for (let i = 0; i < 80; i++) {
@@ -308,10 +313,10 @@ export async function drive(name, context) {
     await capture("member-codex-answer");
   } else if (name === "readable-layout") {
     result.layout = [];
-    const inspect = async (label, checks) => {
+    const inspect = async (label, checks, checkContext = {}) => {
       const entry = { label, viewport: page.viewport(), checks: [], failures: [] };
       for (const check of checks) {
-        try { entry.checks.push(await page.evaluate(checkRendered, check)); }
+        try { entry.checks.push(await page.evaluate(checkRendered, check, checkContext)); }
         catch (error) { entry.failures.push(error.message); result.failures.push(error.message); }
       }
       result.layout.push(entry);
@@ -325,17 +330,19 @@ export async function drive(name, context) {
       });
     }
     await page.setViewport({ width: 1280, height: 800 });
-    await click(page, '#nav [data-go="team"]');
-    await wait(page, '.team-group-members .team-member'); await pause(250);
-    await inspect("team-opening-1280", ["team-readable", "team-card-lines", "content-width"]);
-    await click(page, '[data-team="fit"]'); await pause(200);
-    await inspect("team-explicit-fit-1280", ["team-canvas-fit", "content-width"]);
+    await chat(page); await pause(250);
+    await inspect("sidebar-opening-1280", ["sidebar-shell", "content-width"]);
+    await click(page, '[data-group-fold]'); await pause(250);
+    await inspect("sidebar-folded-1280", ["sidebar-shell", "content-width"]);
     await page.setViewport({ width: 1920, height: 1080 });
     await chat(page); await details(page); await pause(250);
     await inspect("details-1920", ["details-alignment", "conversation-header", "details-quick-once", "conversation-scroll-edge"]);
     await click(page, '.mb-det [data-det="close"]');
     await page.setViewport({ width: 720, height: 900 }); await pause(250);
     await inspect("conversation-720", ["conversation-header"]);
+    await click(page, '[data-sidebar="open"]');
+    await inspect("sidebar-drawer-720", ["sidebar-shell"]);
+    await page.keyboard.press("Escape");
     await details(page); await pause(250);
     await inspect("details-sheet-720", ["details-sheet"]);
     const scrim = await page.$('.mb-det-scrim'), bounds = await scrim?.boundingBox();
@@ -347,9 +354,22 @@ export async function drive(name, context) {
     }
     await scrim?.dispose();
     await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
-    await inspect("home-720", ["sidebar-count-alignment", "home-lead-width", "home-overview", "home-redesign"]);
+    await inspect("home-720", ["sidebar-shell", "home-lead-width", "home-overview", "home-redesign"]);
+    const originalMonth = await page.$eval('.ho-calendar', node => node.dataset.month);
+    await click(page, '[data-home-month="1"]');
+    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month !== month, {}, originalMonth);
+    await click(page, '[data-home-month="-1"]');
+    await page.waitForFunction(month => document.querySelector('.ho-calendar')?.dataset.month === month, {}, originalMonth);
+    await perform(page, {action:'scroll',selector:'.ho-calendar'});
+    await inspect("home-month-720", ["home-month"]);
+    await click(page, '[data-home-today]');
+    await page.setViewport({ width: 1920, height: 1080 });
+    await inspect("home-month-full-1920", ["home-month", "home-redesign"]);
     await page.setViewport({ width: 1280, height: 800 });
-    await click(page, '.ho-calendar > .ho-target'); await wait(page, '.au-day-col'); await pause(200);
+    await perform(page, {action:'scroll',selector:'.ho-calendar'});
+    await inspect("home-month-compact-1280", ["home-month"]);
+    await perform(page, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-day-col'}); await pause(200);
+    await click(page, '[data-period="week"]');
     await inspect("calendar-week-1280", ["calendar-shell"]);
     await click(page, '[data-period="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
@@ -363,6 +383,19 @@ export async function drive(name, context) {
     await inspect("long-owner-expanded-1280", ["message-no-inner-scroll", "message-expanded"]);
     await click(page, expand);
     await inspect("long-owner-collapsed-1280", ["message-no-inner-scroll", "message-preview"]);
+    const roster = (await context.rpc("members.list", {})).members;
+    for (const count of [2, 3]) {
+      const ids = [0, ...roster.filter(member => member.id !== 0).slice(0, count - 1).map(member => member.id)];
+      const { room } = await context.rpc("rooms.create", {name:`Native sidebar ${count} faces`, member_ids:ids});
+      await context.rpc("rooms.send", {room_id:room.id, text:"Native sidebar summary.", request_id:`sidebar-summary-${count}`});
+      await perform(page, {action:"room", id:room.id});
+      await pause(1000);
+      const summary = (await context.rpc("rooms.list", {})).rooms.find(item => item.id === room.id);
+      await page.waitForFunction((id, preview) => document.querySelector(`[data-room="${id}"] .mb-row-p`)?.textContent === preview.replace(/\s+/g, ' '), {}, room.id, summary.preview);
+      await inspect(`sidebar-room-${count}-1280`, ["sidebar-room-avatar", "sidebar-room-summary", "sidebar-selection"], {roomId:room.id, latest:{text:summary.preview, created:summary.last_at}});
+      await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
+      await inspect(`sidebar-home-after-room-${count}-1280`, ["sidebar-selection"]);
+    }
   } else if (name === "self-diagnosis") {
     await chat(page);
     await perform(page, { action: "member-column", collapsed: false });
@@ -427,8 +460,8 @@ export async function drive(name, context) {
         await capture(`${locale}-settings-${pane}`);
       }
       await click(page, '.modal-scrim [data-act="close"]');
-      for (const destination of ["home", "agent", "team", "dictation"]) {
-        await click(page, `#nav [data-go="${destination}"]`); await pause(200);
+      for (const destination of ["home", "agent", "dictation"]) {
+        await click(page, destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`); await pause(200);
         const tabs = destination === "dictation" ? ["overview", "history", "dictionary"] : [null];
         for (const tab of tabs) {
           if (tab) { await click(page, `[data-dictation-tab="${tab}"]`); await pause(150); }

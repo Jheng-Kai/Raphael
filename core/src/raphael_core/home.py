@@ -15,6 +15,7 @@ from .protocol import RpcError, invalid_params
 TODAY_LIMIT = 12
 REPORT_LIMIT = 8
 CALENDAR_LIMIT = 24
+CALENDAR_EVENT_LIMIT = 2500
 logger = logging.getLogger(__name__)
 
 
@@ -54,6 +55,10 @@ class Overview(TypedDict):
     today: list[HomeItem]
     reports: list[HomeItem]
     calendar: list[HomeItem]
+    calendar_days: list[str]
+    calendar_events: list[HomeItem]
+    calendar_items: list[HomeItem]
+    calendar_counts: dict[str, int]
     usage: HomeUsage
     dictation: DictationNumbers
     counts: dict[str, int]
@@ -78,7 +83,7 @@ class ConnectedCalendar:
                            and "calendar_list_events" in c["enabled_tools"] for c in status.get("connectors", [])):
                     return []
                 response = await self.connectors.call_google("calendar_list_events", {
-                    "calendarId": "primary", "singleEvents": True, "orderBy": "startTime", "maxResults": CALENDAR_LIMIT,
+                    "calendarId": "primary", "singleEvents": True, "orderBy": "startTime", "maxResults": CALENDAR_EVENT_LIMIT,
                     "timeMin": datetime.fromtimestamp(start_ms / 1000, UTC).isoformat(),
                     "timeMax": datetime.fromtimestamp(end_ms / 1000, UTC).isoformat(),
                 })
@@ -90,7 +95,7 @@ class ConnectedCalendar:
         except (ValueError, TypeError, ZoneInfoNotFoundError):
             zone = UTC
         events = []
-        for event in response.get("items", [])[:CALENDAR_LIMIT]:
+        for event in response.get("items", [])[:CALENDAR_EVENT_LIMIT]:
             if not isinstance(event, dict) or event.get("status") == "cancelled" or not isinstance(event.get("id"), str):
                 continue
             try:
@@ -179,6 +184,19 @@ class HomeOverview:
         now = self.now_ms()
         day = datetime.fromtimestamp(now / 1000, zone).replace(hour=0, minute=0, second=0, microsecond=0)
         start, tomorrow, end = [int((day + timedelta(days=n)).timestamp() * 1000) for n in (0, 1, 7)]
+        first = day.replace(day=1)
+        if "month" in params:
+            try:
+                value = params["month"]
+                if not isinstance(value, str) or len(value) != 7:
+                    raise ValueError
+                first = datetime.strptime(value + "-01", "%Y-%m-%d").replace(tzinfo=zone)
+                if first.strftime("%Y-%m") != value:
+                    raise ValueError
+            except ValueError:
+                raise invalid_params("month must use YYYY-MM") from None
+        grid_start = first - timedelta(days=first.weekday())
+        month_start, month_end = [int((grid_start + timedelta(days=n)).timestamp() * 1000) for n in (0, 42)]
         roster = (await self.router.call("members.list", {k: params[k] for k in ("ui_language",) if k in params}))["members"]
         people = {m["id"]: m for m in roster}
 
@@ -213,6 +231,21 @@ class HomeOverview:
                 today.append(item("question", f"worker:{row['id']}", row["member_id"], row["text"], row["created_at_ms"],
                                   turn=row["turn_id"], conversation=row["conversation_id"]))
         calendar = []
+        calendar_days = set()
+        month_items, month_counts, month_seen = {}, {}, set()
+
+        def month_item(value):
+            key = datetime.fromtimestamp(value["at_ms"] / 1000, zone).date().isoformat()
+            identity = value.get("id", f"event:{value['at_ms']}:{value['title']}")
+            if identity in month_seen:
+                return
+            month_seen.add(identity)
+            month_counts[key] = month_counts.get(key, 0) + 1
+            candidates = month_items.setdefault(key, [])
+            candidates.append(value)
+            candidates.sort(key=lambda item: (item["at_ms"], item.get("id", "")))
+            del candidates[3:]
+            calendar_days.add(key)
         for routine in self.members.store.routines():
             if not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
                 continue
@@ -229,7 +262,23 @@ class HomeOverview:
                     if due < tomorrow:
                         today.append(occurrence)
                 due = next_run(routine.schedule, due, tz=zone)
-        events, allowances = await asyncio.gather(self._events(start, end, refresh), self._allowances(refresh))
+            # The month marks every scheduled day, independently of the bounded seven-day preview.
+            due = (next_run(routine.schedule, month_start - 1, tz=zone)
+                   if routine.schedule.max_runs is None else routine.next_run_ms)
+            monthly_remaining = 42 * 24 if routine.schedule.max_runs is None else remaining
+            for _ in range(min(42 * 24, monthly_remaining)):
+                if due is None or due >= month_end:
+                    break
+                if due >= month_start:
+                    month_item(item("routine", f"{routine.id}:{due}", routine.member_id, routine.title, due, routine=routine.id))
+                due = next_run(routine.schedule, due, tz=zone)
+            for run in self.conn.execute("SELECT COALESCE(scheduled, started) AS at FROM routine_runs WHERE routine_id=? AND COALESCE(scheduled, started)>=? AND COALESCE(scheduled, started)<?", (routine.id, month_start, month_end)):
+                at = run["at"]
+                month_item(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id))
+        events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
+        for event in events:
+            if month_start <= event["at_ms"] < month_end:
+                month_item(event)
         calendar.extend(event for event in events if start <= event["at_ms"] < end)
         today.sort(key=lambda r: (0 if r["kind"] == "question" else 1, r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
@@ -237,7 +286,8 @@ class HomeOverview:
         stats = await self.router.call("stats.summary", {"days": 14})
         spend = status["spend"]
         return {"generated_at_ms": now, "report": status, "today": today[:TODAY_LIMIT], "reports": reports[:REPORT_LIMIT],
-                "calendar": calendar[:CALENDAR_LIMIT], "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
+                "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events, "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
+                "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts,
                 "usage": {"month_usd": spend["month_usd"], "limit_usd": spend["limit_usd"], "daily": spend["daily"][-14:], "allowances": allowances},
                 "dictation": {"words": stats["all"]["words"], "audio_seconds": stats["all"]["audio_seconds"],
                               "time_saved_seconds": stats["time_saved_seconds"], "speed_wpm": stats.get("speed_wpm"),

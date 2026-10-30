@@ -1,7 +1,107 @@
 // Browser assertions run against the real app after the scene's user interactions.
-export function checkRendered(name) {
+export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const selection = () => {
+    const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav .nav[aria-current="page"]')];
+    const home = !document.querySelector('.page-home').hidden;
+    const searching = !!document.querySelector('#nav .mb-find-input')?.value.trim();
+    require(rows.length <= 1 && (rows.length === 1 || searching), `only the current destination is selected, found ${rows.length}`);
+    if (!rows.length) return 'filtered';
+    if (home) require(rows[0].classList.contains('brand'), "Home selects only the brand");
+    else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room], [data-room-team]'), "chat selects only its conversation");
+    return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
+  };
+  if (name === "sidebar-selection") return {check:name, selected:selection()};
+  if (name === "home-hover-content") {
+    const {normal, hovered} = context;
+    require(normal.background === hovered.background, "hover preserves the block background");
+    require(normal.layer === 'rgba(0, 0, 0, 0)' && hovered.layer === normal.layer, "the full-size click layer stays transparent");
+    require(hovered.border === hovered.hoverEdge && hovered.border !== normal.border, "only the edge lights up with the sidebar spend card hover-edge token");
+    const changed = hovered.visual.findIndex((value, index) => JSON.stringify(value) !== JSON.stringify(normal.visual[index]));
+    require(changed < 0, `hover leaves all block geometry, text, icons, charts and inner colours unchanged: ${changed} ${JSON.stringify(normal.visual[changed])} -> ${JSON.stringify(hovered.visual[changed])}`);
+    return {check:name, background:hovered.background, border:hovered.border};
+  }
+  if (name === "sidebar-shell") {
+    selection();
+    const nav = document.getElementById("nav"), column = nav.querySelector(".mb-col"), main = document.getElementById("main");
+    const compact = matchMedia("(max-width: 859px)").matches, open = document.documentElement.hasAttribute("data-sidebar-open");
+    require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
+    require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
+    require(nav.querySelector(".brand") && nav.querySelector('.mb-find-input') && nav.querySelector('[data-col="add"]'), "brand, search and plus are permanent");
+    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join() === "dictation,settings", "footer contains only dictation and account");
+    require(nav.querySelector('.sidebar-account .owner-face') && nav.querySelector('.sidebar-account-name').textContent.trim(), "account has its own face and name");
+    if (compact) {
+      require(visible(document.querySelector('.sidebar-toggle')) && main.getBoundingClientRect().left < 1 && Math.abs(main.getBoundingClientRect().width - innerWidth) < 1, "compact content uses the whole window behind a menu button");
+      require(nav.inert === !open && main.inert === open, "drawer owns focus and closes access to covered content");
+    } else {
+      require(Math.abs(nav.getBoundingClientRect().width - 296) < 1 && main.getBoundingClientRect().left >= 295, "desktop list retains a fixed readable width");
+      require(!visible(document.querySelector('.sidebar-toggle')) && !visible(nav.querySelector('.sidebar-close')), "desktop has no drawer controls");
+    }
+    const chief = column.querySelector('.mb-chief');
+    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('.mb-row-main') && chief.querySelector('.av'), "chief uses the same conversation row");
+    if (chief && (!compact || open)) require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width - 40) < 1, "chief and colleagues share 40px faces");
+    return { check:name, compact, open, folders:column.querySelectorAll('.mb-sec').length };
+  }
+  if (name === "sidebar-folded") {
+    const folder = document.querySelector('.mb-sec[data-group="1"]');
+    require(folder.dataset.open === "false" && folder.querySelector('.mb-gbody').inert, "collapsed folder excludes its rows from focus");
+    require(JSON.parse(localStorage.getItem('raphael.sidebar.folders')).includes(1), "folder choice persists");
+    return {check:name};
+  }
+  if (name === "sidebar-room-avatar") {
+    const avatar = document.querySelector('.au-room-heading > .room-avatar');
+    require(visible(avatar) && avatar.querySelectorAll('.av').length >= 2, "header uses overlapping member faces");
+    require(!document.querySelector('.au-room-heading > svg.i'), "group identity is its members");
+    const painted = element => {
+      for (let el = element; el; el = el.parentElement) {
+        const color = getComputedStyle(el).backgroundColor;
+        if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color;
+      }
+      return 'rgba(0, 0, 0, 0)';
+    };
+    for (const composite of document.querySelectorAll('.room-avatar')) {
+      const box = composite.getBoundingClientRect(), background = painted(composite.parentElement);
+      require(Math.abs(box.width - 40) < 1 && Math.abs(box.height - 40) < 1, "sidebar and header composites share 40px bounds");
+      require(getComputedStyle(composite).overflow === 'visible', "the composite never clips a face");
+      for (const face of composite.children) {
+        const style = getComputedStyle(face), rect = face.getBoundingClientRect();
+        require(rect.width >= 26 && Math.abs(rect.width - rect.height) < 1 && parseFloat(style.borderRadius) >= rect.width / 2, "every face is a complete readable circle");
+        require(style.backgroundColor !== 'rgba(0, 0, 0, 0)', "each face has its own avatar background");
+        require(style.borderTopWidth === '2px' && style.borderTopColor === background, `2px face rings match their row or header background: ${style.borderTopColor} vs ${background}`);
+        require(rect.left >= box.left - 1 && rect.right <= box.right + 1 && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1, "whole faces fit inside the composite bounds");
+      }
+    }
+    return {check:name, faces:avatar.dataset.faces};
+  }
+  if (name === "sidebar-room-summary") {
+    const roomId = context.roomId ?? 1;
+    const row = document.querySelector(`.au-room-row [data-room="${roomId}"]`);
+    const last = context.latest ?? [...window.__look.data.messages].reverse().find(message => message.room_id === roomId && message.status === 'done' && message.text?.trim() && message.text.trim() !== '(pass)');
+    require(last && row?.querySelector('.mb-row-p')?.textContent === last.text.replace(/\s+/g, ' '), "a room with messages shows its latest visible message");
+    const time = row.querySelector('time');
+    require(visible(time) && time.dateTime === new Date(last.created).toISOString(), "that room's own row shows its latest message time");
+    return {check:name, preview:row.querySelector('.mb-row-p').textContent, datetime:time.dateTime};
+  }
+  if (name === "sidebar-unread") {
+    require(document.querySelector('.mb-col .mb-dot.is-unread') && document.querySelector('.mb-col time'), "new messages retain unread and time");
+    require(document.querySelector('.au-room-row [data-room="1"] .mb-dot.is-unread'), "the unread room has its own unread marker");
+    require(document.querySelector('.mb-col .room-avatar > .av'), "room list uses actual member faces");
+    return {check:name};
+  }
+  if (name === "owner-avatar") {
+    require(document.querySelector('[data-owner-photo] .owner-face'), "account exposes the shared photo picker");
+    return {check:name};
+  }
+  if (name === "owner-avatar-saved") {
+    const photo = window.__look.data.settings.owner_photo;
+    require(photo?.startsWith('data:image/webp;base64,'), "the cropped owner photo is saved as bounded WebP");
+    require(window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'owner_photo'), "saving crosses the existing settings boundary");
+    const faces = [...document.querySelectorAll('.sidebar-account .owner-face img, .me > .owner-face img')];
+    require(faces.length >= 2 && faces.every(face => face.getAttribute('src') === photo), "footer and existing outgoing messages share the saved face");
+    require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
+    return {check:name, faces:faces.length};
+  }
   if (name === "desktop-frame") {
     const doc = document.querySelector('.desktop-viewer iframe')?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
@@ -72,18 +172,7 @@ export function checkRendered(name) {
     require(!window.__look.calls.some(call => call.method === "memory.update"), "opening and reading never applies the pending change");
     return { check: name };
   }
-  if (name === "sidebar-count-alignment") {
-    const count = document.querySelector('.side .nav-count'), row = count?.closest('.nav');
-    require(visible(count), "the connected-app count is visible");
-    const rail = document.documentElement.dataset.rail === 'true';
-    if (!rail) {
-      const badge = count.getBoundingClientRect(), label = row.querySelector('.nav-t').getBoundingClientRect();
-      require(getComputedStyle(count).position !== 'absolute' && badge.left >= label.right - 1 && Math.abs(badge.top + badge.height / 2 - label.top - label.height / 2) < 1, "expanded sidebar count follows and centres with its label");
-      const peer = document.querySelector('.side [data-go="settings"] .nav-t');
-      require(Math.abs(label.left - peer.getBoundingClientRect().left) < 1, "counted sidebar row shares the other labels' left inset");
-    } else require(getComputedStyle(count).position === 'absolute', "icon rail keeps its icon badge");
-    return { check: name, rail };
-  }
+
   if (name === "message-no-inner-scroll") {
     for (const node of document.querySelectorAll('.chat-message, .chat-message .bubble, .chat-message .ans, .message-text, .message-code pre')) {
       if (!visible(node)) continue;
@@ -135,28 +224,6 @@ export function checkRendered(name) {
     if (innerWidth === 1280 && innerHeight === 800) require([...document.querySelectorAll('.ho-stat')].every(card => card.getBoundingClientRect().bottom <= innerHeight), "all three stats and charts fit the default first screen");
     return { check: name, width: copy.getBoundingClientRect().width };
   }
-  if (name === "team-card-lines") {
-    const cards = [...document.querySelectorAll('.team-member')];
-    for (const card of cards) {
-      const action = card.querySelector('[data-team="chat"]');
-      require(action.classList.contains('icon') && !action.textContent.trim() && action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "team chat is a named icon with a tooltip");
-      const label = card.querySelector('.team-model > span:last-child'), source = label.querySelector('.team-model-source');
-      require(source && !source.textContent.trim().startsWith('·'), "model source has no leading separator");
-      for (const line of [label.firstElementChild, source]) {
-        require(visible(line), "model name and source each have a line");
-        const range = document.createRange(); range.selectNodeContents(line);
-        const rects = [...range.getClientRects()];
-        require(rects.length === 1 && rects[0].width <= line.getBoundingClientRect().width + 1, `model line never wraps or clips: ${line.textContent}`);
-      }
-      const box = card.getBoundingClientRect();
-      for (const peer of cards.filter(node => node.parentElement === card.parentElement && Math.abs(node.getBoundingClientRect().top - box.top) < 1)) {
-        require(Math.abs(peer.querySelector('footer').getBoundingClientRect().top - card.querySelector('footer').getBoundingClientRect().top) < 1, "cards in one row align their dividers and actions");
-      }
-    }
-    const chief = document.querySelector('.team-chief').getBoundingClientRect(), groups = document.querySelector('.team-groups').getBoundingClientRect();
-    require(Math.abs(chief.left - groups.left) < 1 && Math.abs(chief.right - groups.right) < 1, "chief and groups share one capped column at every zoom");
-    return { check: name, cards: cards.length };
-  }
   if (name === "onboarding-abilities-hero") {
     const title = document.querySelector('.ob-col h2');
     require(parseFloat(getComputedStyle(title).fontSize) >= 40, "abilities use the welcome hero headline size");
@@ -190,23 +257,6 @@ export function checkRendered(name) {
     require(document.querySelector('.mb-det [data-member-brain] .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
     return { check: name, model: saved[0].params.model };
-  }
-  if (name === "team-column-edges") {
-    const boxes = [...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(node => node.getBoundingClientRect());
-    require(boxes.length > 1 && boxes.every(box => Math.abs(box.left - boxes[0].left) < 1 && Math.abs(box.right - boxes[0].right) < 1), "Fit aligns the chief and every group on both column edges");
-    return { check: name, groups: boxes.length - 1 };
-  }
-  if (name === "team-model-readable") {
-    const labels = [...document.querySelectorAll('.team-model > span:last-child')];
-    require(labels.length > 0, "team model labels are present");
-    for (const label of labels) {
-      const range = document.createRange(); range.selectNodeContents(label);
-      const box = label.getBoundingClientRect();
-      require(label.scrollWidth <= label.clientWidth + 1 && label.scrollHeight <= label.clientHeight + 1 &&
-        [...range.getClientRects()].every(line => line.left >= box.left - 1 && line.right <= box.right + 1 && line.bottom <= box.bottom + 1),
-      `model and source are fully readable: ${label.textContent}`);
-    }
-    return { check: name, labels: labels.length };
   }
   if (name === "details-sheet") {
     const panel = document.querySelector('.mb-det:not([hidden])');
@@ -246,14 +296,6 @@ export function checkRendered(name) {
     require(!!action.getAttribute('aria-label') && action.title === action.getAttribute('aria-label'), "icon actions retain a localized name and tooltip");
     if (action.dataset.runAct === 'export' && document.documentElement.lang === 'zh-TW') require(document.querySelector('.run-tiles').textContent.includes('權杖數') && !document.querySelector('.run-tiles').textContent.includes('Tokens'), "usage headings follow the Traditional Chinese glossary");
     return { check: name, label: action.getAttribute('aria-label') };
-  }
-  if (name === "team-readable") {
-    const board=document.querySelector('.team-board'), matrix=new DOMMatrix(getComputedStyle(board).transform);
-    require(Math.abs(matrix.a-1)<0.001,"initial Team view uses 100 percent; Fit is explicit");
-    const chief=board.querySelector('.team-chief .team-member').getBoundingClientRect();
-    const member=board.querySelector('.team-group-members .team-member').getBoundingClientRect();
-    require(Math.abs(chief.width-member.width)<1 && Math.abs(chief.left-member.left)<1,"chief shares the member-card track and inset");
-    return {check:name,zoom:matrix.a,cardWidth:chief.width};
   }
   if (name === "details-alignment") {
     const panel=document.querySelector('.mb-det:not([hidden])');
@@ -300,6 +342,7 @@ export function checkRendered(name) {
     return {check:name};
   }
   if (name === "home-redesign") {
+    selection();
     const page=document.querySelector('.page-home'), lead=page.querySelector('.ho-hero'), stats=[...page.querySelectorAll('.ho-stat')];
     require(!!lead.querySelector('h1') && getComputedStyle(lead).backgroundColor === 'rgba(0, 0, 0, 0)', "the report is the page headline without a card");
     require(page.querySelectorAll('.ho-card').length === 4 && !!page.querySelector('.ho-inbox'), "four equal blocks hold attention, spend, allowances and dictation");
@@ -311,8 +354,12 @@ export function checkRendered(name) {
     const cards = [...page.querySelectorAll('.ho-card')].map(card => card.getBoundingClientRect());
     require(cards.every(box => Math.abs(box.width - cards[0].width) < 1 && Math.abs(box.height - cards[0].height) < 1), "all four blocks share their dimensions regardless of data");
     require(Math.abs(cards[0].top - cards[1].top) < 1 && Math.abs(cards[2].top - cards[3].top) < 1 && cards[2].top > cards[0].bottom, "four blocks retain their two-by-two positions");
-    require(page.querySelectorAll('.ho-day').length === 7 && page.querySelectorAll('.ho-day[aria-current="date"]').length === 1, "a compact seven-day calendar marks today");
+    require(page.querySelectorAll('.ho-day').length === 42 && page.querySelectorAll('.ho-day[aria-current="date"]').length === 1, "a six-week month calendar marks today");
     require(page.querySelector('.ho-calendar').getBoundingClientRect().top >= cards[3].bottom, "the mini calendar stays below the four blocks");
+    require(page.querySelectorAll('.ho-weekday').length === 7, "the month has a weekday header");
+    require(page.querySelector('.ho-calendar').getBoundingClientRect().height >= 280, "the month fills a balanced area below the summaries");
+    require(emblem.width >= 110 && parseFloat(getComputedStyle(lead.querySelector('h1')).fontSize) >= 30, "the emblem and report read as the page hero");
+    require(!page.querySelector('.ho-week'), "the former week strip is removed");
     const blocks = [...page.querySelectorAll('.ho-card, .ho-calendar')];
     for (const block of blocks) {
       const target = block.querySelector(':scope > .ho-target');
@@ -324,7 +371,7 @@ export function checkRendered(name) {
         const px = box.x + box.width * x, py = box.y + box.height * y;
         if (py >= innerHeight || py < 0) continue;
         const at = document.elementFromPoint(px, py);
-        require(at === target || !!at?.closest('[data-home-item]'), "every sampled point opens the block or its own inner action");
+        require(at === target || !!at?.closest('[data-home-item], [data-home-date], [data-home-month], [data-home-select], [data-home-event], [data-home-today]'), `every sampled point opens the block or its own inner action: ${block.className} ${x},${y} hits ${at?.className}`);
       }
     }
     return {check:name,stats:boxes.map(b=>({top:b.top,bottom:b.bottom}))};
@@ -338,7 +385,7 @@ export function checkRendered(name) {
     return {check:name,columns:keys.left>cards[1].right?2:1};
   }
   if(name === "thread-measure") {
-    const composer=[...document.querySelectorAll('.page-agent:not(.team-page) .composer')].find(el=>visible(el)&&!el.closest('[hidden]')), cap=parseFloat(getComputedStyle(composer).maxWidth);
+    const composer=[...document.querySelectorAll('.page-agent .composer')].find(el=>visible(el)&&!el.closest('[hidden]')), cap=parseFloat(getComputedStyle(composer).maxWidth);
     require(cap===896,"thread and composer use the shared 28-space 896px measure");
     require(composer.getBoundingClientRect().width<=cap+1,"composer respects its measure");
     if(innerWidth<1440) require(!document.querySelector('.page-agent[data-det="open"]'),"details start collapsed before they crowd the thread");
@@ -367,12 +414,6 @@ export function checkRendered(name) {
       require(!close || box.right<=close.left || box.left>=close.right || box.bottom<=close.top || box.top>=close.bottom,"settings header actions clear the modal Close button");
     }
     return {check:name,right,rows:rows.length};
-  }
-  if(name === "team-alignment") {
-    const nodes=[...document.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(el=>el.getBoundingClientRect());
-    require(nodes.length>1 && nodes.every(b=>Math.abs(b.left-nodes[0].left)<1 && Math.abs(b.right-nodes[0].right)<1),"team chief and groups share both column edges");
-    require(new DOMMatrix(getComputedStyle(document.querySelector('.team-board')).transform).a >= 1,"opening preserves readable member type; overflow is pannable");
-    return {check:name,groups:nodes.length};
   }
   if(name === "welcome-alignment") {
     const col=document.querySelector('.ob-col').getBoundingClientRect(), foot=document.querySelector('.ob-foot').getBoundingClientRect();
@@ -466,18 +507,16 @@ export function checkRendered(name) {
     const limits = { word: 10 * space, card: 12 * space, reading: 20 * space, thread: 28 * space, page: 3 * 12 * space + 2 * gap + 2 * space, workspace: 55 * space };
     const groups = [
       ['word', '.wrow'],
-      ['card', '.ho-card:not(.page-home .ho-card), .team-member, .cs-card, .run-tile, .au-occurrence, .icard, .keys-card:not(.page-overview .keys-card), .mb-panel-pages, .mb-det .mb-rt, .mb-det .mem'],
+      ['card', '.ho-card:not(.page-home .ho-card), .cs-card, .run-tile, .au-occurrence, .icard, .keys-card:not(.page-overview .keys-card), .mb-panel-pages, .mb-det .mb-rt, .mb-det .mem'],
       ['reading', '.ho-row, .ho-slot, .card:not(.activity):not(.keys-card), .row, .list, .slist, .cs-list, .hist-top, .hrow, .cs-item, .mb-row, .mb-rt, .conversation-row, .ask-card, .bgq-card'],
       ['thread', '.ra-col, .composer'],
       ['page', '.page:not(.page-agent), .modal, .ho-hero, .page-overview .keys-card'],
-      ['workspace', '.team-board, .au-page'],
+      ['workspace', '.au-page'],
     ];
     const measurements = [];
     for (const [kind, selector] of groups) for (const element of document.querySelectorAll(selector)) {
       if (!visible(element) || element.closest('[hidden]')) continue;
       let scale = 1;
-      const board = element.closest('.team-board');
-      if (board) scale = new DOMMatrix(getComputedStyle(board).transform).a;
       const width = element.getBoundingClientRect().width / scale;
       measurements.push({ kind, class: element.className, width: Math.round(width * 100) / 100, max: limits[kind] });
     }
@@ -503,20 +542,6 @@ export function checkRendered(name) {
     }
     return { check: name, limits, measurements, ...(home ? { home } : {}) };
   }
-  if (name.startsWith("team-crisp-")) {
-    const board = document.querySelector('.team-board');
-    require(visible(board), "the real team board is visible");
-    const style = getComputedStyle(board), matrix = new DOMMatrix(style.transform);
-    const zoom = Number(name.split('-').at(-1));
-    require(Math.abs(matrix.a * 100 - zoom) < .01, `the board is at ${zoom}%`);
-    require(style.willChange === "auto", `the resting board releases its raster layer (${style.willChange})`);
-    require(Number.isInteger(matrix.e) && Number.isInteger(matrix.f), "resting pan uses whole pixels");
-    if (zoom === 150) {
-      const card = document.querySelector('.team-group-members .team-member').getBoundingClientRect(), view = board.parentElement.getBoundingClientRect();
-      require(card.left >= view.left - 1 && card.top >= view.top - 1, "toolbar zoom keeps the first group content visible instead of showing an empty cropped panel");
-    }
-    return { check: name, zoom, willChange: style.willChange, pan: [matrix.e, matrix.f] };
-  }
   if (name.startsWith("locale-")) return (async () => {
     const { catalogs, getLocale } = await import('/src/main/i18n/index.ts');
     const locale = name.slice(7);
@@ -533,7 +558,7 @@ export function checkRendered(name) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node; (node = walker.nextNode());) {
       const element = node.parentElement, text = node.textContent.trim();
-      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .team-member-head b')) continue;
+      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv')) continue;
       if (user.has(text)) continue;
       const interfaceText = authored.reduce((copy, value) => copy.split(value).join(""), text);
       if (foreign.has(text) || (locale === "en" && /[\u3400-\u9fff\u3040-\u30ff]/.test(interfaceText))) stale.push(text.slice(0, 90));
@@ -1148,6 +1173,35 @@ export function checkRendered(name) {
       poll();
     });
   }
+  if (name === "home-month") {
+    const calendar = document.querySelector('.ho-calendar'), grid = calendar.querySelector('.ho-month');
+    require(calendar.scrollHeight <= calendar.clientHeight + 1 && grid.scrollHeight <= grid.clientHeight + 1, 'the full month has no inner scroll or clipped week');
+    require(grid.querySelectorAll('.ho-day').length === 42 && grid.querySelectorAll('.ho-weekday').length === 7, 'the month has six weeks and seven weekday initials');
+    require(calendar.querySelectorAll('.ho-month-actions .btn.icon').length === 2, 'previous and next month are real icon buttons');
+    require(!document.querySelector('.au-page:not([hidden])'), 'changing month retains Home');
+    const adjacent = grid.querySelector('.ho-other-month .ho-date-btn');
+    require(getComputedStyle(adjacent).color !== getComputedStyle(grid.querySelector('.ho-day:not(.ho-other-month) .ho-date-btn')).color, 'neighbouring month days are dimmed');
+    const expanded = getComputedStyle(calendar).getPropertyValue('--home-calendar-expanded').trim() === '1';
+    const frame = calendar.parentElement.getBoundingClientRect();
+    require(expanded === (frame.width >= 900 && frame.height >= 460), 'the available container width and height choose the mode automatically');
+    const bounds = calendar.getBoundingClientRect();
+    const controls = [...calendar.querySelectorAll(':scope > header, [data-home-month], [data-home-today]')].map(node => {
+      const box = node.getBoundingClientRect(); return [box.x - bounds.x, box.y - bounds.y, box.width, box.height];
+    });
+    const prior = window.__homeMonthBounds;
+    if (prior?.width === frame.width && prior.height === frame.height) require(JSON.stringify(controls) === JSON.stringify(prior.controls), 'month changes preserve the header and control positions');
+    window.__homeMonthBounds = {width:frame.width,height:frame.height,controls};
+    const agenda = calendar.querySelector('.ho-agenda');
+    require(expanded ? !visible(agenda) : visible(agenda), 'only compact mode shows the selected-day list');
+    if (!expanded && !agenda.querySelector('.ho-agenda-row')) require(agenda.querySelectorAll('.ho-day-empty').length === 1 && agenda.querySelector('.ho-day-empty').textContent.trim(), 'an empty selected day has one quiet line');
+    require(calendar.querySelectorAll('[data-home-today]').length === 1, 'Today keeps its fixed place beside both arrows');
+    if (expanded) require([...calendar.querySelectorAll('.ho-day')].every(day => [...day.querySelectorAll('.ho-event-chip')].filter(visible).length <= (frame.height >= 600 ? 3 : 2)), 'each full-month day shows only the available two or three chips');
+    return {check:name, month:calendar.dataset.month, expanded, width:frame.width, height:frame.height};
+  }
+  if (name === "home-calendar-day") {
+    require(document.querySelectorAll('.au-day-col').length === 1 && !!document.querySelector('.au-day-col[data-day="2026-10-30"]'), "the month opens the exact selected day in the full calendar");
+    return {check:name};
+  }
   if (name === "home-overview") {
     for (const panel of document.querySelectorAll('.page-home .ho-card, .page-home .ho-card *')) {
       const style = getComputedStyle(panel);
@@ -1246,103 +1300,6 @@ export function checkRendered(name) {
       require(window.__look.calls.some(call => call.command === 'schedule_keep_awake_set' && call.enabled), "keep-awake reaches the native boundary");
     }
     return { check: name, popover: !!popover, weekdays: weekdays.map(day => day.textContent) };
-  }
-  if (name === "team-content-size") {
-    const groups = [...document.querySelectorAll('.team-group:not([hidden])')];
-    const panels = groups.map(group => {
-      const style = getComputedStyle(group), px = key => parseFloat(style[key]) || 0;
-      const content = [...group.children].reduce((sum, child) => {
-        const childStyle = getComputedStyle(child);
-        return sum + child.offsetHeight + (parseFloat(childStyle.marginTop) || 0) + (parseFloat(childStyle.marginBottom) || 0);
-      }, 0);
-      const expected = content + px('paddingTop') + px('paddingBottom') + px('borderTopWidth') + px('borderBottomWidth');
-      require(group.offsetHeight <= expected + 1, 'R-UI-01: a group must not stretch beyond its own content and padding');
-      return { id: group.dataset.teamGroup, height: group.offsetHeight, expected };
-    });
-    for (const card of document.querySelectorAll('.team-member')) {
-      require(!/cli:|\?effort=/.test(card.textContent + (card.querySelector('.team-model')?.title ?? '')), 'cards show model names and sources, never raw CLI refs');
-    }
-    return { check: name, panels };
-  }
-  if (name === "team-member-columns") {
-    const panels = [...document.querySelectorAll('.team-group-members')].map(members => {
-      const cards = [...members.children], group = members.parentElement;
-      const columns = getComputedStyle(members).gridTemplateColumns.split(/\s+/).filter(Boolean).length;
-      const width = parseFloat(getComputedStyle(group).getPropertyValue('--team-card-width'));
-      const gap = parseFloat(getComputedStyle(members).columnGap) || 0;
-      const available = Math.max(1, Math.floor((members.clientWidth + gap + 1) / (width + gap)));
-      require(columns === Math.min(3, available), 'team cards wrap into all available columns, at most three');
-      if (cards.length === 1) require(cards[0].offsetWidth <= 384, 'a one-member group retains empty tracks and a compact card');
-      if (cards.length) {
-        const top = cards[0].offsetTop, firstRow = cards.filter(card => Math.abs(card.offsetTop - top) <= 1);
-        require(firstRow.length === Math.min(columns, cards.length), 'the group fills its first row before wrapping');
-      }
-      return { id: group.dataset.teamGroup, cards: cards.length, columns, width: members.clientWidth };
-    });
-    const chief = document.querySelector('.team-chief .team-member-head > div > span');
-    if (chief) require(chief.textContent === '幕僚長', 'the current chief uses the same role on the board and in the column');
-    return { check: name, panels };
-  }
-  if (name === "team-chief-visible" || name === "team-chief-reachable") {
-    const view = document.querySelector('.team-board-scroll').getBoundingClientRect();
-    const chief = document.querySelector('.team-chief .team-member').getBoundingClientRect();
-    require(chief.left >= view.left - 1 && (name === "team-chief-reachable" || chief.right <= view.right + 1) && chief.top >= view.top - 1 && chief.bottom <= view.bottom + 1, 'the chief stays visible; user zoom may extend its right edge for panning');
-    return { check: name, chief: chief.toJSON(), canvas: view.toJSON() };
-  }
-  if (name === "team-no-overlap") {
-    const nodes = [...document.querySelectorAll('.team-group:not([hidden]), .team-chief .team-member')];
-    const boxes = nodes.map(node => ({ id: node.dataset.teamGroup ?? 'chief', box: node.getBoundingClientRect() }));
-    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i], b = boxes[j];
-      require(Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left) <= 0.5 || Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top) <= 0.5, `team panels ${a.id} and ${b.id} must not overlap`);
-    }
-    return { check: name, panels: boxes.map(({ id, box }) => ({ id, x: box.x, y: box.y, width: box.width, height: box.height })) };
-  }
-  if (name.startsWith("team-canvas-")) {
-    const viewport = document.querySelector('.team-board-scroll'), board = document.querySelector('.team-board');
-    const view = viewport.getBoundingClientRect();
-    const matrix = new DOMMatrix(getComputedStyle(board).transform);
-    if (name === 'team-canvas-open') require(Math.abs(matrix.a-1)<0.001, 'opening keeps the readable 100 percent view; only explicit Fit scales to fit');
-    if (name === 'team-canvas-reopened') require(Math.abs(matrix.a - 1.1 * Math.exp(0.08)) < 0.001, 'reopening the board preserves the zoom chosen in this session');
-    if (name === 'team-canvas-panned') require(Math.abs(matrix.e - window.__look.teamPan.x - 60) <= 1 && Math.abs(matrix.f - window.__look.teamPan.y + 40) <= 1 && !document.querySelector('#app-popover'), 'right drag moves the canvas without a menu');
-    if (name === 'team-canvas-rearranged') {
-      const positions = JSON.parse(localStorage.getItem('raphael.team.positions'));
-      require(Number.isFinite(positions['1']?.x) && getComputedStyle(document.querySelector('[data-team-group="1"]')).transform !== 'none', 'the moved group has a saved device-local position');
-    }
-    if (name === 'team-canvas-drop') {
-      const target = document.querySelector('.team-group.is-drop-target');
-      require(target.classList.contains('is-drop-target') && visible(target.querySelector('.team-drop-preview')), 'the destination lights up and shows the arriving member');
-      require(getComputedStyle(target).outlineStyle === 'solid', 'the destination has a visible outline');
-      const preview = target.querySelector('.team-drop-preview').getBoundingClientRect();
-      require(preview.top >= view.top && preview.bottom <= view.bottom && preview.left >= view.left && preview.right <= view.right, 'the arriving card is visible inside the canvas');
-    }
-    if (name === 'team-canvas-fit') {
-      const boxes = [...board.querySelectorAll('.team-chief, .team-group:not([hidden])')].map(node => node.getBoundingClientRect());
-      require(boxes.every(box => box.left >= view.left - 1 && box.right <= view.right + 1 && box.top >= view.top - 1 && box.bottom <= view.bottom + 1) || matrix.a <= 0.501, 'fit keeps the team inside the canvas unless it exceeds the minimum zoom');
-    }
-    const controls = document.querySelector('.team-zoom').getBoundingClientRect(), composer = document.querySelector('.team-composer').getBoundingClientRect();
-    require(controls.left >= 0 && controls.right <= innerWidth && controls.bottom <= innerHeight && (composer.right <= controls.left + 1 || composer.bottom <= controls.top + 1), 'zoom and composer remain reachable without overlap');
-    return { check: name, zoom: matrix.a, x: matrix.e, y: matrix.f };
-  }
-  if (name === "team-board-space") {
-    const workspace = document.querySelector('.team-board-scroll').getBoundingClientRect();
-    const groups = [...document.querySelectorAll('.team-group:not([hidden])')].map(group => group.getBoundingClientRect());
-    if (innerWidth < 1400 || !groups.length) return { check: name, wide: false };
-    const left = Math.min(...groups.map(box => box.left)), right = Math.max(...groups.map(box => box.right));
-    const widthShare = (right - left) / workspace.width;
-    require(groups.every(box => Math.abs(box.left-left)<1 && Math.abs(box.right-right)<1), "team groups share one aligned column");
-    require(groups.every(box => box.left >= workspace.left && box.right <= workspace.right), "R-UI-01: the default board's columns fit its workspace width");
-    return { check: name, wide: true, widthShare };
-  }
-  if (name === "team-header") {
-    const page = document.querySelector('.team-page'), header = page.querySelector('.page-head');
-    const title = header?.querySelector('h1'), add = header?.querySelector('[data-team="new"]');
-    require(visible(title) && visible(add), "team title and creation action are visible");
-    const pageBox = page.getBoundingClientRect(), titleBox = title.getBoundingClientRect(), addBox = add.getBoundingClientRect();
-    require(titleBox.left - pageBox.left >= 24 && pageBox.right - addBox.right >= 24, "team header uses the page's horizontal padding");
-    require(Math.abs((titleBox.top + titleBox.bottom) / 2 - (addBox.top + addBox.bottom) / 2) <= 2 && titleBox.right < addBox.left, "title and Add share a header row");
-    require(title.textContent === '團隊', "the member count is not glued to the title");
-    return { check: name, padding: titleBox.left - pageBox.left };
   }
   if (name === "admin-approval" || name === "admin-approval-long" || name === "admin-approval-batch") {
     const card = [...document.querySelectorAll('.ask-card')].find(visible);
@@ -1459,27 +1416,20 @@ export function checkRendered(name) {
     return { check: name, width: list.clientWidth, scrollWidth: list.scrollWidth };
   }
   if (name === "apps-count") {
-    // One count from one inventory: the sidebar's badge, the number beside 已連結, the rows under it and the roster every model is given.
-    const badge = document.querySelector("#nav .nav-apps .nav-count"), tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
-    require(visible(badge) && visible(tab), "the sidebar's badge and the tab's number are visible");
+    const tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
+    require(visible(tab) && !document.querySelector('.nav-apps'), "Settings alone contains the connected app count");
     const rows = document.querySelectorAll('.modal-scrim .cs-body [data-stagger="installed"] > .cs-item').length;
-    return window.__TAURI_INTERNALS__.invoke("core_call", { method: "members.list", params: {} }).then(({ team_context: roster }) => {
-      require(badge.textContent.trim() === tab.textContent.trim(), `the sidebar says ${badge.textContent} and the tab ${tab.textContent}`);
-      require(String(roster.connected) === badge.textContent.trim(), `the roster says ${roster.connected} and the sidebar ${badge.textContent}`);
-      require(String(rows) === badge.textContent.trim(), `${rows} rows are listed as connected, the count is ${badge.textContent}`);
-      require(roster.apps.filter(app => app.connected).length === roster.connected, "the roster counts the apps it lists as connected");
-      return { check: name, count: roster.connected, apps: roster.apps.length };
+    return window.__TAURI_INTERNALS__.invoke("core_call", {method:"members.list",params:{}}).then(({team_context:roster})=>{
+      require(String(roster.connected) === tab.textContent.trim() && rows === roster.connected, "Settings count agrees with the shared roster and installed rows");
+      return {check:name,count:roster.connected,apps:roster.apps.length};
     });
   }
   if (name === "apps-unreadable") {
-    // What cannot be known is 「—」 wherever the number would be, never a guess: the sidebar, the tab, and the roster every model is given.
-    const entry = document.querySelector("#nav .nav-apps"), badge = entry?.querySelector(".nav-count"), tab = document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
-    require(visible(badge) && visible(tab), "the sidebar's badge and the tab's number are visible");
-    require(badge.textContent.trim() === "—" && tab.textContent.trim() === "—", `the sidebar says "${badge.textContent}" and the tab "${tab.textContent}"`);
-    require(badge.hasAttribute("data-unknown") && !/\d/.test(entry.getAttribute("aria-label")), "the entry is drawn and named as one whose number is not known");
-    return window.__TAURI_INTERNALS__.invoke("core_call", { method: "members.list", params: {} }).then(({ team_context: roster }) => {
+    const tab=document.querySelector('.modal-scrim [data-conn="tab"][data-id="installed"] .n');
+    require(visible(tab) && tab.textContent.trim() === "—", "Settings states an unknown count without inventing a number");
+    return window.__TAURI_INTERNALS__.invoke("core_call",{method:"members.list",params:{}}).then(({team_context:roster})=>{
       require(roster.connected === null && roster.inventory_state !== "complete", "the roster states no number either");
-      return { check: name, state: roster.inventory_state };
+      return {check:name,state:roster.inventory_state};
     });
   }
   if (name === "connections-dialog-actions") {
@@ -1604,36 +1554,16 @@ export function checkRendered(name) {
     plainWords();
     const column = document.querySelector(".mb-col");
     if (visible(column)) {
-      const rows = [...column.querySelectorAll(".mb-row")], first = rows[0];
+      const rows = [...column.querySelectorAll(".mb-row[data-member]")], first = rows[0];
       require(first.dataset.member === "0", "Raphael is first");
       if (!column.classList.contains("is-collapsed")) {
-        require(first.querySelector(".av").getBoundingClientRect().width >= 64, "Raphael retains his original large emblem");
+        require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - 40) < 1, "the chief shares the conversation avatar size");
         for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 40) < 1, "other members retain 40px faces");
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };
   }
-  if (name === "member-column") {
-    const column = document.querySelector('.mb-col'), toggle = column.querySelector('[data-col="collapse"]');
-    const collapsed = column.classList.contains('is-collapsed');
-    require(visible(column) && visible(toggle), "member column and toggle are visible at every width");
-    require(toggle.getAttribute('aria-expanded') === String(!collapsed), "toggle reflects the column state");
-    const rows = [...column.querySelectorAll('[data-member]')];
-    require(rows[0].dataset.member === String(window.__look.data.primaryId), "the primary occupies the top slot");
-    require(!column.querySelector(".mb-star"), "position identifies the primary without a star");
-    require(rows.filter(row => row.getAttribute('aria-current') === 'true').length === 1, "one active member is marked");
-    if (collapsed) {
-      require(Math.abs(column.getBoundingClientRect().width - 56) < 1, "collapsed column is 56px wide");
-      require(localStorage.getItem('raphael.members.collapsed') === 'true', "collapsed choice is remembered");
-      require(!visible(column.querySelector('.mb-chief b')), "only faces remain in the strip");
-      for (const row of rows) require(row.dataset.tooltip === row.getAttribute('aria-label') && row.dataset.tooltip, "faces have localized name tooltips");
-      require(visible(column.querySelector('.mb-dot.is-wait')), "waiting dot survives collapse");
-    } else {
-      require(rows[0].querySelector('.av').getBoundingClientRect().width >= 64, "the expanded top slot retains its large face");
-      require(!rows[0].querySelector('.mb-pin, time, .mb-row-p'), "the top slot shows its face and name without row metadata");
-    }
-    return { check: name, collapsed, width: column.getBoundingClientRect().width, members: rows.length };
-  }
+  if (name === "member-column") return checkRendered("sidebar-shell");
   // Primary is a display position; the room's coordinator remains identity 0.
   if (name === "primary-menu") {
     const menu = document.querySelector('#app-popover');
@@ -1688,16 +1618,6 @@ export function checkRendered(name) {
       require(sets.length === 0 && data.primaryId === 1, "nothing is set before 設為主要 is pressed");
       return { check: name, choices: choices.length, picked: picked[0].dataset.id };
     }
-    if (name === "primary-board") {
-      const top = document.querySelector('.team-chief .team-member'), original = data.members.find(member => member.id === data.primaryId);
-      require(Number(top.dataset.teamCard) === data.primaryId, "the primary occupies the board's top card");
-      require([...document.querySelectorAll(".team-member-head > div > span")].filter(role => role.textContent === "幕僚長").length === 1, "only the current chief is labeled chief of staff");
-      const group = document.querySelector(`[data-team-group="${original.group_id ?? 'none'}"]`);
-      require(group.querySelector('[data-team-card="0"] .av') && !group.querySelector('[data-team-card="0"] .mb-av'), "Raphael takes the primary's original group slot with his emblem");
-      require(document.querySelectorAll('[data-team-card="0"]').length === 1 && !document.querySelector('[data-team="member-menu"][data-member="0"]'), "Raphael remains one protected identity");
-      require(sets.length === 0, "displaying the primary changes no preference");
-      return { check: name, primary: data.primaryId, group: original.group_id };
-    }
     if (name === "primary-member-picker" || name === "primary-conversation-picker") {
       const rows = document.querySelectorAll(name === 'primary-member-picker' && !document.querySelector('.mb-chat-picker') ? '#app-popover [data-value]' : '.mb-chat-choices [data-dlg="conversation"]');
       require(JSON.stringify(order(rows)) === JSON.stringify(swapped(data.members.filter(m => !m.hidden).map(m => m.id))), "picker exchanges only Raphael and the primary");
@@ -1735,13 +1655,6 @@ export function checkRendered(name) {
     }
     require(sets.length === 0, "this scene only displays the existing primary");
     const members = visible(column) ? columnSwap() : [];
-    if (name === "primary-strip") {
-      require(column.classList.contains('is-collapsed') && Math.abs(column.getBoundingClientRect().width - 56) < 1, "the face strip is collapsed");
-      const row = column.querySelector(`[data-member="${data.primaryId}"]`), tip = document.querySelector('.message-tooltip:not([hidden])');
-      require(row.dataset.tooltip === row.getAttribute('aria-label') && row.dataset.tooltip.includes(' · '), "its name and tooltip identify the primary");
-      require(visible(tip) && tip.textContent.trim() === row.dataset.tooltip, "the hover tooltip identifies the primary");
-      return { check: name, members };
-    }
     if (name === "primary-column") return { check: name, members };
     const room = data.rooms[0], faces = [...document.querySelectorAll('.au-room-heading .au-room-participant')];
     require(room.member_ids.includes(0) && faces.length === room.member_ids.length, "every room member is still present");
@@ -1761,13 +1674,11 @@ export function checkRendered(name) {
   }
   if (name === "usage-bill-breakdown") {
     const bill = document.querySelector(".run-bill-total");
-    const sidebar = document.querySelector(".usage-num");
     require(Number(bill.dataset.billTotal) === window.__look.data.status.spend.month_usd, "month bill uses the sidebar ledger total");
-    require(sidebar.textContent.split("/")[0].trim() === bill.textContent, "formatted overview bill equals the sidebar amount exactly");
     require(document.querySelectorAll("[data-bill-purpose]").length === 5, "all four purposes and unknown spend are included");
     require(document.querySelector(".run-exclusions").textContent.includes("Fish Audio"), "enabled Fish Audio voice is excluded explicitly");
     require(document.querySelector('[data-run-act="show-allowance"]'), "subscription exclusion links to allowances");
-    return { check: name, bill: bill.textContent, sidebar: sidebar.textContent };
+    return { check: name, bill: bill.textContent };
   }
   if (name === "store-toolbar-visible") {
     const pane = document.querySelector('.modal-body'), frame = pane.getBoundingClientRect();

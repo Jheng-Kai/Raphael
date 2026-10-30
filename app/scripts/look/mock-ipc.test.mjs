@@ -5,8 +5,31 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
-  it("loads the one-member and eight-member team roster without replacing its fixture data with the flag", async () => {
-    const target = {}; installMock(fixture, { fixture: { teamBoardRoster: true } }, target);
+  it("projects room previews, timestamps and unread from messages, preserving summaries after reading", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", {method, params});
+    const latest = fixture.messages.filter(message => message.room_id === 1).at(-1);
+    const before = (await call("rooms.list")).rooms.find(room => room.id === 1);
+    expect(before).toMatchObject({preview:latest.text, last_at:latest.created, unread:true});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 2)).toMatchObject({preview:"", last_at:null, unread:false});
+    await call("rooms.update", {room_id:1, read:true, read_through:latest.id});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 1)).toMatchObject({preview:latest.text, last_at:latest.created, unread:false});
+    await call("rooms.send", {room_id:1, text:"Owner follow-up", request_id:"summary"});
+    expect((await call("rooms.list")).rooms.find(room => room.id === 1)).toMatchObject({preview:"Owner follow-up", last_at:fixture.now, unread:false});
+  });
+  it("does not replace a room summary with empty, pass, running or failed member replies", async () => {
+    const target = {}, data = structuredClone(fixture);
+    const latest = data.messages.filter(message => message.room_id === 1).at(-1);
+    for (const [status, text] of [["done", " （PASS）。 "], ["done", ""], ["running", "Pending"], ["error", "Failure"]]) {
+      data.messages.push({...latest, id:data.messages.at(-1).id + 1, status, text});
+    }
+    data.rooms[0].read_message_id = latest.id;
+    installMock(data, {}, target);
+    const {rooms} = await target.__TAURI_INTERNALS__.invoke("core_call", {method:"rooms.list", params:{}});
+    expect(rooms.find(room => room.id === 1)).toMatchObject({preview:latest.text, last_at:latest.created, unread:false});
+  });
+  it("loads the one-member and eight-member sidebar roster without replacing its fixture data with the flag", async () => {
+    const target = {}; installMock(fixture, { fixture: { sidebarMany: true } }, target);
     const invoke = (method) => target.__TAURI_INTERNALS__.invoke('core_call', { method, params: {} });
     const roster = await invoke('members.list');
     expect(roster.members.filter(member => member.group_id === 1)).toHaveLength(1);

@@ -45,7 +45,7 @@ begins with the configured global key while a target field has focus.
 ```powershell
 npm run look -- dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard dictation-notice dictation --theme both --width 1120,720,1920x1080
 npm run look -- overlay-transcribing overlay-cleaning --theme both --width 1120,720,1920x1080
-npm run look -- composer-learn member-composer-learn room-composer-learn team-composer-learn --theme both --width 1120,720,1920x1080
+npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 ```
 
 Keep tab/heatmap/day-filter/dictionary/settings PNGs and report; check the filter

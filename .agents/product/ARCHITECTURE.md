@@ -100,3 +100,40 @@ member-brain adapter as capture. memory_state stores per-conversation watermarks
 three-failure bounds. This introduces no second conversation loop, settings registry or
 RPC boundary. API harness and RaphaelMcp share agent/team.py definitions and guarded
 execution (A-01/A-03/A-04); native CLI memory/skills remain disabled.
+
+## Single sidebar (owner decision 2026-10-30)
+
+`main.ts` mounts the agent-owned member column once in `sidebar.ts`, outside the
+page container. Home, dictation, calendar and conversations share that one DOM
+and the existing MembersShell, member actions, groups and rooms RPCs. There is
+no Team page, route or spatial canvas. Chief swapping remains `memberDisplayList`.
+Details owns the member brain picker. The Everyone room uses `is_team` and follows
+the current roster without duplicating members or a conversation loop.
+
+Owner identity uses existing `owner_name`/`owner_photo` settings, the shared avatar
+picker/cropper and bounded image conversion. Sidebar footer and outgoing messages
+consume `owner-avatar.ts`. Settings > Connections is the sole connected-app entry.
+Home's mini calendar remains the full calendar entry. Migration 44 adds room pin,
+hide and read-message position to the existing rooms table; `rooms.list` resolves
+previews/unread from the same visible messages, while `rooms.update` saves actions.
+The mock IPC boundary projects those same summary fields from fixture messages.
+Conversation-row selection also requires the agent page to be visible; hiding it
+redraws the shared column immediately without losing the remembered conversation.
+Composite faces keep their own round backing and a 2px surface-coloured separator;
+only that group context frames Raphael's otherwise bare emblem.
+No new RPC boundary, settings registry or provider loop is introduced (A-01/06/08/11).
+
+Home month navigation keeps its visible month in page state, requests month-scoped
+home.overview data, and uses the shared monthDays local-date grid. It sends a
+CalendarDate through the existing app.go boundary to the full day calendar. The
+projection retains the bounded seven-day preview and adds compact month date marks
+and connected events; it creates no calendar database or owner store. Horizontal
+wheel/touch navigation uses a finite 160ms slide and respects reduced motion.
+
+The final Home calendar uses a size container: 900px width plus 460px height selects
+the full event-chip month; smaller containers use mini month plus selected-day
+agenda (stacked below 680px). Both read the same bounded three-items-per-date
+projection and daily counts. Month controls stay outside the animated grid and
+six rows prevent month-to-month height changes. A compact date changes page-local
+selection; full-grid dates and all event links navigate through the existing app.go
+CalendarDate/CalendarEventFocus boundary. Calendar highlights the requested item.

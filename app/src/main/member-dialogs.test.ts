@@ -2,7 +2,8 @@
 // The dialogs of the members (member-dialogs.ts): 新增成員 as the mockup draws it, the question before
 // a delete, the routine the core offers, and a group's places.
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType } from "./member-dialogs";
+import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType, pickPicture } from "./member-dialogs";
+import { registerDismissal } from "./dismissals";
 import type { MemberGroup } from "./types";
 import { setLocale } from "./i18n";
 
@@ -141,6 +142,17 @@ describe("新增成員", () => {
     document.querySelector<HTMLElement>('#app-popover [data-pick="0"]')!.click();
     expect(dialog.el.isConnected).toBe(true);
     expect(dialog.el.querySelector('input[type="file"]')).not.toBeNull();
+  });
+
+  test("the owner file chooser stays inside Settings instead of dismissing its modal", () => {
+    document.body.innerHTML = '<section class="modal-scrim"><div class="modal"></div></section>';
+    const panel = document.querySelector<HTMLElement>(".modal")!, close = vi.fn();
+    const stop = registerDismissal(panel, close);
+    try {
+      pickPicture(() => {});
+      expect(panel.querySelector('input[type="file"]')).not.toBeNull();
+      expect(close).not.toHaveBeenCalled();
+    } finally { stop(); }
   });
 
   test("a preset without a picture URL keeps the default silhouette after typing a name", () => {

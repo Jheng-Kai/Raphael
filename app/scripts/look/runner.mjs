@@ -151,7 +151,7 @@ export async function run(options) {
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
         // Existing conversation journeys enter through the real rail after the home is ready.
         if (scene.entry !== "overlay.html" && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
-          await perform(page, { action: "click", selector: '#nav .nav[data-go="agent"]' });
+          await perform(page, { action: "click", selector: '.mb-chief' });
           await page.waitForSelector('.page-agent:not([hidden]) .conversation-trigger', { visible: true, timeout: 10000 });
         }
         for (const step of scene.steps) {

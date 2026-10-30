@@ -30,14 +30,14 @@ describe("look browser interaction contracts", () => {
   });
   it("names the motion and target that prevented capture readiness", async () => {
     const pending = [{ name: "row-in", target: '<div class="row"></div>', currentTime: 100, timing: { duration: 9000 } }];
-    const page = { waitForFunction: vi.fn().mockRejectedValue(new Error("Waiting failed: 5000ms exceeded")), evaluate: vi.fn().mockResolvedValue(pending) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockRejectedValue(new Error("Waiting failed: 5000ms exceeded")), evaluate: vi.fn().mockResolvedValue(pending) };
     await expect(settleMotion(page)).rejects.toThrow('Motion did not settle: waiting for finite entrance animations; pending=[{"name":"row-in"');
     expect(page.waitForFunction).toHaveBeenCalledWith(finiteMotionSettled, { timeout: 5000 });
   });
   it("requeries a replaced click target without replaying application errors", async () => {
     const stale = { click: vi.fn().mockRejectedValue(new Error("Node is either not clickable or not an Element")), dispose: vi.fn() };
     const current = { click: vi.fn().mockResolvedValue(undefined), dispose: vi.fn() };
-    const page = { waitForFunction: vi.fn().mockResolvedValueOnce({ asElement: () => stale }).mockResolvedValue({ asElement: () => current }) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValueOnce({ asElement: () => stale }).mockResolvedValue({ asElement: () => current }) };
     await perform(page, { action: "click", selector: ".target" });
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(stale.dispose).toHaveBeenCalledOnce();
@@ -46,7 +46,7 @@ describe("look browser interaction contracts", () => {
     await expect(perform(page, { action: "click", selector: ".target" })).rejects.toThrow("application failure");
     expect(page.waitForFunction).toHaveBeenCalledTimes(3);
   });
-  it.each([true, false])("opens the wide member picker through visible column controls (collapsed=%s)", async collapsed => {
+  it.each([true, false])("opens the member picker through the permanent plus (legacy preference=%s)", async collapsed => {
     const clicked = [];
     const page = {
       evaluate: vi.fn().mockResolvedValue(false),
@@ -54,17 +54,17 @@ describe("look browser interaction contracts", () => {
       waitForFunction: vi.fn().mockImplementation(async (_fn, _options, selector) => ({ asElement: () => ({ click: async () => { clicked.push(selector); }, dispose: vi.fn() }) })),
     };
     await perform(page, { action: "member-picker" });
-    expect(clicked).toEqual([...(collapsed ? ['[data-col="collapse"]'] : []), '[data-col="add"]', '#app-popover [data-pick="conversation"]']);
+    expect(clicked).toEqual(['[data-col="add"]', '#app-popover [data-pick="conversation"]']);
   });
   it("fails after three pre-dispatch stale handles", async () => {
     const target = { click: vi.fn().mockRejectedValue(new Error("Node is detached from document")), dispose: vi.fn() };
-    const page = { waitForFunction: vi.fn().mockResolvedValue({ asElement: () => target }) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValue({ asElement: () => target }) };
     await expect(perform(page, { action: "click", selector: ".target" })).rejects.toThrow("Node is detached");
     expect(target.click).toHaveBeenCalledTimes(3);
     expect(target.dispose).toHaveBeenCalledTimes(3);
   });
   it("waits for an absence by its selector and says what is still there when it does not come", async () => {
-    const page = { waitForFunction: vi.fn().mockResolvedValue(undefined) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValue(undefined) };
     await perform(page, { action: "wait-gone", selector: ".row" });
     expect(page.waitForFunction).toHaveBeenCalledWith(expect.any(Function), { timeout: 6000 }, ".row");
     const gone = page.waitForFunction.mock.calls[0][0];
@@ -82,7 +82,7 @@ describe("look browser interaction contracts", () => {
     expect(findVisibleElement(".missing")).toBeNull();
   });
   it("waits for updated visible text instead of accepting a stale sidebar preview", async () => {
-    const page = { waitForFunction: vi.fn().mockResolvedValue(undefined) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValue(undefined) };
     const step = { action: "wait-text", selector: ".preview", text: "Gmail 還沒登入" };
     await perform(page, step);
     const ready = page.waitForFunction.mock.calls[0][0];

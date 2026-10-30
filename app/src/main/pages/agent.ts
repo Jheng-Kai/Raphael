@@ -83,7 +83,7 @@ import {
   turnHTML,
   wantsRefresh,
 } from "../timeline";
-import type { AgentDraft, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, SettingsPane, TurnAttachment, WireAttachment } from "../types";
+import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
 import { copyText, esc, ico, iconButton, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { composerHTML, drawTaskSlot, openComposerMenu } from "../chat-composer";
@@ -205,7 +205,7 @@ export const sendsOnEnter = (e: Pick<KeyboardEvent, "key" | "shiftKey" | "isComp
  * The words of a draft the page is handed when it opens (`app.go("agent", "draft:" + words)`, from
  * the 「試試看」 of a connected service), cut to what a question may hold; null for none.
  */
-export function draftText(arg: SettingsPane | AgentDraft | undefined): string | null {
+export function draftText(arg: PageArgument | undefined): string | null {
   if (typeof arg !== "string" || !arg.startsWith("draft:")) return null;
   return arg.slice("draft:".length).slice(0, TYPED_MAX_CHARS);
 }
@@ -233,7 +233,7 @@ interface ComposerDraft {
   quote?: MessageQuote;
 }
 
-export function createAgent(app: AppContext): Page {
+export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loadSidebar(): Promise<void> } {
   const el = document.createElement("div");
   el.className = "page page-agent";
   el.dataset.page = "agent";
@@ -283,13 +283,14 @@ export function createAgent(app: AppContext): Page {
 
   // ---------- the members ----------
 
+  let visible = false;
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
     visible: () => visible,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => conversationButton.setAttribute("aria-expanded", String(open)),
-    onSelect: () => switchThread(),
+    onSelect: () => { app.go("agent"); switchThread(); },
     onUpdate: () => {
       drawComposer();
       drawDock();
@@ -470,7 +471,6 @@ export function createAgent(app: AppContext): Page {
   let failure: (() => string) | null = null;
   let pending = false;
   let loads = 0;
-  let visible = false;
   let loadedThread = false;
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const pacing = new ReplyPacing(() => { if (visible) render(); }, () => reducedMotion?.matches ?? false);
@@ -2141,20 +2141,20 @@ export function createAgent(app: AppContext): Page {
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
       if (event.type !== "AgentTurn" || (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
-      if (visible) members.changed();
+      members.changed();
     }
     waiting?.follow(event);
     if (event.type === "AgentQuestion") {
       setQuestion(openQuestion(event));
       drawDock();
       redrawCards();
-      if (visible) members.changed();
+      members.changed();
     } else if (event.type === "AgentQuestionClosed") {
       questions.delete(event.id);
       answeringQuestions.delete(event.id);
       drawDock();
       redrawCards();
-      if (visible) members.changed();
+      members.changed();
     } else if (event.type === "VoiceLevel") {
       voice.level(event.value);
     } else if (event.type === "Dictation" && event.agent) {
@@ -2235,10 +2235,13 @@ export function createAgent(app: AppContext): Page {
   return {
     id: "agent",
     el,
+    sidebar: members.column,
+    loadSidebar: () => members.load(),
     show(arg) {
       const wasVisible = visible;
       visible = true;
       if (!roomPane.active) desktop.show();
+      else void roomPane.refresh();
       problemNotice.show();
       messageResize?.observe(scroller);
       dropResize?.observe(stage);

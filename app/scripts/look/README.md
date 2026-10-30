@@ -176,7 +176,7 @@ From `app/`:
 npm run look -- --list
 npm run look -- chat details --theme both --width 1120,720
 npm run look -- --all --theme both --width 1120,720,1920x1080
-npm run look -- composer-learn member-composer-learn room-composer-learn team-composer-learn --theme both --width 1120,720,1920x1080
+npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- appearance --skin lagoon --locale ja --out .look/review
 npm run verify
 npm run verify -- --out ../.fold/app/.look
@@ -330,8 +330,8 @@ on a 1536x864 logical desktop at 125% scaling. Native window-state restores
 remembered bounds; manual first/second launches show and focus the window,
 while --autostart leaves it in the tray.
 
-Home's combined inbox and three-stat layout, two-by-two dictation totals,
-896px conversation measure, shared settings edges, readable team column and
+Home's four equal blocks and adaptive calendar, two-by-two dictation totals,
+896px conversation measure, shared settings edges, fixed conversation sidebar and
 centered welcome are asserted by their ordinary feature scenes. no-naming
 replaces the removed first-Bot setup scenes. Details' pointer focus assertion
 runs before its separate keyboard icon-interaction check.
@@ -339,15 +339,15 @@ runs before its separate keyboard icon-interaction check.
 ## Owner round 5 readable layout
 
 Run all main-page scenes in both themes at 1120, 720, 1920x1080 and 1280x800.
-`team-readable` rejects automatic opening Fit and compares the chief card with
-the group card track. `details-alignment` compares New conversation, the search
+`sidebar-shell` checks the fixed conversation list and compact drawer, including
+open and folded folders. `details-alignment` compares New conversation, the search
 input and routines/memory block. `conversation-header` rejects duplicate compact
-identity and clipped header line boxes. Explicit Fit and manual canvas zoom
-remain independent interactions; they may intentionally go below 100%.
+identity and clipped header line boxes. The former Team canvas and Fit/zoom
+interactions were retired by the owner's 2026-10-30 sidebar decision.
 
 `npm run native -- readable-layout` applies the same assertions to an isolated
-WebView/SQLite run. Roster prerequisites use production RPC; opening, explicit
-Fit, conversation navigation and details controls use the real UI. Captures
+WebView/SQLite run. Roster prerequisites use production RPC; folder folding,
+drawer navigation, Home month changes and details controls use the real UI. Captures
 record their actual viewport dimensions.
 
 ## Owner round 7 layout

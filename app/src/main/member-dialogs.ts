@@ -328,7 +328,7 @@ export function pickPicture(then: (file: File) => void): void {
   }
   // The native chooser starts with a synthetic click. Keep its hidden input inside the active
   // modal so the shared outside-click dismissal does not consume that click and close it.
-  const dialogs = document.querySelectorAll<HTMLElement>(".mb-dialog");
+  const dialogs = document.querySelectorAll<HTMLElement>(".mb-dialog, .modal-scrim:not([hidden]) .modal");
   (dialogs[dialogs.length - 1] ?? document.body).append(picker);
   picked = then;
   picker.value = "";

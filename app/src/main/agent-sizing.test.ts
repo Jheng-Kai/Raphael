@@ -10,7 +10,7 @@ const members = strip(read("members.css"));
 const both = agent + "\n" + members + "\n" + strip(read("conversations.css"));
 
 /** The block that sets the tokens: its selectors and its declarations. */
-const block = /(\.page-agent, \.mb-scrim[^{]*)\{([^{}]*)\}/.exec(agent);
+const block = /(\.page-agent, \.side, \.mb-scrim[^{]*)\{([^{}]*)\}/.exec(agent);
 
 /** `--pa-name: calc(A px + B * var(--pa-u))` as [A, A + B]: the size in a small window and in a maximised one. */
 function ends(name: string): [number, number] {
@@ -23,7 +23,7 @@ describe("the page's responsive sizes", () => {
   test("the tokens are on the page and what it opens at the body, never on :root", () => {
     expect(block).not.toBeNull();
     const selectors = block![1].split(",").map((s) => s.trim());
-    expect(selectors).toEqual([".page-agent", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop", ".toasts"]);
+    expect(selectors).toEqual([".page-agent", ".side", ".mb-scrim", ".menu.mb-avpop", ".menu.mb-menu", ".menu.mb-toolpop", ".toasts"]);
     expect(/(^|[\s,])(:root|html|body|\*)([\s,{]|$)/.test(block![1])).toBe(false);
   });
 
@@ -32,11 +32,11 @@ describe("the page's responsive sizes", () => {
     expect(block![2]).toContain("--pa-u: calc(var(--pa-t) / 960);");
   });
 
-  test("the columns: the members 260 to 400 px, the details 300 to 460 px", () => {
-    expect(block![2]).toContain("--pa-col: clamp(260px, 21vw, 400px);");
+  test("the global sidebar is fixed and the details retain responsive width", () => {
+    expect(read("styles.css")).toContain("--sidebar-width: 296px;");
     expect(block![2]).toContain("--pa-det: clamp(300px, 24vw, 460px);");
-    expect(members).toContain(".page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: var(--pa-col) minmax(0, 1fr);");
-    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: var(--pa-col) minmax(0, 1fr) var(--pa-det); }');
+    expect(members).toContain(".page.page-agent { position: relative; max-width: none; height: 100%; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr);");
+    expect(members).toContain('.page.page-agent[data-det="open"]:not(.is-room) { grid-template-columns: minmax(0, 1fr) var(--pa-det); }');
   });
 
   test("the columns and controls retain their responsive geometry", () => {
@@ -72,10 +72,10 @@ describe("the page's responsive sizes", () => {
     }
   });
 
-  test("the breakpoints stay: the panel lies over the chat under 1120 px, the face strip and picker remain usable under 860 px", () => {
+  test("the panel overlays compact chat and the sidebar becomes a drawer under 860 px", () => {
     expect(members).toMatch(/@media \(max-width: 1119px\) \{[^@]*\.mb-det \{ position: absolute;[^}]*width: var\(--pa-det\)/);
-    expect(members).toContain('.page.page-agent:has(.mb-col.is-collapsed) { --pa-col: 56px; }');
-    expect(members).toMatch(/@media \(max-width: 859px\) \{[^@]*\.sel\.mb-pick \{ display: inline-flex; \}/);
+    expect(read("sidebar.css")).toContain("@media (max-width: 859px)");
+    expect(read("sidebar.css")).toContain("transform: translateX(-100%)");
   });
 
   test("icons stay at 16 or 20 px: they step at 1280 px wide instead of following the fluid sizes", () => {

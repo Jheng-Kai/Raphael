@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { type ColumnHost, columnHTML, createMemberColumn, memberRowHTML } from "./member-column";
 import { openNewGroupChat } from "./group-chats";
 import { installContextMenus } from "./context-menu";
+import { setLocale, t } from "./i18n";
 vi.mock("./group-chats", () => ({ createRoomsSection: () => document.createElement("section"), openNewGroupChat: vi.fn() }));
 import type { Member, MembersList } from "./types";
 
@@ -36,6 +37,11 @@ const dom = (html: string): HTMLElement => {
 };
 
 describe("the column, drawn", () => {
+  test("remembering a conversation never selects it while another page is visible", () => {
+    const el = dom(columnHTML(view({active:false})));
+    expect(el.querySelector('[aria-current="true"]')).toBeNull();
+    expect(dom(columnHTML(view({active:true}))).querySelector('[aria-current="true"]')?.getAttribute('data-member')).toBe('0');
+  });
   test("rows show valid last-message times and omit missing or invalid timestamps", () => {
     const time = new Date(2026, 9, 24, 13, 45).getTime();
     const row = dom(memberRowHTML(member(1, { last_at: time }), view()));
@@ -49,15 +55,15 @@ describe("the column, drawn", () => {
     expect(el.querySelectorAll(".mb-row")).toHaveLength(1);
     expect(el.querySelector(".mb-none")).toBeNull();
   });
-  test("Raphael retains his original first row with a bare 64 px emblem", () => {
+  test("Raphael uses the shared conversation row with his bare emblem", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
-    expect(el.firstElementChild).toBe(chief);
+    expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
     expect(chief.classList.contains("mb-row")).toBe(true);
-    expect(chief.querySelector(".mb-pin, time, .mb-row-p")).toBeNull();
+    expect(chief.querySelector(".mb-pin, time")).toBeNull();
     expect(chief.dataset.member).toBe("0");
-    expect(chief.textContent).toBe("拉斐爾");
-    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:64px");
+    expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
+    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
     expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
@@ -72,7 +78,7 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
     expect(el.querySelector('[data-member-more="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
-    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:64px');
+    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
     expect(el.querySelector('.mb-star')).toBeNull();
     expect(LIST.members[3].group_id).toBe(20);
@@ -87,19 +93,6 @@ describe("the column, drawn", () => {
     expect(search.querySelectorAll('[data-member]')).toHaveLength(1);
     expect(search.querySelector('.mb-none')).toBeNull();
     expect(search.querySelector('[data-member="0"] .mb-av')).toBeNull();
-  });
-
-  test("the face strip puts the primary first, keeps dots and identifies it without a star", () => {
-    const list = { ...LIST, team_context: { primary_id: 4 } } as unknown as MembersList;
-    const strip = dom(columnHTML(view({ list, collapsed: true })));
-    expect([...strip.querySelectorAll<HTMLElement>('[data-member]')].map(row => row.dataset.member)).toEqual(['4', '1', '2', '3', '0']);
-    const primary = strip.querySelector<HTMLElement>('[data-member="4"]')!;
-    expect(primary.querySelector('.mb-dot.is-unread')).not.toBeNull();
-    expect(primary.getAttribute('aria-label')).toBe('行程管家 · 主要聯絡人');
-    expect(primary.dataset.tooltip).toBe(primary.getAttribute('aria-label'));
-    expect(strip.querySelector<HTMLElement>('[data-member="0"]')!.dataset.tooltip).toBe('拉斐爾');
-    expect(strip.querySelector('[data-member="0"] .mb-av')).toBeNull();
-    expect(strip.querySelector('.mb-star')).toBeNull();
   });
 
   test("the groups under their headers in their order, then 未分組", () => {
@@ -185,39 +178,6 @@ describe("the column, used", () => {
     return column;
   };
 
-  test("collapse retains every face, state and selection and persists across recreation", () => {
-    const column = mount();
-    column.el.querySelector<HTMLElement>('[data-group-fold="10"]')!.click();
-    const toggle = column.el.querySelector<HTMLElement>('[data-col="collapse"]')!;
-    toggle.click();
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(localStorage.getItem("raphael.members.collapsed")).toBe("true");
-    expect(column.el.classList.contains("is-collapsed")).toBe(true);
-    expect([...column.el.querySelectorAll<HTMLElement>("[data-member]")].map(row => row.dataset.member)).toEqual(["0", "1", "2", "3", "4"]);
-    expect(column.el.querySelector('[data-member="2"] .is-wait')).not.toBeNull();
-    expect(column.el.querySelector('[data-member="4"] .is-unread')).not.toBeNull();
-    const face = column.el.querySelector<HTMLElement>('[data-member="3"]')!;
-    expect(face.dataset.tooltip).toBe(LIST.members[3].name);
-    face.click();
-    expect(host.select).toHaveBeenCalledWith(3);
-    const restored = mount();
-    expect(restored.el.classList.contains("is-collapsed")).toBe(true);
-    toggle.click();
-    expect(localStorage.getItem("raphael.members.collapsed")).toBe("false");
-    expect(column.el.querySelector('[data-group="10"]')?.getAttribute("data-open")).toBe("false");
-  });
-
-  test("column toggle remains usable when storage reads and writes throw", () => {
-    const read = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
-    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
-    try {
-      const column = mount();
-      const before = column.el.classList.contains("is-collapsed");
-      column.el.querySelector<HTMLElement>('[data-col="collapse"]')!.click();
-      expect(column.el.classList.contains("is-collapsed")).toBe(!before);
-    } finally { read.mockRestore(); write.mockRestore(); }
-  });
-
   test("a click on a row opens that member's thread", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member="3"] .mb-row-t')!.click();
@@ -228,7 +188,6 @@ describe("the column, used", () => {
 
   test("the search narrows the rows as it is typed, and Escape closes it", () => {
     const column = mount();
-    column.el.querySelector<HTMLElement>('[data-col="search"]')!.click();
     const input = column.el.querySelector<HTMLInputElement>(".mb-find-input")!;
     expect(column.el.querySelector<HTMLElement>(".mb-find")!.hidden).toBe(false);
     input.value = "信箱";
@@ -237,6 +196,18 @@ describe("the column, used", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(column.query()).toBe("");
     expect(column.el.querySelectorAll(".mb-row")).toHaveLength(5);
+  });
+
+  test("the persistent plus tooltip follows language changes with its accessible label", () => {
+    const column = mount();
+    try {
+      for (const locale of ["en", "ja", "zh-TW"]) {
+        setLocale(locale); column.draw();
+        const add = column.el.querySelector<HTMLElement>('[data-col="add"]')!;
+        expect(add.title).toBe(t("members.add"));
+        expect(add.getAttribute("aria-label")).toBe(add.title);
+      }
+    } finally { setLocale("zh-TW"); }
   });
 
   test("the narrow-window search opens a member and closes its popover", () => {
@@ -301,5 +272,19 @@ describe("the column, used", () => {
     expect(column.el.querySelector<HTMLElement>('[data-group="10"]')!.dataset.open).toBe("false");
     column.el.querySelector<HTMLElement>('[data-group-fold="10"]')!.click();
     expect(column.el.querySelector<HTMLElement>('[data-group="10"]')!.dataset.open).toBe("true");
+  });
+
+  test("member drops and folder reorder use the shared persistence callbacks", () => {
+    const column = mount();
+    host.dropMember = vi.fn().mockResolvedValue(undefined);
+    host.reorderGroup = vi.fn().mockResolvedValue(undefined);
+    const drag = (source: string, destination: string): void => {
+      column.el.querySelector(source)!.dispatchEvent(new Event("dragstart", { bubbles: true, cancelable: true }));
+      column.el.querySelector(destination)!.dispatchEvent(new Event("drop", { bubbles: true, cancelable: true }));
+    };
+    drag('[data-member-item="3"]', '[data-group="10"] [data-member-item="1"]');
+    expect(host.dropMember).toHaveBeenCalledWith(3, 10, 1);
+    drag('[data-group="20"] .mb-gname', '[data-group="10"] .mb-gname');
+    expect(host.reorderGroup).toHaveBeenCalledWith(20, 10);
   });
 });

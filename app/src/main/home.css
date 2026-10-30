@@ -1,17 +1,16 @@
 /* The same four summaries and compact calendar remain in place in every data state. */
-.page.page-home { max-width: 1080px; margin: 0 auto; padding: 24px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); align-content: start; }
+.page.page-home { max-width: 1080px; min-height: 100%; margin: 0 auto; padding: 24px 40px; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(320px, 1fr); gap: var(--sp-4); align-content: start; }
 .page-home .btn { line-height: inherit; }
 .ho-hero { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--sp-5); }
 .ho-hero:has(> button) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ho-hero > .av { flex-shrink: 0; }
-.ho-date { margin: 0 0 var(--sp-1); font-size: var(--fs-sm); color: var(--text-3); }
-.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: break-word; }
+.ho-date { margin: 0 0 var(--sp-2); font-size: var(--fs-md); color: var(--text-3); }
+.page-home .ho-said { margin: 0; font: 600 calc(var(--fs-lg) + var(--fs-sm))/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: break-word; }
 .ho-phrase { display: inline-block; max-width: 100%; word-break: keep-all; }
 .ho-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: stretch; }
 .ho-card, .ho-calendar { position: relative; border-radius: var(--r-lg); }
-.ho-card:hover, .ho-calendar:hover { background: var(--hover); }
-.ho-card:has(> .ho-target:active), .ho-calendar:has(> .ho-target:active) { background: var(--pressed); }
-.ho-target.btn, .ho-target.btn:hover, .ho-target.btn:active { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.ho-card:hover, .ho-calendar:hover { border-color: var(--hover-edge); }
+.page-home .ho-target.btn, .page-home .ho-target.btn:hover, .page-home .ho-target.btn:active { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
 .ho-target:focus { outline: none; }
 :root[data-keys] .ho-target:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ho-card button:not(.ho-target) { position: relative; z-index: 2; }
@@ -40,7 +39,7 @@
 .ho-now { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); color: var(--err); font-size: var(--fs-2xs); font-weight: 600; font-variant-numeric: tabular-nums; }
 .ho-now::after { content: ""; height: 2px; border-radius: var(--r-pill); background: var(--err); }
 .ho-row.btn { max-width: var(--layout-reading-max); display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); width: 100%; min-height: 44px; height: auto; padding: var(--sp-1) 0; border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; }
-.ho-row.btn:hover { background: var(--hover); }
+.page-home .ho-row.btn:hover { background: transparent; }
 .ho-row-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .ho-row-copy strong, .ho-row-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ho-row-copy strong { font-size: var(--fs-sm); font-weight: 500; }
@@ -64,15 +63,64 @@
 .ho-meter-row b { text-align: right; font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .ho-meter { height: 6px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; }
 .ho-meter i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--accent-icon); }
-.ho-calendar { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--sp-4); min-height: 96px; }
-.ho-calendar > header { display: flex; align-items: center; gap: var(--sp-2); }
-.ho-calendar h2 { margin: 0; font-size: var(--fs-sm); font-weight: 500; color: var(--text-3); }
-.ho-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--sp-1); }
-.ho-day { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); height: auto; min-width: 0; padding: var(--sp-2) 0; }
-.ho-day small { font-size: var(--fs-2xs); color: var(--text-3); }
-.ho-day b { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 28px; height: 28px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 500; }
+.ho-calendar-frame { container: home-calendar / size; min-width: 0; min-height: 320px; }
+.ho-calendar { --home-calendar-expanded: 0; display: grid; grid-template-rows: 32px minmax(0, 1fr); gap: var(--sp-2); height: 100%; box-sizing: border-box; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--edge); background: var(--panel); touch-action: pan-y; }
+.ho-calendar > header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.ho-month-actions { position: relative; z-index: 2; display: flex; align-items: center; gap: var(--sp-1); flex: none; pointer-events: none; }
+.ho-month-actions .btn { pointer-events: auto; background: transparent; }
+.page-home .ho-calendar .ho-today:is(:hover, :active) { border-color: var(--btn-edge); }
+.page-home .ho-calendar .icon:is(:hover, :active) { border-color: transparent; color: var(--text-2); }
+.ho-calendar h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text-2); }
+.ho-calendar-body { display: grid; grid-template-columns: minmax(240px, .85fr) minmax(0, 1fr); gap: var(--sp-5); min-height: 0; }
+.ho-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 24px repeat(6, minmax(0, 1fr)); gap: var(--sp-1); min-height: 0; }
+.ho-weekday { text-align: center; font-size: var(--fs-xs); color: var(--text-3); }
+.ho-day { position: relative; min-width: 0; min-height: 0; }
+.page-home .ho-date-btn.btn { position: relative; z-index: 2; display: grid; align-content: center; justify-items: center; gap: 2px; width: 100%; height: 100%; min-height: 28px; min-width: 0; padding: 0; border: 0; background: transparent; border-radius: var(--r-sm); }
+.page-home .ho-calendar .btn:is(:hover, :active) { background: transparent; }
+.ho-other-month .ho-date-btn.btn { color: var(--text-3); }
+.ho-date-btn b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 500; }
+.ho-day.is-selected b { background: var(--selected); }
 .ho-day.is-today b { background: var(--accent); color: var(--on-accent); }
 .ho-dots { display: flex; justify-content: center; gap: 3px; height: 4px; }
 .ho-dots i { width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--accent-icon); }
+.ho-day-events { display: none; }
+.ho-agenda { position: relative; z-index: 2; min-width: 0; min-height: 192px; display: flex; flex-direction: column; gap: var(--sp-1); pointer-events: none; }
+.ho-agenda .btn { pointer-events: auto; }
+.ho-agenda h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); }
+.page-home .ho-agenda-row.btn { display: grid; grid-template-columns: 48px minmax(0, 1fr) 24px; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: var(--sp-1) 0; border: 0; background: transparent; text-align: left; font-size: var(--fs-sm); }
+.ho-agenda-row time { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ho-agenda-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ho-day-empty { margin: 0; color: var(--text-3); font-size: var(--fs-sm); }
+.page-home .ho-agenda-more.btn { align-self: flex-start; min-height: 24px; padding: 0; border: 0; background: transparent; color: var(--text-3); font-size: var(--fs-xs); }
+@container home-calendar (max-width: 680px) {
+  .ho-calendar-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 192px; gap: var(--sp-4); }
+}
+@container home-calendar (min-width: 900px) and (min-height: 460px) {
+  .ho-calendar { --home-calendar-expanded: 1; }
+  .ho-calendar-body { grid-template-columns: minmax(0, 1fr); }
+  .ho-agenda { display: none; }
+  .ho-month { gap: 0; }
+  .ho-day { border-top: 1px solid var(--line); border-right: 1px solid var(--line); padding: 2px var(--sp-1); }
+  .ho-day:nth-child(7n) { border-right: 0; }
+  .page-home .ho-date-btn.btn { position: absolute; inset: 0; justify-items: start; align-content: start; padding: 2px var(--sp-1); }
+  .ho-date-btn b { width: 20px; height: 20px; }
+  .ho-dots { display: none; }
+  .ho-day-events { position: relative; z-index: 3; display: flex; flex-direction: column; gap: 1px; margin-top: 20px; pointer-events: none; }
+  .page-home .ho-event-chip.btn { display: flex; align-items: center; gap: var(--sp-1); width: 100%; min-height: 14px; height: 14px; padding: 0 var(--sp-1); border: 0; border-left: 2px solid var(--accent-icon); border-radius: 0; background: transparent; pointer-events: auto; font-size: var(--fs-2xs); line-height: 14px; text-align: left; }
+  .page-home .ho-event-chip.is-routine { border-left-color: var(--ok); }
+  .ho-event-chip time { flex: none; font-size: inherit; color: var(--text-3); }
+  .ho-event-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ho-event-chip:nth-child(3), .ho-more-three { display: none !important; }
+  .page-home .ho-more.btn { position: relative; z-index: 3; align-self: flex-start; min-height: 14px; height: 14px; padding: 0 var(--sp-1); border: 0; border-radius: 0; color: var(--text-3); font-size: var(--fs-2xs); line-height: 14px; pointer-events: auto; }
+}
+@container home-calendar (min-width: 900px) and (min-height: 600px) {
+  .ho-event-chip:nth-child(3) { display: flex !important; }
+  .ho-more-two { display: none !important; }
+  .ho-more-three { display: inline-flex !important; }
+}
+@media (max-width: 859px) { .ho-calendar-frame { min-height: 540px; } }
 @media (max-width: 960px) { .page.page-home { padding: 24px; } }
-@media (max-width: 760px) { .ho-hero { gap: var(--sp-3); } .ho-calendar { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); } .ho-big small { display: block; margin: 0; font-size: var(--fs-xs); } .ho-card { height: 224px; } }
+@media (max-width: 760px) { .ho-hero { gap: var(--sp-3); } .ho-big small { display: block; margin: 0; font-size: var(--fs-xs); } .ho-card { height: 224px; } }
+
+.page-home .ho-calendar .ho-event-chip.btn:is(:hover, :active) { border-left-color: var(--accent-icon); }
+.page-home .ho-calendar .ho-event-chip.is-routine:is(:hover, :active) { border-left-color: var(--ok); }

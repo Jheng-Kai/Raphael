@@ -1,28 +1,40 @@
-# Members
+# Members and sidebar
+
+Owner decision 2026-10-30: MembersShell's column is global, with a same-sized chief
+conversation row, folders and group chats. No face strip or separate Team page.
+Folders support add/rename/delete, persistent collapse, member drag/drop and folder
+drag reorder using existing groups/members position fields. Member brain selection
+stays in details. The plus opens the existing member profile and group chat creation.
+Chief swap remains the bot-home primary contact rule. Existing protected Raphael
+identity, row actions and context menus remain authoritative.
+Selection follows the visible page, independently of the remembered conversation.
+Hiding the conversation clears member and room selection immediately; opening it
+restores only its active member or room. Home selects only the Raphael brand row.
+
 
 ## Sub-features
 
-Remembered member-column collapse, original Raphael emblem, identity/personality, profile editing, avatar selection, memory, routines, skills,
+Persistent folder collapse, the shared chief conversation row, identity/personality, profile editing, avatar selection, memory, routines, skills,
 commands and voice settings, and the Permissions tab's two switches: ask before contacting colleagues, and write mail as a draft for the owner to send
 (`draft_first`, on by default; see the P08c section of [Conversation](conversation.md)). Members have independent conversations.
-The owner's primary contact (P15b-1, the last section) takes the top display slot in place of Raphael, without a star. `memberRole` uses the single three-language `rooms.chief` key for the current chief on the board, column, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data; the unique primary contact also holds the chief capability and coordinates rooms.
+The owner's primary contact (P15b-1, the last section) takes the top display slot in place of Raphael, without a star. `memberRole` uses the single three-language `rooms.chief` key for the current chief in the sidebar, pickers, participant tooltips and member usage; ordinary profiles retain their role text. This does not write profile data; the unique primary contact also holds the chief capability and coordinates rooms.
 
 ## How to get to it (user POV)
 
-In Conversation the top-left arrow collapses the member column to a 56px face strip; the same arrow expands it. The primary takes the large top face and name when expanded. Raphael takes its original group or pinned slot and keeps his bare emblem. When Raphael is the primary, the original layout is unchanged. Collapsed faces retain localized tooltips, active selection and unread/waiting dots, including members in folded groups. The choice is remembered in localStorage, with an in-memory fallback when storage is unavailable. Compact windows initially use the face strip; the member picker still exposes rooms and search. An open details overlay temporarily hides an expanded compact column so the title remains reachable; closing details restores it without changing the saved choice. The details-closed scene explicitly expands the column before testing the title.
+The fixed sidebar is present on every page. Its chief uses the same compact row as colleagues. Folders preserve their collapsed state; drag members between folders or reorder folders. Below 860px the menu opens the same full sidebar as a drawer. No icon strip or separate Team page remains.
 
 Select a member, then click the stacked header title for details.
-At compact width use the member picker to select the member first. The same title
+At compact width open the sidebar drawer to select a member first. The same title
 closes the panel; its close button updates the same remembered session state. Details has the avatar, edit pencil and resource
-panes. Team's creation menu is another entry point to member creation; verify the
+panes. The sidebar plus is the member creation entry; verify the
 complete flow for creation changes.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- members-expanded members-collapsed members-collapsed-hover members-reexpanded --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
-npm run look -- team-new-menu member-text --theme both --width 1120,720,1920x1080
+npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete sidebar-new-conversation conversation-delete-main --theme both --width 1120,720,1920x1080
 ```
 
@@ -52,9 +64,9 @@ Skills/commands/voices have empty fixture collections. Seed resources before cla
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
 
-## Raphael team administration
+## Raphael sidebar administration
 
-The current chief can administer the team from their conversation: overview, member creation
+The current chief can administer the sidebar from their conversation: overview, member creation
 and editing, groups, any member's routines, skill imports and command templates.
 Management tools, including the legacy create_member alias, are offered only to the current chief capability holder. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
 presets, then the neutral silhouette, and the create dialog defaults.
@@ -115,11 +127,11 @@ The owner chooses which member is their primary contact, the Bot that new work i
 Raphael is the primary until another is chosen, and exactly one is at a time. Choosing is 設為主要 in a member's menu (the row's more button
 or a right click): it opens 「選擇主要成員」, a list of real buttons (Raphael and the other visible members, not the primary now) with the member whose menu
 it was chosen already, 取消 and the primary 設為主要. Position alone identifies the primary: no star badge is drawn in the column, face strip or details, and the menu uses an up arrow instead of a star.
-The primary takes Raphael's large top slot in the member column, collapsed strip and team board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
+The primary takes Raphael's large top slot in the member column, collapsed strip and sidebar board; Raphael takes the primary's former group/pinned position and keeps his emblem. The same identity swap orders member/conversation pickers, mentions, room membership/responder choices, room participant faces/role choices, and calendar/routine choices. It never mutates stored groups, pins, identities, current conversation, default recipient or the core roster.
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
-npm run look -- members-expanded members-collapsed members-collapsed-hover members-reexpanded primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-contact-strip primary-member-picker primary-new-conversation primary-team-board primary-team-mentions primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-member-picker primary-new-conversation primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
 `primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips without a star. `primary-contact-menu` retains 設為主要 after 移到分組; `primary-contact-picker` excludes the current primary while offering Raphael, with one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
@@ -127,7 +139,7 @@ npm run look -- members-expanded members-collapsed members-collapsed-hover membe
 The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_context.primary_id` says it, a hidden or deleted primary is Raphael again, and a hidden member cannot be chosen. Unit cases cover default/explicit Raphael, valid and absent primary IDs, grouped/pinned/ungrouped slots, source immutability, details drafts, picker identities and restricted mentions.
 
 The core keeps the flag on the member's row (schema v39, a unique index) and the roster is the one place it is read from: the snapshot's `primary_id`
-(and equal `chief_id`) is in its revision, and every prompt (an API turn, a resumed CLI thread's per-turn team block, a background task or
+(and equal `chief_id`) is in its revision, and every prompt (an API turn, a resumed CLI thread's per-turn sidebar block, a background task or
 routine, each room turn) is built from it fresh. Offline proof: core/tests/members/test_primary.py (one at a time and its persistence, hide and delete hand it
 back to Raphael, nothing else changes, each room uses the current chief and concludes once when the chief changes, a roster that kept the old one
 is told apart on each path), core/tests/background/test_primary.py, and Guardian S02 (every Bot names the new primary as the chief after the
@@ -164,11 +176,11 @@ prove rendered interactions only; live brains and native persistence remain sepa
 
 Every row, card or item that has a ⋯ opens that button's menu when it is right-clicked anywhere on it, at the pointer (the owner, 2026-10-27, about every
 overflow menu and the conversation list of a member's details): member rows and group headers in the column, conversations and routines in a member's details,
-the notes, routines, skills and commands of a member's profile, rooms (the sidebar's rows and the room's header), the team board's group headers, a custom
+the notes, routines, skills and commands of a member's profile, rooms (the sidebar's rows and the room's header), the sidebar board's group headers, a custom
 server's header and a subscription account's card in Settings, memory notes, safety rules, computer apps, History rows, dictionary words and Raphael's answers.
 The menu is the very one the ⋯ opens, because the button is pressed and its own handler runs, so a menu that replaces the first from the same button
 (「移到分組」) stands at the pointer too. Shift+F10 and the Menu key open it under the ⋯ of the focused row. A right button dragged more than a few pixels opens
-nothing, so that a drag (the team board's pan, later) is not a click. Anywhere else there is no browser menu, and a text field keeps its own. A left click on a conversation row
+nothing, so that a drag (the sidebar board's pan, later) is not a click. Anywhere else there is no browser menu, and a text field keeps its own. A left click on a conversation row
 still opens that conversation: it is the row's own action, and a menu on it would leave no way to open one from the list.
 
 `OVERFLOW_ROWS` in app/src/main/context-menu.ts is the one table of every ⋯ and its row. A ⋯ drawn without a line in it fails app/src/main/context-menu.test.ts,
@@ -240,7 +252,7 @@ in Settings. Raphael now has the ordinary Skills tab. Native CLI memory/skills s
 disabled; the host provides the member's own memory/skill context and tools.
 
 ```powershell
-npm run look -- details raphael-details details-memory details-skills raphael-skills member-brain-saved primary-contact-column primary-contact-set primary-team-board primary-room-picker primary-room-members primary-room-chief quick-model-menu --theme both --width 1120,720,1920x1080
+npm run look -- details raphael-details details-memory details-skills raphael-skills member-brain-saved primary-contact-column primary-contact-set sidebar-folders primary-room-picker primary-room-members primary-room-chief quick-model-menu --theme both --width 1120,720,1920x1080
 npm run native -- bot-homes
 ```
 

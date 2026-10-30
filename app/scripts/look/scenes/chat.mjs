@@ -111,15 +111,11 @@ export default [
     wait(".toast"), check("composer-learn"), check("composer-pair"),
   ], { dictationText }),
   scene("members-expanded", "Original Raphael emblem and expanded member column", [{ action: "member-column", collapsed: false }, check("member-column")]),
-  scene("members-collapsed", "Remembered member face strip with active and waiting markers", [{ action: "member-column", collapsed: true }, click('.mb-col [data-member="1"]'), check("member-column")], { waitingMember: 3 }),
-  scene("members-collapsed-hover", "Member name tooltip over the collapsed face strip", [{ action: "member-column", collapsed: true }, hover('.mb-col [data-member="2"]'), check("member-column"), wait('.message-tooltip:not([hidden])')], { waitingMember: 3 }),
-  scene("members-reexpanded", "Expand the face strip back to its original column", [{ action: "member-column", collapsed: true }, click('[data-col="collapse"]'), check("member-column")]),
-  scene("primary-contact-column", "The primary takes the large top face and Raphael takes its group slot", [{ action: "member-column", collapsed: false }, check("member-column"), check("primary-column")], { primaryMember: 1 }),
-  scene("primary-member-picker", "The compact member picker swaps Raphael and the primary", [{ action: "member-column", collapsed: true }, { action: "member-picker" }, check("primary-member-picker")], { primaryMember: 1 }),
+  scene("primary-contact-column", "The primary takes the first conversation row and Raphael takes its group slot", [{ action: "member-column", collapsed: false }, check("member-column"), check("primary-column")], { primaryMember: 1 }),
+  scene("primary-member-picker", "The conversation member picker swaps Raphael and the primary", [{ action: "member-column", collapsed: false }, { action: "member-picker" }, check("primary-member-picker")], { primaryMember: 1 }),
   scene("primary-new-conversation", "New conversation choices swap Raphael and the primary", [{ action: "member-column", collapsed: false }, click('[data-col="add"]'), click('[data-pick="conversation"]'), wait('.mb-chat-picker'), check("primary-conversation-picker")], { primaryMember: 1 }),
   scene("primary-contact-menu", "A member's menu gives 設為主要, without a star, right after 移到分組", [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), wait('#app-popover [data-pick="primary"]'), check("primary-menu")]),
   scene("primary-contact-picker", "設為主要 in 小森's menu opens 選擇主要成員 while 小晴 is the primary: Raphael and the other members as buttons, 小森 chosen, the primary action ready", [...primaryMenu, check("primary-picker")], { primaryMember: 1 }),
-  scene("primary-contact-strip", "The primary takes the first collapsed face slot and Raphael takes its old slot", [{ action: "member-column", collapsed: true }, hover('.mb-col [data-member="1"]'), wait(".message-tooltip:not([hidden])"), check("primary-strip")], { primaryMember: 1 }),
   scene("primary-contact-set", "設為主要 on 小晴 exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu, click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, wait(".mb-det .mb-who-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
   scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-expandable]"), check("conversation-design")]),
@@ -190,9 +186,9 @@ export default [
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),
   scene("tooltip", "Answer timestamp tooltip", [hover(".ra .chat-message[data-expandable] .message-actions time")]),
   scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message")]),
-  ...["member", "room", "team"].flatMap(context => {
-    const base = context === "member" ? [member(1)] : context === "room" ? [room(1)] : [click('[data-go="team"]')];
-    const form = context === "member" ? ".mb-chat:not(.au-room-pane) .composer" : context === "room" ? ".au-room-pane .composer" : ".team-composer .composer";
+  ...["member", "room"].flatMap(context => {
+    const base = context === "member" ? [member(1)] : [room(1)];
+    const form = context === "member" ? ".mb-chat:not(.au-room-pane) .composer" : ".au-room-pane .composer";
     return [scene(`${context}-composer-learn`, `${context} dictated name correction reaches the dictionary`, [...base,
       { action: "dictation-paste", selector: `${form} textarea`, text: dictationText.before },
       type(`${form} textarea`, dictationText.after), check("composer-pair"), click(`${form} .cmp-send`), wait(".toast"), check("composer-learn"), check("composer-pair")], { dictationText }),

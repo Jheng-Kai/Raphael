@@ -100,7 +100,7 @@ describe("no sideways scrolling", () => {
 
   it("long member names, routine schedules and chip buttons truncate or wrap without pushing their row past its width", () => {
     expect(ruleFor(mainRules, ".mb-row-t b:not(:only-child)").some((r) => /max-width:\s*70%/.test(r.body))).toBe(true);
-    expect(ruleFor(mainRules, ".nav.mb-chief b").some((r) => /text-overflow:\s*ellipsis/.test(r.body))).toBe(true);
+    expect(ruleFor(mainRules, ".mb-row-t b").some((r) => /text-overflow:\s*ellipsis/.test(r.body))).toBe(true);
     expect(ruleFor(mainRules, ".mb-rt-main span").some((r) => /text-overflow:\s*ellipsis/.test(r.body))).toBe(true);
     expect(ruleFor(mainRules, ".mb-chip .chip-x").some((r) => /flex:\s*none/.test(r.body))).toBe(true);
     expect(ruleFor(mainRules, ".ra-hi").some((r) => /overflow-wrap:\s*anywhere/.test(r.body))).toBe(true);

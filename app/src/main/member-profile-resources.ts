@@ -260,16 +260,16 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
 }
 
 /** Converts the user's selected crop into the file sent to members.set_avatar. */
-export async function croppedMemberPicture(file: WireAttachment, crop: { x: number; y: number; zoom: number }): Promise<WireAttachment> {
+export async function croppedMemberPicture(file: WireAttachment, crop: { x: number; y: number; zoom: number }, side = 512, mime = "image/png"): Promise<WireAttachment> {
   const image = new Image();
   await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error(t("agent.attachUnreadable", { p0: file.name }))); image.src = `data:${file.mime};base64,${file.data}`; });
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 512;
+  canvas.width = canvas.height = side;
   const context = canvas.getContext("2d");
   if (!context) throw new Error(t("agent.attachUnreadable", { p0: file.name }));
-  const scale = 512 / Math.min(image.naturalWidth, image.naturalHeight) * crop.zoom;
+  const scale = side / Math.min(image.naturalWidth, image.naturalHeight) * crop.zoom;
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
-  context.drawImage(image, (512 - width) * crop.x, (512 - height) * crop.y, width, height);
-  return { name: "avatar.png", mime: "image/png", data: canvas.toDataURL("image/png").split(",")[1]! };
+  context.drawImage(image, (side - width) * crop.x, (side - height) * crop.y, width, height);
+  return { name: "avatar.png", mime, data: canvas.toDataURL(mime, 0.9).split(",")[1]! };
 }

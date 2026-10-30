@@ -919,6 +919,7 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
+  preview?: string; last_at?: number | null; unread?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";
@@ -983,7 +984,7 @@ export type TrayAction = "add-word";
 
 // ---------- what the pages share with main.ts ----------
 
-export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations" | "team";
+export type PageId = "home" | "agent" | "dictation" | "history" | "dictionary" | "settings" | "automations";
 export type MainPageId = Exclude<PageId, "settings" | "history" | "dictionary">;
 export type DictationTab = "overview" | "history" | "dictionary";
 
@@ -995,6 +996,9 @@ export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "c
  * 「試試看」 of a connected service (Settings › 連接) goes there with one of its example questions.
  */
 export type AgentDraft = `draft:${string}`;
+export type CalendarDate = `${number}-${number}-${number}`;
+export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
+export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus;
 
 /** One of the five pages of the main window. */
 export interface Page {
@@ -1004,7 +1008,7 @@ export interface Page {
    * The page comes on screen (or the window comes back): load what it shows. The settings open at
    * the tab given; the 拉斐爾 page may be given a draft for its composer.
    */
-  show(arg?: SettingsPane | AgentDraft): void | Promise<void>;
+  show(arg?: PageArgument): void | Promise<void>;
   /** The page goes off screen (or the window goes away): stop what runs for it. */
   hide(): void;
 }
@@ -1015,7 +1019,7 @@ export interface AppContext {
    * Goes to a page. The settings panel opens at `arg` if a tab is given (the key and the limit are in
    * "usage"); the 拉斐爾 page takes a draft for its composer (the settings close on the way).
    */
-  go(page: PageId, arg?: SettingsPane | AgentDraft): void;
+  go(page: PageId, arg?: PageArgument): void;
   /** Opens the history at one day, `2026-10-14`: its dictations only, with a way back to all of them. */
   showDay(date: string): void;
   /** The device settings as they are now. */
