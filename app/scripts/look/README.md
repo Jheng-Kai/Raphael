@@ -207,6 +207,20 @@ beside the report (including failed budget assertions). `look-paint-start` and
 `look-paint-end` delimit the measured interval; trace filenames are listed per result.
 Tracing is optional diagnostic overhead and does not change the 250 ms budget.
 
+`LOOK_PROFILE=1` saves a CDP `.cpuprofile` for each measured scene, starting before
+navigation and ending after its steps. `profileNavigationStart` in the result maps
+PerformanceObserver's page-relative times to the profile's monotonic clock (seconds).
+Measured scenes also retain every navigation-to-capture long task in `longTasks`,
+including startup and neighbouring actions; interaction assertions retain their own
+unchanged budget interval. Failed measurements keep their assertion data as well.
+Profiling adds diagnostic overhead; confirm acceptance with it disabled too.
+
+`LOOK_CPU_SLOWDOWN=3` applies CDP CPU throttling to each page for a labelled
+headroom stress run without starting a competing workload. The report records the
+rate (default 1). It leaves the interaction observer, timing interval and budgets
+unchanged. Stress results are separate from ordinary machine timing; use the same
+rate before and after a performance change, and retain unthrottled acceptance too.
+
 Look needs an installed Edge/Chrome and the pinned **puppeteer-core@25.13.0** devDependency.
 It never downloads a browser or installs packages. Preserve the package/lockfile pin.
 `LOOK_BROWSER` optionally selects an executable. Node 22 or later is required.

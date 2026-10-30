@@ -72,11 +72,13 @@ export async function perform(page, step) {
         if (!event.target.closest(selector)) return;
         document.removeEventListener(action === "type" ? "input" : "click", capture, true);
         const start = performance.now(), tasks = [];
+        performance.mark("look-paint-start");
         const observer = new PerformanceObserver(list => tasks.push(...list.getEntries()));
         observer.observe({ type: "longtask" });
         const finish = () => requestAnimationFrame(() => requestAnimationFrame(() => {
           tasks.push(...observer.takeRecords()); observer.disconnect();
-          resolve({ durationMs: performance.now() - start,
+          performance.mark("look-paint-end");
+          resolve({ startTime: start, durationMs: performance.now() - start,
             longTasks: tasks.filter(task => task.startTime + task.duration > start).map(task => ({ start: task.startTime, duration: task.duration })),
             domNodes: document.querySelectorAll('[data-cs-body] *').length, cards: document.querySelectorAll('.cs-card').length });
         }));
@@ -380,10 +382,12 @@ export async function perform(page, step) {
   await new Promise(resolve => setTimeout(resolve, 100));
   if (step.measure) {
     const measured = await page.evaluate(() => window.__raphaelPaint);
+    const assertion = { check: step.measure.name, ...measured, budgetMs: step.measure.budgetMs };
+    const reject = message => { const error = new Error(message); error.assertion = assertion; throw error; };
     if (step.measure.enforce !== false) {
-      if (measured.durationMs > step.measure.budgetMs) throw new Error(`${step.measure.name}: ${measured.durationMs.toFixed(1)}ms exceeds ${step.measure.budgetMs}ms event-to-paint budget`);
-      if (step.measure.maxLongTaskMs && measured.longTasks.some(task => task.duration > step.measure.maxLongTaskMs)) throw new Error(`${step.measure.name}: long task exceeds ${step.measure.maxLongTaskMs}ms: ${JSON.stringify(measured.longTasks)}`);
+      if (measured.durationMs > step.measure.budgetMs) reject(`${step.measure.name}: ${measured.durationMs.toFixed(1)}ms exceeds ${step.measure.budgetMs}ms event-to-paint budget`);
+      if (step.measure.maxLongTaskMs && measured.longTasks.some(task => task.duration > step.measure.maxLongTaskMs)) reject(`${step.measure.name}: long task exceeds ${step.measure.maxLongTaskMs}ms: ${JSON.stringify(measured.longTasks)}`);
     }
-    return { check: step.measure.name, ...measured, budgetMs: step.measure.budgetMs };
+    return assertion;
   }
 }

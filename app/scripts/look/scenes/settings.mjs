@@ -1,10 +1,10 @@
-import { scene, click, hover, type, wait, page, settings, scroll, key, check } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check } from "./steps.mjs";
 
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
 const custom = [...add, click('.menu [data-value="custom"]')];
 const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]')];
-const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card')];
+const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card'), waitGone('[data-cs-pending]')];
 const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];

@@ -1170,6 +1170,9 @@ export function createSettings(app: AppContext): SettingsPage {
 
   // ---------- events ----------
 
+  el.addEventListener("focusin", (e) => {
+    if (pane === "connections") connections.focus(e.target as Element);
+  });
   el.addEventListener("click", (e) => {
     const target = e.target as Element;
     if (ownerControls.click(target)) return;

@@ -533,3 +533,12 @@ localized conversation-event-line using the shared eventLineHTML (quiet text and
 icon), and excluded from public work narration. member-text
 asserts the notice and absence of internal event data. Native skill-growth verifies the
 notice after production background review, then reads that skill in the next task.
+
+## Acceptance fixes (2026-10-30)
+
+Conversation approval cards use the shared 640px reading cap, independently of the
+896px composer/thread. The selected matrix covers admin-approval,
+admin-approval-batch, admin-approval-long, admin-delete-approval, admin-approved
+and admin-denied, plus chat as the neighbouring ordinary composer consumer.
+Run both themes at 1120,720,1920x1080. The shared content-width check rejects
+stretched approval cards. Desktop overlay confirmation geometry is unchanged.

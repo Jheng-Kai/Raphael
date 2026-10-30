@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -37,10 +37,13 @@ export function browserPath() {
 }
 
 export async function run(options) {
+  const cpuSlowdown = Number(process.env.LOOK_CPU_SLOWDOWN ?? 1);
+  if (!Number.isFinite(cpuSlowdown) || cpuSlowdown < 1) throw new Error("LOOK_CPU_SLOWDOWN must be a finite number >= 1");
   await mkdir(options.out, { recursive: true });
   // Keep each invocation separate: a blocked run must never inherit old green screenshots.
   const directory = await mkdtemp(join(options.out, "run-"));
   const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, skin: options.skin, locale: options.locale }, results: [], contactSheets: [], errors: [] };
+  report.cpuSlowdown = cpuSlowdown;
   let server, browser;
   const save = () => saveReport(directory, report);
   try {
@@ -88,6 +91,7 @@ export async function run(options) {
     for (const scene of options.selected) for (const theme of options.themes) for (const width of options.widths) {
       const page = await browser.newPage();
       const runtimeErrors = [];
+      let profiler;
       const result = { scene: scene.name, theme, width, height: options.heights[width] ?? 900, skin: options.skin, locale: options.locale, runtimeErrors, image: null, failed: true };
       report.results.push(result);
       const error = (kind, message) => runtimeErrors.push({ kind, message });
@@ -125,7 +129,24 @@ export async function run(options) {
         // what an earlier scene left there (a collapsed member column hid the rooms of the scene after it).
         const storage = await page.createCDPSession();
         await storage.send("Storage.clearDataForOrigin", { origin, storageTypes: "local_storage,session_storage" });
-        await storage.detach();
+        if (cpuSlowdown > 1) await storage.send("Emulation.setCPUThrottlingRate", { rate: cpuSlowdown });
+        // Keep the emulation session attached until page.close() ends the stress run.
+        if (cpuSlowdown === 1) await storage.detach();
+        if (scene.steps.some(step => step.measure)) {
+          await page.evaluateOnNewDocument(() => {
+            window.__lookLongTasks = [];
+            const record = entries => window.__lookLongTasks.push(...entries.map(task => task.toJSON()));
+            window.__lookLongTaskObserver = new PerformanceObserver(list => record(list.getEntries()));
+            window.__lookLongTaskObserver.observe({ type: "longtask", buffered: true });
+          });
+          if (process.env.LOOK_PROFILE === "1") {
+            profiler = await page.createCDPSession();
+            await profiler.send("Performance.enable");
+            await profiler.send("Profiler.enable");
+            await profiler.send("Profiler.setSamplingInterval", { interval: 100 });
+            await profiler.send("Profiler.start");
+          }
+        }
         await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "networkidle0", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
         // Existing conversation journeys enter through the real rail after the home is ready.
@@ -139,6 +160,10 @@ export async function run(options) {
           if (trace) await page.tracing.start({ path: join(directory, trace), categories: ["devtools.timeline", "blink.user_timing", "v8.execute", "disabled-by-default-v8.cpu_profiler"] });
           let assertion;
           try { assertion = await perform(page, step); }
+          catch (error) {
+            if (error.assertion) (result.assertions ??= []).push(error.assertion);
+            throw error;
+          }
           finally {
             if (trace) {
               await page.tracing.stop();
@@ -154,6 +179,20 @@ export async function run(options) {
         result.diagnostics = await page.evaluate(() => ({ messages: [...document.querySelectorAll('.message-text, .ans, .ra')].map(el => ({ tag: el.tagName, class: el.className, parent: el.parentElement?.outerHTML.slice(0, 500) })) })).catch(() => null);
       }
       try {
+        if (profiler) {
+          const { metrics } = await profiler.send("Performance.getMetrics");
+          result.profileNavigationStart = metrics.find(metric => metric.name === "NavigationStart")?.value;
+          const { profile } = await profiler.send("Profiler.stop");
+          result.profile = `${scene.name}-${theme}-${width}.cpuprofile`;
+          await writeFile(join(directory, result.profile), JSON.stringify(profile));
+          await profiler.detach();
+          profiler = null;
+        }
+        if (scene.steps.some(step => step.measure)) result.longTasks = await page.evaluate(() => {
+          const pending = window.__lookLongTaskObserver?.takeRecords() ?? [];
+          window.__lookLongTaskObserver?.disconnect();
+          return [...(window.__lookLongTasks ?? []), ...pending.map(task => task.toJSON())];
+        });
         const actualLocale = await page.evaluate(() => document.documentElement.lang || "zh-TW");
         result.locale = actualLocale;
         const englishUI = actualLocale === "zh-TW" && !scene.name.startsWith("overlay-") ? await page.evaluate(async () => {

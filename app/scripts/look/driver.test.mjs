@@ -131,6 +131,9 @@ describe("look browser interaction contracts", () => {
       const measured = await perform(page, { ...step, measure: { ...step.measure, enforce: false } });
       expect(measured.longTasks).toEqual([{ start: 5, duration: 75 }]);
       await expect(perform(page, step)).rejects.toThrow("long task exceeds 50ms");
+      await expect(perform(page, step)).rejects.toMatchObject({
+        assertion: { check: "all", longTasks: [{ start: 5, duration: 75 }], budgetMs: 250 },
+      });
     } finally {
       vi.unstubAllGlobals(); vi.restoreAllMocks();
     }

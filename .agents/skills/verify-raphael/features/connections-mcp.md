@@ -86,19 +86,13 @@ grid styling. Unit tests compare the sources in all four service states.
 checks built-ins plus the optional setup row without issuing connectors.catalog.
 Both error scenes open the small password dialog. `plugins-connecting` joins the
 built-in GitHub entry without a Composio key and checks integrations.connect.
-The fixture has four representative built-ins from the repository catalog. The two
-configured Store scenes add 360 synthetic entries across three categories (with
-multiple-category memberships and a duplicate), yielding 363 unique managed rows
-and 367 total rows. They check complete grouping, provider category order, local
-search for the last entry and the category dropdown. The shared driver's optional
-measure field records real click/input-to-next-painted-frame durations, with a
-250 ms budget for opening and searching the large list; it excludes automation
-transport time. Each render shares one filtered catalog snapshot between its rows
-and count. A refresh retains the existing rows until the reply, without a redundant
-pending-state redraw. Off-screen managed row contents use browser content visibility
-with a 64px intrinsic height; every app remains in its original grid and category.
-`plugins-store` scrolls to app 360, checks the row layout and opens its detail,
-then returns to the top; search and the category journey still cover the full list.
+The fixture has four representative built-ins from the repository catalog. The
+configured Store scenes add 360 synthetic entries with multiple category
+memberships and a duplicate. Broad-group chips and local search operate on the
+complete index, while connected context and 18-card result pages bound the DOM.
+The shared driver's measure field records real click/input-to-next-painted-frame
+durations with a 250ms budget and a 50ms maximum long task. Search reaches app 360
+and opens its detail without rendering the entire catalog.
 Use `LOOK_TRACE=1` with the shared look command to retain per-interaction Chrome
 traces, including budget failures. These measurements concern this offline browser fixture;
 they do not establish live provider or native timing. Unit tests cover source
@@ -393,3 +387,66 @@ reply retains the current rendered rows instead of forcing a second settings lay
 changed metadata or categories still redraw. The controller regression in
 `app/src/main/connections.test.ts` covers both outcomes, while the existing measured
 Store scenes enforce the unchanged 250ms paint and 50ms long-task budgets.
+
+## Acceptance fixes (2026-10-30)
+
+Connect apps categories uses the existing single scrolling row of broad group
+buttons, replacing the retired provider dropdown journey. The scene focuses every
+chip with Tab, checks that each full chip is visible and hit-testable, selects the
+last group with Enter, then clicks Productivity and checks filtered rows. Selection
+also reveals a chip when pointer activation did not first focus it.
+
+Switching Installed/Store preserves the Connections shell and uses shared swapHTML
+inside it, avoiding full Settings reconstruction and synchronous scroll restoration.
+A unit regression checks both directions without host redraw. Existing 250ms paint
+and 50ms long-task budgets remain enforced; use LOOK_TRACE=1 for CPU/layout evidence.
+The acceptance matrix includes plugins-store, plugins-store-category,
+plugins-store-search, plugins-store-all, plugins-store-empty, plugins-store-motion,
+connect-apps-categories and neighbouring connections, connections-empty,
+plugins-installed, plugins-detail, plugins-store-key and plugins-connecting.
+Run both themes at 1120,720,1920x1080. Fixture timing does not prove native/provider
+timing. Judge is intentionally skipped under this acceptance brief.
+
+Focus-in on the Settings Connections pane reveals the entire category button
+before selection, reserving the existing right fade padding. The focus helper is
+shared with selected-category repaint, and a unit regression checks both scroll
+directions without changing the selected group or redrawing Settings.
+
+## Store long-task diagnostics (2026-10-30)
+
+Tab switching also retains the original toolbar, tab buttons and search input.
+Only the result body is replaced, so a clicked tab keeps native focus without a
+second focus call forcing synchronous layout. The existing controller regression
+checks both directions without a full redraw, and checks node identity, selected
+state and no focus restoration when entering Store.
+The six Store scenes retain the 250ms paint and 50ms long-task gates.
+
+The shared look runner records navigation-to-capture long tasks for measured scenes,
+including startup and neighbouring actions, without removing any task from the
+existing interaction interval. Failed interaction assertions retain their metrics.
+Use LOOK_PROFILE=1 for full-scene CDP samples and LOOK_TRACE=1 for measured timeline
+events. Compare both with ordinary unprofiled repeats; diagnostic overhead is not
+production timing. Historical failures without samples cannot be assigned a cause
+solely from a later passing run. See app/scripts/look/README.md for clock mapping.
+
+## Store click-to-paint work (third pass, 2026-10-30)
+
+The default first-screen snapshot is prepared as the catalog loads, keyed by the
+catalog identities, configuration and locale; non-default filters use fresh data.
+Opening Store preserves the toolbar and immediately builds twelve app names and
+working actions, with stable tracks for the remaining page. After paint, two rows
+per task receive their summaries, Add icons and asynchronously decoded marks, followed by
+offscreen rows. Existing name/action nodes remain intact. The cached-catalog refresh
+also starts after paint. A generation, host visibility and body attachment guard
+prevent late writes after redraw, filter changes, tab changes or reset. Selecting
+the current category on its first page retains the existing rows.
+
+The controller tests cover staged completion, stable nodes, unchanged category
+selection and cancellation on switching/reset. The existing plugins-store-rows
+check also verifies that names, summaries and actions fit within each row.
+Store scenes wait for pending details after the unchanged measured opening step;
+the observer interval and 250ms/50ms gates are not changed. Use the same six Store
+scenes in both themes at 1120,720,1920x1080 for five consecutive ordinary passes.
+LOOK_CPU_SLOWDOWN labels additional CDP stress evidence separately from ordinary
+machine timing; see the shared look README. Neither kind proves native/provider
+timing, or the cause of a historical failure without its CPU samples.

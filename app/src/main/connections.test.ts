@@ -1028,7 +1028,7 @@ describe("what the tab does", () => {
     }
   });
 
-  test("selecting an overflow category keeps keyboard focus and scrolls the whole chip into view after repaint", async () => {
+  test.each([true, false])("selecting an overflow category reveals the whole chip with prior focus %s", async (focused) => {
     const c = createConnections(host);
     await c.load();
     c.click(button("tab", { id: "store" }));
@@ -1044,12 +1044,12 @@ describe("what the tab does", () => {
       const groups = browser.document.querySelector(".cs-store-groups")! as unknown as HTMLElement;
       groups.scrollLeft = 20;
       const last = groups.querySelector<HTMLButtonElement>('[data-id="other"]')!;
-      last.focus();
+      if (focused) last.focus();
       c.click(last);
       const replaced = browser.document.querySelector(".cs-store-groups")! as unknown as HTMLElement;
       const selected = replaced.querySelector<HTMLButtonElement>('[data-id="other"]')!;
       expect(selected.getAttribute("aria-pressed")).toBe("true");
-      expect(browser.document.activeElement).toBe(selected);
+      if (focused) expect(browser.document.activeElement).toBe(selected);
       expect(replaced.scrollLeft).toBe(30);
       expect(selected.getBoundingClientRect().right).toBe(replaced.getBoundingClientRect().right);
     } finally {
@@ -1057,6 +1057,94 @@ describe("what the tab does", () => {
       vi.unstubAllGlobals();
       await browser.happyDOM.abort();
     }
+  });
+
+  test("focusing any category reveals its whole button clear of the fade before selection", async () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div class="cs-store-groups" style="padding-right:24px"><button data-conn="store-group" data-id="">All</button><button data-conn="store-group" data-id="other">Other</button></div>';
+    const groups = browser.document.querySelector('.cs-store-groups')! as unknown as HTMLElement;
+    const geometry = vi.spyOn(browser.HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('cs-store-groups')) return new browser.DOMRect(0, 0, 100, 28);
+      return new browser.DOMRect((this.dataset.id ? 90 : 0) - groups.scrollLeft, 0, 40, 28);
+    });
+    const c = createConnections(host);
+    host.redraw.mockClear();
+    try {
+      c.focus(groups.querySelector('[data-id="other"]')!);
+      expect(groups.scrollLeft).toBe(54);
+      expect(c.view().category).toBe('');
+      c.focus(groups.querySelector('[data-id=""]')!);
+      expect(groups.scrollLeft).toBe(0);
+      expect(host.redraw).not.toHaveBeenCalled();
+    } finally { geometry.mockRestore(); await browser.happyDOM.abort(); }
+  });
+
+  test("switching store tabs preserves the settings shell and avoids a full settings redraw", async () => {
+    const c = createConnections(host);
+    await c.load();
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    vi.stubGlobal("document", browser.document);
+    try {
+      const shell = browser.document.querySelector('.cs');
+      const storeTab = browser.document.querySelector('[data-conn="tab"][data-id="store"]')! as unknown as HTMLButtonElement;
+      const searchInput = browser.document.querySelector('#conn-search')!;
+      storeTab.focus();
+      const focus = vi.spyOn(browser.HTMLElement.prototype, 'focus');
+      host.redraw.mockClear();
+      c.click(storeTab as unknown as Element);
+      expect(browser.document.querySelector('.cs-store')).toBe(shell);
+      expect(browser.document.activeElement).toBe(storeTab);
+      expect(browser.document.querySelector('#conn-search')).toBe(searchInput);
+      expect(storeTab.getAttribute('aria-selected')).toBe('true');
+      expect(focus).not.toHaveBeenCalled();
+      expect(browser.document.querySelector('.cs-card')).not.toBeNull();
+      expect(host.redraw).not.toHaveBeenCalled();
+      c.click(browser.document.querySelector('[data-conn="tab"][data-id="installed"]')! as unknown as Element);
+      expect(browser.document.querySelector('.cs')).toBe(shell);
+      expect(shell!.classList.contains('cs-store')).toBe(false);
+      expect(browser.document.querySelector('.cs-item')).not.toBeNull();
+    } finally { vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
+  });
+
+  test.each(["finish", "switch", "reset"])("store paints visible rows first and cancels stale fill on %s", async (ending) => {
+    api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: false, google_configured: false });
+    api.integrationsCatalog.mockResolvedValue({ services: Array.from({ length: 24 }, (_, i) => service(`app-${i}`, `App ${i}`)) });
+    const c = createConnections(host);
+    await c.load();
+    await settle();
+    const browser = new Window();
+    browser.document.body.innerHTML = connectionsHTML(c.view());
+    const frames: FrameRequestCallback[] = [];
+    vi.useFakeTimers();
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => { frames.push(frame); return frames.length; });
+    try {
+      c.click(browser.document.querySelector('[data-conn="tab"][data-id="store"]')! as unknown as Element);
+      const first = browser.document.querySelector('.cs-card [data-conn="open-store"]');
+      expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(12);
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      c.click(browser.document.querySelector('[data-conn="store-group"][data-id=""]')! as unknown as Element);
+      expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      frames.shift()!(0);
+      // requestAnimationFrame runs before paint; hydration must wait for the following task.
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(18);
+      if (ending === "switch") c.click(button("tab", { id: "installed" }));
+      if (ending === "reset") c.reset();
+      await vi.runOnlyPendingTimersAsync();
+      if (ending !== "finish") {
+        expect(frames).toHaveLength(0);
+        expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(ending === "reset" ? 12 : 0);
+        return;
+      }
+      expect(browser.document.querySelectorAll('[data-cs-pending]')).toHaveLength(16);
+      while (frames.length) { frames.shift()!(0); await vi.runOnlyPendingTimersAsync(); }
+      expect(browser.document.querySelector('[data-cs-pending]')).toBeNull();
+      expect(browser.document.querySelectorAll('.cs-card [data-conn="open-store"]')).toHaveLength(18);
+      expect(browser.document.querySelector('.cs-card [data-conn="open-store"]')).toBe(first);
+      expect(browser.document.querySelector('.cs-store-pages .num')!.textContent).toContain('/ 24');
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); await browser.happyDOM.abort(); }
   });
 
   test("switches a service on or off, a tool on or off, and reads its tools again", async () => {

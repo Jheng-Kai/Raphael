@@ -130,3 +130,11 @@ Owner round 6: profile, dictation, appearance, skins, models, data and messaging
 ## Owner round 7 contracts
 
 Models omits the reference-price helper paragraph while retaining price/subscription information on each purpose row. Catalog failure remains an essential error. settings-concise rejects the redundant price note in the normal Models fixture; models-responsive retains the stacked narrow-row contract.
+
+## Acceptance fixes (2026-10-30)
+
+The quick-model-row check follows rounds 6/7 and R-UI-02: its localized row label
+says Quick questions, its shared picker shows model/source, and its price remains
+visible. No helper paragraph is required or permitted. The affected matrix is
+models, quick-model-menu, quick-effort-menu and quick-model-selection, both themes
+at 1120,720,1920x1080. The audit regression rejects a generic Model label.
