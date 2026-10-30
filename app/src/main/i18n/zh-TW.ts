@@ -3,6 +3,18 @@ import { homeZh } from "./home-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
   "desktop.open": "即時桌面",
+  "desktop.expand": "展開",
+  "desktop.done": "我完成了",
+  "desktop.working": "正在使用電腦",
+  "desktop.finished": "電腦工作已完成",
+  "desktop.ended": "電腦工作已停止",
+  "desktop.firstBuild": "首次建立通常需要 5–15 分鐘，實際時間取決於下載速度。",
+  "desktop.need.sign_in": "需要你在電腦上登入，才能繼續。",
+  "desktop.need.password": "需要你在電腦上輸入密碼，才能繼續。",
+  "desktop.need.two_factor": "需要你在電腦上完成雙重驗證，才能繼續。",
+  "desktop.need.captcha": "需要你在電腦上完成人機驗證，才能繼續。",
+  "desktop.need.payment": "需要你在電腦上完成付款步驟，才能繼續。",
+  "desktop.need.other": "這一步需要你親自操作電腦，才能繼續。",
   "desktop.starting": "正在啟動 Docker…",
   "desktop.building": "首次使用，正在建立桌面映像…",
   "desktop.preparing": "正在準備桌面…",

@@ -183,11 +183,19 @@ export async function drive(name, context) {
     // Await the real app's timezone propagation before checking that same VM.
     const ownerZone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
     await context.rpc("home.overview", { tz: ownerZone });
-    const clock = await context.computerOffset();
     const minutes = -new Date().getTimezoneOffset();
     const expected = `${minutes < 0 ? "-" : "+"}${String(Math.floor(Math.abs(minutes) / 60)).padStart(2, "0")}${String(Math.abs(minutes) % 60).padStart(2, "0")}`;
-    result.computer.timezone = { ...clock, ownerZone, expected };
-    if (clock.offset !== expected) throw new Error(`VM UTC offset ${clock.offset} differs from host ${expected}`);
+    // Home schedules reconciliation asynchronously; its RPC reply is not readiness.
+    const timezoneChecks = [], timezoneDeadline = Date.now() + 120000;
+    let clock;
+    do {
+      try { clock = await context.computerOffset(); timezoneChecks.push(clock); }
+      catch (error) { timezoneChecks.push({ error: error.message }); }
+      if (clock?.offset === expected) break;
+      await pause(1000);
+    } while (Date.now() < timezoneDeadline);
+    result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
+    if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
     await wait(page, '[data-desktop="open"]:not([hidden])');
     await capture("entry");
@@ -223,6 +231,47 @@ export async function drive(name, context) {
     await inspectDesktop("handback");
     await capture("handback");
     await click(page, '.desktop-viewer [data-dlg="close"]');
+    const { member: colleague } = await context.rpc("members.create", { name: "Computer tester", role: "Local computer test" });
+    await perform(page, { action: "member", id: colleague.id });
+    await type(page, ".composer .cmp-input", "Complete the local test sign-in [native-computer:signin]");
+    await click(page, ".cmp-send");
+    await page.waitForSelector('[data-desktop-work][data-work-state="waiting_control"]', { visible: true, timeout: 60000 });
+    await capture("takeover");
+    const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
+    await click(page, '[data-desktop-card-open]');
+    await page.waitForSelector('.desktop-viewer[data-desktop-state="owner"]', { visible: true, timeout: 60000 });
+    const ownerFrame = await (await page.$('.desktop-viewer iframe')).contentFrame();
+    await ownerFrame.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
+    await click(page, '.desktop-viewer iframe');
+    const canvas = await ownerFrame.$('#noVNC_container canvas');
+    const desktopBox = await canvas.boundingBox();
+    // The local page focuses Email when the owner clicks its background. Avoid
+    // browser accelerators, which WebView2 can intercept before noVNC sees them.
+    await canvas.click({ offset: { x: Math.floor(desktopBox.width * 0.1), y: Math.floor(desktopBox.height * 0.75) } });
+    // All owner input travels through the real noVNC keyboard connection.
+    await page.keyboard.type("owner@example.test"); await page.keyboard.press("Tab");
+    await page.keyboard.type("native-only-dummy"); await page.keyboard.press("Tab"); await page.keyboard.press("Enter");
+    await pause(700);
+    const auditHeld = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
+    if (auditHeld !== auditBefore) throw new Error("Member computer call completed while the owner held control");
+    if (await page.$eval('[data-dlg="control"]', el => el.textContent) !== "我完成了") throw new Error("Explicit takeover done action missing");
+    await capture("signed-in");
+    await click(page, '[data-dlg="control"]');
+    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    await click(page, '.desktop-viewer [data-dlg="close"]');
+    let resumed;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      resumed = (await snapshot()).agent_turns.find(turn => turn.member_id === colleague.id);
+      if (resumed?.status === "done") break;
+      await pause(200);
+    }
+    if (resumed?.status !== "done" || !resumed.text.includes("繼續一次")) throw new Error("Original computer task did not continue");
+    const rows = (await snapshot()).tool_audit.filter(row => row.server === "computer");
+    const continuation = rows.slice(auditBefore);
+    if (continuation.map(row => row.tool).join(",") !== "request_takeover,get_desktop_state,vm_exec" || continuation.some(row => row.outcome !== "ok")) throw new Error("Sign-in check or the single real continuation failed");
+    if (rows.filter(row => row.tool === "request_takeover" && row.outcome === "ok").length !== 1) throw new Error("Takeover did not resume exactly once");
+    result.computer.takeover = { turn: resumed.id, state: resumed.status, resumeCount: 1, noMemberCallsWhileHeld: true };
+    await capture("continued-once");
     return;
   }
   if (name === "skill-growth") {

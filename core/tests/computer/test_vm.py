@@ -440,9 +440,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover"}
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover"}
     assert not snapshot.hidden()
     assert all(tool.pinned for tool in hub.offered())
     assert hub.tier_of("mcp:computer-shared/install_extension") is None
@@ -548,6 +548,9 @@ async def test_vm_tool_descriptions_require_owner_yes_before_outward_actions(des
         assert tool.tier == Tier.T0
         if tool.name == "attach_file":
             assert tool.description == ATTACH["description"]
+            continue
+        if tool.name == "request_takeover":
+            assert "Never request secrets in chat" in definitions["computer__request_takeover"]["description"]
             continue
         description = definitions["computer__" + tool.name]["description"]
         for clause in ("no per-action approval", "owner control blocks all calls",

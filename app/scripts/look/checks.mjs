@@ -2,6 +2,23 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("computer-")) {
+    const cards = document.querySelectorAll('[data-desktop-work]'), card = cards[0];
+    require(cards.length === 1 && visible(card), "one computer card per task");
+    require(card.closest('.tn')?.dataset.id === "2", "the card belongs to its own private turn");
+    require(!card.querySelector('input, textarea'), "owner secrets have no chat input");
+    if (name === "computer-inline") {
+      require(visible(card.querySelector('iframe')), "the preview streams the desktop");
+      require(getComputedStyle(card.querySelector('iframe')).pointerEvents === "none", "inline preview cannot input");
+    }
+    if (name === "computer-takeover") {
+      require(card.dataset.workState === "waiting_control" && card.textContent.includes("登入"), "typed sign-in need is stated plainly");
+      require(!card.querySelector('iframe'), "owner entry never streams into the inline card");
+    }
+    if (name === "computer-takeover-owner") require(document.querySelector('[data-dlg="control"]').textContent === "我完成了", "explicit done action");
+    if (name === "computer-takeover-done") require(window.__look.calls.filter(call => call.method === "computer.viewer_control" && !call.params.held && call.params.takeover === "private-takeover-request").length === 1, "one explicit handback for this request");
+    return { check: name };
+  }
   if (name === "desktop-install") {
     const buttons = document.querySelectorAll('[data-act="docker-download"]');
     require(buttons.length === 1 && visible(buttons[0]) && !buttons[0].disabled, "one usable Docker download action");
@@ -44,6 +61,10 @@ export function checkRendered(name) {
       const preparing = ["starting", "building", "preparing"].includes(viewer.dataset.desktopState);
       require(preparing ? action.hidden : !action.disabled, "preparation hides control; a failed desktop can retry");
       if (viewer.dataset.desktopState === "building") require(viewer.querySelector('.desktop-placeholder').textContent.includes("[2/4]"), "real build progress remains visible");
+      if (preparing) {
+        require(viewer.querySelectorAll('.desktop-preparation li').length === 3, "all preparation steps are visible");
+        require(visible(viewer.querySelector('progress')), "unknown progress has an indeterminate indicator");
+      }
     } else {
       require(visible(frame), "the connected desktop is visible");
       if (name === "desktop-owner" || name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === true), "take control acquires the core lease");

@@ -4,6 +4,7 @@ import { onLocaleChange, t } from "./i18n";
 import { openDialog, type Dialog } from "./member-dialogs";
 import { esc, iconButton } from "./ui";
 import "./desktop-viewer.css";
+import { mountDesktopTimeline, type DesktopWork } from "./desktop-timeline";
 
 export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
@@ -11,11 +12,26 @@ export interface DesktopState {
   control: "member" | "owner";
   progress?: string;
   error?: string;
+  works?: DesktopWork[];
+  preview_allowed?: boolean;
 }
 export interface DesktopSession { session: string; url: string }
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
-export function mountDesktopViewer(host: HTMLElement, member: () => number): { show(): void; hide(): void; refresh(): void } {
+export function preparationHTML(state: DesktopState): string {
+  const stages = ["starting", "building", "preparing"] as const;
+  const at = stages.indexOf(state.state as typeof stages[number]);
+  const percent = state.progress?.match(/\b(\d{1,3}(?:\.\d+)?)%/);
+  const value = percent ? Math.min(100, Number(percent[1])) : undefined;
+  return `<div class="desktop-preparation"><span class="spin" aria-hidden="true"></span>` +
+    `<ol>${stages.map((stage, index) => `<li data-stage="${index < at ? "done" : index === at ? "current" : "next"}"${index === at ? ' aria-current="step"' : ""}>${esc(t(STATUS_KEY[stage]))}</li>`).join("")}</ol>` +
+    `<progress aria-label="${esc(t(STATUS_KEY[stages[Math.max(0, at)]]))}" max="100"${value === undefined ? "" : ` value="${value}"`}></progress>` +
+    (state.progress ? `<p class="desktop-build-progress">${esc(state.progress)}</p>` : "") +
+    (state.state === "building" ? `<p>${esc(t("desktop.firstBuild"))}</p>` : "") + `</div>`;
+}
+
+export function mountDesktopViewer(host: HTMLElement, member: () => number,
+  options?: { timeline: HTMLElement; conversation: () => number | undefined }): { show(): void; hide(): void; refresh(): void; sync(): void; carry(from: Element, to: HTMLElement): void } {
   host.insertAdjacentHTML("afterbegin", iconButton("monitor", t("desktop.open"), ' data-desktop="open" hidden', "ra-tool"));
   const entry = host.querySelector<HTMLButtonElement>('[data-desktop="open"]')!;
   onLocaleChange(() => { entry.setAttribute("aria-label", t("desktop.open")); entry.title = t("desktop.open"); });
@@ -25,6 +41,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
   let connected = false, loading = false, changing = false;
   let connectingSince = 0;
   let closePending: Promise<unknown> = Promise.resolve();
+  let takeover: string | undefined, taking = false;
+  const timeline = options ? mountDesktopTimeline(options.timeline, member, options.conversation, work => {
+    takeover = work.state === "waiting_control" ? work.request_id : undefined;
+    taking = !!takeover; void open();
+  }) : undefined;
 
   function draw(): void {
     if (!dialog) return;
@@ -37,14 +58,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     status.textContent = t(STATUS_KEY[label]);
     status.hidden = !running;
     const action = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="control"]')!;
-    action.textContent = t(state?.control === "owner" ? "desktop.release" : !running ? "desktop.retry" : "desktop.take");
+    const pending = state?.works?.find(work => work.state === "waiting_control");
+    action.textContent = t(state?.control === "owner" ? (takeover || pending ? "desktop.done" : "desktop.release") : !running ? "desktop.retry" : "desktop.take");
     action.hidden = state?.control !== "owner" && (preparing || running && !connected);
     action.disabled = changing || state?.control !== "owner" && running && !connected;
     frame!.hidden = !running || !connected;
     const placeholder = dialog.el.querySelector<HTMLElement>(".desktop-placeholder")!;
     placeholder.hidden = !!running && connected;
     const failure = state?.error === "build_failed" || state?.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed";
-    placeholder.textContent = t(!running && state?.error ? failure : STATUS_KEY[label]) + (state?.progress ? `\n${state.progress}` : "");
+    if (preparing) placeholder.innerHTML = preparationHTML(state!);
+    else placeholder.textContent = t(!running && state?.error ? failure : STATUS_KEY[label]);
     if (!running && frame!.hasAttribute("src")) {
       frame!.removeAttribute("src");
       connected = false;
@@ -67,6 +90,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     dialog = undefined;
     frame = undefined;
     connected = false;
+    takeover = undefined; taking = false;
     if (previous) closePending = api.desktopClose(previous.session).catch(() => {});
   }
 
@@ -75,6 +99,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
       || event.data?.type !== "raphael-desktop") return;
     connected = event.data.state === "connected";
     draw();
+    if (connected && taking && !changing) { taking = false; void control(); }
   }
 
   async function poll(): Promise<void> {
@@ -82,9 +107,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     loading = true;
     const current = generation, id = member();
     try {
-      const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id);
+      const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id, options?.conversation());
       if (!visible || current !== generation || id !== member()) return;
       state = next;
+      timeline?.update(next);
       entry.hidden = next.state === "absent";
       draw();
     } catch {
@@ -95,7 +121,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
           const expired = session;
           session = undefined;
           await api.desktopClose(expired.session).catch(() => {});
-          const reopened = await api.desktopOpen(id).catch(() => undefined);
+          const reopened = await api.desktopOpen(id, options ? { conversation_id: options.conversation() } : undefined).catch(() => undefined);
           if (reopened) {
             if (visible && current === generation) session = reopened;
             else await api.desktopClose(reopened.session).catch(() => {});
@@ -115,12 +141,21 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     const current = generation, id = member();
     try {
       await closePending;
-      const opened = await api.desktopOpen(id);
+      const opened = await api.desktopOpen(id, options ? { conversation_id: options.conversation() } : undefined);
       if (!visible || current !== generation || id !== member()) {
         await api.desktopClose(opened.session);
         return;
       }
       session = opened;
+      if (state?.works?.length) state = await api.desktopRenew(opened.session);
+      if (taking) {
+        takeover = state?.works?.find(work => work.state === "waiting_control")?.request_id;
+        taking = !!takeover;
+      }
+      if (!visible || current !== generation || id !== member()) {
+        await api.desktopClose(opened.session); if (session === opened) session = undefined; return;
+      }
+      if (state) timeline?.update(state);
       dialog = openDialog({
         title: t("desktop.open"), cls: "desktop-viewer",
         body: `<p class="desktop-status" role="status"></p><div class="desktop-screen"><div class="desktop-placeholder">${esc(t("desktop.connecting"))}</div><iframe title="${esc(t("desktop.open"))}" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe></div><p class="desktop-error" role="alert" hidden></p>`,
@@ -131,6 +166,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
       window.addEventListener("message", message);
       draw();
     } catch {
+      if (session && !dialog) {
+        const failed = session; session = undefined;
+        await api.desktopClose(failed.session).catch(() => {});
+      }
       entry.setAttribute("aria-label", t("desktop.unavailable"));
     } finally { changing = false; if (current === generation) draw(); }
   }
@@ -145,15 +184,19 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     try {
       if (state?.state !== "running" && state?.control !== "owner") {
         await api.desktopClose(opened.session);
-        const next = await api.desktopOpen(member());
+        const next = await api.desktopOpen(member(), options ? { conversation_id: options.conversation() } : undefined);
         if (current !== generation) { await api.desktopClose(next.session); return; }
         session = next;
         state = { state: "preparing", ready: false, control: "member" };
         return;
       }
-      const next = await api.desktopControl(opened.session, held);
+      const pending = state?.works?.find(work => work.state === "waiting_control");
+      const request = takeover ?? pending?.request_id;
+      const next = request ? await api.desktopControl(opened.session, held, request) : await api.desktopControl(opened.session, held);
       if (current !== generation) return;
       state = next;
+      if (!held) takeover = undefined;
+      timeline?.update(next);
       connected = false;
       frame!.removeAttribute("src");
       dialog.el.querySelector<HTMLElement>(".desktop-error")!.hidden = true;
@@ -168,7 +211,17 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
 
   return {
     show() { visible = true; clearTimeout(timer); entry.setAttribute("aria-label", t("desktop.open")); void poll(); },
-    hide() { visible = false; generation++; clearTimeout(timer); dialog?.close(); entry.hidden = true; },
-    refresh() { generation++; dialog?.close(); clearTimeout(timer); entry.hidden = true; if (visible && !loading) void poll(); },
+    hide() { visible = false; generation++; clearTimeout(timer); dialog?.close(); timeline?.clear(); entry.hidden = true; },
+    refresh() { generation++; dialog?.close(); timeline?.clear(); clearTimeout(timer); entry.hidden = true; if (visible && !loading) void poll(); },
+    sync() { timeline?.sync(); },
+    carry(from, to) {
+      for (const card of from.querySelectorAll<HTMLElement>('[data-desktop-slot] > .desktop-card')) {
+        const slot = to.querySelector<HTMLElement>(`[data-desktop-slot="${card.parentElement!.dataset.desktopSlot}"]`);
+        if (slot) {
+          if (typeof slot.moveBefore === "function") slot.moveBefore(card, null);
+          else slot.append(card);
+        }
+      }
+    },
   };
 }

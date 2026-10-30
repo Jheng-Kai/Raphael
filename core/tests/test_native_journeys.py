@@ -97,3 +97,24 @@ def test_native_codex_model_uses_configured_available_model_and_rejects_guessed_
         native_codex_model({**environ, "RAPHAEL_NATIVE_CODEX_MODEL": "gpt-6.1"})
     with pytest.raises(ValueError, match="installed Codex model id"):
         native_codex_model({**environ, "RAPHAEL_NATIVE_CODEX_MODEL": "openrouter:paid?key=secret"})
+
+
+def test_native_computer_scripts_only_the_real_takeover_sequence_when_explicitly_enabled(monkeypatch):
+    from raphael_core.native_journeys import native_computer
+    messages = [{"role": "user", "content": "Local sign-in [native-computer:signin]"}]
+    names = {"computer__vm_exec", "computer__request_takeover", "computer__get_desktop_state"}
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE_COMPUTER", raising=False)
+    assert native_computer(messages, names, 0) is None
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE_COMPUTER", "1")
+    assert [native_computer(messages, names, index)[0] for index in range(4)] == [
+        "computer__vm_exec", "computer__request_takeover", "computer__get_desktop_state", "computer__vm_exec"]
+    assert native_computer(messages, names, 1)[1] == {"reason": "sign_in"}
+    assert native_computer(messages, names, 4)[0] == "reply"
+    with_screen = [*messages, {"role": "tool", "content": "Desktop inspected"},
+                   {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,test"}}]}]
+    assert native_computer(with_screen, names, 3)[0] == "computer__vm_exec"
+    assert native_computer([*with_screen, {"role": "user", "content": "Another task"}], names, 3) is None
+    assert native_computer([], names, 0) is None
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE")
+    assert native_computer(messages, names, 0) is None

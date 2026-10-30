@@ -4,6 +4,18 @@ import type { Messages } from './zh-TW';
 
 export const ja = {
   "desktop.open": "ライブデスクトップ",
+  "desktop.expand": "拡大",
+  "desktop.done": "完了しました",
+  "desktop.working": "コンピューターで作業中",
+  "desktop.finished": "コンピューターの作業が完了しました",
+  "desktop.ended": "コンピューターの作業を停止しました",
+  "desktop.firstBuild": "初回の構築には通常5〜15分かかります。ダウンロード速度により変わります。",
+  "desktop.need.sign_in": "続けるには、コンピューターでサインインしてください。",
+  "desktop.need.password": "続けるには、コンピューターでパスワードを入力してください。",
+  "desktop.need.two_factor": "続けるには、コンピューターで二段階認証を完了してください。",
+  "desktop.need.captcha": "続けるには、コンピューターでCAPTCHA認証を完了してください。",
+  "desktop.need.payment": "続けるには、コンピューターで支払い手続きを完了してください。",
+  "desktop.need.other": "続けるには、この操作をコンピューターで行ってください。",
   "desktop.starting": "Docker を起動中…",
   "desktop.building": "初回のデスクトップイメージを構築中…",
   "desktop.preparing": "デスクトップを準備中…",

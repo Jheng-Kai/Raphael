@@ -54,7 +54,7 @@ test.each(["pull_failed", "docker_start_timeout"])("%s explains the failed prepa
 
 test("the selected member opens in the shared dialog and only a trusted frame can announce a connection", async () => {
   await open();
-  expect(api.desktopOpen).toHaveBeenCalledWith(1);
+  expect(api.desktopOpen).toHaveBeenCalledWith(1, undefined);
   expect(frame().src).toBe("http://127.0.0.1:5000/session-one/vnc.html");
   expect(control().disabled).toBe(true);
   window.dispatchEvent(new MessageEvent("message", { origin: "http://foreign.test", data: { type: "raphael-desktop", state: "connected" } }));
