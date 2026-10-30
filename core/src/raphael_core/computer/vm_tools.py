@@ -50,6 +50,8 @@ EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspa
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 300}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace into Raphael's attachment store and return its attachment ID. Paths outside this workspace are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
+REQUEST = {"description": "Ask the owner to grant you persistent computer access. Use only when the owner asks for computer work or the task truly needs it. No computer starts before yes. On denial or expiry, say plainly that you cannot use the computer. Routines cannot grant access; ask the owner in a private chat first.",
+           "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
 
 
 class VmTools:
@@ -57,6 +59,10 @@ class VmTools:
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
         self.audit = AuditLog(conn) if conn is not None else None
         self.conn = conn
+        if conn is not None:
+            from .grants import ComputerGrants
+            self.vm.grants = ComputerGrants(conn)
+        self.requests = {}
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -69,6 +75,8 @@ class VmTools:
         return getattr(self.delegate, name)
 
     async def prepare(self, member_id=0):
+        if not self.vm.grants.allowed(member_id):
+            return
         if self.vm.clock() - self._checked_at > 10:
             self._available = await self.vm.installed()
             self._checked_at = self.vm.clock()
@@ -76,6 +84,8 @@ class VmTools:
             return
         target = self.vm.target(member_id)
         async with self.locks.setdefault(target.key, asyncio.Lock()):
+            if not self.vm.grants.allowed(member_id):
+                return
             if target.key in self.catalogs:
                 return
             try:
@@ -122,16 +132,23 @@ class VmTools:
 
     def offered_for(self, member_id):
         target = self.vm.target(member_id)
-        native = [self.tools[key] for key in self.catalogs.get(target.key, [])] if self._available else []
+        if self.vm.grants.allowed(member_id):
+            native = [self.tools[key] for key in self.catalogs.get(target.key, [])] if self._available else []
+        else:
+            key = tool_key(f"computer-access-{member_id}", "request_computer")
+            self.requests[key] = member_id
+            native = [PluginTool(key, "computer", "request_computer", REQUEST["description"], REQUEST["parameters"], Tier.T2, pinned=True)]
         return [*self.delegate.offered(), *native]
 
     def offered(self):
         return self.offered_for(0)
 
     def is_computer_tool(self, key):
-        return key in self.tools
+        return key in self.tools or key in self.requests
 
     def tier_of(self, key):
+        if key in self.requests:
+            return Tier.T2
         if key in self.tools:
             shared = self.vm.settings is None or self.vm.settings.get("computer_vm_mode") == "shared"
             matches = (self.routes[key].key == "shared") == shared
@@ -140,7 +157,7 @@ class VmTools:
 
     def tier_for_call(self, key, arguments):
         # The hub knows nothing about computer tools, so it must not be asked about them.
-        return self.tier_of(key) if key in self.tools else self.delegate.tier_for_call(key, arguments)
+        return self.tier_of(key) if self.is_computer_tool(key) else self.delegate.tier_for_call(key, arguments)
 
     def kind_of(self, server, name):
         if server == "computer":
@@ -157,17 +174,51 @@ class VmTools:
                 approver=approver, outcome=outcome if outcome in ("ok", "timeout", "denied", "expired", "blocked") else "error", task_id=task_id)
 
     def record_unrun(self, key, *, outcome, task_id=None):
-        if key in self.tools:
+        if key in self.requests:
+            if self.audit:
+                self.audit.add(server="computer", tool="request_computer", tier="T2", approver="none", outcome=outcome, task_id=task_id)
+        elif key in self.tools:
             self._audit(key, outcome, "none", task_id)
         else:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
+        if key in self.requests:
+            member = self.requests[key]
+            if task_id:
+                return PluginResult(False, "computer_permission_required", "Computer access is not granted. Ask the owner in this member's private chat or press Start in its computer panel; this routine cannot start it.")
+            if approver != "user":
+                return PluginResult(False, "denied", "The owner did not grant computer access. Say plainly that you cannot use the computer.")
+            if not Draft202012Validator(REQUEST["parameters"]).is_valid(arguments):
+                return PluginResult(False, "bad_arguments")
+            scope = _SCOPE.get()
+            if scope is None or scope[0] != "turn" or scope[1] != member:
+                return PluginResult(False, "computer_permission_required")
+            if not _TURN.get()[1]:
+                return PluginResult(False, "private_only", "Request computer access in the owner's private chat.")
+            self.vm.grants.set(member, True)
+            if self.audit:
+                self.audit.add(server="computer", tool="request_computer", tier="T2", approver="user", outcome="ok")
+            await self.prepare(member)
+            if not self.vm.grants.allowed(member):
+                return PluginResult(False, "computer_permission_required", "The owner revoked computer access.")
+            if not self._available or not self.catalogs.get(self.vm.target(member).key):
+                return PluginResult(False, self.problem or "unavailable", "Computer access was granted, but the computer could not start.")
+            return PluginResult(True, text="Computer access granted. Computer tools are now available; continue the owner's task.")
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         tool, target = self.tools[key], self.routes[key]
         result = PluginResult(False, "blocked")
         try:
+            scope = _SCOPE.get()
+            member = scope[1] if scope and scope[0] == "turn" else 0
+            if task_id and self.conn is not None:
+                row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
+                if row is None:
+                    return PluginResult(False, "computer_permission_required")
+                member = row[0]
+            if not self.vm.grants.allowed(member) or target != self.vm.target(member):
+                return PluginResult(False, "computer_permission_required", "The owner has not granted this member computer access.")
             if self.tier_of(key) is None or approver == "none" or tool.tier >= Tier.T2 and approver != "user":
                 return result
             if target.key in self.vm.held:

@@ -1058,6 +1058,19 @@ ALTER TABLE rooms ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;
 PRAGMA user_version = 44;
 COMMIT;
 """
+_MIGRATIONS[45] = """
+BEGIN;
+CREATE TABLE computer_grants (
+    member_id INTEGER PRIMARY KEY,
+    granted INTEGER NOT NULL CHECK(granted IN (0, 1)),
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE TRIGGER clear_computer_grant AFTER DELETE ON members BEGIN
+  DELETE FROM computer_grants WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 45;
+COMMIT;
+"""
 LATEST_VERSION = max(_MIGRATIONS)
 
 

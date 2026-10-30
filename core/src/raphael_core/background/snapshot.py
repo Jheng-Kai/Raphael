@@ -190,6 +190,17 @@ class Snapshot:
         """The aliases of the pool that the task has not been shown."""
         return [alias for alias in (self.pool.by_alias if self.pool else {}) if alias not in self.refs]
 
+    def refresh_computer(self, plugins, member_id):
+        """Refresh only this member's computer offer after an owner decision."""
+        old = {alias for alias, ref in self.refs.items() if ref.server == "computer"}
+        for alias in old:
+            self.refs.pop(alias)
+        self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in old]
+        kept = [tool for tool in (self.pool.by_alias.values() if self.pool else []) if tool.server != "computer"]
+        computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer"]
+        self.pool = make_offer([*kept, *computer])
+        self.show([alias for alias, tool in self.pool.by_alias.items() if tool.server == "computer"])
+
     def show(self, aliases: Sequence[str]) -> list[dict[str, Any]]:
         """Show the task these tools of the pool; returns the definitions that are new."""
         if self.pool is None:

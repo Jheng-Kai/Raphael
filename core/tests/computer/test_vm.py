@@ -69,6 +69,7 @@ def container(vm, target, runtime):
 def desktop(tmp_path):
     runtime = Runtime()
     vm = LocalVm(tmp_path, runner=runtime, clock=lambda: 0)
+    vm.grants.set(0, True)
     target = vm.target()
     runtime.raw = container(vm, target, runtime)
     return vm, target, runtime
@@ -509,6 +510,7 @@ async def test_a_tool_call_on_a_running_desktop_does_not_report_preparation(desk
 async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tmp_path, action_mode):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    vm.grants.set(0, True)
     await hub.prepare(0)
     snapshot = take_snapshot(hub)
     assert "computer__vm_exec" in snapshot.refs and "computer__get_desktop_state" in snapshot.refs
@@ -670,6 +672,7 @@ async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_pat
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
+    vm.grants.set(2, True)
     hub.scope_busy = lambda owner: owner == ("turn", 0, 1)
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     with vm_scope(("turn", 0, 1)):

@@ -49,6 +49,7 @@ async def vm_smoke(directory):
     vm._progress = record_progress
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory), conn=conn)
     try:
+        vm.grants.set(0, True)
         await vm.ensure_engine(vm.target())
         await hub.prepare()
         snapshot = take_snapshot(hub)
@@ -134,6 +135,7 @@ async def vm_timezone_smoke(directory):
         def record_unrun(self, *args, **kwargs): pass
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory))
     try:
+        vm.grants.set(0, True)
         await hub.prepare()
         tool = next(tool for tool in hub.offered() if tool.name == "vm_exec")
         gate = ToolGate(hub)

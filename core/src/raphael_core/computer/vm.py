@@ -169,6 +169,8 @@ class LocalVm:
         self.enabled = enabled
         self.settings, self.run, self.clock = settings, runner or Docker(), clock
         self.last_activity, self.active, self.held = {}, {}, set()
+        from .grants import ComputerGrants
+        self.grants = ComputerGrants()
         self.locks, self.targets = {}, {}
         self.task = None
         self.busy = lambda key: False
