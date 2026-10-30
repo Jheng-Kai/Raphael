@@ -179,6 +179,8 @@ class LocalVm:
         self.desktop = DockerDesktop() if runner is None else None
         self.preparation, self.preparing = {}, {}
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
+        from .takeover import ComputerWork
+        self.work = ComputerWork(self)
 
     async def installed(self):
         return self.enabled and (self.desktop.installed() if self.desktop else await self.available())

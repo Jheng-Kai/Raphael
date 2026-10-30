@@ -30,9 +30,9 @@ async function connect() {
     let config = await response.json();
     rfb = new RFB(screen, `ws://${location.host}${config.path}`, {credentials:{password:config.password}});
     rfb.viewOnly = !config.held;
+    rfb.resizeSession = !config.preview;
     config = null;
     rfb.scaleViewport = true;
-    rfb.resizeSession = true;
     rfb.clipViewport = false;
     rfb.background = 'transparent';
     rfb.addEventListener('connect', () => tell('connected'));
@@ -75,12 +75,16 @@ class Session:
     expires: float
     sockets: set = field(default_factory=set)
     revision: int = 0
+    member_id: int = 0
+    conversation_id: int | None = None
+    preview: bool = False
 
 
 class DesktopViewer:
     def __init__(self, vm, *, member_exists=lambda member: True):
         self.vm, self.member_exists = vm, member_exists
         self.sessions, self.owners = {}, {}
+        self.vm.viewer_owners = self.owners
         self.server = self.monitor = None
         self.origin = ""
         self.tasks = set()
@@ -103,7 +107,9 @@ class DesktopViewer:
         target = self.target(params)
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False}
-        return await self.status_for(target)
+        state = await self.status_for(target)
+        works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
+        return {**state, **({"works": works} if works else {})}
 
     async def open(self, params):
         async with self.open_lock:
@@ -118,8 +124,11 @@ class DesktopViewer:
             self.origin = f"http://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
             self.monitor = asyncio.create_task(self._monitor())
         token = secrets.token_urlsafe(32)
-        self.sessions[token] = Session(target, self.vm.clock() + LEASE_SECONDS)
-        if (await self.status_for(target))["state"] != "running":
+        if type(params.get("preview", False)) is not bool:
+            raise invalid_params("preview must be a boolean")
+        self.sessions[token] = Session(target, self.vm.clock() + LEASE_SECONDS,
+            member_id=params.get("member_id", 0), conversation_id=params.get("conversation_id"), preview=params.get("preview", False))
+        if not params.get("preview") and (await self.status_for(target))["state"] != "running":
             self.vm.launch(target)
         return {"session": token, "url": f"{self.origin}/{token}/vnc.html"}
 
@@ -135,7 +144,15 @@ class DesktopViewer:
         session.expires = self.vm.clock() + LEASE_SECONDS
         if self.owners.get(session.target.key) == token:
             self.vm.hold(session.target, True)
-        return await self.status_for(session.target)
+        return await self.session_state(session)
+
+    async def session_state(self, session):
+        state = await self.status_for(session.target)
+        works = self.vm.work.views(session.member_id, session.conversation_id)
+        token = self.owners.get(session.target.key)
+        return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
+                "preview_allowed": state["control"] == "member",
+                **({"works": works} if works else {})}
 
     async def status_for(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.
@@ -159,8 +176,13 @@ class DesktopViewer:
             raise invalid_params("held must be a boolean")
         target = session.target
         owner = self.owners.get(target.key)
+        pending = self.vm.work.pending(target)
+        if session.preview:
+            raise invalid_params("preview is read only")
+        if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
+            raise invalid_params("private conversation required")
         if held:
-            if owner not in (None, token) or (target.key in self.vm.held and owner != token):
+            if owner not in (None, token) or (target.key in self.vm.held and owner != token and not pending):
                 raise invalid_params("desktop already held")
             if self.vm.active.get(target.key):
                 raise invalid_params("desktop busy")
@@ -174,12 +196,16 @@ class DesktopViewer:
             self.vm.hold(target, True)
             await self.disconnect_target(target)
         elif owner == token:
+            if pending and params.get("takeover") != pending.request_id:
+                raise invalid_params("explicit takeover handback required")
             # End every input connection before the tool gate is released.
             await self.disconnect_target(target)
             self.owners.pop(target.key, None)
             self.vm.hold(target, False)
+            if pending:
+                self.vm.work.complete(target, params["takeover"])
         session.expires = self.vm.clock() + LEASE_SECONDS
-        return await self.status_for(target)
+        return await self.session_state(session)
 
     async def disconnect_target(self, target):
         # Invalidate handshakes that fetched their connection before this switch.
@@ -202,7 +228,8 @@ class DesktopViewer:
             if self.owners.get(session.target.key) == token:
                 await self.disconnect_target(session.target)
                 self.owners.pop(session.target.key, None)
-                self.vm.hold(session.target, False)
+                if not self.vm.work.pending(session.target):
+                    self.vm.hold(session.target, False)
             for socket in list(session.sockets):
                 socket.close()
             self.sessions.pop(token, None)
@@ -256,7 +283,8 @@ class DesktopViewer:
                     return
                 port, password = await self.vm.viewer_connection(session.target)
                 if asset == "connection":
-                    config = {"password": password, "held": self.owners.get(session.target.key) == token,
+                    config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
+                              "preview": session.preview,
                               "path": f"/{token}/websockify/{session.revision}"}
                     await self._respond(writer, 200, json.dumps(config).encode(), "application/json")
                     return

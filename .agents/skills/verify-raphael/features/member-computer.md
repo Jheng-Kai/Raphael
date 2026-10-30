@@ -160,3 +160,60 @@ disable the computer adapter.
 Unit evidence: core/tests/computer/test_viewer.py and
 app/src/main/desktop-viewer.test.ts. The existing test_vm.py suite retains the
 actual tool refusal assertions. Shell tests allowlist only the five viewer RPCs.
+
+## Computer in the private timeline (2026-10-30)
+
+Each private task has one live read-only computer card, updated and moved in place
+across timeline redraws. Opening it uses the existing full-size viewer. Owner input
+never appears in the inline stream. Fixed action labels describe the member's work;
+no command, screen contents or tool arguments enter the card metadata.
+The live surface uses a 16:10 viewport capped by the shared layout-card-max token,
+with a border separating the desktop pixels from the conversation. Its compact
+waiting state retains that task surface's width and viewer title. The monitor icon,
+small action buttons and full-size dialog use the existing shared components;
+the original computer continuation record keeps its connector-card geometry.
+
+The shared computer tool set adds request_takeover with a typed reason (sign-in,
+password, two-factor verification, CAPTCHA, payment or another owner-only step).
+API and CLI brains receive it through the production snapshot; the shared doctrine
+requires it instead of asking for secrets in chat. Foreground private turns and
+private background tasks bind the card to their existing history turn. Rooms and
+member exchanges cannot create takeover cards.
+
+The coroutine remains paused on its original task. Only an explicit I'm done from
+the controlling viewer, with the current request nonce, resumes it once. Closing,
+disconnecting, lease expiry, timeout and Stop do not resume it. Reopening a viewer
+can reclaim the lease but does not finish the request. After handback the next
+computer call must inspect get_desktop_state successfully before any input.
+In-memory waiting tasks cannot survive or automatically resume a core restart.
+
+Preparation displays the Docker / first image build / desktop steps centrally,
+with an indeterminate progress indicator, known build percentage/bytes and a first
+build time estimate. Failed preparation retains the existing contextual retry.
+
+```powershell
+npm run look -- desktop-inline desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-viewer desktop-owner desktop-handback desktop-starting desktop-building desktop-preparing desktop-unavailable chat-computer-takeover --theme both --width 1120,720,1920x1080
+npm run verify -- --core
+npm run native -- member-computer
+```
+
+The selected matrix covers R-UI-14/16/18/19/22/25/29/32/38/45 and A-01/03/04/06/11/12.
+Compare the new private card actions with chat-computer-takeover and compare its
+full-size viewer with desktop-viewer at the same theme and width. This feature's
+brief prohibits judge, OpenRouter and Claude session search; judge/live acceptance
+must remain SKIP. Native Docker acceptance requires no concurrent heavy process.
+
+The existing member-computer journey now opens a loopback test sign-in page inside
+the container, requests takeover through a fake provider and real production tools,
+enters dummy credentials through noVNC, presses done, and checks one continuation
+and no completed member computer calls during owner control. It never uses real
+credentials. Unit tests cover lease isolation, no automatic resumption, typed
+secret rejection, secret-free audit metadata, API/CLI schemas and preview lifecycle.
+
+Owner acceptance on 2026-10-30 waived a baseline comparison for this new feature.
+The current compiled UI passed member-computer in app/.native/run-NV9PS8:
+the real local sign-in succeeded, owner control made no member computer calls,
+and explicit done resumed the original task once after a desktop inspection.
+The selected look run app/.look/run-TjbL3G passed 72/72 cells. Docker was stopped
+after acceptance. Commands, earlier failures and offline/live limits are retained
+in .fold/computer-in-chat-handoff.md.

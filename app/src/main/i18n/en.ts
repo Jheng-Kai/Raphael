@@ -4,6 +4,18 @@ import type { Messages } from './zh-TW';
 
 export const en = {
   "desktop.open": "Live desktop",
+  "desktop.expand": "Expand",
+  "desktop.done": "I'm done",
+  "desktop.working": "Working on the computer",
+  "desktop.finished": "Computer work finished",
+  "desktop.ended": "Computer work stopped",
+  "desktop.firstBuild": "First build usually takes 5–15 minutes; download speed may change this.",
+  "desktop.need.sign_in": "Sign in on the computer so I can continue.",
+  "desktop.need.password": "Enter the password on the computer so I can continue.",
+  "desktop.need.two_factor": "Complete two-factor verification on the computer so I can continue.",
+  "desktop.need.captcha": "Complete the CAPTCHA on the computer so I can continue.",
+  "desktop.need.payment": "Complete the payment step on the computer so I can continue.",
+  "desktop.need.other": "This step needs you at the computer before I can continue.",
   "desktop.starting": "Starting Docker…",
   "desktop.building": "Building the desktop image for first use…",
   "desktop.preparing": "Preparing the desktop…",

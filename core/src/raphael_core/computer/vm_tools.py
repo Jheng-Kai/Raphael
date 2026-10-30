@@ -21,17 +21,21 @@ from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
 from .vm_catalog import DRIVER_TOOLS, READS
+from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
+_TURN = ContextVar("computer_turn", default=(0, False, None))
 
 
 @contextmanager
-def vm_scope(owner):
+def vm_scope(owner, *, turn_id=0, private=False, task=None):
     token = _SCOPE.set(owner)
+    turn = _TURN.set((turn_id, private, task))
     try:
         yield
     finally:
         _SCOPE.reset(token)
+        _TURN.reset(turn)
 
 
 VM_CONTRACT = (
@@ -52,6 +56,7 @@ class VmTools:
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
         self.audit = AuditLog(conn) if conn is not None else None
+        self.conn = conn
         self.catalogs, self.tools, self.routes, self.locks, self.actions = {}, {}, {}, {}, {}
         self.schemas = {}
         self.problem = None
@@ -98,7 +103,7 @@ class VmTools:
                     # Keep the contract first and within Offer's description cap.
                     definitions[name] = {"description": VM_CONTRACT + " " + item.get("description", ""), "parameters": schema,
                         "validation": item.get("originalInputSchema", schema)}
-                definitions.update(vm_exec=EXEC, attach_file=ATTACH)
+                definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER)
                 keys = []
                 for name, definition in definitions.items():
                     key = tool_key(f"computer-{target.key}", name)
@@ -165,11 +170,34 @@ class VmTools:
                 result = PluginResult(False, "bad_arguments")
                 return result
             owner = _SCOPE.get() or ("async", asyncio.current_task())
+            turn = _TURN.get()
+            if task_id and self.conn is not None:
+                origin = self.conn.execute("SELECT w.member_id, a.conversation_id, w.turn_id FROM worker_tasks w "
+                    "JOIN agent_turns a ON a.id=w.turn_id WHERE w.id=? AND w.scope='private' "
+                    "AND w.room_id IS NULL AND a.scope='private'", (task_id,)).fetchone()
+                if origin:
+                    owner = ("task", task_id, origin["member_id"], origin["conversation_id"])
+                    turn = (origin["turn_id"], True, None)
             previous = self.leases.get(target.key)
             if previous is not None and previous != owner and self.scope_busy(previous):
                 result = PluginResult(False, "computer_busy")
                 return result
             self.leases[target.key] = owner
+            work = self.vm.work.begin(target, owner, *turn)
+            if work and owner[0] == "task":
+                work.alive = lambda: self.scope_busy(owner)
+            if work and work.state in ("stopped", "expired"):
+                return PluginResult(False, "task_stopped")
+            if work and work.check_required and tool.name != "get_desktop_state":
+                return PluginResult(False, "desktop_check_required")
+            if tool.name == "request_takeover":
+                if self.vm.active.get(target.key) or self.actions.get(target.key) and self.actions[target.key].locked():
+                    return PluginResult(False, "computer_busy")
+                data = await self.vm.work.request(work, arguments["reason"])
+                result = PluginResult(True, text=json.dumps(data))
+                return result
+            if work:
+                work.tool = tool.name
             lock = self.actions.setdefault(target.key, asyncio.Lock())
             if lock.locked():
                 result = PluginResult(False, "computer_busy")
@@ -208,6 +236,8 @@ class VmTools:
                     combined = "\n".join(text)
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
                         combined[:20_000], len(combined) > 20_000, blocks=blocks)
+                if work and result.ok and tool.name == "get_desktop_state":
+                    work.check_required = False
             finally:
                 self.vm.active[target.key] -= 1
                 self.vm.last_activity[target.key] = self.vm.clock()

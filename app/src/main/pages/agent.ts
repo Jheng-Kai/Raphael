@@ -260,7 +260,9 @@ export function createAgent(app: AppContext): Page {
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
-  const desktop = mountDesktopViewer(el.querySelector<HTMLElement>(".ra-tools")!, () => members.current());
+  const desktop = mountDesktopViewer(el.querySelector<HTMLElement>(".ra-tools")!, () => members.current(), {
+    timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
+  });
   const find = el.querySelector<HTMLElement>(".ra-find")!;
   const findInput = el.querySelector<HTMLInputElement>(".ra-find-input")!;
   const findCount = el.querySelector<HTMLElement>(".ra-find-count")!;
@@ -810,7 +812,9 @@ export function createAgent(app: AppContext): Page {
           // A key being typed into a secret card goes to the same card in the new line.
           const restore = carryTyped(node, made);
           const restoreMail = carryMail(node, made);
-          node.replaceWith(made);
+          node.before(made);
+          desktop.carry(node, made);
+          node.remove();
           restore();
           restoreMail();
         }
@@ -828,6 +832,7 @@ export function createAgent(app: AppContext): Page {
     if (visible) attachmentMedia.sync();
     if (visible) previews.sync();
     else previews.pause();
+    desktop.sync();
     measureMessages();
   }
 

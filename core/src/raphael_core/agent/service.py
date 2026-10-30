@@ -2382,7 +2382,9 @@ class AgentService:
         steps: list[Step] | None = None,
     ) -> ToolResult:
         from ..computer.vm_tools import vm_scope
-        with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
+        with vm_scope(("turn", ask.speaker.id, ask.conversation_id), turn_id=ask.turn_id,
+                      private=ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER,
+                      task=self._inflight.get(ask.session_id)):
             result = await self._make_call_result(ask, call, approval, ledger, action, steps=steps)
         if self._tool_observer is not None:
             from .harness_tools import definitions_for

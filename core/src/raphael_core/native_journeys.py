@@ -91,6 +91,9 @@ async def vm_smoke(directory):
         outcome = await run_task(FakeBrain(), system="Deterministic fake brain; use only the specified test tools.", user="Test the optional desktop", tools=snapshot.definitions)
         assert outcome.status == "done" and completed == [name for name, _ in calls]
         target = vm.target()
+        import shutil
+        target.workspace.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", target.workspace / "native-signin.py")
         vm.hold(target, True)
         refused = []
         for name, arguments in calls:
@@ -234,6 +237,41 @@ def native_connect(messages, offered, seen):
         return None
     name = "find_app" if seen == 0 else "connect_app" if seen == 1 else ""
     return (name, {"query" if seen == 0 else "app": match[1]}) if name in offered else None
+
+
+def native_computer(messages, offered, seen):
+    """Script only fake-provider choices; the real VM, task, lease and viewer execute them."""
+    if not native_enabled(True) or os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") != "1":
+        return None
+    # Desktop screenshots are appended as user image blocks by the shared loop.
+    latest = next((message["content"] for message in reversed(messages)
+                   if message.get("role") == "user" and isinstance(message.get("content"), str)), "")
+    if "[native-computer:signin]" not in latest:
+        return None
+    calls = [
+        ("computer__vm_exec", {"command": """nohup /opt/venv/bin/python /home/cua/workspace/native-signin.py >/dev/null 2>&1 &
+sleep 1
+profile=/home/cua/workspace/.native-signin-browser
+mkdir -p "$profile"
+if command -v firefox >/dev/null 2>&1; then
+  printf '%s\\n' 'user_pref("browser.shell.checkDefaultBrowser", false);' 'user_pref("browser.aboutwelcome.enabled", false);' 'user_pref("browser.startup.homepage_override.mstone", "ignore");' 'user_pref("signon.rememberSignons", false);' > "$profile/user.js"
+  nohup firefox --no-remote --profile "$profile" --width 1280 --height 900 http://127.0.0.1:8765 >/dev/null 2>&1 &
+else
+  browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+  test -n "$browser" || exit 1
+  nohup "$browser" --no-sandbox --no-first-run --start-maximized --disable-dev-shm-usage --user-data-dir="$profile" http://127.0.0.1:8765 >/dev/null 2>&1 &
+fi
+sleep 3"""}),
+        ("computer__request_takeover", {"reason": "sign_in"}),
+        ("computer__get_desktop_state", {}),
+        ("computer__vm_exec", {"command": "/opt/venv/bin/python -c 'import urllib.request,json; s=json.load(urllib.request.urlopen(\"http://127.0.0.1:8765/state\")); assert s[\"signed_in\"] and s[\"continued\"]==0; urllib.request.urlopen(\"http://127.0.0.1:8765/finish\",data=b\"\").read(); print(\"Continued once\")'"}),
+    ]
+    if seen >= len(calls):
+        return "reply", "已登入，原本的工作已繼續一次。"
+    name, arguments = calls[seen]
+    if name not in offered:
+        raise ValueError("Native computer tool is absent")
+    return name, arguments
 
 
 def native_consult(messages: list[dict], offered: set[str], seen: int) -> dict | None:

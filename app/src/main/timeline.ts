@@ -827,6 +827,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       : workSectionHTML(turn, state, query, revealing) + textAnswer) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +

@@ -8,3 +8,19 @@
 .desktop-screen iframe { width: 100%; height: 100%; border: 0; }
 .desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-4); white-space: pre-line; overflow-wrap: anywhere; text-align: center; color: var(--text-2); }
 .desktop-error { margin: 0; color: var(--err); }
+.desktop-preparation { width: min(100%, var(--layout-card-max)); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-4); }
+.desktop-preparation ol { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin: 0; padding-left: var(--sp-5); text-align: start; }
+.desktop-preparation li[data-stage="current"] { color: var(--text); font-weight: 600; }
+.desktop-preparation li[data-stage="next"] { color: var(--text-3); }
+.desktop-preparation p { margin: 0; font-size: var(--fs-sm); }
+.desktop-preparation progress { width: 100%; height: var(--sp-2); accent-color: var(--accent); }
+.desktop-build-progress { max-width: 100%; overflow-wrap: anywhere; }
+.desktop-card { display: grid; grid-template-columns: minmax(0, 1fr); width: min(100%, var(--layout-card-max)); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; margin-top: var(--sp-3); background: var(--content); }
+.btn.desktop-preview { position: relative; width: 100%; aspect-ratio: 16 / 10; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; background: var(--surface-2); color: var(--text-2); cursor: pointer; }
+.desktop-preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+:root[data-keys] .desktop-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.desktop-card-meta { padding: var(--sp-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.desktop-card-title { display: flex; align-items: center; gap: var(--sp-2); font-weight: 600; }
+.desktop-card-state { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.desktop-card-actions { display: flex; justify-content: flex-end; }
+.desktop-card:not([data-work-state="running"]) .desktop-preview { display: none; }

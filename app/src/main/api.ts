@@ -74,10 +74,10 @@ export const homeOverview = (refresh = false): Promise<HomeOverview> => core("ho
 /** Asks OpenRouter again; answers with the `openrouter` part of the status. */
 export const statusCheckOpenrouter = (): Promise<Status["openrouter"]> => core("status.check_openrouter");
 
-export const desktopStatus = (member_id: number): Promise<DesktopState> => core("computer.viewer_status", { member_id });
-export const desktopOpen = (member_id: number): Promise<DesktopSession> => core("computer.viewer_open", { member_id });
+export const desktopStatus = (member_id: number, conversation_id?: number): Promise<DesktopState> => core("computer.viewer_status", { member_id, conversation_id });
+export const desktopOpen = (member_id: number, options?: { conversation_id?: number; preview?: boolean }): Promise<DesktopSession> => core("computer.viewer_open", { member_id, ...options });
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
-export const desktopControl = (session: string, held: boolean): Promise<DesktopState> => core("computer.viewer_control", { session, held });
+export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 
 // ---------- usage and prices ----------

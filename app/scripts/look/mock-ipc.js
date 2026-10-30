@@ -2,6 +2,8 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  const desktopSessions = new Map();
+  let desktopSequence = 0;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
   if (variant.pluginsMany) {
     const base = [...data.pluginCatalog];
@@ -292,10 +294,24 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     switch (method) {
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
-      case "computer.viewer_open": return { session: "look-desktop", url: `${location.origin}/scripts/look/fixtures/desktop.html` };
-      case "computer.viewer_renew": return data.desktop;
-      case "computer.viewer_control": data.desktop.control = p.held ? "owner" : "member"; return data.desktop;
-      case "computer.viewer_close": if (data.desktop) data.desktop.control = "member"; return {};
+      case "computer.viewer_open": {
+        const session = `look-desktop-${++desktopSequence}`;
+        desktopSessions.set(session, { preview: p.preview, held: false });
+        return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html` };
+      }
+      case "computer.viewer_renew": return { ...data.desktop, control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
+      case "computer.viewer_control": {
+        const session = desktopSessions.get(p.session);
+        if (session.preview) throw new Error("Read-only preview");
+        session.held = p.held;
+        data.desktop.control = p.held ? "owner" : "member";
+        if (!p.held && p.takeover) for (const work of data.desktop.works ?? []) if (work.request_id === p.takeover) work.state = "running";
+        return data.desktop;
+      }
+      case "computer.viewer_close": {
+        if (desktopSessions.get(p.session)?.held && data.desktop) data.desktop.control = "member";
+        desktopSessions.delete(p.session); return {};
+      }
       case "settings.get": return { settings: data.settings };
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
