@@ -10,8 +10,8 @@ handler below; what a handler alone does not show is here:
   RpcError(INVALID_PARAMS), and so is a value that a store refuses (it raises ValueError,
   KeyError or TypeError). A param that may be null may also be left out. A whole number is an
   int and a bool is no number.
-- A dictation is not lost to bookkeeping. If the history cannot be written, the text still comes
-  back (with id None); if the key store fails, it comes back as spoken, without cleanup.
+- If history cannot be written, cleaned text still comes back (with id None). Cleanup failures
+  retain recovery text and a reason; the device refuses automatic delivery of those results.
 - Voice questions share dictation cleanup and spend accounting but never write a history row.
   Transcript-only consumers still use `brain.normalize_transcript` for dictionary and script
   normalization without model calls, history or cost.
@@ -414,8 +414,7 @@ class Brain:
             # The model answered, so the time it took is a round trip to OpenRouter.
             self._openrouter.latency_ms = result.llm_ms
         if result.parts:
-            # Cleaned in pieces, some of which may have fallen back: each is finished as it would
-            # be alone, and they are joined with what they were cut at: a paragraph break, a space.
+            # All pieces succeeded. Finish each and retain its sentence/paragraph boundary.
             text = join_parts(
                 [
                     replace(

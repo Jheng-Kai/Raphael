@@ -1,5 +1,5 @@
 """Tests for the cleanup of a long dictation in pieces: where it is cut, how the pieces are cleaned
-side by side and put back in order, and what becomes of a piece whose cleanup falls back.
+side by side and put back in order, and refusing partial success when any piece fails.
 
 As in test_cleanup.py, the OpenRouter client is a fake and the stores are real ones on an
 in-memory database. The fake "cleans" a piece by writing it in capitals, which the hallucination
@@ -8,6 +8,7 @@ from one that kept its raw text.
 """
 
 import asyncio
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -265,28 +266,24 @@ async def test_each_piece_is_waited_for_as_its_share_of_the_speech(svc, client):
     assert by_text[long]["max_tokens"] == cleanup.max_tokens_for(long)
 
 
-async def test_a_piece_that_fails_keeps_its_raw_text_and_the_others_stay_cleaned(
+async def test_a_failed_piece_makes_the_whole_dictation_unsuccessful(
     svc, client, conn
 ):
     pieces = sentences(5)
     client.fail = {"s2": OpenRouterError(503, "server", "upstream down")}
     result = await svc.clean(join_segments(pieces), audio_seconds=50.0, chunks=as_chunks(pieces))
-    assert result.cleaned is True
+    assert result.cleaned is False
     assert result.fallback_reason == "error:server"  # said the way a single call says it
-    expected = [piece.upper() for piece in pieces]
-    expected[2] = pieces[2]
-    assert result.text == join_segments(expected)
-    assert [part.cleaned for part in result.parts] == [True, True, False, True, True]
+    assert result.text == join_segments(pieces) and result.parts == ()
     assert len(spend_rows(conn)) == 4 and result.cost_usd == pytest.approx(0.004)
 
 
-async def test_a_piece_whose_reply_is_no_cleanup_keeps_its_raw_text(svc, client):
+async def test_a_suspicious_piece_refuses_partial_success(svc, client):
     pieces = sentences(4)
     client.answer = {"s1"}
     result = await svc.clean(join_segments(pieces), audio_seconds=40.0, chunks=as_chunks(pieces))
-    assert result.cleaned and result.fallback_reason == "suspicious"
-    assert result.parts[1] == CleanedPart(pieces[1], False, " ")
-    assert result.parts[0] == CleanedPart(pieces[0].upper(), True, " ")
+    assert not result.cleaned and result.fallback_reason == "suspicious"
+    assert result.text == join_segments(pieces) and result.parts == ()
     assert result.cost_usd == pytest.approx(0.004)  # the answer was paid for too
 
 
@@ -296,7 +293,7 @@ async def test_the_reason_is_that_of_the_first_piece_that_fell_back(svc, client)
     client.fail = {"s1": OpenRouterError(0, "network", "no route")}
     result = await svc.clean(join_segments(pieces), audio_seconds=40.0, chunks=as_chunks(pieces))
     assert result.fallback_reason == "error:network"
-    assert [part.cleaned for part in result.parts] == [True, False, True, False]
+    assert not result.cleaned and result.parts == ()
 
 
 async def test_when_every_piece_falls_back_it_is_the_raw_text_as_for_one_call(svc, client):
@@ -321,7 +318,7 @@ async def test_a_piece_that_times_out_keeps_its_raw_text(conn, client):
     client.delay = {"s1": 1.0}
     result = await svc.clean(join_segments(pieces), audio_seconds=30.0, chunks=as_chunks(pieces))
     assert result.fallback_reason == "timeout"
-    assert [part.cleaned for part in result.parts] == [True, False, True]
+    assert not result.cleaned and result.text == join_segments(pieces) and result.parts == ()
 
 
 async def test_zero_budget_does_not_stop_any_piece(conn, client):
@@ -380,21 +377,16 @@ async def test_a_long_dictation_through_the_brain_is_cleaned_in_pieces_and_saved
     finally:
         await brain.aclose()
     assert len(client.calls) == 5
-    assert result["cleaned"] is True and result["fallback_reason"] == "error:server"
-    # The cleaned pieces are as the model wrote them; the one that fell back loses its obvious
-    # stutter, as a whole dictation that falls back does.
-    expected = [piece.upper() for piece in pieces]
-    expected[3] = remove_stutters(pieces[3])
-    assert "the, the" not in expected[3]
-    assert result["text"] == join_segments(expected)
+    assert result["cleaned"] is False and result["fallback_reason"] == "error:server"
+    # Keep the normalized recovery text in history, explicitly marked unsuccessful.
+    assert result["text"] == remove_stutters(raw)
     assert result["raw_text"] == raw
     assert len(items) == 1 and items[0]["text"] == result["text"]
     assert items[0]["cost_usd"] == pytest.approx(0.004)
 
 
 async def test_paragraphs_cut_apart_are_joined_with_their_break(conn, client):
-    # The first piece ends at a paragraph break: the break is not lost to the join, whether the
-    # pieces were cleaned or one of them kept its raw text.
+    # Both successful text and failed recovery text retain the paragraph boundary.
     keys = MemoryKeyStore()
     keys.set("sk-or-v1-test")
     brain = Brain(conn, client, keys, now_ms=lambda: NOW_MS)
@@ -418,7 +410,7 @@ async def test_paragraphs_cut_apart_are_joined_with_their_break(conn, client):
         [first, second]
     )
     assert cleaned["text"] == first.upper() + "\n\n" + second.upper()
-    assert half["text"] == first.upper() + "\n\n" + second
+    assert half["text"] == raw and half["cleaned"] is False
     assert half["fallback_reason"] == "error:server"
 
 
@@ -436,3 +428,68 @@ async def test_a_piece_cut_inside_a_word_is_joined_with_nothing(svc, client):
     pieces = split_for_cleanup(text)
     result = await svc.clean(text, audio_seconds=60.0, chunks=[(p, p) for p in pieces])
     assert result.text == text.upper()
+
+
+async def test_long_text_is_split_even_without_caller_supplied_chunks(svc, client):
+    original = client.complete_json
+
+    async def limited(**kwargs):
+        if len(transcript_of(kwargs["user"])) > CLEANUP_CHUNK_CHARS:
+            raise OpenRouterError(0, "truncated", "output limit reached")
+        return await original(**kwargs)
+
+    client.complete_json = limited
+    raw = " ".join(sentences(14))
+    result = await svc.clean(raw, audio_seconds=300)
+    assert result.cleaned and result.fallback_reason is None
+    assert result.text == raw.upper()
+    assert len(client.calls) > 1
+
+
+async def test_neighbor_context_reaches_each_chunk_without_becoming_its_transcript(svc, client):
+    pieces = ["Ship on Wednesday.", "No, ship on Friday instead.", "Only after QA approval."]
+    await svc.clean(" ".join(pieces), audio_seconds=30, chunks=as_chunks(pieces))
+    middle = next(call for call in client.calls if transcript_of(call["user"]) == pieces[1])
+    assert pieces[0] in middle["system"] and pieces[2] in middle["system"]
+    assert "context only" in middle["system"]
+
+
+def test_a_list_continuing_across_a_sentence_cut_keeps_item_lines_and_numbers():
+    parts = [CleanedPart("1. Back up the files.\n2. Verify the backup.", True),
+             CleanedPart("1. Send the report.\n2. Wait for approval.", True)]
+    assert cleanup.join_parts(parts) == (
+        "1. Back up the files.\n2. Verify the backup.\n3. Send the report.\n4. Wait for approval."
+    )
+
+
+def test_prose_after_a_chunked_list_does_not_become_part_of_its_last_item():
+    parts = [CleanedPart("1. Back up the files.", True, " "),
+             CleanedPart("Do not send anything yet.", True)]
+    assert cleanup.join_parts(parts) == "1. Back up the files.\n\nDo not send anything yet."
+
+
+async def test_neighbor_context_is_bounded_and_does_not_inflate_output_budget(svc, client):
+    pieces = ["before " * 200, "middle words.", "after " * 200]
+    await svc.clean("".join(pieces), audio_seconds=60, chunks=as_chunks(pieces))
+    middle = next(call for call in client.calls if transcript_of(call["user"]) == pieces[1])
+    context = json.loads(middle["system"].split("\n")[-1])
+    assert all(len(value) <= cleanup.CLEANUP_CONTEXT_CHARS for value in context.values())
+    assert middle["max_tokens"] == cleanup.max_tokens_for(pieces[1])
+
+
+def test_separate_lists_keep_their_numbering_across_a_paragraph_cut():
+    parts = [CleanedPart("1. First option.", True, "\n\n"),
+             CleanedPart("1. Another topic.", True)]
+    assert cleanup.join_parts(parts) == "1. First option.\n\n1. Another topic."
+
+
+def test_a_year_at_the_start_of_a_sentence_is_not_a_list_index():
+    parts = [CleanedPart("2026. That is the year we started.", True, " "),
+             CleanedPart("2027. That is the year we expanded.", True)]
+    assert "2027. That" in cleanup.join_parts(parts)
+
+
+def test_explicit_nonconsecutive_step_numbers_are_not_rewritten():
+    parts = [CleanedPart("1. Check step one.", True, " "),
+             CleanedPart("5. Check step five.", True)]
+    assert "5. Check step five." in cleanup.join_parts(parts)

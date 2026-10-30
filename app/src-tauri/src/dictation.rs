@@ -1259,7 +1259,11 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 let fallback = if incomplete {
                     Some(notices::INCOMPLETE)
                 } else {
-                    this.first_time(notices::notice_for_fallback(reason.as_deref()))
+                    // Text pasted uncleaned is told every time; a missing key or connection once.
+                    match notices::notice_for_fallback(reason.as_deref()) {
+                        Some(notices::NOT_CLEANED) => Some(notices::NOT_CLEANED),
+                        other => this.first_time(other),
+                    }
                 };
                 let language = reply
                     .get("ui_language")
