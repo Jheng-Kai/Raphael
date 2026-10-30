@@ -4,12 +4,12 @@ import { resolve } from "node:path";
 const mainWindow = JSON.parse(readFileSync(new URL("../../src-tauri/tauri.conf.json", import.meta.url), "utf8")).app.windows.find(window => window.label === "main");
 
 export function parseOptions(args, scenes) {
-  const options = { names: [], themes: ["light"], widths: [mainWindow.width], heights: { [mainWindow.width]: mainWindow.height }, skin: "default", locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
+  const options = { names: [], themes: ["light"], widths: [mainWindow.width], heights: { [mainWindow.width]: mainWindow.height }, locale: "zh-TW", out: resolve(".look"), all: false, list: false, help: false };
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (["--all", "--list", "--help"].includes(flag)) { options[flag.slice(2)] = true; continue; }
     if (!flag.startsWith("-")) { options.names.push(flag); continue; }
-    if (!["--theme", "--width", "--skin", "--locale", "--out"].includes(flag)) throw new Error(`Unknown option: ${flag}`);
+    if (!["--theme", "--width", "--locale", "--out"].includes(flag)) throw new Error(`Unknown option: ${flag}`);
     const value = args[++i];
     if (!value || value.startsWith("--")) throw new Error(`Missing value for ${flag}`);
     if (flag === "--theme") {
@@ -23,9 +23,6 @@ export function parseOptions(args, scenes) {
     } else if (flag === "--locale") {
       if (!["zh-TW", "en", "ja"].includes(value)) throw new Error(`Invalid locale: ${value}`);
       options.locale = value;
-    } else if (flag === "--skin") {
-      if (!["default", "black"].includes(value)) throw new Error(`Invalid skin: ${value}`);
-      options.skin = value;
     } else options.out = resolve(value);
   }
   for (const name of options.names) if (!scenes.some(scene => scene.name === name)) throw new Error(`Unknown scene: ${name}; use --list`);

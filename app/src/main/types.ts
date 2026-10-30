@@ -522,7 +522,6 @@ export interface BrainSettings {
   owner_name?: string;
   owner_about?: string;
   owner_photo?: string;
-  skin?: string;
   action_mode?: "ask" | "direct";
   agent_fallbacks?: string[];
   cleanup_fallbacks?: string[];

@@ -8,7 +8,7 @@
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
 import { isUiLocale, onLocaleChange, t } from "../i18n";
-import { createOwnerControls, skinOf } from "../owner-settings";
+import { createOwnerControls } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
@@ -340,7 +340,7 @@ export function createSettings(app: AppContext): SettingsPage {
       case "appearance":
         return {
           choices: APPEARANCES,
-          current: skinOf(brain?.skin) === "black" ? "black" : d.appearance,
+          current: d.appearance,
           pick: (value) => { if (APPEARANCES.some(c => c.value === value)) void changeAppearance(value); },
         };
       case "retention":
@@ -936,9 +936,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   async function changeAppearance(value: string): Promise<void> {
     try {
-      // Save the device mode first so leaving black never flashes the old mode.
-      if (value !== "black") await app.setDevice({ appearance: value as DeviceSettings["appearance"] });
-      brain = (await api.settingsSet("skin", value === "black" ? "black" : "default")).settings;
+      await app.setDevice({ appearance: value as DeviceSettings["appearance"] });
     } catch (error) { toaster.info(describeError(error)); }
     render();
   }

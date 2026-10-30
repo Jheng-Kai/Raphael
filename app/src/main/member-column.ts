@@ -45,7 +45,7 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
-    faceHTML(member, 48) + (primary ? `<span class="mb-star" aria-hidden="true">${ico("star")}</span>` : "") +
+    faceHTML(member, 40) + (primary ? `<span class="mb-star" aria-hidden="true">${ico("star")}</span>` : "") +
     `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>${member.pinned ? `<span class="mb-pin" aria-label="${esc(t("members.sidePinned"))}">${ico("pin")}</span>` : ""}${memberRole(member) ? `<i>${esc(memberRole(member))}</i>` : ""}` +
     (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +

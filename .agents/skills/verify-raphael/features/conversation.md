@@ -138,7 +138,7 @@ Keep reports and result PNGs: answer/attachment, expanded work, open menus/dialo
 quoted draft and highlighted search target. Inspect action-menu placement and
 composer clearance at 720. Slash commands use the slash's measured text rectangle, start-aligned above the line with a below-line fallback. The slash-commands scene checks its left edge within 24px of the character. The chat scene also checks 15px/24px message type,
 12px bubble radii, a borderless answer and the original Raphael emblem and other members' 40px faces. Owner
-messages use the skin accent/on-accent colors; assistant messages use a raised surface. Every thread reads plainly
+messages use the bubble colors; assistant messages use a raised surface. Every thread reads plainly
 (R-UI-42): the core stores Raphael's replies and progress as his 《prefix。…》 line, split over messages when long,
 and the window shows, copies and quotes them without it; his in-app questions are plain too, while the overlay keeps
 the persona. `chat`, `running` and `plain-bot-chat` reject a visible prefix or stray closing mark. Work is one muted

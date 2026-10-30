@@ -13,7 +13,7 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
-import { ownerProfileHTML, skinOf } from "../owner-settings";
+import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
 
 import { brandIcon } from "../brand";
@@ -44,7 +44,6 @@ export const APPEARANCES: Choice[] = [
   { value: "system", get label() { return t("settings.013"); } },
   { value: "light", get label() { return t("settings.015"); } },
   { value: "dark", get label() { return t("settings.016"); } },
-  { value: "black", get label() { return t("skin.black"); } },
 ];
 /** What one background task may spend (brain/settings.py, WORKER_COST_CAPS). */
 export const WORKER_COST_CAPS: Choice[] = [
@@ -756,7 +755,7 @@ export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
       return headingHTML(v) + coreNote(v) + `<div class="appearance-settings">` + section("", [
-        row(t("settings.067"), "", sel(APPEARANCES, skinOf(v.brain?.skin) === "black" ? "black" : v.device.appearance, t("settings.067"), ` data-k="appearance"${v.brain ? "" : " disabled"}`)),
+        row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
         row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
       ]) + `</div>`;
     case "general":

@@ -29,7 +29,7 @@ describe("maintained verification feature map", () => {
       expect(commands.length, name).toBeGreaterThan(0);
       for (const [, command] of commands) {
         const options = parseOptions(command.trim().split(/\s+/), scenes);
-        expect(options.themes, `${name}: ${command}`).toEqual(options.skin === "black" ? ["dark"] : ["light", "dark"]);
+        expect(options.themes, `${name}: ${command}`).toEqual(["light", "dark"]);
         const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
         const allowedWidths = wide ? [[1120, 720, 1920]] : [[1120, 720], [1120, 720, 1920]];
         allowedWidths.push([1120,720,1920,1180,1280]);

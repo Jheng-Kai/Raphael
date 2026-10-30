@@ -42,7 +42,7 @@ export async function run(options) {
   await mkdir(options.out, { recursive: true });
   // Keep each invocation separate: a blocked run must never inherit old green screenshots.
   const directory = await mkdtemp(join(options.out, "run-"));
-  const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, skin: options.skin, locale: options.locale }, results: [], contactSheets: [], errors: [] };
+  const report = { status: "running", startedAt: new Date().toISOString(), options: { scenes: options.selected.map(scene => scene.name), themes: options.themes, widths: options.widths, heights: options.heights, locale: options.locale }, results: [], contactSheets: [], errors: [] };
   report.cpuSlowdown = cpuSlowdown;
   let server, browser;
   const save = () => saveReport(directory, report);
@@ -93,7 +93,7 @@ export async function run(options) {
       const page = await browser.newPage();
       const runtimeErrors = [];
       let profiler;
-      const result = { scene: scene.name, theme, width, height: options.heights[width] ?? 900, skin: options.skin, locale: options.locale, runtimeErrors, image: null, failed: true };
+      const result = { scene: scene.name, theme, width, height: options.heights[width] ?? 900, locale: options.locale, runtimeErrors, image: null, failed: true };
       report.results.push(result);
       const error = (kind, message) => runtimeErrors.push({ kind, message });
       page.on("pageerror", value => error("exception", value.message));
@@ -119,7 +119,7 @@ export async function run(options) {
           else if (disposition === "continue") void request.continue().catch(() => {});
           else { error("network", `External request blocked: ${url}`); void request.abort().catch(() => {}); }
         });
-        await page.evaluateOnNewDocument(installMock, fixture, { fixture: scene.fixture, theme, locale: options.locale, skin: options.skin });
+        await page.evaluateOnNewDocument(installMock, fixture, { fixture: scene.fixture, theme, locale: options.locale });
         await page.evaluateOnNewDocument(now => {
           const NativeDate = Date;
           window.Date = class extends NativeDate {

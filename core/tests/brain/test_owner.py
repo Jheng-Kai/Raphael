@@ -24,7 +24,7 @@ def test_owner_profile_is_saved_and_prompted_as_data(conn):
 
 @pytest.mark.parametrize("key,value", [
     ("owner_name", "x" * 101), ("owner_about", "x" * 4001),
-    ("owner_photo", "https://example.com/avatar.png"), ("skin", "unknown"),
+    ("owner_photo", "https://example.com/avatar.png"),
 ])
 def test_profile_rejects_invalid_data(conn, key, value):
     with pytest.raises(ValueError):

@@ -51,9 +51,9 @@ upload and crop an image; the resulting face appears on the footer and outgoing 
 ## Driving it with look
 
 ```powershell
-npm run look -- profile appearance appearance-menu appearance-keyboard appearance-black models dictation agent messaging data about theme-clarity --theme both --width 1120,720
-npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme dark --skin black --width 1120,720,1920x1080
-npm run look -- appearance --theme dark --width 1120,720,1920x1080 --skin black --locale ja
+npm run look -- profile appearance appearance-menu appearance-keyboard models dictation agent messaging data about theme-clarity --theme both --width 1120,720
+npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme both --width 1120,720,1920x1080
+npm run look -- appearance --theme both --width 1120,720,1920x1080 --locale ja
 npm run look -- cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
 npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected --theme both --width 1120,720,1920x1080
 ```
@@ -80,7 +80,7 @@ menu (R-UI-11). Memory rows use the same policy and retain Undo.
 
 ## Gotchas
 
-Default resolves system/light/dark; black always resolves dark. Retired saved skins silently read as default in core and frontend. Contrast
+The theme resolves system/light/dark. There are no skins; a saved skin value from an older build is ignored. Contrast
 tests cannot prove every rendered combination. Native settings/provider responses
 are fixtures. Profile is reached through Settings, not a retired owner menu. Keep
 destructive native steps within task authorization and disposable test data.
@@ -165,7 +165,7 @@ Neither check is paid OpenRouter acceptance. See the shared look README for laun
 
 ## Theme and clarity (owner, 2026-10-30)
 
-Appearance uses the shared sel/openMenu component, with system/light/dark/black and
+Appearance uses the shared sel/openMenu component, with system/light/dark and
 language as two rows inside a <=640px card. Language moved from General to this pane;
 search and locale journeys follow that entry. There is no preview gallery or skin grid.
 Black uses neutral near-black surfaces, white accent/primary controls, neutral selection,

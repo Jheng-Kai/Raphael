@@ -52,10 +52,11 @@ function framing(body: string): string[] {
 }
 
 describe("Raphael's emblem stands bare", () => {
-  test("composite grid cells have small corners with no disc or separator ring", () => {
+  test("composite grid cells are round faces on the recessed fill, with no ring", () => {
     const composite = rules.find(rule => rule.name === "sidebar.css" && rule.selector === ".room-avatar > .av")!;
     expect(framing(composite.body)).toEqual([
-      "border-radius: var(--sp-1)",
+      "border-radius: var(--r-pill)",
+      "background: var(--surface-2)",
     ]);
   });
   test("no style sheet gives the emblem, or what it is drawn into, a background, an edge, a shadow or a round crop", () => {
@@ -78,7 +79,7 @@ describe("Raphael's emblem stands bare", () => {
     column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
     const face = column.querySelector(".mb-chief > .av")!;
     expect(face.className).toBe("av");
-    expect(face.getAttribute("style")).toBe("--av:48px");
+    expect(face.getAttribute("style")).toBe("--av:40px");
   });
 
   test("on the line of what he asked a member, too", () => {

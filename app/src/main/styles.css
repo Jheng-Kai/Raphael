@@ -1,4 +1,4 @@
-/* Ice-blue surfaces and periwinkle accents frame Raphael's portrait and quiet status report.
+/* Black and white only: neutral greys, with no hue. Colour comes from portraits and service logos.
    Text, links and filled controls use separate contrast-tested colors in each theme. */
 
 @import "../assets/fonts/inter.css";
@@ -29,52 +29,55 @@
   --zh-sub: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
 
   /* surfaces: the window (sidebar), the page, the panels on it, a recessed fill */
-  --side: #edf2fa; --content: #f7f9fd; --panel: #ffffff; --surface-2: #e7eef8;
-  --edge: #dce4f0; --line: #e1e8f2;
-  /* Neutral interaction surfaces; blue is reserved for primary and selected states. */
-  --hover: #eceef1; --pressed: #e0e3e7; --hover-edge: #8d9198;
-  --danger-hover: #fff0f3; --danger-pressed: #fce5eb;
+  --side: #f7f7f7; --content: #ffffff; --panel: #f7f7f7; --surface-2: #efefef;
+  --edge: #e5e5e5; --line: #ebebeb;
+  --hover: #ededed; --pressed: #e2e2e2; --hover-edge: #8f8f8f;
+  --danger-hover: #fdf0f0; --danger-pressed: #fbe5e5;
   /* text: body, secondary, muted (all at least AA on every surface above) */
-  --text: #1b2942; --text-2: #464c56; --text-3: #535b66;
-  --accent: #a8c9ed; --accent-text: #3b64aa; --accent-icon: #3b64aa; --on-accent: #1b3154; --accent-soft: #e4edf9;
-  --accent-hover: #b8d0f8; --accent-pressed: #90b0e0;
-  --accent-ring: rgba(94, 134, 200, 0.2); --conversation-glow: transparent; --focus: #3f6db8;
-  --selected: #dce8f8; --selection: #c8e0f8; --on-selection: #1b2942;
-  --ok: #24736d; --warn: #8a5a12; --err: #b72c49; --warn-soft: #fcf2df; --warn-edge: #e8d3a9;
-  --btn: #ffffff; --btn-edge: #b6c4d8; --key: #f0f4fb; --key-edge: #c3cede;
-  --track: #dce4f0; --menu: #ffffff; --scrim: rgba(18, 24, 38, 0.26);
-  --pop: 0 20px 64px rgba(27, 49, 84, 0.15), 0 3px 10px rgba(27, 49, 84, 0.08);
-  --tab-shadow: 0 1px 2px rgba(10, 34, 70, 0.12);
+  --text: #0a0a0a; --text-2: #404040; --text-3: #595959;
+  --accent: #0a0a0a; --accent-text: #0a0a0a; --accent-icon: #0a0a0a; --on-accent: #ffffff; --accent-soft: #ededed;
+  --accent-hover: #262626; --accent-pressed: #404040;
+  --accent-ring: rgba(0, 0, 0, 0.14); --conversation-glow: transparent; --focus: #0a0a0a;
+  --selected: #e8e8e8; --selection: #d4d4d4; --on-selection: #0a0a0a;
+  /* the owner's own bubble */
+  --bubble: #efefef; --on-bubble: #0a0a0a;
+  --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
+  --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
+  --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
+  --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
+  --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   /* the window's close button under the pointer: Windows' own red, the same in both themes */
   --close: #c42b1c; --on-close: #ffffff;
-  --toast-action: #c8e0f8; --toast-hover: #35383d;
-  /* Activity levels are one hue, the skin's accent, from the empty day up: more reads as stronger. */
-  --heat-0: #e7eef8; --hatch: #c3cede;
+  --toast-action: #e5e5e5; --toast-hover: #404040;
+  /* Activity levels are one hue, the accent, from the empty day up: more reads as stronger. */
+  --heat-0: #efefef; --hatch: #d4d4d4;
   --heat-1: color-mix(in srgb, var(--accent) 30%, var(--heat-0)); --heat-2: color-mix(in srgb, var(--accent) 55%, var(--heat-0));
   --heat-3: color-mix(in srgb, var(--accent) 78%, var(--heat-0)); --heat-4: var(--accent);
-  --scroll-thumb: #bbc8dc; --scroll-hover: #8d9198;
-  /* Raphael's own gold, from the emblem: only where he himself asks (the card of his YES/NO question) */
-  --rg-bg: #fff7e2; --rg-edge: #e2b85a; --rg-ink: #6b4a08; --rg-btn: #e0a52e; --rg-on: #2b1c00; --rg-glow: rgba(224, 165, 46, 0.22);
+  --scroll-thumb: #cfcfcf; --scroll-hover: #8f8f8f;
+  /* The card of Raphael's own YES/NO question: strong and neutral. */
+  --rg-bg: #f7f7f7; --rg-edge: #8f8f8f; --rg-ink: #0a0a0a; --rg-btn: #0a0a0a; --rg-on: #ffffff; --rg-glow: rgba(0, 0, 0, 0.1);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --side: #121826; --content: #182133; --panel: #1f2a40; --surface-2: #283650;
-  --edge: #303e57; --line: #334159;
-  --hover: #343840; --pressed: #3f434b; --hover-edge: #93979e;
-  --danger-hover: #432b36; --danger-pressed: #50303e;
-  --text: #edf3fd; --text-2: #d0d2d6; --text-3: #b7bbc2;
-  --accent: #a8ccf2; --accent-text: #b8d8f8; --accent-icon: #b8d8f8; --on-accent: #1b3154; --accent-soft: #2a3e5d;
-  --accent-hover: #c8e0f8; --accent-pressed: #90b0e0;
-  --accent-ring: rgba(168, 204, 242, 0.24); --conversation-glow: transparent; --focus: #b8d8f8;
-  --selected: #2e4364; --selection: #3c567c; --on-selection: #edf3fd;
-  --ok: #8dcfc7; --warn: #e8b04a; --err: #ff94aa; --warn-soft: #362f27; --warn-edge: #635236;
-  --btn: #283650; --btn-edge: #536581; --key: #283650; --key-edge: #536581;
-  --track: #34435f; --menu: #1f2a40; --scrim: rgba(7, 13, 26, 0.58);
-  --pop: 0 20px 64px rgba(4, 10, 24, 0.48), 0 3px 10px rgba(4, 10, 24, 0.3);
-  --toast-action: #284c82; --toast-hover: #d8dbe0;
-  --heat-0: #283650; --hatch: #465a7a;
-  --scroll-thumb: #465777; --scroll-hover: #93979e;
-  --rg-bg: #2a2314; --rg-edge: #b8862a; --rg-ink: #f6d58a; --rg-btn: #f0be55; --rg-on: #2b1c00; --rg-glow: rgba(240, 190, 85, 0.18);
+  --side: #000000; --content: #0a0a0a; --panel: #161616; --surface-2: #1f1f1f;
+  --edge: #262626; --line: #262626;
+  --hover: #262626; --pressed: #303030; --hover-edge: #929292;
+  --danger-hover: #322023; --danger-pressed: #3c2429;
+  --text: #f5f5f5; --text-2: #d0d0d0; --text-3: #b5b5b5;
+  --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #262626;
+  --accent-hover: #ffffff; --accent-pressed: #d6d6d6;
+  --accent-ring: rgba(255, 255, 255, 0.2); --conversation-glow: transparent; --focus: #eeeeee;
+  --selected: #282828; --selection: #454545; --on-selection: #ffffff;
+  --bubble: #262626; --on-bubble: #f5f5f5;
+  --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
+  --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
+  --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
+  --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
+  --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --toast-action: #333333; --toast-hover: #dddddd;
+  --heat-0: #202020; --hatch: #555555;
+  --scroll-thumb: #555555; --scroll-hover: #929292;
+  --rg-bg: #1f1f1f; --rg-edge: #777777; --rg-ink: #eeeeee; --rg-btn: #f5f5f5; --rg-on: #0a0a0a; --rg-glow: rgba(255, 255, 255, 0.16);
   color-scheme: dark;
 }
 
@@ -695,30 +698,6 @@ kbd.ob-cap { white-space: nowrap; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .toast-bar { display: none; }
 }
-
-/* Neutral near-black appearance; the resolved mode is always dark. */
-:root[data-skin="black"][data-theme="dark"] {
-  --side: #000000; --content: #0a0a0a; --panel: #141414; --surface-2: #1c1c1c;
-  --edge: #242424; --line: #262626;
-  --hover: #262626; --pressed: #303030; --hover-edge: #929292;
-  --danger-hover: #322023; --danger-pressed: #3c2429;
-  --text: #f5f5f5; --text-2: #d0d0d0; --text-3: #b5b5b5;
-  --accent: #f5f5f5; --accent-text: #eeeeee; --accent-icon: #eeeeee; --on-accent: #0a0a0a; --accent-soft: #242424;
-  --accent-hover: #ffffff; --accent-pressed: #d6d6d6;
-  --accent-ring: rgba(255, 255, 255, 0.2); --conversation-glow: transparent; --focus: #eeeeee;
-  --selected: #282828; --selection: #454545; --on-selection: #ffffff;
-  --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
-  --btn: #1c1c1c; --btn-edge: #555555; --key: #1c1c1c; --key-edge: #555555;
-  --track: #333333; --menu: #141414; --scrim: rgba(0, 0, 0, 0.65);
-  --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);
-  --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --toast-action: #333333; --toast-hover: #dddddd;
-  --heat-0: #202020; --hatch: #555555;
-  --scroll-thumb: #555555; --scroll-hover: #929292;
-  --rg-bg: #1c1c1c; --rg-edge: #777777; --rg-ink: #eeeeee; --rg-btn: #f5f5f5; --rg-on: #0a0a0a; --rg-glow: rgba(255, 255, 255, 0.16);
-  color-scheme: dark;
-}
-:root[data-skin="black"] :is(.app-icon, .em-d) { filter: grayscale(1); }
 
 /* Custom icon controls share the same interaction policy as iconButton. */
 /* Window controls use caption hover surfaces, as requested by the owner (2026-10-25). */

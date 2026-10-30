@@ -106,10 +106,10 @@ const view = (over: Partial<SettingsView> = {}): SettingsView => ({
 });
 
 test("appearance offers one theme dropdown and language without a preview gallery", () => {
-  const html = paneHTML(view({ pane: "appearance", brain: { ...brain, skin: "black" } }));
+  const html = paneHTML(view({ pane: "appearance" }));
   expect(html).toContain('data-k="appearance"');
   expect(html).toContain('data-k="ui-language"');
-  expect(html).toContain("極致黑");
+  expect(html).not.toContain("極致黑");
   expect(html).not.toContain('skin-preview');
   expect(html).not.toContain('data-skin-choice');
 });
@@ -320,9 +320,9 @@ describe("一般", () => {
   });
 
   test("offers light, dark, or as Windows is, in that order", () => {
-    expect(APPEARANCES.map((c) => c.label)).toEqual(["跟隨系統", "淺色", "深色", "極致黑"]);
+    expect(APPEARANCES.map((c) => c.label)).toEqual(["跟隨系統", "淺色", "深色"]);
     setLocale("en");
-    expect(APPEARANCES.map((c) => c.label)).toEqual(["Follow system", "Light", "Dark", "Black"]);
+    expect(APPEARANCES.map((c) => c.label)).toEqual(["Follow system", "Light", "Dark"]);
   });
 });
 

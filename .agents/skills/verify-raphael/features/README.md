@@ -161,7 +161,7 @@ behavior the fixture cannot prove.
 | [Automations](automations.md) | Home-owned day/week calendar, schedules, advanced options and deletion |
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
-| [Settings and appearance](settings-appearance.md) | Profile/preferences, default and black themes, languages, models and app information |
+| [Settings and appearance](settings-appearance.md) | Profile/preferences, black and white themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
 | [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
@@ -253,7 +253,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Automations | Planned automations-worker: create/edit/delete schedule, trigger worker, cancel/restart; assert schedule, task and report persistence and no late writes; fake brain. |
 | Team and rooms | readable-layout checks the fixed sidebar and folded folders on a persisted roster; locale-sweep visits the current main pages; delete-conversation creates a room, mentions Raphael/member, waits for reports/wrap-up and checks room rows stay out of private history. Legacy quarantine rows cannot be created through current UI and are not fabricated. Planned rooms-routing: group management and stop; assert routing and cancellation; fake brain, Codex CLI for reasoning. |
 | Dictation | locale-sweep visits all tabs; voice-conversation uses WAV/local STT. Planned dictation-paste-learning: injected hotkeys in an isolated target, microphone/WAV, paste and correction; assert target text, history, dictionary learning and overlay focus; fake brain/local STT. |
-| Settings and appearance | locale-sweep drives every locale/settings section. Planned settings-restart: change theme/skin/model/mic/preferences and restart; assert device/core persistence and window behavior; fake brain. |
+| Settings and appearance | locale-sweep drives every locale/settings section. Planned settings-restart: change theme/model/mic/preferences and restart; assert device/core persistence and window behavior; fake brain. |
 | Connections and MCP | gmail-connect (explicit opt-in only): ask/connect card, assert final state/error and redacted CLI event/stderr diagnostics in the run log; configured signed-in Codex model, run-local workspace/state, fake API clients, declared Composio only, stop at authorizing without Google consent approval. Restricted-network failures before a card are not OAuth acceptance. Planned MCP lifecycle/permissions/private skills: assert discovery and real tool gates; local fake server/CLI. |
 | Usage | Planned usage-ledger: complete/cancel local fake turns, open grouping/export and allowances; assert SQLite totals, CSV and CLI status classification; fake brain, signed-in Codex CLI for allowance acceptance. |
 | Onboarding | Planned onboarding-native: empty data, complete profile/ability steps, hotkey practice and speech exercise, restart; assert completion gating and persisted first-run choices; fake brain/local STT. |
@@ -351,8 +351,8 @@ Only a public model-list read is authorized; no paid OpenRouter request is accep
 
 ## Theme and computer side panel (2026-10-30)
 
-See settings-appearance.md for the single system/light/dark/black selector, retired-skin
-fallback, neutral black and clarity evidence. See member-computer.md for the persistent
+See settings-appearance.md for the single system/light/dark selector and clarity
+evidence. See member-computer.md for the persistent
 side-panel noVNC stream, click-to-input timing, nonce handback and Docker journey.
 This global-token change authorizes one final --all two-theme/three-size look matrix,
 plus black Home/sidebar/chat/settings/calendar/dictionary representatives. Use

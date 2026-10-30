@@ -22,22 +22,8 @@ const ratio = (a, b) => {
   return result;
 };
 const surfaces = ["side", "content", "panel", "surface-2", "menu", "btn", "key", "hover", "pressed", "selected", "accent-soft"];
-const skinSource = readFileSync(new URL("../src/main/owner-settings.ts", import.meta.url), "utf8");
-const skinNames = [...skinSource.match(/export const SKINS = \[([^\]]+)\]/)[1].matchAll(/"([^"]+)"/g)].map(([, name]) => name);
-const skins = Object.fromEntries([...css.matchAll(/:root\[data-skin="([^"]+)"\]\[data-theme="(light|dark)"\]\s*\{([\s\S]*?)\n\}/g)].map(([, name, mode, block]) => [`${name}/${mode}`, { ...(mode === "dark" ? dark : light), ...tokens(block) }]));
-for (const name of skinNames.filter(name => name !== "default")) {
-  for (const mode of name === "black" ? ["dark"] : ["light", "dark"]) {
-    if (!skins[`${name}/${mode}`]) throw new Error(`Missing skin mode: ${name}/${mode}`);
-  }
-}
-if (Object.keys(skins).length !== (skinNames.length - 1)) throw new Error("Unexpected skin palettes");
-for (const [name, palette] of Object.entries(skins)) {
-  for (const token of Object.keys(tokens(css.match(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/)[1]))) {
-    if (!(token in palette)) throw new Error(`Missing skin token: ${name}/${token}`);
-  }
-}
 const report = {};
-for (const [theme, palette] of Object.entries({ "default/light": light, "default/dark": dark, ...skins })) {
+for (const [theme, palette] of Object.entries({ light, dark })) {
   const contrast = {};
   for (const [label, token] of Object.entries({ body: "text", secondary: "text-2", muted: "text-3", links: "accent-text" })) {
     const measured = surfaces.map((surface) => ({ surface, ratio: ratio(palette[token], palette[surface]) }));

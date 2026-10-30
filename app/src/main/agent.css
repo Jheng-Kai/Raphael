@@ -139,7 +139,7 @@
 .tn { display: flex; flex-direction: column; gap: var(--pa-gap-in); }
 .tn.is-new { animation: ra-turn-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .me { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--sp-1); }
-.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--r-lg); background: var(--accent); color: var(--on-accent); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--r-lg); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .ra { display: grid; grid-template-columns: var(--pa-ra-face) minmax(0, 1fr); gap: var(--pa-ra-gap); align-items: start; max-width: 88%; }
 .ra-face { display: block; width: var(--pa-ra-face); height: var(--pa-ra-face); margin-top: var(--sp-1); }
 .ra-face .av { --av: var(--pa-ra-face) !important; }
@@ -308,7 +308,7 @@
 .tn-more[aria-expanded="true"] .i { transform: rotate(180deg); }
 
 /* a turn not in the history yet */
-.tn.is-pending .bubble { color: var(--on-accent); }
+.tn.is-pending .bubble { color: var(--on-bubble); }
 
 /* what was done: one line that opens on the steps */
 .steps { display: grid; grid-template-columns: minmax(0, 1fr); }

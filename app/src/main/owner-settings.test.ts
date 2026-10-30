@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ settingsSet: vi.fn() }));
 vi.mock("./api", () => api);
-import { applySkin, createOwnerControls, ownerProfileHTML, SKINS, skinOf } from "./owner-settings";
+import { applyAppearance, createOwnerControls, ownerProfileHTML } from "./owner-settings";
 import type { BrainSettings } from "./types";
 
 afterEach(() => document.body.replaceChildren());
@@ -13,24 +13,12 @@ it("keeps name and about beside the shared owner avatar picker", () => {
   expect(ownerProfileHTML(settings)).not.toContain('type="file"');
   expect(ownerProfileHTML(settings)).toContain("data-owner-photo");
 });
-it("resolves black to dark and respects the default appearance preference", () => {
-  for (const skin of SKINS) {
-    for (const systemDark of [false, true]) {
-      for (const appearance of ["system", "light", "dark"] as const) {
-        applySkin(skin, appearance, systemDark);
-        expect(document.documentElement.dataset.skin).toBe(skin);
-        expect(document.documentElement.dataset.theme).toBe(skin === "black" ? "dark" : appearance === "system" ? systemDark ? "dark" : "light" : appearance);
-      }
+it("resolves the appearance preference to black or white", () => {
+  for (const systemDark of [false, true]) {
+    for (const appearance of ["system", "light", "dark"] as const) {
+      applyAppearance(appearance, systemDark);
+      expect(document.documentElement.dataset.theme).toBe(appearance === "system" ? systemDark ? "dark" : "light" : appearance);
     }
-  }
-  expect(SKINS).toEqual(["default", "black"]);
-});
-it("silently falls back for retired and unknown saved skins", () => {
-  for (const value of ["paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin", "unknown", null]) {
-    expect(skinOf(value)).toBe("default");
-    applySkin(value, "light", true);
-    expect(document.documentElement.dataset.skin).toBe("default");
-    expect(document.documentElement.dataset.theme).toBe("light");
   }
 });
 it("persists profile edits in order through the core", async () => {

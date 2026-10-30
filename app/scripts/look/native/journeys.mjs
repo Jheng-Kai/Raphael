@@ -3,7 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
-  { name: "appearance", description: "Real Appearance dropdown, black persistence and narrow rows at three native sizes" },
+  { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
   { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
@@ -99,21 +99,19 @@ export async function drive(name, context) {
     result.appearance = [];
     for (const width of [1120, 720, 1920]) {
       await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
-      for (const value of ['light', 'dark', 'black']) {
+      for (const value of ['light', 'dark']) {
         await click(page, '[data-k="appearance"]');
-        await wait(page, '.menu [data-value="black"]');
+        await wait(page, '.menu [data-value="dark"]');
         result.appearance.push(await page.evaluate(checkRendered, 'appearance-settings'));
         await click(page, `.menu [data-value="${value}"]`);
-        await page.waitForFunction(value => document.documentElement.dataset.skin === (value === 'black' ? 'black' : 'default') && document.documentElement.dataset.theme === (value === 'black' ? 'dark' : value), {}, value);
+        await page.waitForFunction(value => document.documentElement.dataset.theme === value, {}, value);
         await capture(`${value}-${width}`);
       }
     }
-    result.persistedSkin = (await context.rpc('settings.get', {})).settings.skin;
-    if (result.persistedSkin !== 'black') throw new Error('Black did not persist through the production settings store');
     await page.reload({waitUntil:'domcontentloaded'});
     await page.waitForSelector('.page-home:not([hidden]) .ho-hero');
-    await page.waitForSelector(':root[data-skin="black"][data-theme="dark"]');
-    await capture('black-restored');
+    await page.waitForSelector(':root[data-theme="dark"]');
+    await capture('dark-restored');
     return;
   }
   if (name === "sidebar-home") {

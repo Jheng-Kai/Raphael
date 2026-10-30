@@ -14,7 +14,7 @@ import { createDictationOverview } from "./pages/dictation-overview";
 import { createDictation } from "./pages/dictation";
 import { createSettings } from "./pages/settings";
 import { createNavigationPage, registerNavigationPages, resolvePage, START_PAGE } from "./navigation-pages";
-import { applySkin } from "./owner-settings";
+import { applyAppearance } from "./owner-settings";
 import { DeviceState } from "./device";
 import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
@@ -62,7 +62,6 @@ const RESHOW_MS = 1000;
 // ---------- the theme ----------
 
 const prefersDark = matchMedia("(prefers-color-scheme: dark)");
-let skin = "default";
 /** The device settings, kept right when reads and writes overlap. */
 const device = new DeviceState(
   DEFAULT_DEVICE,
@@ -76,7 +75,7 @@ const device = new DeviceState(
 /** Light or dark, as `appearance` says; `system` follows the system. */
 function applyTheme(): void {
   const { appearance } = device.get();
-  applySkin(skin, appearance, prefersDark.matches);
+  applyAppearance(appearance, prefersDark.matches);
 }
 prefersDark.addEventListener("change", applyTheme);
 
@@ -171,8 +170,6 @@ async function start(): Promise<void> {
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
-      skin = value.skin ?? "default";
-      applyTheme();
     } catch { /* The window remains usable while the core restarts. */ }
   }
   ctx.onEvent(event => { if (event.type === "SettingsChanged") void refreshOwner(); });

@@ -10,7 +10,7 @@ test("the chief uses the same conversation row, including preview and time", () 
   const el = document.createElement("div");
   el.innerHTML = columnHTML({ list: null, current: 0, query: "", folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
   expect(el.querySelector('.mb-chief .mb-row-p')?.textContent).toBe("Latest report");
-  expect(el.querySelector('.mb-chief .av')?.getAttribute("style")).toBe("--av:48px");
+  expect(el.querySelector('.mb-chief .av')?.getAttribute("style")).toBe("--av:40px");
 });
 
 test("the shell has one permanent conversation sidebar and no Team route or apps entry", () => {

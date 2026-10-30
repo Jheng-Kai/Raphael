@@ -18,7 +18,7 @@ export function checkRendered(name, context = {}) {
     }
     require(!document.querySelector('.skin-preview, [data-skin-choice]'), "preview gallery is retired");
     const choices=[...document.querySelectorAll('.menu [data-value]')];
-    if(choices.length)require(choices.map(item=>item.dataset.value).join(',')==='system,light,dark,black','theme menu has exactly four appearance choices');
+    if(choices.length)require(choices.map(item=>item.dataset.value).join(',')==='system,light,dark','theme menu has exactly three appearance choices');
     return { check:name, width:card.getBoundingClientRect().width };
   }
   if (name === "theme-clarity") {
@@ -27,10 +27,7 @@ export function checkRendered(name, context = {}) {
     require(surfaces.every(s => s.opacity === '1' && s.filter === 'none' && s.backdrop === 'none'), "root and conversation have no opacity or blur veil");
     require(getComputedStyle(document.querySelector('.mb-chat')).backgroundImage === 'none', "conversation has no tinted gradient");
     const root = getComputedStyle(document.documentElement), tokens = Object.fromEntries(['content', 'panel', 'text-2', 'text-3', 'accent', 'focus', 'selected'].map(key=>[key, root.getPropertyValue(`--${key}`).trim()]));
-    if (document.documentElement.dataset.skin === 'black') {
-      require(document.documentElement.dataset.theme === 'dark', "black always resolves dark");
-      require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "black uses neutral greys including text, accent, focus and selection");
-    }
+    require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
     return {check:name, surfaces, tokens};
   }
   if(name==='home-hero'){
@@ -84,7 +81,7 @@ export function checkRendered(name, context = {}) {
     const chief = column.querySelector('.mb-chief');
     if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('.mb-row-main') && chief.querySelector('.av'), "chief uses the same conversation row");
     if(chief)require(chief.querySelector('.mb-star')&&chief.querySelector('.mb-row-t i'),'chief retains its role and one star badge');
-    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-48)<1,'chief and colleagues share 48px faces');
+    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1,'chief and colleagues share 40px faces');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');
@@ -115,7 +112,7 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.au-room-heading > svg.i'), "group identity is its members");
     for (const composite of document.querySelectorAll('.room-avatar')) {
       const box = composite.getBoundingClientRect();
-      const expected=composite.closest('#nav')?48:40;
+      const expected=40;
       require(Math.abs(box.width-expected)<1&&Math.abs(box.height-expected)<1,'sidebar and header use their shared avatar bounds');
       require(getComputedStyle(composite).display==='grid'&&getComputedStyle(composite).borderRadius==='0px'&&getComputedStyle(composite).backgroundColor==='rgba(0, 0, 0, 0)','composite is a square grid without an outer disc');
       for (const face of composite.children) {
@@ -1660,8 +1657,8 @@ export function checkRendered(name, context = {}) {
       const rows = [...column.querySelectorAll(".mb-row[data-member]")], first = rows[0];
       require(first.dataset.member === "0", "Raphael is first");
       if (!column.classList.contains("is-collapsed")) {
-        require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - 48) < 1, "the chief shares the conversation avatar size");
-        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 48) < 1, "other members share 48px faces");
+        require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - 40) < 1, "the chief shares the conversation avatar size");
+        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 40) < 1, "other members share 40px faces");
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };

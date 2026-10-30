@@ -11,13 +11,8 @@ import { croppedMemberPicture } from "./member-profile-resources";
 import { isPictureUrl } from "./members";
 import "./owner-settings.css";
 
-export const SKINS = ["default", "black"] as const;
-export type Skin = typeof SKINS[number];
-export function skinOf(value: unknown): Skin { return SKINS.includes(value as Skin) ? value as Skin : "default"; }
-export function applySkin(value: unknown, appearance: "system" | "light" | "dark", systemDark: boolean): void {
-  const skin = skinOf(value);
-  document.documentElement.dataset.skin = skin;
-  document.documentElement.dataset.theme = skin === "black" ? "dark" : appearance === "system" ? systemDark ? "dark" : "light" : appearance;
+export function applyAppearance(appearance: "system" | "light" | "dark", systemDark: boolean): void {
+  document.documentElement.dataset.theme = appearance === "system" ? systemDark ? "dark" : "light" : appearance;
 }
 export function ownerProfileHTML(brain: BrainSettings | null): string {
   return `<section class="sgroup owner-profile"><h2>${esc(t("owner.profile"))}</h2><div class="slist">` +
@@ -27,7 +22,7 @@ export function ownerProfileHTML(brain: BrainSettings | null): string {
 }
 export function createOwnerControls(saved: (settings: BrainSettings) => void) {
   let writes = Promise.resolve();
-  const set = (key: "owner_name" | "owner_about" | "owner_photo" | "skin", value: string): void => {
+  const set = (key: "owner_name" | "owner_about" | "owner_photo", value: string): void => {
     writes = writes.then(async () => { const settings = (await api.settingsSet(key, value)).settings; setOwnerProfile(settings); saved(settings); }).catch(error => toaster.info(describeError(error)));
   };
   return {
