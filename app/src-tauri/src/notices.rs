@@ -89,6 +89,13 @@ pub const OFFLINE: Notice = Notice {
     ja: "《告。OpenRouter に接続できません。整形前のテキストを貼り付けます。》",
 };
 
+/// Cleanup failed for any other reason: the words are not lost, and the owner is told every time.
+pub const NOT_CLEANED: Notice = Notice {
+    zh: "《告。這次沒有整理成功，已貼上原文。》",
+    en: "《Notice. Cleanup did not finish this time. The text is pasted as you said it.》",
+    ja: "《告。今回は整形できませんでした。話した内容をそのまま貼り付けます。》",
+};
+
 /// No OpenRouter key is stored: the raw text is pasted.
 pub const NO_KEY: Notice = Notice {
     zh: "《告。未設定 OpenRouter 金鑰。改為貼上未整理的原文。》",
@@ -194,14 +201,15 @@ pub fn learned(words: &[String], language: &str) -> String {
     }
 }
 
-/// The notice for the `fallback_reason` of a `dictation.stop` result, if it gets one. A plain
-/// `"timeout"` (the cleanup took too long) and the other reasons are not worth a notice.
+/// The notice for the `fallback_reason` of a `dictation.stop` result, if it gets one. Nothing was
+/// said (`"empty"`) needs none, and incomplete speech has a notice of its own.
 pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
     match reason? {
         "budget" => Some(BUDGET),
         "no_key" => Some(NO_KEY),
         "error:network" | "error:timeout" | "error:server" => Some(OFFLINE),
-        _ => None,
+        "empty" | "incomplete_stt" => None,
+        _ => Some(NOT_CLEANED),
     }
 }
 
@@ -209,7 +217,8 @@ pub fn notice_for_fallback(reason: Option<&str>) -> Option<Notice> {
 mod tests {
     use super::*;
 
-    const ALL: [Notice; 14] = [
+    const ALL: [Notice; 15] = [
+        NOT_CLEANED,
         CORE_RECOVERED,
         ELEVATED,
         FOCUS_CHANGED,
@@ -229,7 +238,9 @@ mod tests {
     #[test]
     fn fallback_reasons_map_to_notices() {
         assert_eq!(notice_for_fallback(Some("budget")).unwrap().zh, BUDGET.zh);
-        assert!(notice_for_fallback(Some("suspicious")).is_none());
+        assert_eq!(notice_for_fallback(Some("suspicious")), Some(NOT_CLEANED));
+        assert_eq!(notice_for_fallback(Some("timeout")), Some(NOT_CLEANED));
+        assert!(notice_for_fallback(Some("empty")).is_none());
         assert!(notice_for_fallback(None).is_none());
     }
 
@@ -239,8 +250,8 @@ mod tests {
         for reason in ["error:network", "error:timeout", "error:server"] {
             assert_eq!(notice_for_fallback(Some(reason)), Some(OFFLINE), "{reason}");
         }
-        for reason in ["timeout", "empty", "error:other", ""] {
-            assert_eq!(notice_for_fallback(Some(reason)), None, "{reason}");
+        for reason in ["timeout", "error:other", ""] {
+            assert_eq!(notice_for_fallback(Some(reason)), Some(NOT_CLEANED), "{reason}");
         }
     }
 
