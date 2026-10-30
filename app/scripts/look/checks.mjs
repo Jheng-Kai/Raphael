@@ -80,9 +80,13 @@ export function checkRendered(name, context = {}) {
       require(!visible(document.querySelector('.sidebar-toggle')) && !visible(nav.querySelector('.sidebar-close')), "desktop has no drawer controls");
     }
     const chief = column.querySelector('.mb-chief');
-    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('.mb-row-main') && chief.querySelector('.av'), "chief uses the same conversation row");
-    if(chief)require(!document.querySelector('.mb-star')&&chief.querySelector('.mb-row-t i'),'chief retains its role without a star');
-    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-52)<1&&chief.getBoundingClientRect().height>=76,'chief is the larger box above 40px colleagues');
+    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector(':scope > b') && chief.querySelector(':scope > .av'), "chief shows its face and name");
+    if(chief)require(!document.querySelector('.mb-star')&&!chief.querySelector('.mb-row-main, .mb-row-p, time'),'chief has no star, role line or preview');
+    if(chief&&(!compact||open)){
+      const box=chief.getBoundingClientRect(),face=chief.querySelector(':scope > .av').getBoundingClientRect(),label=chief.querySelector(':scope > b').getBoundingClientRect();
+      require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'chief has a larger centered face');
+      require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'chief name is centered below its face');
+    }
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');

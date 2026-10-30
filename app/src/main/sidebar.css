@@ -21,10 +21,11 @@
 .side .mb-row-time { position: absolute; right: 36px; top: 8px; opacity: 0; pointer-events: none; }
 .side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-time { opacity: 1; }
 .side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-t:has(time) { padding-right: 40px; }
-.side .nav.mb-chief { grid-template-columns: 52px minmax(0, 1fr) auto; min-height: 76px; padding-block: var(--sp-3); background: var(--surface-2); }
-.side .nav.mb-chief:hover { background: var(--hover); }
-.side .nav.mb-chief > .av { --av: 52px !important; }
-.side .mb-item:hover .nav.mb-chief { padding-right: calc(var(--pa-more) + 8px); }
+.side .mb-item .nav.mb-chief.mb-row { position: relative; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); min-height: 0; padding: var(--sp-3) var(--sp-2) var(--sp-5); text-align: center; }
+.side .nav.mb-chief.mb-row > .av { --av: clamp(64px, 5vw, 96px) !important; }
+.side .nav.mb-chief b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); font-weight: 600; }
+.side .nav.mb-chief[aria-current="true"] b { color: var(--accent-text); }
+.side .nav.mb-chief > .mb-dot { position: absolute; top: 10px; right: 12px; }
 .side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
 .side .mb-ghead { cursor: grab; }
 .side .mb-ghead .mb-fold { opacity: 0; }

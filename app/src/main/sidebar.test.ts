@@ -6,11 +6,12 @@ import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
 
-test("the chief uses the same conversation row, including preview and time", () => {
+test("the chief leads with a larger centered face and its name, without a preview", () => {
   const el = document.createElement("div");
   el.innerHTML = columnHTML({ list: null, current: 0, query: "", folded: new Set(), fresh: new Set(), previews: new Map([[0, "Latest report"]]) });
-  expect(el.querySelector('.mb-chief .mb-row-p')?.textContent).toBe("Latest report");
-  expect(el.querySelector('.mb-chief .av')?.getAttribute("style")).toBe("--av:40px");
+  expect(el.querySelector('.mb-chief .mb-row-p')).toBeNull();
+  expect(el.querySelector('.mb-chief > b')?.textContent).toBeTruthy();
+  expect(el.querySelector('.mb-chief > .av')?.getAttribute("style")).toBe("--av:64px");
 });
 
 test("the shell has one permanent conversation sidebar and no Team route or apps entry", () => {

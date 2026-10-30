@@ -32,16 +32,30 @@ export interface ColumnView {
   fresh: ReadonlySet<number>;
 }
 
+const memberDot = (member: Member): string => member.waiting
+  ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>`
+  : member.unread
+    ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>`
+    : "";
+
+/** The top of the list: a larger face centered above the name, set apart from the conversation rows. */
+function chiefRowHTML(top: Member, v: ColumnView): string {
+  const role = memberRole(top);
+  return (
+    `<div class="mb-item" data-member-item="${top.id}"${top.id ? ' draggable="true"' : ""}>` +
+    `<button type="button" class="nav mb-row mb-chief" data-member="${top.id}" aria-current="${v.active !== false && top.id === v.current}" data-k="member:${top.id}" aria-label="${esc(role ? `${top.name} · ${role}` : top.name)}">` +
+    faceHTML(top, 64) + `<b>${esc(top.name)}</b>${memberDot(top)}</button>` +
+    (top.id === 0 ? "" : iconButton("more", t("members.more", { p0: top.name }), ` data-member-more="${top.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${top.id}"`, "mb-more")) +
+    `</div>`
+  );
+}
+
 /** A member's row: its picture, name, role, preview and dot; then its protected member actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
   const chief = member.id === 0;
   const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
-  const dot = member.waiting
-    ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>`
-    : member.unread
-      ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>`
-      : "";
+  const dot = memberDot(member);
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
@@ -80,7 +94,7 @@ export function columnHTML(v: ColumnView): string {
   const pinned = all.members.filter(m => m.id !== top.id && m.pinned && !m.hidden && memberMatches(m, v.query));
   const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, v.query, top.id);
   const searching = v.query.trim() !== "";
-  const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
+  const chief = chiefRowHTML(top, v);
   const showChief = !searching || memberMatches(top, v.query);
   return (showChief ? chief : "") + (pinned.length ? `<div class="mb-pinned">${pinned.map(m => memberRowHTML(m, v)).join("")}</div>` : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
 }

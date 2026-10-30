@@ -55,7 +55,7 @@ describe("the column, drawn", () => {
     expect(el.querySelectorAll(".mb-row")).toHaveLength(1);
     expect(el.querySelector(".mb-none")).toBeNull();
   });
-  test("Raphael uses the shared conversation row with his bare emblem", () => {
+  test("Raphael leads the column with his bare emblem", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
@@ -63,7 +63,7 @@ describe("the column, drawn", () => {
     expect(chief.querySelector(".mb-pin, time")).toBeNull();
     expect(chief.dataset.member).toBe("0");
     expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
-    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
+    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:64px");
     expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
@@ -78,7 +78,7 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
     expect(el.querySelector('[data-member-more="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
-    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
+    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:64px');
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
     expect(el.querySelector('.mb-star')).toBeNull();
     expect(LIST.members[3].group_id).toBe(20);

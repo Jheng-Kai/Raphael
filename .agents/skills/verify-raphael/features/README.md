@@ -3,8 +3,8 @@
 ## Sidebar redesign (2026-10-30)
 
 One fixed 296px sidebar has Home brand and round search/plus controls. Search opens
-in place without moving either control. The chief, with its role and no star, leads in a
-larger always-visible box above one continuous list of member rows and unframed group face grids (up to four faces).
+in place without moving either control. The chief, without a star, role line or preview, leads as a
+larger centered face above its name, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is one row, without a
 gear or separator: the owner's face and name open Settings, a single mic icon opens dictation.
