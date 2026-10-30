@@ -78,6 +78,15 @@ screen.addEventListener('mousedown', () => {
     controlAt = 0;
   }
 }, true);
+// The last picture of the screen: the window shows it at once when it comes back.
+setInterval(() => {
+  const canvas = screen.querySelector('canvas');
+  if (!rfb || !canvas?.width) return;
+  const small = document.createElement('canvas'), scale = Math.min(1, 480 / canvas.width);
+  small.width = Math.round(canvas.width * scale); small.height = Math.round(canvas.height * scale);
+  small.getContext('2d').drawImage(canvas, 0, 0, small.width, small.height);
+  parent.postMessage({type:'raphael-desktop', state:'frame', image:small.toDataURL('image/jpeg', 0.6)}, '*');
+}, 3000);
 addEventListener('pagehide', () => {closed = true; rfb?.disconnect();});
 document.documentElement.classList.remove('noVNC_loading');
 connect();

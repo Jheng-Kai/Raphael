@@ -38,13 +38,13 @@ apply. Judge and all OpenRouter requests are prohibited by this task: SKIP.
 
 ## Sidebar redesign (2026-10-30)
 
-One 296px sidebar has no brand: collapse and Home icons and a plus share the top row, with a
+One 296px sidebar has no brand: a collapse icon and a plus share the top row, with a
 standing search box below. It collapses to a 72px rail of faces (hover names a face; the plus moves
 above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
 rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
 appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
-separator: a dictation row above the owner's face, name and gear, which open Settings. Native `owner-face`
+separator: a dictation row above the owner's face and name, which open Settings, beside a square Home. Native `owner-face`
 proves a window that loaded before the core still hears it and shows the saved photo.
 Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
 Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and

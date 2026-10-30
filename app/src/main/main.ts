@@ -170,6 +170,7 @@ async function start(): Promise<void> {
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
+      void settings.preload();
     } catch {
       // The core can be restarting: keep asking, or the owner's face and name stay blank.
       setTimeout(() => void refreshOwner(), 1000);

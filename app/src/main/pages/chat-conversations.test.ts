@@ -23,7 +23,7 @@ test("the stacked member and conversation title toggles details with one state; 
   expect(title.querySelector(".conversation-caption")?.textContent).toBe("Research");
   expect(title.querySelector("button")).toBeNull();
   expect(page.el.querySelector(".conversation-head")?.textContent).not.toContain(" / ");
-  expect(page.el.querySelectorAll(".mb-head .ra-tools button:not([hidden])")).toHaveLength(1);
+  expect(page.el.querySelectorAll('.mb-head .ra-tools [data-act="settings"]')).toHaveLength(1);
   expect(page.el.querySelector('.desktop-panel')?.closest('.mb-det')).not.toBeNull();
   const expectedGear = document.createElement("div"); expectedGear.innerHTML = ico("gear");
   expect(page.el.querySelector('[data-act="settings"] path')?.getAttribute("d")).toBe(expectedGear.querySelector("path")?.getAttribute("d"));

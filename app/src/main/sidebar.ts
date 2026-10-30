@@ -7,7 +7,7 @@ import { esc, ico, iconButton } from "./ui";
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"')}</div><div class="sidebar-conversations"></div><div class="side-foot">${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}<button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button></div>`;
+  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}</div><div class="sidebar-conversations"></div><div class="side-foot">${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}<div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button><button type="button" class="nav sidebar-home" data-go="home" aria-current="false">${ico("home")}</button></div></div>`;
   const header = column.querySelector('.mb-top');
   if (header) header.prepend(nav.querySelector('.sidebar-brand')!);
   nav.querySelector(".sidebar-conversations")!.append(column);
@@ -40,7 +40,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     const label = t(rail ? "nav.expandSidebar" : "nav.collapseSidebar");
     collapse.setAttribute("aria-label", label); collapse.title = label;
     if (rail) foot.prepend(add); else header?.append(add);
-    if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .side-foot .nav[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
+    if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip], .side-foot [data-go='dictation'][data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
     column.dispatchEvent(new Event("sidebar-rail"));
   };
   collapse.addEventListener("click", () => {
@@ -52,7 +52,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
   // A face in the rail is named on hover or focus; the row's name stays in the page for screen readers.
   const nameFace = (event: Event): void => {
     if (!document.documentElement.hasAttribute("data-sidebar-collapsed")) return;
-    const row = (event.target as Element).closest<HTMLElement>(".mb-row, .side-foot .nav");
+    const row = (event.target as Element).closest<HTMLElement>(".mb-row, .sidebar-account, .side-foot [data-go='dictation']");
     if (row) row.dataset.tooltip = row.querySelector("b, .nav-t, .sidebar-account-name")?.textContent ?? "";
   };
   nav.addEventListener("pointerover", nameFace, true);
@@ -61,7 +61,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
   const draw = (): void => {
     nav.setAttribute("aria-label", t("nav.pages"));
     const home = nav.querySelector<HTMLElement>('[data-go="home"]')!;
-    home.setAttribute("aria-label", t("nav.home")); home.title = t("nav.home");
+    home.setAttribute("aria-label", t("nav.home")); home.dataset.tooltip = t("nav.home");
     add.setAttribute("aria-label", t("members.add")); add.title = t("members.add");
     const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
     collapse.setAttribute("aria-label", t(rail ? "nav.expandSidebar" : "nav.collapseSidebar")); collapse.title = collapse.getAttribute("aria-label")!;
@@ -69,7 +69,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     dictation.querySelector(".nav-t")!.textContent = t("nav.dictation");
     dictation.setAttribute("aria-label", t("nav.dictation"));
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
-    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>${ico("gear")}`;
+    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);
     toggle.innerHTML = ico("menu"); toggle.setAttribute("aria-label", t("nav.pages"));
     nav.querySelector('[data-sidebar="close"]')?.setAttribute("aria-label", t("common.close"));

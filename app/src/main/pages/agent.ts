@@ -245,6 +245,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">` +
+    iconButton("monitor", t("card.pcTitle"), ' data-act="computer" hidden', "ra-tool") +
     iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
     `</div></div>` +
     `<div class="ra-find" hidden><span class="ra-find-ic">${ico("search")}</span>` +
@@ -308,6 +309,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
     name: () => members.nameOf(members.current()),
     openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
+    available: on => { el.querySelector<HTMLElement>('[data-act="computer"]')!.hidden = !on; },
   });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
@@ -380,7 +382,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     chosenConversations.delete(member);
     if(visible&&member===memberId())switchThread();
   });
-  conversationButton.addEventListener("click", () => members.setDetails(!members.detailsOpen()));
+  conversationButton.addEventListener("click", () => {
+    if (members.detailsOpen() && desktop.viewing() === "computer") { desktop.view("details"); return; }
+    desktop.view("details");
+    members.setDetails(!members.detailsOpen());
+  });
+  el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
+    if (members.detailsOpen() && desktop.viewing() === "computer") { members.setDetails(false); return; }
+    desktop.view("computer");
+    members.setDetails(true);
+  });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
     const old = conversationId();
@@ -419,7 +430,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.append(roomPane.el);
   window.addEventListener("raphael:open-room", event => {
     if (!el.isConnected) return;
-    desktop.hide();
+    // A member's private computer does not stay open behind a group.
+    desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
     void members.load();

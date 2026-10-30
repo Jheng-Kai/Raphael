@@ -2,7 +2,6 @@
 .side { overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
 .sidebar-brand { display: flex; align-items: center; gap: var(--sp-1); flex: 1; min-width: 0; }
 .sidebar-brand .btn.icon { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-pill); }
-.sidebar-brand [data-go="home"]:not([aria-current="page"]) { color: var(--text-2); }
 .btn.sidebar-close, .btn.sidebar-toggle { display: none; }
 .sidebar-conversations { display: flex; flex: 1; min-height: 0; }
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
@@ -45,9 +44,11 @@
 :root[data-sidebar-collapsed] .side .mb-row-main, :root[data-sidebar-collapsed] .side .nav.mb-tile b { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :root[data-sidebar-collapsed] .side .mb-row .mb-dot { position: absolute; top: 4px; right: 4px; }
 :root[data-sidebar-collapsed] .side .side-foot { justify-items: center; }
+:root[data-sidebar-collapsed] .sidebar-foot-row { flex-direction: column-reverse; }
+:root[data-sidebar-collapsed] .side .sidebar-account { flex: none; }
 :root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-pill); }
 :root[data-sidebar-collapsed] .side-foot [data-go="dictation"] > .i { margin-inline: 0; }
-:root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name), :root[data-sidebar-collapsed] .sidebar-account > svg.i { display: none; }
+:root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
 .side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
 .side .mb-ghead { cursor: grab; }
 .side .mb-ghead .mb-fold { opacity: 0; }
@@ -56,7 +57,9 @@
 .side .au-room-row { margin: var(--sp-1) 0 0; }
 .side .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: none; margin: 0; padding: var(--sp-1) 0 0; border: 0; }
 .side .side-foot .nav { justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-1); border-radius: var(--r-md); }
-.side .sidebar-account { min-height: 44px; }
+.side .sidebar-account { flex: 1; min-height: 44px; }
+.sidebar-foot-row { display: flex; gap: var(--sp-1); min-width: 0; }
+.side .side-foot .sidebar-home { flex: none; justify-content: center; width: 44px; min-height: 44px; padding: 0; }
 .sidebar-account-name { flex: 1; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 /* The mic stands in a box as wide as the owner's face, so the two names line up. */
 .side-foot [data-go="dictation"] > .i { flex: none; margin-inline: var(--sp-2); }

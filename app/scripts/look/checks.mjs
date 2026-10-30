@@ -125,12 +125,13 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
-    require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&header.querySelector('[data-go="home"]'),'no brand; collapse and Home lead the top row');
+    require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand; collapse leads the top row and Home sits beside the owner');
     if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
-    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='dictation,settings','footer lists dictation above the owner');
+    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='dictation,settings,home','footer lists dictation above the owner and a square Home');
+    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const square=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(square.width-square.height)<1,'Home is a square');}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&(document.documentElement.hasAttribute('data-sidebar-collapsed')||visible(nav.querySelector('.side-foot [data-go="dictation"] .nav-t'))),'dictation is a named row');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(rail||(visible(nav.querySelector('.sidebar-account > svg.i'))&&visible(nav.querySelector('.sidebar-account-name'))),'account shows its face, name and gear');
+    require(!nav.querySelector('.sidebar-account > svg.i')&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name, without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     if (compact) {
@@ -1407,7 +1408,7 @@ export function checkRendered(name, context = {}) {
     require(!home.querySelector('.ho-pending [data-home-item^="routine:"], .ho-pending [data-home-item^="report:"]'), "Pending lists only what waits for the owner");
     for (const card of home.querySelectorAll('.ho-card')) require(visible(card.querySelector(':scope > header .ho-open')), "every card opens its details from an icon");
     require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
-    require(document.querySelector('#nav .sidebar-brand [data-go="home"]'), "Home is in the top row");
+    require(document.querySelector('#nav .sidebar-foot-row [data-go="home"]'), "Home sits beside the owner");
     for (const chart of home.querySelectorAll('.ho-bars')) require(chart.getAttribute('aria-label'), "charts have an accessible description");
     // Each page is named on one line in the sidebar, at every width: 連結應用程式 and its number must fit the narrow sidebar too.
     for (const label of document.querySelectorAll('#nav .nav .nav-t')) if (visible(label))

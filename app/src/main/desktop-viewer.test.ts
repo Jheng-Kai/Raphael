@@ -45,7 +45,20 @@ test('explicit done includes the current nonce once; close never sends handback'
   expect(api.desktopControl).toHaveBeenLastCalledWith('one',true,'nonce');expect(handback().textContent).toBe('我完成了');
   api.desktopControl.mockResolvedValue({...running,works:[{...work,state:'returning'}]});handback().click();handback().click();await flush();
   expect(api.desktopControl.mock.calls.filter(call=>call[1]===false&&call[2]==='nonce')).toHaveLength(1);
-  mounted.hide();await flush();expect(api.desktopClose).toHaveBeenCalledWith('one');expect(api.desktopControl).toHaveBeenCalledTimes(2);
+  mounted.hide(true);await flush();expect(api.desktopClose).toHaveBeenCalledWith('one');expect(api.desktopControl).toHaveBeenCalledTimes(2);
+});
+test('leaving keeps the stream for a moment, so coming back costs no reconnect',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');const same=frame();
+  mounted.hide();await flush();expect(api.desktopClose).not.toHaveBeenCalled();expect(frame()).toBe(same);
+  await vi.advanceTimersByTimeAsync(60_000);mounted.show();await flush();
+  expect(frame()).toBe(same);expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+  mounted.hide();await vi.advanceTimersByTimeAsync(120_000);await flush();expect(api.desktopClose).toHaveBeenCalledWith('one');
+});
+test('a stopped computer is shown, not started, until the owner presses start',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});mounted.show();await flush();
+  expect(api.desktopOpen).not.toHaveBeenCalled();
+  host.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.click();await flush();
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
 test('expansion retains the same iframe and lease',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');const same=frame();

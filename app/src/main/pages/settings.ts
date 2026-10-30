@@ -155,6 +155,8 @@ interface MenuSpec { choices: Choice[]; current: string; pick: (value: string) =
 export interface SettingsPage extends Page {
   /** The tab that is open; while the panel is closed, the one it was left at. */
   pane(): SettingsPane;
+  /** Reads ahead, so that the first opening has nothing to wait for either. */
+  preload(): Promise<void>;
 }
 /** How long 「移除金鑰」 waits for its second press. */
 const KEY_REMOVAL_CONFIRM_MS = 5000;
@@ -236,6 +238,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The search for microphones that 「重新搜尋麥克風」 started is under way. */
   let searchingMicrophones = false;
   let visible = false;
+  let readOnce = false, preloading = false;
   let stopOutside = (): void => {};
   let loading = false;
   let loads = 0;
@@ -1359,10 +1362,47 @@ export function createSettings(app: AppContext): SettingsPage {
   const onVisibility = (): void => syncMonitor();
   let stopEvents: (() => void) | null = null;
 
+  /** Reads what the settings show; the returned step keeps it and says whether anything changed. */
+  async function readSettings(): Promise<() => boolean> {
+    const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, desktopResult] = await Promise.allSettled([
+      api.settingsGet(),
+      api.secretsStatus(),
+      api.statusGet(),
+      api.audioDevices(),
+      api.keyboardHasAltgr(),
+      getVersion(),
+      api.languagesList(),
+      api.desktopStatus(0),
+      // Read again: the settings may have changed since the window started. `refreshDevice` puts
+      // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
+      app.refreshDevice(),
+    ]);
+    return () => {
+      const before = JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+      brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
+      hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
+      openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
+      spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
+      devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
+      altgr = altgrResult.status === "fulfilled" && altgrResult.value;
+      version = versionResult.status === "fulfilled" ? versionResult.value : "";
+      desktopRequired = desktopResult.status === "fulfilled" && desktopResult.value.state === "absent";
+      if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
+      if (brainResult.status === "fulfilled") readOnce = true;
+      return before !== JSON.stringify([brain, hasKey, openrouter, spend, devices, altgr, version, desktopRequired, languageGroups]);
+    };
+  }
+
   return {
     id: "settings",
     el,
     pane: () => pane,
+    async preload() {
+      if (readOnce || preloading) return;
+      preloading = true;
+      try { const apply = await readSettings(); if (!visible) apply(); }
+      finally { preloading = false; }
+    },
     async show(open?: SettingsPane) {
       const hadUsage = usage !== null;
       visible = true;
@@ -1371,7 +1411,13 @@ export function createSettings(app: AppContext): SettingsPage {
       cliBrains.start();
       document.addEventListener("keydown", settingsKey);
       const mine = ++loads;
-      loading = true;
+      loading = !readOnce;
+      replacingKey = false;
+      keyError = null;
+      limitDraft = null;
+      limitError = null;
+      cityDraft = null;
+      cityError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open)) ? canonicalPane(open) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
@@ -1398,37 +1444,10 @@ export function createSettings(app: AppContext): SettingsPage {
       render();
       paintNav();
       el.querySelector<HTMLElement>("#set-title")?.focus();
-      const [brainResult, keyResult, statusResult, devicesResult, altgrResult, versionResult, languagesResult, desktopResult] = await Promise.allSettled([
-        api.settingsGet(),
-        api.secretsStatus(),
-        api.statusGet(),
-        api.audioDevices(),
-        api.keyboardHasAltgr(),
-        getVersion(),
-        api.languagesList(),
-        api.desktopStatus(0),
-        // Read again: the settings may have changed since the window started. `refreshDevice` puts
-        // the answer in `app.device()` itself, or drops it if a newer read or write overtook it.
-        app.refreshDevice(),
-      ]);
+      const apply = await readSettings();
       if (mine !== loads || !visible) return;
-      brain = brainResult.status === "fulfilled" ? brainResult.value.settings : null;
-      hasKey = keyResult.status === "fulfilled" && keyResult.value.has_key;
-      openrouter = statusResult.status === "fulfilled" ? statusResult.value.openrouter : null;
-      spend = statusResult.status === "fulfilled" ? statusResult.value.spend : null;
-      devices = devicesResult.status === "fulfilled" ? devicesResult.value : null;
-      altgr = altgrResult.status === "fulfilled" && altgrResult.value;
-      version = versionResult.status === "fulfilled" ? versionResult.value : "";
-      desktopRequired = desktopResult.status === "fulfilled" && desktopResult.value.state === "absent";
-      if (languagesResult.status === "fulfilled") languageGroups = languagesResult.value.groups;
-      replacingKey = false;
-      keyError = null;
-      limitDraft = null;
-      limitError = null;
-      cityDraft = null;
-      cityError = null;
-      loading = false;
-      render();
+      // Nothing is redrawn under the owner's hands unless the read found something new.
+      if (apply() || loading) { loading = false; render(); }
       void hiddenMembers.load();
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
       void loadCatalog();
