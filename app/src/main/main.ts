@@ -170,7 +170,10 @@ async function start(): Promise<void> {
     try {
       const { settings: value } = await api.settingsGet();
       setOwnerProfile(value);
-    } catch { /* The window remains usable while the core restarts. */ }
+    } catch {
+      // The core can be restarting: keep asking, or the owner's face and name stay blank.
+      setTimeout(() => void refreshOwner(), 1000);
+    }
   }
   ctx.onEvent(event => { if (event.type === "SettingsChanged") void refreshOwner(); });
   void refreshOwner();
@@ -255,7 +258,7 @@ async function start(): Promise<void> {
     for (const page of Object.values(pages)) if (page !== settings) page.el.hidden = page.id !== id;
     // The calendar opens from Home and has no rail entry of its own.
     const railId = id === "automations" ? "home" : id;
-    nav.querySelectorAll<HTMLElement>(".nav[data-go]").forEach((item) =>
+    nav.querySelectorAll<HTMLElement>("[data-go]").forEach((item) =>
       item.setAttribute("aria-current", item.dataset.go === railId ? "page" : "false"),
     );
     main.scrollTop = 0;

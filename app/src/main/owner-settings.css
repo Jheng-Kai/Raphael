@@ -1,4 +1,7 @@
-.owner-profile .slist { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); padding: var(--sp-4); }
+.owner-profile { margin-top: 0; }
+.owner-profile .slist { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: start; gap: var(--sp-5); }
+.owner-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); min-width: 0; }
+.owner-profile .btn.owner-photo { width: 72px; height: 72px; border: 0; padding: 0; border-radius: var(--r-pill); }
 .owner-profile label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); font-size: var(--fs-sm); }
 .owner-profile .field { width: 100%; min-width: 0; padding: var(--sp-2) var(--sp-2); background: var(--panel); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); }
 .owner-profile textarea { resize: vertical; min-height: 110px; }

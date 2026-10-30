@@ -115,13 +115,13 @@ async def test_members_turn_counts_sources_and_models_without_double_counting_co
     assert {s["key"]: s["total"] for s in result["messages_by"]["source"]["series"]} == {
         "telegram": 1, "routine": 1, "voice": 1, "member": 1,
     }
-    raphael, ada, removed = result["members"]
+    raphael, ada = result["members"]
     assert raphael["id"] == 0
     assert ada["name"] == "Ada" and ada["role"] == "Writer"
     assert ada["turns"] == 2 and ada["cost_usd"] == 4
-    assert ada["share"] == pytest.approx(2 / 3)
+    assert ada["share"] == pytest.approx(ada["cost_usd"] / (ada["cost_usd"] + raphael["cost_usd"]))
     assert ada["models"][0] == {"model": "@p:model:v1", "turns": 1, "cost_usd": 3}
-    assert removed["id"] == 17 and removed["deleted"] is True
+    assert 17 not in [member["id"] for member in result["members"]]
     assert "private" not in str(result)
 
 

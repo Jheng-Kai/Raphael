@@ -38,21 +38,20 @@ const memberDot = (member: Member): string => member.waiting
     ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>`
     : "";
 
-/** The top of the list: a larger face centered above the name, set apart from the conversation rows. */
-function chiefRowHTML(top: Member, v: ColumnView): string {
-  const role = memberRole(top);
+/** A pinned member leaves the rows for the top of the list: a larger face centered above the name. */
+function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
+  const role = memberRole(member);
   return (
-    `<div class="mb-item" data-member-item="${top.id}"${top.id ? ' draggable="true"' : ""}>` +
-    `<button type="button" class="nav mb-row mb-chief" data-member="${top.id}" aria-current="${v.active !== false && top.id === v.current}" data-k="member:${top.id}" aria-label="${esc(role ? `${top.name} · ${role}` : top.name)}">` +
-    faceHTML(top, 64) + `<b>${esc(top.name)}</b>${memberDot(top)}</button>` +
-    (top.id === 0 ? "" : iconButton("more", t("members.more", { p0: top.name }), ` data-member-more="${top.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${top.id}"`, "mb-more")) +
+    `<div class="mb-item" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
+    `<button type="button" class="nav mb-row mb-tile${top ? " mb-chief" : ""}" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}" aria-label="${esc(role ? `${member.name} · ${role}` : member.name)}">` +
+    faceHTML(member, 64) + `<b>${esc(member.name)}</b>${memberDot(member)}</button>` +
+    iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
   );
 }
 
 /** A member's row: its picture, name, role, preview and dot; then its protected member actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
-  const chief = member.id === 0;
   const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
   const dot = memberDot(member);
@@ -60,11 +59,11 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40) +
-    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>${member.pinned ? `<span class="mb-pin" aria-label="${esc(t("members.sidePinned"))}">${ico("pin")}</span>` : ""}${memberRole(member) ? `<i>${esc(memberRole(member))}</i>` : ""}` +
+    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>${memberRole(member) ? `<i>${esc(memberRole(member))}</i>` : ""}` +
     (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +
-    (chief ? "" : iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more")) +
+    iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
   );
 }
@@ -91,12 +90,12 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
 /** The list under the search: the primary, groups and ungrouped members, or an empty result. */
 export function columnHTML(v: ColumnView): string {
   const all = memberDisplayList(v.list), top = all.members[0];
-  const pinned = all.members.filter(m => m.id !== top.id && m.pinned && !m.hidden && memberMatches(m, v.query));
+  const pinned = all.members.filter(m => m.pinned && (m.id === top.id || !m.hidden) && memberMatches(m, v.query));
   const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, v.query, top.id);
   const searching = v.query.trim() !== "";
-  const chief = chiefRowHTML(top, v);
-  const showChief = !searching || memberMatches(top, v.query);
-  return (showChief ? chief : "") + (pinned.length ? `<div class="mb-pinned">${pinned.map(m => memberRowHTML(m, v)).join("")}</div>` : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
+  const showChief = !top.pinned && (!searching || memberMatches(top, v.query));
+  const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
+  return (pinned.length ? `<div class="mb-pinned" data-count="${Math.min(pinned.length, 3)}">${pinned.map(m => pinnedTileHTML(m, v, m.id === top.id)).join("")}</div>` : "") + (showChief ? chief : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
 }
 
 export interface ColumnHost {
@@ -158,8 +157,11 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
 
 export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHost, "view" | "moveMember" | "deleteMember" | "memberAction">): void {
   const member = host.view().list?.members.find(m => m.id === id);
+  const pin = { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" } as const;
+  // Raphael is not a member row the owner can edit: pinning is all there is to do to him here.
+  if (id === 0) return openActions(anchor, [pin], pick => host.memberAction?.(id, pick));
   openActions(anchor, [
-    { id: "pin", label: t(member?.pinned ? "members.sideUnpin" : "members.sidePin"), icon: "pin" },
+    pin,
     { id: "move", label: t("members.moveTo"), icon: "folder", sub: true },
     { id: "primary", label: t("members.sidePrimary"), icon: "up" },
     { id: "unread", label: t("members.sideUnread"), icon: "chat" },
@@ -180,16 +182,13 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   const el = document.createElement("aside");
   el.className = "mb-col";
   el.innerHTML =
-    `<div class="mb-top"><label class="mb-find" hidden>${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
-    iconButton("search", t("chat.searchAll"), ' data-col="search" aria-expanded="false"', "mb-tool") +
-    iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool") + `</div>` +
+    `<div class="mb-top">${iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool")}</div>` +
+    `<label class="mb-find">${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
     `<nav class="mb-scroll"><div class="mb-list"></div></nav>`;
   const rooms = createRoomsSection(() => host.view().active !== false);
   el.querySelector(".mb-scroll")!.append(rooms);
   const findInput = el.querySelector<HTMLInputElement>(".mb-find-input")!;
   const addButton = el.querySelector<HTMLElement>('[data-col="add"]')!;
-  const searchButton = el.querySelector<HTMLButtonElement>('[data-col="search"]')!;
-  const find = el.querySelector<HTMLElement>('.mb-find')!;
   const list = el.querySelector<HTMLElement>(".mb-list")!;
   const nav = el.querySelector<HTMLElement>(".mb-scroll")!;
   let query = "";
@@ -211,10 +210,11 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     addButton.title = t("members.add");
     findInput.placeholder = t("chat.searchAll");
     findInput.setAttribute("aria-label", t("chat.searchAll"));
-    searchButton.title = t("chat.searchAll"); searchButton.setAttribute("aria-label", t("chat.searchAll"));
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
-    search.draw(query, columnHTML({ ...host.view(), query, folded }));
+    // The rail has no folder headings to open a folder with, so it shows every face.
+    const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
+    search.draw(query, columnHTML({ ...host.view(), query, folded: rail ? new Set() : folded }));
     rooms.dispatchEvent(new CustomEvent("sidebar-search", { detail: query }));
     if (key) list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
   }
@@ -235,12 +235,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     );
   }
 
-  // Header controls retain their listeners when the sidebar places them beside the brand.
-  searchButton.addEventListener('click', () => {
-    find.hidden = !find.hidden; searchButton.setAttribute('aria-expanded', String(!find.hidden));
-    if (!find.hidden) findInput.focus();
-    else { query = ''; findInput.value = ''; draw(); }
-  });
+  el.addEventListener("sidebar-rail", draw);
   addButton.addEventListener('click', () => {
       openActions(
         addButton,

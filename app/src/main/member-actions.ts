@@ -27,7 +27,11 @@ export function createMemberActions(host: MemberActionHost) {
 
   async function memberAction(id: number, action: string): Promise<void> {
     const m = memberOf(host.list(), id);
-    if (!m || id === RAPHAEL_ID) return;
+    if (!m) return;
+    if (id === RAPHAEL_ID) {
+      if (action === "pin") { await api.settingsSet("chief_pinned", !m.pinned).catch(error => toaster.info(describeError(error))); await host.load(); }
+      return;
+    }
     if (action === "edit") return editMember(m);
     if (action === "primary") return choosePrimary(id);
     try {

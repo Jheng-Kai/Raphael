@@ -96,7 +96,8 @@ describe("primary display order", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, pinned: true } : m), team_context: { primary_id: 3 } } as MembersList;
     const before = JSON.stringify(list), display = memberDisplayList(list);
     expect(display.members.map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
-    expect(display.members.find(m => m.id === 0)).toMatchObject({ group_id: 20, pinned: true, name: '拉斐爾' });
+    expect(display.members.find(m => m.id === 0)).toMatchObject({ group_id: 20, name: '拉斐爾' });
+    expect(display.members.find(m => m.id === 0)?.pinned).toBeFalsy();
     expect(orderedMembers(list).map(m => m.id)).toEqual([3, 1, 2, 0, 4, 5]);
     expect(JSON.stringify(list)).toBe(before);
   });

@@ -2,12 +2,14 @@
 
 ## Sidebar redesign (2026-10-30)
 
-One fixed 296px sidebar has Home brand and round search/plus controls. Search opens
-in place without moving either control. The chief, without a star, role line or preview, leads as a
-larger centered face above its name, over one continuous list of member rows and unframed group face grids (up to four faces).
+One 296px sidebar has no brand: collapse and Home icons and a plus share the top row, with a
+standing search box below. It collapses to a 72px rail of faces (hover names a face; the plus moves
+above the owner). The chief, without a star, is the first ordinary row; any pinned member leaves the
+rows for a larger centered face above its name at the top, over one continuous list of member rows and unframed group face grids (up to four faces).
 Only owner-created folders have headings; their chevrons appear on hover. Times
-appear on hover, and current-page selection remains unique. The footer is one row, without a
-gear or separator: the owner's face and name open Settings, a single mic icon opens dictation.
+appear on hover, and current-page selection remains unique. The footer is a Notion-like list without a
+separator: a dictation row above the owner's face, name and gear, which open Settings. Native `owner-face`
+proves a window that loaded before the core still hears it and shows the saved photo.
 Groups are the owner's own: there is no everyone entry, and an empty former team room is not listed.
 Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and
 focus containment. Team route/canvas are removed. Settings > Connections owns apps;
@@ -15,7 +17,7 @@ Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
 existing picker/crop component and presets; footer and owner messages share identity.
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
-sidebar-unread, sidebar-drawer, sidebar-search, sidebar-plus, sidebar-group-avatar,
+sidebar-unread, sidebar-drawer, sidebar-search, sidebar-chief-pinned, sidebar-rail, sidebar-plus, sidebar-group-avatar,
 sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, chat, details, profile, plugins-installed,
 all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --core`, then the selected look matrix and inspect every

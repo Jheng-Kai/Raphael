@@ -39,12 +39,12 @@ export function checkRendered(name, context = {}) {
     return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
   }
   const selection = () => {
-    const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav .nav[aria-current="page"]')];
+    const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav [data-go][aria-current="page"]')];
     const home = !document.querySelector('.page-home').hidden;
     const searching = !!document.querySelector('#nav .mb-find-input')?.value.trim();
     require(rows.length <= 1 && (rows.length === 1 || searching), `only the current destination is selected, found ${rows.length}`);
     if (!rows.length) return 'filtered';
-    if (home) require(rows[0].classList.contains('brand'), "Home selects only the brand");
+    if (home) require(rows[0].matches('[data-go="home"]'), "Home selects only its own icon");
     else if (!document.querySelector('.page-agent').hidden) require(rows[0].matches('[data-member], [data-room]'), "chat selects only its conversation");
     return rows[0].getAttribute('data-go') ?? rows[0].getAttribute('data-member') ?? rows[0].getAttribute('data-room');
   };
@@ -65,42 +65,64 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
     const header=nav.querySelector('.mb-top');
-    require(header.querySelector('.brand')&&header.querySelector('[data-col="search"]')&&header.querySelector('[data-col="add"]'),'brand, search and plus share the top row');
-    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,dictation','footer has owner on the left and dictation on the right');
-    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!visible(nav.querySelector('.side-foot [data-go="dictation"] .nav-t')),'dictation is one named icon');
+    const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
+    require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&header.querySelector('[data-go="home"]'),'no brand; collapse and Home lead the top row');
+    if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
+    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='dictation,settings','footer lists dictation above the owner');
+    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&(document.documentElement.hasAttribute('data-sidebar-collapsed')||visible(nav.querySelector('.side-foot [data-go="dictation"] .nav-t'))),'dictation is a named row');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
-    require(!nav.querySelector('.sidebar-account svg.i:not(.owner-face svg.i)')&&visible(nav.querySelector('.sidebar-account-name')),'account shows its face and name without a gear');
+    require(rail||(visible(nav.querySelector('.sidebar-account > svg.i'))&&visible(nav.querySelector('.sidebar-account-name'))),'account shows its face, name and gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
     require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     if (compact) {
       require(visible(document.querySelector('.sidebar-toggle')) && main.getBoundingClientRect().left < 1 && Math.abs(main.getBoundingClientRect().width - innerWidth) < 1, "compact content uses the whole window behind a menu button");
       require(nav.inert === !open && main.inert === open, "drawer owns focus and closes access to covered content");
     } else {
-      require(Math.abs(nav.getBoundingClientRect().width - 296) < 1 && main.getBoundingClientRect().left >= 295, "desktop list retains a fixed readable width");
+      const listWidth=rail?72:296;
+      require(Math.abs(nav.getBoundingClientRect().width - listWidth) < 1 && main.getBoundingClientRect().left >= listWidth - 1, "desktop list retains its fixed width");
       require(!visible(document.querySelector('.sidebar-toggle')) && !visible(nav.querySelector('.sidebar-close')), "desktop has no drawer controls");
     }
     const chief = column.querySelector('.mb-chief');
-    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector(':scope > b') && chief.querySelector(':scope > .av'), "chief shows its face and name");
-    if(chief)require(!document.querySelector('.mb-star')&&!chief.querySelector('.mb-row-main, .mb-row-p, time'),'chief has no star, role line or preview');
-    if(chief&&(!compact||open)){
-      const box=chief.getBoundingClientRect(),face=chief.querySelector(':scope > .av').getBoundingClientRect(),label=chief.querySelector(':scope > b').getBoundingClientRect();
-      require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'chief has a larger centered face');
-      require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'chief name is centered below its face');
-    }
+    if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
+    if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
+    if(!rail){const mic=nav.querySelector('.side-foot [data-go="dictation"] .nav-t').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account-name').getBoundingClientRect();require(Math.abs(mic.left-owner.left)<1,'dictation and the owner names line up');}
+    if(chief&&!rail&&!chief.matches('.mb-tile')&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
       if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');
     }
     return { check:name, compact, open, folders:column.querySelectorAll('.mb-sec').length };
   }
+  if(name==='sidebar-tile'){
+    const tile=document.querySelector('#nav .mb-pinned .mb-tile');
+    require(tile,'a pinned member is a tile');
+    const box=tile.getBoundingClientRect(),face=tile.querySelector(':scope > .av').getBoundingClientRect(),label=tile.querySelector(':scope > b').getBoundingClientRect();
+    require(face.width>=64&&Math.abs(face.left+face.width/2-(box.left+box.width/2))<1,'the tile has a larger centered face');
+    require(label.top>=face.bottom&&Math.abs(label.left+label.width/2-(box.left+box.width/2))<1,'the name is centered below the face');
+    return {check:name,face:face.width};
+  }
+  if(name==='sidebar-rail'){
+    const nav=document.getElementById('nav'),compact=matchMedia('(max-width: 859px)').matches;
+    if(compact){
+      require(!document.documentElement.hasAttribute('data-sidebar-collapsed')&&!document.documentElement.hasAttribute('data-sidebar-open'),'on a narrow window the same control closes the drawer');
+      return {check:name,compact};
+    }
+    require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-72)<1,'the list collapses to a 72px rail');
+    require(!visible(nav.querySelector('.mb-find-input'))&&!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no search or names');
+    const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')];
+    require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-36)<1;}),'every face is centered in the rail');
+    const add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
+    require(add.bottom<=owner.top,'plus sits above the owner in the rail');
+    return {check:name,faces:faces.length};
+  }
   if(name==='sidebar-search-before'||name==='sidebar-search-open'){
     const header=document.querySelector('#nav .mb-top'), buttons=[...header.querySelectorAll('[data-col]')];
     const positions=buttons.map(button=>button.getBoundingClientRect().toJSON());
     if(name==='sidebar-search-before'){
-      require(header.querySelector('.mb-find').hidden,'search starts behind its icon');
+      require(visible(document.querySelector('#nav .mb-find-input')),'search stands ready');
       window.__sidebarSearchPositions=positions;
     }else{
-      require(!header.querySelector('.mb-find').hidden&&document.activeElement===header.querySelector('input'),'search opens in place and receives focus');
+      require(document.activeElement===document.querySelector('#nav .mb-find-input'),'search receives focus');
       require(positions.every((box,index)=>Math.abs(box.x-window.__sidebarSearchPositions[index].x)<1&&Math.abs(box.y-window.__sidebarSearchPositions[index].y)<1),'opening search never moves its icon or plus');
     }
     return {check:name,positions};
@@ -1325,8 +1347,8 @@ export function checkRendered(name, context = {}) {
     require(pictures.length === 2 && pictures.every(src => /-loop\.webp$/.test(src) !== reduced), reduced ? "under reduced motion Raphael's emblem is his still picture" : "Raphael's emblem is the turning loop");
     require(!home.querySelector('.ho-pending [data-home-item^="routine:"], .ho-pending [data-home-item^="report:"]'), "Pending lists only what waits for the owner");
     for (const card of home.querySelectorAll('.ho-card')) require(visible(card.querySelector(':scope > header .ho-open')), "every card opens its details from an icon");
-    require(document.querySelector('#nav .nav[aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
-    require(document.querySelector('#nav .nav')?.dataset.go === "home", "Home is first in the rail");
+    require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "Home is the selected rail destination");
+    require(document.querySelector('#nav .sidebar-brand [data-go="home"]'), "Home is in the top row");
     for (const chart of home.querySelectorAll('.ho-bars')) require(chart.getAttribute('aria-label'), "charts have an accessible description");
     // Each page is named on one line in the sidebar, at every width: 連結應用程式 and its number must fit the narrow sidebar too.
     for (const label of document.querySelectorAll('#nav .nav .nav-t')) if (visible(label))
@@ -1376,7 +1398,7 @@ export function checkRendered(name, context = {}) {
       require(day.left >= box.left && day.right <= box.left + grid.clientWidth + 1, "every day fits inside the calendar viewport");
     }
     require(!document.querySelector('.au-page [data-view]'), "the calendar has no list view");
-    require(document.querySelector('#nav .nav[aria-current="page"]')?.dataset.go === "home", "the calendar belongs to Home in the rail");
+    require(document.querySelector('#nav [data-go][aria-current="page"]')?.dataset.go === "home", "the calendar belongs to Home in the rail");
     require(!document.querySelector('#nav .nav[data-go="automations"]'), "the rail has no automations entry");
     const compact = grid.closest('.au-page').clientWidth <= 760;
     require(visible(side) !== compact, "the month and members remain visible at 1120px; compact tools start below 760px content width");

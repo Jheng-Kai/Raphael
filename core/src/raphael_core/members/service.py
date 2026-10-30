@@ -314,6 +314,11 @@ class MembersService:
             return Speaker(**self.first_bot_profile(), capabilities=frozenset({"chief"}) if self.store.is_chief(member_id) else frozenset())
         return self.store.speaker(member_id)
 
+    def _chief_pinned(self) -> bool:
+        from ..brain.settings import SettingsStore
+
+        return bool(SettingsStore(self._conn).get("chief_pinned"))
+
     def first_bot_profile(self) -> dict:
         from ..brain.settings import SettingsStore
 
@@ -582,7 +587,7 @@ class MembersService:
         last = latest.get(0)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
-            "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
+            "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": True,
             "id": 0,
             "chief": self.store.is_chief(0),
             "name": RAPHAEL_NAMES[language],

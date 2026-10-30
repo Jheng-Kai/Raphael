@@ -378,7 +378,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "members.list": {
         // the roster of every model carries the same inventory and the same count as the sidebar and the connections page
         const counted = inventory();
-        return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId })), groups: data.groups, team_context: {
+        return { members: data.members.map(m => ({ ...m, chief: m.id === data.primaryId, pinned: m.id === 0 ? !!data.settings.chief_pinned : m.pinned })), groups: data.groups, team_context: {
           schema_version: 1, revision: "fixture", self_id: 0, count: data.members.length, primary_id: data.primaryId, chief_id: data.primaryId,
           inventory_state: counted.state, room_member_ids: null,
           members: data.members.map(m => ({ id: m.id, name: m.name, role: m.role, blurb: m.blurb ?? "" })),

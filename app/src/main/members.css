@@ -55,7 +55,6 @@
 .mb-row-t b { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--pa-row-name); line-height: 1.35; }
 .mb-row-t b:not(:only-child) { max-width: 70%; }
 .mb-row-t:has(time) i { max-width: 64px; }
-.mb-row-t .mb-pin { margin-left: 0; }
 /* the role is a small chip after the name, in a tint of the text so that it shows on the selected row too */
 .mb-row-t i { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px calc(5px + 3 * var(--pa-u)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--text) 7%, transparent); font-style: normal; font-size: var(--pa-row-role); line-height: 1.5; color: var(--text-3); }
 .mb-row-p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-row-pv); line-height: 1.45; color: var(--text-3); }

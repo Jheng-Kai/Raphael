@@ -45,6 +45,7 @@ from ..languages import DEFAULT_LANGUAGES, checked_languages
 DEFAULTS: dict[str, Any] = {
     "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
+    "chief_pinned": False,
     "owner_name": "",
     "owner_about": "",
     "owner_photo": "",

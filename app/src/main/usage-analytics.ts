@@ -29,7 +29,7 @@ const exactUsd = (value: number) => `US$${new Intl.NumberFormat("en-US", { minim
 const compact = (value: number) => value >= 1_000_000 ? `${+(value / 1_000_000).toFixed(1)}M`
   : value >= 1000 ? `${+(value / 1000).toFixed(1)}K` : `${+value.toPrecision(3)}`;
 
-type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.deleted" | "usage.estimates">;
+type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.estimates">;
 const labelKeys: Record<string, PlainUsageKey> = {
   __other__: "usage.other", other: "usage.other", unknown: "usage.unknown",
   agent: "usage.agent", cleanup: "usage.cleanup", stt: "usage.stt", memory: "usage.memory",
@@ -152,7 +152,7 @@ export function mountUsageAnalytics(host: HTMLElement, api: UsageAnalyticsApi): 
           usage.members.slice(0, more ? undefined : 5).map(m => {
             const open = expanded.has(m.id), detailsId = `${tooltipId}-member-${m.id}`;
             return `<tr><th scope="row"><button type="button" class="btn" data-control="member-${m.id}" data-member="${m.id}" aria-expanded="${open}" aria-controls="${detailsId}">` +
-              `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.deleted ? t("usage.deleted", { id: m.id }) : m.id === 0 ? t("nav.agent") : m.name)}</button>` +
+              `<span aria-hidden="true">${open ? "⌄" : "›"}</span> ${faceHTML(m,24)}${esc(m.id === 0 ? t("nav.agent") : m.name)}</button>` +
               (memberRole(m) ? `<small>${esc(memberRole(m))}</small>` : "") + `</th><td>${count(m.turns)}</td><td>${formatUsd(m.cost_usd)}</td><td>${share(m.share)}</td></tr>` +
               `<tr id="${detailsId}" ${open ? "" : "hidden"}><td colspan="4"><ul class="ua-models">${m.models.map(model => `<li>${usageModel(model.model,modelData).html}<span>${count(model.turns)} · ${formatUsd(model.cost_usd)}</span></li>`).join("")}</ul></td></tr>`;
           }).join("") + `</tbody></table></div>`;

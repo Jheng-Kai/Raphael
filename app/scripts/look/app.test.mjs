@@ -18,7 +18,7 @@ describe("real app entry with the shared look fixture", () => {
     await vi.waitFor(() => expect(document.querySelector('.page-home:not([hidden]) .ho-hero')).not.toBeNull());
   });
   it("boots and navigates all primary destinations and settings without unmocked calls", async () => {
-    expect(document.querySelector('#nav .nav')?.dataset.go).toBe("home");
+    expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
     expect(document.body.textContent).toContain("這週的研究與安排");
@@ -32,12 +32,12 @@ describe("real app entry with the shared look fixture", () => {
       document.querySelector(destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`).click();
       await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
     }
-    document.querySelector('#nav .nav[data-go="home"]').click();
+    document.querySelector('#nav [data-go="home"]').click();
     await vi.waitFor(() => expect(document.querySelector('.ho-calendar [data-home-go="calendar"]')).not.toBeNull());
     expect(document.querySelector('#nav .nav[data-go="automations"]')).toBeNull();
     document.querySelector('.ho-calendar [data-home-go="calendar"]').click();
     await vi.waitFor(() => expect(document.querySelector('.au-page:not([hidden]) .au-calendar-scroll')).not.toBeNull());
-    expect(document.querySelector('#nav .nav[aria-current="page"]').dataset.go).toBe("home");
+    expect(document.querySelector('#nav [data-go][aria-current="page"]').dataset.go).toBe("home");
     document.querySelector('#nav .nav[data-go="settings"]').click();
     await vi.waitFor(() => expect(document.querySelector('.modal-scrim [data-pane="general"]')).not.toBeNull());
     for (const pane of ["general", "appearance", "dictation", "agent", "connections", "messaging", "models", "data", "about"]) {

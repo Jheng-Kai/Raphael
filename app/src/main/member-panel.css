@@ -1,6 +1,4 @@
 .mb-pinned { padding: var(--sp-1) 0 var(--sp-2); border-bottom: 0; }
-.mb-pin { color: var(--text-3); display: inline-flex; margin-left: var(--sp-1); }
-.mb-pin .i { width: 16px; height: 16px; }
 .mb-det .mb-tabs:empty, .mb-det [data-slot="conversations"]:empty { display: none; }
 .mb-panel-pages { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; background: var(--panel); }
 .mb-panel-row.btn { width: 100%; display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-3); text-align: left; border: 0; border-radius: 0; background: transparent; }

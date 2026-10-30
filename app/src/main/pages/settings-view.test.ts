@@ -307,7 +307,7 @@ describe("the rules for every tab, in every language", () => {
 describe("一般", () => {
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
-    expect(groups(html)).toEqual(["個人資料", "介面與桌面", "啟動"]);
+    expect(groups(html)).toEqual(["介面與桌面", "啟動"]);
     expect(names(html)).toEqual(["桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
     for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
@@ -694,7 +694,9 @@ describe("搜尋設定", () => {
         // a capability of 服務 is a row of the rounded list, named by its `.nm`
         const items = [...html.matchAll(/<span class="nm">(.*?)<\/span>/g)].map((m) => m[1]);
         const addButton = /data-pv="directory"[^>]*>(.*?)<\/button>/.exec(html)?.[1].replace(/<[^>]*>/g, "") ?? "";
-        expect([...names(html), ...items, ...headings, addButton].map((shown) => shown.replace("&#39;", "'")), `${locale} ${entry.label}`).toContain(name);
+        // a labelled field of the owner's profile
+        const fields = [...html.matchAll(/<label>([^<]*)</g)].map((m) => m[1]);
+        expect([...names(html), ...items, ...headings, ...fields, addButton].map((shown) => shown.replace("&#39;", "'")), `${locale} ${entry.label}`).toContain(name);
       }
     }
   });

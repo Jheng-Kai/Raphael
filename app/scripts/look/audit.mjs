@@ -61,11 +61,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
-    // The owner's Grok-style sidebar explicitly uses two round, framed controls.
-    const sidebarTool = element.matches('#nav .mb-top > button.mb-tool[data-col="search"], #nav .mb-top > button.mb-tool[data-col="add"]');
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
     if (element.matches('button.btn.icon')) {
-      if (!sidebarTool && !floatingLatest && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!floatingLatest && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
@@ -141,9 +139,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows.
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
-      const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
+      const navigation = element.matches('.conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
-      if (!sidebarTool && !floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
+      if (!floatingLatest && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       if (!navigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
     if (element.matches('.action-row')) {
@@ -173,6 +171,96 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
   }
   for (const orphan of overflowOrphans) productRules.push({ ...orphan, rule: 'R-UI-44', reason: 'A ⋯ button that a right click on its row does not reach' });
+  // R-UI-52: text and icons stay readable on their surface, at rest and under the pointer.
+  const parsed = value => {
+    const rgb = /^rgba?\(([^)]+)\)$/.exec(value);
+    const srgb = /^color\(srgb ([^)]+)\)$/.exec(value);
+    if (!rgb && !srgb) return null;
+    const parts = (rgb ?? srgb)[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+    const scale = srgb ? 255 : 1;
+    return { r: parts[0] * scale, g: parts[1] * scale, b: parts[2] * scale, a: parts[3] ?? 1 };
+  };
+  const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
+  const luminance = ({ r, g, b }) => [r, g, b].map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
+  // The solid colour behind an element, or null when a picture lies under it.
+  const backdrop = element => {
+    const layers = [];
+    for (let node = element; node; node = node.parentElement) {
+      const style = win.getComputedStyle(node);
+      if (style.backgroundImage && style.backgroundImage !== "none") return null;
+      const color = parsed(style.backgroundColor);
+      if (color && color.a > 0) { layers.push(color); if (color.a === 1) break; }
+    }
+    if (!layers.length || layers[layers.length - 1].a < 1) return null;
+    return layers.reduceRight((below, top) => over(top, below));
+  };
+  const hasText = element => [...element.childNodes].some(node => node.nodeType === 3 && node.textContent.trim());
+  const marks = element => [...(hasText(element) ? [element] : []), ...element.querySelectorAll("*")].filter(node => (hasText(node) || node.matches("svg.i")) && visible(node));
+  const quiet = element => element.closest(":disabled, [aria-disabled='true'], [inert], .desktop-screen, .message-code");
+  const unreadable = (foreground, background) => foreground && background && foreground.a > 0.1 && ratio(over(foreground, background), background) < 3;
+  const seenContrast = new Set();
+  const reportContrast = (key, element, state) => {
+    if (seenContrast.has(key)) return;
+    seenContrast.add(key);
+    productRules.push({ ...describe(element), rule: "R-UI-52", reason: `Text or icon is unreadable ${state}` });
+  };
+  for (const element of doc.body.querySelectorAll("*")) {
+    if (!hasText(element) || element.matches("script, style, option") || !visible(element) || !onScreen(element) || quiet(element)) continue;
+    const background = backdrop(element);
+    if (unreadable(parsed(win.getComputedStyle(element).color), background)) reportContrast(`rest:${element.className}`, element, "at rest");
+  }
+  const specificity = selector => [(selector.match(/#[\w-]+/g) ?? []).length, (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!not|is|where)[\w-]+/g) ?? []).length, (selector.replace(/\[[^\]]+\]|\.[\w-]+|#[\w-]+|:[\w-]+/g, " ").match(/[a-z][\w-]*/gi) ?? []).length];
+  const beats = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return true; };
+  const hovered = new Map();
+  const collect = rules => {
+    for (const rule of rules) {
+      if (rule.cssRules && !rule.selectorText) {
+        if (!rule.media || win.matchMedia(rule.media.mediaText).matches) collect(rule.cssRules);
+        continue;
+      }
+      if (!rule.selectorText?.includes(":hover")) continue;
+      const fill = rule.style.backgroundColor || rule.style.background, ink = rule.style.color;
+      if (!fill && !ink) continue;
+      for (const selector of rule.selectorText.split(/,(?![^(]*\))/)) {
+        if (!selector.includes(":hover")) continue;
+        let matches;
+        try { matches = doc.querySelectorAll(selector.replace(/:hover/g, "").trim() || "*"); } catch { continue; }
+        const weight = specificity(selector);
+        for (const element of matches) {
+          const entry = hovered.get(element) ?? {};
+          if (fill && (!entry.fill || beats(weight, entry.fill.weight))) entry.fill = { value: fill, weight, selector };
+          if (ink && (!entry.ink || beats(weight, entry.ink.weight))) entry.ink = { value: ink, weight };
+          hovered.set(element, entry);
+        }
+      }
+    }
+  };
+  for (const sheet of doc.styleSheets ?? []) { try { collect(sheet.cssRules); } catch { /* A sheet from elsewhere cannot be read. */ } }
+  const resolved = (element, property, value) => {
+    const probe = doc.createElement("i");
+    probe.style.display = "none";
+    probe.style[property] = value;
+    if (!probe.style[property]) return null;
+    element.append(probe);
+    const color = parsed(win.getComputedStyle(probe)[property]);
+    probe.remove();
+    return color;
+  };
+  for (const [element, { fill, ink }] of hovered) {
+    if (!fill || !visible(element) || !onScreen(element) || quiet(element)) continue;
+    const surface = resolved(element, "backgroundColor", fill.value.split(/\s+(?![^(]*\))/)[0]);
+    const below = element.parentElement && backdrop(element.parentElement);
+    if (!surface || !below) continue;
+    const background = over(surface, below);
+    const forced = ink && resolved(element, "color", ink.value);
+    for (const mark of marks(element)) {
+      const foreground = mark === element && forced ? forced : forced && win.getComputedStyle(mark).color === win.getComputedStyle(element).color ? forced : parsed(win.getComputedStyle(mark).color);
+      if (mark !== element && backdrop(mark) !== null && parsed(win.getComputedStyle(mark).backgroundColor)?.a > 0) continue;
+      if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
+    }
+  }
   const documentWidth = Math.max(doc.documentElement.scrollWidth, doc.body.scrollWidth);
   return { horizontalOverflow: { document: documentWidth > viewport.width + 1, documentWidth, viewportWidth: viewport.width, elements: horizontalOverflow }, outsideViewport, missingI18nKeys, nativeControls, invalidDurations, mixedLanguage, rawMarkdown, productRules };
 }

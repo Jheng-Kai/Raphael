@@ -118,6 +118,13 @@ describe("rendered look checks", () => {
     for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
     return { window, audit: () => auditDocument(window.document, { width: 1120, height: 900 }, []) };
   };
+  it("rejects text that vanishes at rest or under the pointer (R-UI-52)", () => {
+    const { window, audit } = productAudit('<div style="background-color:rgb(30,30,30)"><button class="vanish" style="color:rgb(245,245,245)">Show all</button><p class="dim" style="color:rgb(10,10,10)">Link</p></div><style>.vanish:hover{background-color:rgb(245,245,245)}</style>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-52').map(item => item.class)).toEqual(['dim', 'vanish']);
+    window.document.querySelector('.dim').style.color = 'rgb(245,245,245)';
+    window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
   it("rejects a second dots style in the conversation", () => {
     const { window, audit } = productAudit('<section class="page-agent"><p class="ans thinking"><span class="think"></span></p></section>');
     expect(audit().productRules).toContainEqual(expect.objectContaining({ rule: 'R-UI-38', reason: 'Conversation waiting must use the shared work line' }));
@@ -151,8 +158,8 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<div class="wgrid"><div class="wrow"></div><div class="wrow"></div><div class="wrow"></div></div>');
     expect(audit().productRules).toEqual([]);
   });
-  it("limits the round sidebar control exception to its search and plus", () => {
-    const { audit } = productAudit('<nav id="nav"><div class="mb-top"><button class="btn icon mb-tool" data-col="search" style="background:#fff;border:1px solid #888"></button><button class="btn icon mb-tool" data-col="add" style="background:#fff;border:1px solid #888"></button><button class="btn icon mb-tool" data-col="other" style="background:#fff;border:1px solid #888"></button></div></nav>');
+  it("gives sidebar icon controls no surface of their own", () => {
+    const { audit } = productAudit('<nav id="nav"><div class="mb-top"><button class="btn icon mb-tool" data-col="other" style="background:#fff;border:1px solid #888"></button></div></nav>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {
@@ -224,7 +231,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
-    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button><button class="btn brand" style="border:none">Raphael</button>');
+    const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
   it("checks rendered primary and destructive action positions", () => {

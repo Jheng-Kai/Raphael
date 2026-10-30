@@ -1,15 +1,19 @@
 /** The single conversation sidebar persists across page navigation. */
 import { onLocaleChange, t } from "./i18n";
-import { navHomeHTML, navItemHTML } from "./nav-items";
+import { messageTooltip } from "./message-tooltip";
+import { navItemHTML } from "./nav-items";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
-import { esc, ico } from "./ui";
+import { esc, ico, iconButton } from "./ui";
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-brand">${navHomeHTML()}</div><div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}</div>`;
+  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"')}</div><div class="sidebar-conversations"></div><div class="side-foot">${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}<button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button></div>`;
   const header = column.querySelector('.mb-top');
   if (header) header.prepend(nav.querySelector('.sidebar-brand')!);
   nav.querySelector(".sidebar-conversations")!.append(column);
+  const collapse = nav.querySelector<HTMLElement>('[data-sidebar="collapse"]')!;
+  const add = column.querySelector<HTMLElement>('[data-col="add"]')!;
+  const foot = nav.querySelector<HTMLElement>(".side-foot")!;
   const toggle = document.createElement("button");
   toggle.type = "button"; toggle.className = "btn icon sidebar-toggle";
   toggle.dataset.sidebar = "open"; toggle.setAttribute("aria-controls", nav.id);
@@ -21,19 +25,51 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     const compact = matchMedia("(max-width: 859px)").matches;
     nav.inert = compact && !open;
     document.getElementById("main")!.inert = compact && open;
-    if (open) nav.querySelector<HTMLElement>(".brand")?.focus();
+    if (open) collapse.focus();
     else if (compact) toggle.focus();
   };
   const close = (): void => setOpen(false);
+  const compactWindow = matchMedia("(max-width: 859px)");
+  let collapsed = false;
+  try { collapsed = localStorage.getItem("raphael.sidebar.collapsed") === "true"; } catch { /* Keep the full list when storage is unavailable. */ }
+  // Below the desktop width the list is a drawer, so the rail only exists on a wide window.
+  const placeRail = (): void => {
+    const rail = collapsed && !compactWindow.matches;
+    document.documentElement.toggleAttribute("data-sidebar-collapsed", rail);
+    collapse.setAttribute("aria-expanded", String(!rail));
+    const label = t(rail ? "nav.expandSidebar" : "nav.collapseSidebar");
+    collapse.setAttribute("aria-label", label); collapse.title = label;
+    if (rail) foot.prepend(add); else header?.append(add);
+    if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .side-foot .nav[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
+    column.dispatchEvent(new Event("sidebar-rail"));
+  };
+  collapse.addEventListener("click", () => {
+    if (compactWindow.matches) { close(); return; }
+    collapsed = !collapsed;
+    try { localStorage.setItem("raphael.sidebar.collapsed", String(collapsed)); } catch { /* Keep the current session choice. */ }
+    placeRail();
+  });
+  // A face in the rail is named on hover or focus; the row's name stays in the page for screen readers.
+  const nameFace = (event: Event): void => {
+    if (!document.documentElement.hasAttribute("data-sidebar-collapsed")) return;
+    const row = (event.target as Element).closest<HTMLElement>(".mb-row, .side-foot .nav");
+    if (row) row.dataset.tooltip = row.querySelector("b, .nav-t, .sidebar-account-name")?.textContent ?? "";
+  };
+  nav.addEventListener("pointerover", nameFace, true);
+  nav.addEventListener("focusin", nameFace, true);
+  messageTooltip(nav);
   const draw = (): void => {
     nav.setAttribute("aria-label", t("nav.pages"));
-    const brand = nav.querySelector<HTMLElement>(".brand")!;
-    brand.setAttribute("aria-label", t("nav.home")); brand.title = t("nav.home");
+    const home = nav.querySelector<HTMLElement>('[data-go="home"]')!;
+    home.setAttribute("aria-label", t("nav.home")); home.title = t("nav.home");
+    add.setAttribute("aria-label", t("members.add")); add.title = t("members.add");
+    const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
+    collapse.setAttribute("aria-label", t(rail ? "nav.expandSidebar" : "nav.collapseSidebar")); collapse.title = collapse.getAttribute("aria-label")!;
     const dictation = nav.querySelector<HTMLElement>('[data-go="dictation"]')!;
     dictation.querySelector(".nav-t")!.textContent = t("nav.dictation");
-    dictation.setAttribute("aria-label", t("nav.dictation")); dictation.dataset.tooltip = t("nav.dictation");
+    dictation.setAttribute("aria-label", t("nav.dictation"));
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
-    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
+    account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>${ico("gear")}`;
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);
     toggle.innerHTML = ico("menu"); toggle.setAttribute("aria-label", t("nav.pages"));
     nav.querySelector('[data-sidebar="close"]')?.setAttribute("aria-label", t("common.close"));
@@ -53,7 +89,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }
   });
-  matchMedia("(max-width: 859px)").addEventListener("change", close);
-  onLocaleChange(draw); onOwnerProfile(draw); draw(); close();
+  compactWindow.addEventListener("change", () => { close(); placeRail(); });
+  onLocaleChange(draw); onOwnerProfile(draw); placeRail(); draw(); close();
   return { close };
 }

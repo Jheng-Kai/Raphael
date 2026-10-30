@@ -108,12 +108,12 @@ export function primaryFirst<T extends { id: number }>(members: readonly T[], pr
   return ordered;
 }
 
-/** A view-only roster: the primary takes the top slot and Raphael takes its group/pinned slot. */
+/** A view-only roster: the primary takes the top slot and Raphael takes its group slot; each keeps its own pin. */
 export function memberDisplayList(list: MembersList | null): MembersList {
   const source = list ?? { members: [], groups: [] }, raphael = raphaelOf(list), primary = memberOf(list, primaryIdOf(list))!;
   const members = primaryFirst([raphael, ...source.members.filter(member => member.id !== RAPHAEL_ID)], primary.id)
     .map(member => member.id === RAPHAEL_ID && primary.id !== RAPHAEL_ID
-      ? { ...member, group_id: primary.group_id, position: primary.position, pinned: primary.pinned } : member);
+      ? { ...member, group_id: primary.group_id, position: primary.position } : member);
   return { ...source, members };
 }
 

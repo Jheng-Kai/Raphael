@@ -117,10 +117,12 @@ class UsageAnalytics:
         member_info = {row[0]: (row[1], row[2]) for row in self.conn.execute("SELECT id,name,role FROM members")}
         members = {}
         for mid, model, source, cost, at in turns:
+            # A member that is gone has no name to show, so it is not listed; the totals keep its cost.
+            if mid != 0 and mid not in member_info:
+                continue
             if mid not in members:
-                name, role = member_info.get(mid, ("Raphael" if mid == 0 else str(mid), ""))
+                name, role = member_info.get(mid, ("Raphael", ""))
                 members[mid] = {"id": mid, "name": name, "role": role,
-                                "deleted": mid != 0 and mid not in member_info,
                                 "turns": 0, "cost_usd": 0, "models": {}}
             member = members[mid]
             member["turns"] += 1

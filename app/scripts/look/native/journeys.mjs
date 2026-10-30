@@ -4,6 +4,7 @@ import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
+  { name: "owner-face", description: "A window that may load before the core still hears it: a saved owner photo reaches the sidebar" },
   { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
@@ -114,19 +115,25 @@ export async function drive(name, context) {
     await capture('dark-restored');
     return;
   }
+  if (name === "owner-face") {
+    await context.rpc("settings.set", { key: "owner_photo", value: "data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA" });
+    await page.waitForSelector('.sidebar-account .owner-face img', { timeout: 15000 });
+    await capture("owner-face");
+    result.face = true;
+    return;
+  }
   if (name === "sidebar-home") {
     result.layout = [];
     for (const width of [1120, 720, 1920]) {
       await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
       await pause(250);
       result.layout.push(await page.evaluate(checkRendered, "home-hero"));
-      if (width === 720) await click(page, '[data-sidebar="open"]');
+      if (width === 720) { await click(page, '[data-sidebar="open"]'); await pause(300); }
       result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
       await page.evaluate(checkRendered, "sidebar-search-before");
-      await click(page, '[data-col="search"]');
+      await click(page, '.mb-find-input');
       result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
       await capture(`home-sidebar-${width}`);
-      await click(page, '[data-col="search"]');
       if (width === 720) await click(page, '.sidebar-scrim');
     }
     return;

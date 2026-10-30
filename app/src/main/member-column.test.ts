@@ -55,7 +55,7 @@ describe("the column, drawn", () => {
     expect(el.querySelectorAll(".mb-row")).toHaveLength(1);
     expect(el.querySelector(".mb-none")).toBeNull();
   });
-  test("Raphael leads the column with his bare emblem", () => {
+  test("Raphael leads the column as an ordinary row with his bare emblem", () => {
     const el = dom(columnHTML(view()));
     const chief = el.querySelector<HTMLElement>(".mb-chief")!;
     expect(el.firstElementChild?.querySelector(".mb-chief")).toBe(chief);
@@ -63,7 +63,7 @@ describe("the column, drawn", () => {
     expect(chief.querySelector(".mb-pin, time")).toBeNull();
     expect(chief.dataset.member).toBe("0");
     expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
-    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:64px");
+    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
     expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
@@ -76,18 +76,19 @@ describe("the column, drawn", () => {
     expect(ids(el)).toEqual([3, 1, 2, 0, 4]);
     expect(el.querySelector('[data-group="20"] [data-member="0"] .av')).not.toBeNull();
     expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
-    expect(el.querySelector('[data-member-more="0"]')).toBeNull();
+    expect(el.querySelector('[data-member-more="0"]')).not.toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
-    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:64px');
+    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
     expect(el.querySelector('.mb-star')).toBeNull();
     expect(LIST.members[3].group_id).toBe(20);
   });
 
-  test("a primary's pinned slot goes to Raphael, and searching finds each member only in its new place", () => {
+  test("a pinned primary is a tile, Raphael takes its group slot, and searching finds each member only in its new place", () => {
     const list = { ...LIST, members: LIST.members.map(m => m.id === 1 ? { ...m, pinned: true } : m), team_context: { primary_id: 1 } } as MembersList;
     const el = dom(columnHTML(view({ list })));
-    expect(el.querySelector('.mb-pinned [data-member="0"]')).not.toBeNull();
+    expect(el.querySelector('.mb-pinned [data-member="1"]')).not.toBeNull();
+    expect(el.querySelector('.mb-pinned [data-member="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('1');
     const search = dom(columnHTML(view({ list, query: '拉斐爾' })));
     expect(search.querySelectorAll('[data-member]')).toHaveLength(1);
@@ -189,9 +190,6 @@ describe("the column, used", () => {
   test("the search narrows the rows as it is typed, and Escape closes it", () => {
     const column = mount();
     const input = column.el.querySelector<HTMLInputElement>(".mb-find-input")!;
-    expect(column.el.querySelector<HTMLElement>(".mb-find")!.hidden).toBe(true);
-    column.el.querySelector<HTMLButtonElement>('[data-col="search"]')!.click();
-    expect(column.el.querySelector<HTMLElement>(".mb-find")!.hidden).toBe(false);
     input.value = "信箱";
     input.dispatchEvent(new Event("input"));
     expect([...column.el.querySelectorAll(".mb-row")].map((n) => (n as HTMLElement).dataset.member)).toEqual(["4"]);

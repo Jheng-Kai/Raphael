@@ -135,7 +135,7 @@ export interface SearchEntry {
  * entry here (its name's key), or the search does not know it.
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
-  { pane: "general", label: "owner.profile" },
+  { pane: "general", label: "owner.name" },
   ...PANES.map((p) => ({ pane: p.id })),
   { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },

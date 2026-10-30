@@ -738,9 +738,18 @@ pub async fn core_call(
         return Err(format!("the main window may not call {method}"));
     }
     validate_core_call(&method, &params)?;
-    let core = app
-        .try_state::<Arc<CoreProcess>>()
-        .ok_or(CORE_NOT_RUNNING)?;
+    // The window can load before the app has started the core; its first calls wait for it.
+    let mut waited = 0;
+    let core = loop {
+        if let Some(core) = app.try_state::<Arc<CoreProcess>>() {
+            break core;
+        }
+        if waited == 50 {
+            return Err(CORE_NOT_RUNNING.into());
+        }
+        waited += 1;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    };
     let method = if method == "dictionary.correct" {
         params = crate::learned::composer_params(params)?;
         "dictionary.learn".to_owned()
@@ -1102,7 +1111,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
 }
 
 /// The page calls this once and receives the events on `channel`. A page that calls it again (it
-/// was reloaded) replaces the one before. Without a core the page still hears the app's own
+/// was reloaded) replaces the one before. Until the core is there the page hears the app's own
 /// events, such as the tray's.
 #[tauri::command]
 pub async fn main_events(
@@ -1118,12 +1127,15 @@ pub async fn main_events(
     PAGE.lock()
         .unwrap_or_else(PoisonError::into_inner)
         .subscribe(channel.clone());
-    let Some(core) = app.try_state::<Arc<CoreProcess>>() else {
-        log::warn!("main events: the core is not running, so the page hears nothing from it");
-        return Ok(());
-    };
-    let mut notifications = core.subscribe();
     let forwarder = tauri::async_runtime::spawn(async move {
+        // The window can load before the app has started the core. Such a page still has to hear
+        // from it, so wait for the core rather than leave the page deaf until it reloads.
+        let mut notifications = loop {
+            if let Some(core) = app.try_state::<Arc<CoreProcess>>() {
+                break core.subscribe();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        };
         loop {
             match notifications.recv().await {
                 Ok(notification) => {

@@ -15,10 +15,10 @@ export function applyAppearance(appearance: "system" | "light" | "dark", systemD
   document.documentElement.dataset.theme = appearance === "system" ? systemDark ? "dark" : "light" : appearance;
 }
 export function ownerProfileHTML(brain: BrainSettings | null): string {
-  return `<section class="sgroup owner-profile"><h2>${esc(t("owner.profile"))}</h2><div class="slist">` +
-    `<div class="owner-photo-row"><span class="owner-photo-label">${esc(t("settings.avatar"))}</span>${btn(ownerFaceHTML(64, brain?.owner_photo), "owner-photo", ` data-owner-photo aria-label="${esc(t("settings.avatar"))}"${brain ? "" : " disabled"}`)}</div>` +
-    `<label>${esc(t("owner.name"))}<input class="field" data-owner="owner_name" maxlength="100" value="${esc(brain?.owner_name ?? "")}" ${brain ? "" : "disabled"}></label>` +
-    `<label>${esc(t("owner.about"))}<textarea class="field" rows="4" data-owner="owner_about" maxlength="4000" ${brain ? "" : "disabled"}>${esc(brain?.owner_about ?? "")}</textarea></label></div></section>`;
+  return `<section class="sgroup owner-profile" aria-label="${esc(t("owner.profile"))}"><div class="slist">` +
+    btn(ownerFaceHTML(72, brain?.owner_photo), "owner-photo", ` data-owner-photo aria-label="${esc(t("settings.avatar"))}"${brain ? "" : " disabled"}`) +
+    `<div class="owner-fields"><label>${esc(t("owner.name"))}<input class="field" data-owner="owner_name" maxlength="100" value="${esc(brain?.owner_name ?? "")}" ${brain ? "" : "disabled"}></label>` +
+    `<label>${esc(t("owner.about"))}<textarea class="field" rows="4" data-owner="owner_about" maxlength="4000" ${brain ? "" : "disabled"}>${esc(brain?.owner_about ?? "")}</textarea></label></div></div></section>`;
 }
 export function createOwnerControls(saved: (settings: BrainSettings) => void) {
   let writes = Promise.resolve();
