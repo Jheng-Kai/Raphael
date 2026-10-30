@@ -1,4 +1,4 @@
-import { scene, check, click, key, member, room, wait } from "./steps.mjs";
+import { scene, check, click, hover, key, member, room, wait } from "./steps.mjs";
 
 const arm = [key("Escape"), check("cancel-armed")];
 const roomTask = [room(1), wait('.au-room-pane .composer[data-task-state="running"] .cmp-voice')];
@@ -11,10 +11,10 @@ const prompt = (long=false) => ({type:"ask",id:"round3-confirmation",tier:"T2",p
   "建立每週專案報告\n每週五下午整理進度並儲存到 Notion。",yes:"是",no:"否",timeout_ms:120000});
 
 export default [
-  scene("esc-main-armed", "First Escape arms Stop and typing disarms it", [...arm,key("a"),check("cancel-cleared"),key("Backspace"),...arm], {running:true}),
-  scene("esc-member-armed", "The member reply uses the shared gesture", [member(1),...arm], {running:true,runningMember:1}),
-  scene("esc-recording-armed", "A recording has a visible Stop and localized Escape hint", [...recording,...arm]),
-  scene("esc-room-armed", "Room Stop uses the same primary action and cancellation hint", [...roomTask,...arm], {roomThinking:true}),
+  scene("esc-main-armed", "First Escape arms Stop and typing disarms it", [hover('.composer .cmp-voice'),...arm,key("a"),check("cancel-cleared"),key("Backspace"),...arm], {running:true}),
+  scene("esc-member-armed", "The member reply uses the shared gesture", [member(1),hover('.composer .cmp-voice'),...arm], {running:true,runningMember:1}),
+  scene("esc-recording-cancel", "One Escape immediately cancels recording without arming Stop", [...recording,key("Escape"),check("cancel-recording-result"),wait('.composer[data-task-state="idle"]')], {stopVoice:true}),
+  scene("esc-room-armed", "Room Stop uses the same primary action and cancellation hint", [...roomTask,hover('.composer .cmp-voice'),...arm], {roomThinking:true}),
   ...[120,150,194].flatMap(px=>[false,true].map(long=>desktop(`overlay-confirm-${long?"long":"short"}-${px}`,px,[wait('#ask.on'),check("overlay-confirmation"),check("overlay-confirmation-content"),check("overlay-stop-content"),...(!long&&px===120?[...arm,key("Escape"),check("cancel-overlay-result"),{action:"overlay-event",event:prompt(false)},wait('#ask.on')]:[]),...(long&&px===150?[...arm]:[])],[prompt(long)]))),
   desktop("overlay-confirm-expanded",194,[wait('#ask.on'),click('#ask-expand'),check("overlay-stop-content"),check("overlay-confirmation-content"),check("overlay-confirmation"),check("overlay-confirmation-expanded")],[prompt(true)]),
 ];

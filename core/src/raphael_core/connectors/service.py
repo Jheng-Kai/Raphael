@@ -595,35 +595,52 @@ class ConnectorsService:
             return [app.id for app in APPS.values() if any(name.startswith(app.prefix) for name in ready)]
         return [entry.id.removeprefix("composio:")]
 
-    def tier(self, server_id, name):
+    def _execution(self, args):
+        """Validate the documented envelope and the current policy for every contained slug."""
+        optional = {"thought": str, "current_step": str, "current_step_metric": str,
+                    "session_id": str, "sync_response_to_workbench": bool}
+        if (not isinstance(args, dict) or set(args) - {"tools", *optional}
+                or any(type(args[key]) is not kind for key, kind in optional.items() if key in args)
+                or args.get("sync_response_to_workbench", False) is not False):
+            return None
+        calls = args.get("tools")
+        if not isinstance(calls, list) or not 1 <= len(calls) <= 50:
+            return None
+        kinds = []
+        for call in calls:
+            if (not isinstance(call, dict) or set(call) != {"tool_slug", "arguments"}
+                    or not isinstance(call.get("tool_slug"), str) or not _TOOL.fullmatch(call["tool_slug"])
+                    or not isinstance(call.get("arguments"), dict)):
+                return None
+            tool = call["tool_slug"]
+            entries = [c for c in self.store.connectors.values() if c.kind == "composio" and c.status == "ACTIVE" and c.enabled
+                       and tool in c.enabled_tools and tool not in c.disabled_tools]
+            if not entries or all(c.draft_only for c in entries) and re.search(r"(^|_)(SEND|POST|PUBLISH)(_|$)", tool):
+                return None
+            # Use exactly the classifier shown in Connections, including provider hints.
+            kinds.append(all(_kind(next((t for t in self._tool_catalog.get(c.id, []) if t["slug"] == tool),
+                                        {"slug": tool}), c.id.split(":", 1)[1]) == "read" for c in entries))
+        return kinds
+
+    def tier(self, server_id, name, args=None):
         if server_id == COMPOSIO_SERVER:
-            return Tier.T2 if name == META_EXECUTE else Tier.T1
+            if name != META_EXECUTE:
+                return Tier.T1
+            if args is None:
+                return Tier.T2  # An offer without an envelope cannot promise read-only execution.
+            kinds = self._execution(args)
+            return None if kinds is None else Tier.T1 if all(kinds) else Tier.T2
         return Tier.T1 if name in READ_TOOLS else Tier.T2
 
     def allow_call(self, server_id, name, args, approver):
         if not self.tool_available(server_id, name):
             return False
-        if self.tier(server_id, name) >= Tier.T2 and approver != "user":
+        tier = self.tier(server_id, name, args)
+        if tier is None or tier >= Tier.T2 and approver != "user":
             return False
         if server_id == GOOGLE_SERVER:
             return _validate(args, TOOLS[name][1])
-        if name in META_READ:
-            return True
-        # [U] The execution envelope is supplied by the live MCP schema. This isolated
-        # adapter accepts only the tested tool_slug envelope and fails closed otherwise.
-        calls = args.get("tools")
-        if set(args) != {"tools"} or not isinstance(calls, list) or not 1 <= len(calls) <= 50:
-            return False
-        for call in calls:
-            if (not isinstance(call, dict) or set(call) != {"tool_slug", "arguments"}
-                    or not isinstance(call.get("tool_slug"), str) or not isinstance(call.get("arguments"), dict)):
-                return False
-            tool = call["tool_slug"]
-            entries = [c for c in self.store.connectors.values() if c.kind == "composio" and c.status == "ACTIVE" and c.enabled
-                       and tool in c.enabled_tools and tool not in c.disabled_tools]
-            if not entries or all(c.draft_only for c in entries) and re.search(r"(^|_)(SEND|POST|PUBLISH)(_|$)", tool):
-                return False
-        return True
+        return name in META_READ or self._execution(args) is not None
 
     async def auth_failed(self, server_id):
         if server_id != COMPOSIO_SERVER:

@@ -1,5 +1,45 @@
 # Dictation
 
+## Owner round 10 contracts (supersedes round 9 message previews)
+
+Only owner messages use eight-line faded previews with a quiet expand action inside
+the bubble. Assistant messages render fully; authored reply envelopes retain separate
+bubbles and complete Markdown blocks in private and room conversations. Chief,
+member and room scrollers hide their scrollbar, retain normal scrolling and expose
+an accessible jump-to-latest action only when away from the bottom. New messages do
+not move an owner reading older messages. Recording/STT cancels on one Escape;
+in-flight in-app answers require two. Menus, dialogs and ordinary overlay keep their
+existing Escape handling.
+
+`dictionary.correct` carries bounded dictation snapshots to the same Rust Tracker
+used for external editor corrections. Core owns final term acceptance and opaque,
+single-use batch Undo, including prior evidence restoration. A separate passive
+`learned.html` native window shows the learned batch and localized Undo at the active
+monitor's horizontal center, 56% down its work area. It expires after five seconds
+without hover. The ordinary overlay remains click-through. Fixture pill evidence
+does not establish native hit-testing, positioning, paste or persistence.
+
+`stable-click` records the clicked view control and persistent content above it,
+then rejects position/size changes over 1px after settling. Normal look clicks on
+tabs, switches, pressed filters, Settings panes and view controls automatically use
+it (sidebar/Home excluded for the parallel redesign). Explicit scenes cover
+Connections tabs/categories, Dictionary filters and Models/Settings tabs. Existing
+Calendar, member and Plugins scene clicks inherit this check. Connections search is
+below the fixed Installed/Store switch in both states. A selected look report is
+required to establish the actual covered controls and any remaining movements.
+
+Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+`long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
+`conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
+`conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
+`stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
+Run both themes at 1120,720,1920x1080 only after maintainer authorization. One heavy
+process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
+CARGO_TARGET_DIR apply. Full verify, look and builds are currently deferred at the
+maintainer's request; only focused single-file tests are authorized. Judge and all
+OpenRouter/live owner Composio requests are prohibited.
+
+
 Global questions use Raphael's persistent quick conversation. Public progress/thinking
 comes from the same stored turn stream as the conversation, newest line only, in the
 existing 14px caption position. No rotating placeholder status is sent. The API fast
@@ -114,7 +154,7 @@ separate from the raw global-key stream. Native interruption markers preserve
 Escape/key/click ordering without retaining typed text or pointer positions.
 
 ```powershell
-npm run look -- esc-recording-armed overlay-confirm-short-120 overlay-confirm-long-120 overlay-confirm-short-150 overlay-confirm-long-150 overlay-confirm-short-194 overlay-confirm-long-194 overlay-confirm-expanded overlay-transcribing overlay-cleaning overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
+npm run look -- esc-recording-cancel overlay-confirm-short-120 overlay-confirm-long-120 overlay-confirm-short-150 overlay-confirm-long-150 overlay-confirm-short-194 overlay-confirm-long-194 overlay-confirm-expanded overlay-transcribing overlay-cleaning overlay-step overlay-long-answer --theme both --width 1120,720,1920x1080
 ```
 
 R-UI-48: desktop YES/NO is an opaque shared `--panel` card, with an intent title,
@@ -177,3 +217,37 @@ any earlier ordinary-orb Stop wording; composer and permission Stop controls rem
 ```powershell
 npm run look -- overlay-working-cancel --theme both --width 1120,720,1920x1080,1280x800
 ```
+
+## Executable round 10 matrix
+
+```powershell
+npm run look -- conversation-chief-up conversation-chief-bottom conversation-member-up conversation-member-bottom conversation-room-up conversation-room-bottom reply-split-bubbles overlay-learned-pill stable-connections-switch stable-dictionary-controls stable-settings-controls --theme both --width 1120,720,1920x1080
+```
+
+## Native round 10 regression journey
+
+```powershell
+npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation
+```
+
+`owner-round10` uses the bundled debug shell, real Rust correction Tracker, core
+acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
+two Escape presses for a pending fake answer, a complete learned batch, five-second
+hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
+checks the learned window's NOACTIVATE style, rounded click region, click-through
+expiry, active-monitor placement and foreground continuity. The passive learned
+window starts independently of the ordinary overlay, including native isolation.
+`voice-conversation` additionally verifies one Escape cancels a new native recording.
+Its speech path still requires installed local Qwen3 ASR and VAD; missing models
+are BLOCKED. The pending-answer marker is inert outside isolated fake native runs.
+No real provider, owner data, Gmail, Composio or OpenRouter is used.
+
+Dictation navigation reserves the selected label width even before selection, so
+English variable-font weight changes cannot shift the right-aligned tab group.
+The stable-dictionary-controls scene visits Overview, History and Dictionary in
+both directions. Repeat its six-cell matrix with --locale en and --locale ja in
+addition to the default Traditional Chinese; native locale-sweep checks all three.
+
+History and Dictionary filter labels also reserve their selected weight through
+the shared segmented component. The same scene clicks every filter in both pages
+before returning to Dictionary; locale changes update both visible and reserve labels.

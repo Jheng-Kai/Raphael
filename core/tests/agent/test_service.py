@@ -21,6 +21,7 @@ from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.policy import Tier
 from raphael_core.agent.routing import Router as Decider
 from raphael_core.agent.service import AgentService
+from raphael_core.failures import Failure
 from raphael_core.brain.openrouter import ChatTurn, OpenRouterError, TextCompletion
 from raphael_core.brain.secrets import MemoryKeyStore
 from raphael_core.brain.settings import SettingsStore
@@ -607,7 +608,7 @@ async def test_a_model_that_fails_to_find_it_is_a_failure_of_its_kind(rig, clien
     client.decisions.append(decision("command", "open"))
     client.replies.append(OpenRouterError(0, "network", "offline"))
     result = await rig.ask("open the thing", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "The network is unreachable.")
+    assert (result["prefix"], result["text"]) == ("Negative", Failure("network", "").sentence("openai/gpt-6-luna", "en"))
     assert did(actions) == []
 
 
@@ -988,7 +989,7 @@ async def test_offline_the_commands_still_work_and_the_rest_is_refused_with_the_
     assert (await rig.ask("打開 youtube.com"))["prefix"] == "了"  # by the list of words
     assert did(actions) == [("open_url", "https://youtube.com/")]
     result = await rig.ask("台北天氣如何")
-    assert (result["prefix"], result["text"]) == ("否", "拉斐爾 目前無法連線，請確認網路後再試。")
+    assert (result["prefix"], result["text"]) == ("否", Failure("network", "").sentence("openai/gpt-6-luna", "zh-TW"))
 
 
 async def test_a_request_the_list_of_words_cannot_find_is_not_guessed_at(rig, client, actions):
@@ -1013,7 +1014,7 @@ async def test_a_key_openrouter_refuses_is_still_auth_after_the_harness_attempt(
     client.decisions.append(OpenRouterError(401, "auth", "bad key"))
     client.chats.append(OpenRouterError(401, "auth", "bad key"))
     result = await rig.ask("你好")
-    assert result["text"] == "拉斐爾 還沒登入或缺少金鑰，請到設定 › 連接完成連線。" and client.json_calls == []
+    assert result["text"] == Failure("auth_expired", "").sentence("openai/gpt-6-luna", "zh-TW") and client.json_calls == []
 
 
 async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid_for(
@@ -1022,7 +1023,7 @@ async def test_a_model_that_fails_after_jev_decided_is_a_failure_but_jev_is_paid
     client.decisions.append(decision("answer", cost=0.00004))
     client.replies.append(OpenRouterError(0, "timeout", "slow"))
     result = await rig.ask("什麼是量子糾纏")
-    assert (result["prefix"], result["text"]) == ("否", "回應時間過長，請再試一次。")
+    assert (result["prefix"], result["text"]) == ("否", Failure("timeout", "").sentence("openai/gpt-6-luna", "zh-TW"))
     (turn,) = await rig.turns()
     assert turn["status"] == "error" and turn["route"] == "answer"
     assert rig.spent() == [("agent", "typesafe/jev-1.14", 0.00004)]

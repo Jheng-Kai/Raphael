@@ -50,7 +50,7 @@ from datetime import date
 
 from ..agent.history import Turn
 from ..agent.ledger import Ledger
-from ..brain.openrouter import CLEANUP_FALLBACKS, OpenRouterError
+from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import for_purpose
 from .conversation import turn_time
@@ -540,7 +540,7 @@ class Reflector:
             completion = await asyncio.wait_for(
                 self._client.complete_json(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=system,
                     user=user,
                     schema=ACTIONS_SCHEMA,

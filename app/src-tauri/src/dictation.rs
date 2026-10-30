@@ -571,6 +571,12 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         self
     }
 
+    /// Only an answer already with the brain uses the in-app two-press gesture.
+    fn cancels_immediately(&self) -> bool {
+        let state = lock(&self.state);
+        state.phase != Phase::Idle && (state.agent.is_none() || matches!(state.agent, Some(AgentStage::Listening | AgentStage::Transcribing)))
+    }
+
     /// Whether the main window shows the current question to Raphael itself now ([`AppFront`]).
     fn app_shows_question(&self) -> bool {
         self.front.as_ref().is_some_and(|front| front())
@@ -2727,6 +2733,9 @@ mod app {
                 None => log::warn!("learned notice without an overlay"),
             }
         }
+        fn learned_batch(&self, text: &str, words: &[String], undo: Option<&str>, language: &str) {
+            if let Some(overlay) = &self.0 { overlay.learned_batch(text, words, undo, language); }
+        }
         fn say(&self, prefix: &str, text: &str) {
             match &self.0 {
                 Some(overlay) => overlay.say(prefix, text),
@@ -2945,7 +2954,11 @@ mod app {
                     Some(event) => {
                         if matches!(event, HotkeyEvent::CancelKey | HotkeyEvent::CancelReset) {
                             let reset = event == HotkeyEvent::CancelReset;
-                            if !reset && !controller.as_ref().is_some_and(|c| c.phase() == super::Phase::Recording) { continue; }
+                            if !reset && controller.as_ref().is_some_and(|c| c.cancels_immediately()) {
+                                if let Some(controller) = &controller { drop(controller.on_hotkey(HotkeyEvent::Cancel, now_ms())); }
+                                continue;
+                            }
+                            if !reset && !controller.as_ref().is_some_and(|c| c.app_shows_question()) { continue; }
                             if reset || controller.as_ref().is_some_and(|c| c.app_shows_question()) {
                                 crate::commands::report_hotkey(event);
                             }
@@ -5629,7 +5642,7 @@ mod tests {
         assert_eq!(c.core().count("dictionary.learn"), 1);
         assert_eq!(
             c.core().call_params("dictionary.learn"),
-            json!({"corrections": [{"word": "手提電話", "misheard": "首機"}]})
+            json!({"undoable": true, "corrections": [{"word": "手提電話", "misheard": "首機"}]})
         );
         assert_eq!(
             probe.reads(),

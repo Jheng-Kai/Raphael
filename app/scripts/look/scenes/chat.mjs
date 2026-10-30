@@ -3,7 +3,7 @@ import { scene, click, hover, type, wait, waitGone, member, room, search, check,
 const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 const details = [member(1), { action: "open-details" }, check("member-details")];
 const composer = [click(".cmp-attach"), wait("#app-popover")];
-const dictationText = { before: "Please use Open Mouse Bot", after: "Please use OpenMausBot" };
+const dictationText = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
 // A key made up for the scenes: it is typed into a secret card and must reach nothing but `integrations.card_save`.
 const lookKey = "sk-look-4c9f2b7e81d3";
 const secretField = '[data-secret-card="card-notion"] input[type="password"]';
@@ -34,7 +34,7 @@ export default [
   { ...scene("composer-stop-pending", "A typed CLI request shares the running work line before its first turn", [...pendingReply, { action: "freeze-motion", at: 600 }, check("work-dots")], { stopPending: true }), motion: true },
   scene("composer-stop-pending-result", "Stop cancels the pending request once without starting voice", [...pendingReply, click('.cmp-voice'), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-pending-result")], { stopPending: true }),
   scene("composer-stop-voice", "Alt+Space processing remains stoppable after opening quick with older history", voiceReply, { stopVoice: true }),
-  scene("composer-stop-voice-result", "Stop ends native voice processing before a turn exists", [...voiceReply, key("Escape"), check("cancel-armed"), key("Escape"), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-voice-result")], { stopVoice: true }),
+  scene("composer-stop-voice-result", "Stop ends native voice processing before a turn exists", [...voiceReply, key("Escape"), check("cancel-recording-result"), wait('.composer[data-task-state="idle"] .av'), check("composer-stop-voice-result")], { stopVoice: true }),
   scene("composer-stop-member", "A member voice reply shows Stop before the turn announcement", [member(1),
     { action: "main-event", event: { type: "Dictation", phase: "processing", agent: true, member_id: 1 } }, rosterRefresh, ...stopSlot, check("pending-work")], { stopVoice: true, stopVoiceMember: 1 }),
   scene("composer-stop-navigation", "A running member reply keeps Stop after visiting another thread", [member(1), member(0), member(1), rosterRefresh, ...stopSlot], { running: true, runningMember: 1 }),
@@ -46,9 +46,9 @@ export default [
   scene("admin-draft-apply-result", "Apply settles once and updates the member column", [...adminDraftEdits, click('[data-draft-act="confirm"]'), wait('.draft-done'), click('[data-act="draft-done"]'), check("admin-edited-result")], { adminApproval: "draft" }),
   scene("live-scenario-owner-view", "Guardian S17 owner-visible failure and separate public work", [check("conversation-design"), check("live-scenario-owner-view")], { liveScenarioOwnerView: true }),
   scene("quick-conversation-list", "Persistent quick questions at the top of Raphael conversations", [{ action: "open-details" }, check("quick-conversation-list")]),
-  scene("quick-conversation", "Open and continue the persistent quick conversation", [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.ra .chat-message[data-expandable]'), check("quick-conversation")]),
+  scene("quick-conversation", "Open and continue the persistent quick conversation", [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.ra .chat-message[data-reply]'), check("quick-conversation")]),
   scene("quick-question-result", "An Alt+Space answer arrives in the open quick conversation, answered by the quick model",
-    [...quickOpen, { action: "main-event", event: { type: "AgentTurn", turn_id: 91, member_id: 0 } }, wait('.tn[data-id="91"] .ra .chat-message[data-expandable]'), check("quick-question-result")],
+    [...quickOpen, { action: "main-event", event: { type: "AgentTurn", turn_id: 91, member_id: 0 } }, wait('.tn[data-id="91"] .ra .chat-message[data-reply]'), check("quick-question-result")],
     { arrivals: [quickAnswer] }),
   scene("quick-formal-isolation", "A formal question names its thread, a quick follow-up names the quick destination, and neither thread shows the other",
     [check("quick-formal-isolation-formal"), type(".composer textarea", "整理這週的研究重點"), click(".cmp-send"),
@@ -81,7 +81,7 @@ export default [
     { connectorCard: "expired", cardSignIn: "approve" }),
   scene("connector-failed-continued", "A failed connection returns its reason and a self-check continuation to the same conversation",
     [member(1), { action: "member-column", collapsed: false }, wait('[data-connector="card-gmail"]'), click('[data-connector="card-gmail"] [data-act="card-connect"]'),
-      wait('[data-connector="card-gmail"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-expandable]'),
+      wait('[data-connector="card-gmail"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-reply]'),
       { action: "wait-text", selector: '.mb-col [data-member="1"] .mb-row-p', text: "Gmail 還沒登入" },
       check("failure-owner-copy")],
     { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureText: "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。我已檢查設定，會在連線完成後繼續原本的工作。" }),
@@ -113,7 +113,7 @@ export default [
   scene("composer-learn", "A corrected dictated name is learned on send with one notice", [
     { action: "dictation-paste", selector: ".cmp-input", text: dictationText.before },
     type(".cmp-input", dictationText.after), check("composer-pair"), click(".cmp-send"),
-    wait(".toast"), check("composer-learn"), check("composer-pair"),
+    check("composer-learn"), check("composer-pair"),
   ], { dictationText }),
   scene("members-expanded", "Original Raphael emblem and expanded member column", [{ action: "member-column", collapsed: false }, check("member-column")]),
   scene("members-collapsed", "Remembered member face strip with active and waiting markers", [{ action: "member-column", collapsed: true }, click('.mb-col [data-member="1"]'), check("member-column")], { waitingMember: 3 }),
@@ -127,8 +127,8 @@ export default [
   scene("primary-contact-strip", "The primary takes the first collapsed face slot and Raphael takes its old slot", [{ action: "member-column", collapsed: true }, hover('.mb-col [data-member="1"]'), wait(".message-tooltip:not([hidden])"), check("primary-strip")], { primaryMember: 1 }),
   scene("primary-contact-set", "設為主要 on 小晴 exchanges display positions without changing rooms, tasks or conversations", [...primaryMenu, click('.mb-primary-picker [data-id="1"]'), click('.mb-primary-picker [data-dlg="set"]'), wait('.mb-col .mb-chief[data-member="1"]'), member(1), { action: "open-details" }, wait(".mb-det .mb-who-face"), check("primary-set")]),
   scene("primary-room-chief", "The current chief wears the room crown and writes its one wrap-up", [{ action: "member-column", collapsed: false }, room(1), wait(".au-room-wrapup"), check("primary-room-chief")], { primaryMember: 1, roomWrapup: true }),
-  scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-expandable]"), check("conversation-design")]),
-  scene("plain-bot-chat", "Raphael's stored two-message 《答。…》 reply reads plainly", [wait(".ra .chat-message[data-expandable]"), check("conversation-design"), check("plain-bot-chat")], { splitReply: true }),
+  scene("chat", "Conversation with public progress, replies and an attachment", [wait(".ra .chat-message[data-reply]"), check("conversation-design")]),
+  scene("plain-bot-chat", "Raphael's stored two-message 《答。…》 reply reads plainly", [wait(".ra .chat-message[data-reply]"), check("conversation-design"), check("plain-bot-chat")], { splitReply: true }),
   scene("centred-system-events", "Hand-off, consultation and meeting lines centred between question and answer", [wait("[data-handoff]"), check("centred-system-events")], { systemEvents: true }),
   scene("bot-ask-centred", "The asker's chat names the colleague it asked in one centred line that opens on the question and the answer",
     [member(2), wait('[data-handoff="x71"]'), check("bot-ask-centred"), click('[data-handoff="x71"] summary'), wait('[data-handoff="x71"][open]'), check("bot-ask-expanded")], { colleagues: 1 }),
@@ -189,18 +189,18 @@ export default [
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer action mode submenu", [...composer, click('[data-action="1"]'), wait("#app-submenu, #app-popover [data-value]")]),
-  scene("actions", "Answer actions", [hover(".ra .chat-message[data-expandable]"), click('.ra .chat-message[data-expandable] [data-act="more-message"]'), wait("#app-popover")]),
-  scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-expandable]"), click('.ra .chat-message[data-expandable] [data-act="reply-message"]')]),
+  scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),
+  scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
   scene("search-target", "Navigate to a message search match", [search("研究"), click("[data-message-result]"), wait(".is-search-target")]),
-  scene("tooltip", "Answer timestamp tooltip", [hover(".ra .chat-message[data-expandable] .message-actions time")]),
+  scene("tooltip", "Answer timestamp tooltip", [hover(".ra .chat-message[data-reply] .message-actions time")]),
   scene("room", "Room conversation", [room(1), wait(".au-room-thread .chat-message")]),
   ...["member", "room", "team"].flatMap(context => {
     const base = context === "member" ? [member(1)] : context === "room" ? [room(1)] : [click('[data-go="team"]')];
     const form = context === "member" ? ".mb-chat:not(.au-room-pane) .composer" : context === "room" ? ".au-room-pane .composer" : ".team-composer .composer";
     return [scene(`${context}-composer-learn`, `${context} dictated name correction reaches the dictionary`, [...base,
       { action: "dictation-paste", selector: `${form} textarea`, text: dictationText.before },
-      type(`${form} textarea`, dictationText.after), check("composer-pair"), click(`${form} .cmp-send`), wait(".toast"), check("composer-learn"), check("composer-pair")], { dictationText }),
+      type(`${form} textarea`, dictationText.after), check("composer-pair"), click(`${form} .cmp-send`), check("composer-learn"), check("composer-pair")], { dictationText }),
       scene(`${context}-composer-empty`, `${context} empty composer`, [...base, check("composer-pair")], { ...(context === "room" ? { messages: [] } : {}), turns: [] }),
       scene(`${context}-text`, `${context} composer draft`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), check("composer-pair"), ...(context === "member" ? [check("skill-learned-notice")] : [])], context === "member" ? { turns: [{ id: 501, member_id: 1, conversation_id: 11, session_id: "look-skill", created_at_ms: 1792807154000, question: "整理研究摘要", route: "answer", source: "app", prefix: "", text: "研究摘要已整理完成。", status: "done", cost_usd: 0, messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: 1792807155000 }], steps: [], attachments: [] }] } : {}),
       scene(`${context}-composer-hover`, `${context} composer send hover`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), hover(`${form} .cmp-send`), wait('.message-tooltip:not([hidden])'), check("composer-pair")])];

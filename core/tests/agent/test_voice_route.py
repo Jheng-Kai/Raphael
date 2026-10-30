@@ -38,7 +38,7 @@ async def test_a_harness_timeout_after_routing_failed_uses_the_timeout_phrase(ma
     client.replies.append(TimeoutError())
     client.chats.extend([error] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "Raphael took too long to respond. Try again later."
+    assert result["text"] == "openai/gpt-6-luna took too long to respond. Try again later."
     [turn] = await rig.turns()
     assert turn["status"] == "error" and turn["route"] == "answer"
 
@@ -56,7 +56,7 @@ async def test_a_connection_failure_is_offline_only_after_the_harness_also_fails
     client.replies.append(OpenRouterError(0, "network", "unreachable"))
     client.chats.extend([connection] * 4)
     result = await rig.ask("Read this example", language="en")
-    assert result["text"] == "Raphael cannot connect right now. Check your network and try again."
+    assert result["text"] == "openai/gpt-6-luna cannot connect right now. Check your network and try again."
     assert len(client.chat_calls) == 4
 
 
@@ -96,6 +96,6 @@ async def test_voice_harness_has_a_total_deadline_and_cancels_a_hanging_request(
     client.decisions.append(decision("unclear"))
     client.chats.append(hang)
     result = await asyncio.wait_for(rig.ask("Read this example", language="en"), 1)
-    assert result["text"] == "The request took too long. Please try again."
+    assert result["text"] == "openai/gpt-6-luna took too long to respond. Try again later."
     assert cancelled.is_set()
     assert (await rig.turns())[0]["status"] == "error"

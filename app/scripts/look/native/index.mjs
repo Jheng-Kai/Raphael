@@ -35,7 +35,7 @@ async function run(options) {
   const save = () => saveReport(directory, report);
   const python = process.env.RAPHAEL_CORE_PYTHON || join(root, "core/.venv/Scripts/python.exe");
   const target = process.env.CARGO_TARGET_DIR || resolve(root, "../.target");
-  const executable = join(target, "debug/app.exe");
+  const executable = process.env.RAPHAEL_NATIVE_BINARY || join(target, "debug/app.exe");
   let owned, browser, interrupted = false;
   const interrupt = () => { interrupted = true; void stopOwned(owned).catch(error => report.errors.push(error.message)); };
   process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
@@ -107,7 +107,7 @@ async function run(options) {
         let page;
         for (let i = 0; i < 100; i++) {
           result.targets = browser.targets().map(target => ({ type: target.type(), url: target.url() }));
-          page = (await browser.pages()).find(page => /tauri\.localhost|tauri:\/\/localhost|localhost:1420/.test(page.url()));
+          page = (await browser.pages()).find(page => /tauri\.localhost|tauri:\/\/localhost|localhost:1420/.test(page.url()) && !/\/(?:learned|overlay)\.html/.test(page.url()));
           if (page) break;
           await pause(200);
         }
@@ -131,17 +131,18 @@ async function run(options) {
         });
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
-        const capture = async label => {
-          try { await settleMotion(page); }
+        const capture = async (label, target = page) => {
+          try { await settleMotion(target); }
           catch (error) { throw new Error(`${journey.name}/${label}: ${error.message}`, { cause: error }); }
-          await page.evaluate(decodeVisibleImages);
+          await target.evaluate(decodeVisibleImages);
           const image = `${journey.name}-${label}.png`;
-          await page.screenshot({ path: join(directory, image) });
+          await target.screenshot({ path: join(directory, image) });
           result.image = image;
-          report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", width: page.viewport().width, height: page.viewport().height, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
+          const viewport = await target.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+          report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {

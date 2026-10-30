@@ -569,7 +569,7 @@ class TaskRun:
             self._check(paid=True)
             proposed = Proposed(CREATE_MEMBER, team_description(CREATE_MEMBER), summarize(arguments))
         else:
-            if self._gate.reads_only(ref.server, ref.name):
+            if self._gate.reads_only(ref.server, ref.name, arguments):
                 return PASS
             self._check(paid=True)
             description = ""
@@ -585,8 +585,8 @@ class TaskRun:
     async def _plugin(
         self, ref: ToolRef, arguments: dict, alias: str = "", call_id: str = ""
     ) -> tuple[dict, str, str | None, int | None]:
-        now = self._gate.tier_now(ref.key)
-        if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name)):
+        now = self._gate.tier_now(ref.key, arguments)
+        if self._declined and (ref.key in self._declined or not self._gate.reads_only(ref.server, ref.name, arguments)):
             # The owner said no to something in this task: this tool is not tried again, and no other that changes
             # something is, whatever it is called. Nothing is asked and nothing is made.
             self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
@@ -680,7 +680,7 @@ class TaskRun:
             )  # fmt: skip
             content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
-        now = self._gate.tier_now(ref.key)
+        now = self._gate.tier_now(ref.key, waiting.arguments)
         # The yes is for the tier the question was asked at: a tool that has none now, or a higher
         # one, is not covered by it.
         if now is None or now > waiting.tier:

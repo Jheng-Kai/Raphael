@@ -28,3 +28,39 @@ test("a newly selected task never inherits an armed gesture",()=>{
   esc();dispose();dispose=cancelGesture().register(()=>({key:"task:2",button:stop,hint:"Press again to cancel",cancel}));
   esc();expect(cancel).not.toHaveBeenCalled();esc();expect(cancel).toHaveBeenCalledOnce();
 });
+
+
+test("a recording target cancels on the first Escape without an armed hint", () => {
+  dispose();
+  dispose = cancelGesture().register(() => ({ key: "recording", immediate: true, button: stop, hint: "", cancel }));
+  esc();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(stop.dataset.cancelArmed).toBeUndefined();
+});
+
+test("an Escape consumed by a menu or dialog never arms or cancels the answer", () => {
+  const consume = (event: KeyboardEvent) => event.preventDefault();
+  stop.addEventListener("keydown", consume);
+  stop.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  expect(stop.dataset.cancelArmed).toBeUndefined();
+  expect(cancel).not.toHaveBeenCalled();
+  stop.removeEventListener("keydown", consume);
+  esc(); expect(cancel).not.toHaveBeenCalled();
+});
+
+test("an idle conversation leaves Escape available to the existing UI", () => {
+  dispose(); dispose = cancelGesture().register(() => null);
+  const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  stop.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(cancel).not.toHaveBeenCalled();
+});
+
+
+test.each(["dialog", "menu", "listbox"])("an open %s keeps native cancellation from bypassing its Escape", role => {
+  const layer = document.createElement("div"); layer.setAttribute("role", role); document.body.append(layer);
+  expect(cancelGesture().press()).toBe(false);
+  expect(cancel).not.toHaveBeenCalled(); expect(stop.dataset.cancelArmed).toBeUndefined();
+  layer.hidden = true;
+  expect(cancelGesture().press()).toBe(true); expect(cancel).not.toHaveBeenCalled();
+});

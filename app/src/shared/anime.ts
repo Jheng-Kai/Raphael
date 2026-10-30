@@ -36,16 +36,22 @@ export function plainReplies(texts: readonly string[]): string[] {
 
 /** Older stored CLI envelopes still read as words; authored JSON without reply keys stays intact. */
 export function replyBody(text: string): string {
+  return replyMessages(text).join("\n\n");
+}
+
+/** Preserve authored reply envelopes as separate messages; never split Markdown text. */
+export function replyMessages(text: string): string[] {
   let body = text;
   for (let depth = 0; depth < 4; depth++) {
     try {
       const value = JSON.parse(body);
-      if (!value || Array.isArray(value) || typeof value !== "object" || !("text" in value || "messages" in value)) return body;
+      if (!value || Array.isArray(value) || typeof value !== "object" || !("text" in value || "messages" in value)) return [body];
       const messages = Array.isArray(value.messages) ? value.messages.filter((item: unknown) => typeof item === "string" && item.trim()) : [];
-      body = messages.length ? messages.join("\n\n") : typeof value.text === "string" ? value.text : "";
-    } catch { return body; }
+      if (messages.length) return messages;
+      body = typeof value.text === "string" ? value.text : "";
+    } catch { return [body]; }
   }
-  return "";
+  return [];
 }
 
 /** Raphael's words: `replyLine("答", "好的")` is 《答。好的》; an English prefix reads 《Answer. Done》. */

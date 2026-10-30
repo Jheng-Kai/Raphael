@@ -3,29 +3,15 @@ import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
 import { ComposerLearning, bindComposerLearning, composerCorrections, learnComposerCorrections } from "./composer-learning";
-import { setLocale } from "./i18n";
 const before = "Please use Open Mouse Bot", after = "Please use OpenMausBot";
-const correction = [{ word: "OpenMausBot", misheard: "Open Mouse Bot" }];
+const correction = [{ before, after }];
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); document.body.innerHTML = ""; });
 
-test("a retyped proper noun in a short dictation is one whole correction", () => {
+test("bounded dictation evidence goes unchanged to the shared native tracker", () => {
   expect(composerCorrections(before, after)).toEqual(correction);
-  expect(composerCorrections("open maus bot", "OpenMausBot")).toEqual([{ word: "OpenMausBot", misheard: "open maus bot" }]);
-  expect(composerCorrections("Allice", "Alice")).toEqual([{ word: "Alice", misheard: "Allice" }]);
-  expect(composerCorrections("Please ask Allice to check today's release.", "Please ask Alice to check today's release.")).toEqual([{ word: "Alice", misheard: "Allice" }]);
-});
-// Built at run time: written out whole, GitHub push protection takes it for a real Stripe key.
-const FAKE_STRIPE_KEY = ["sk", "live", "1234567890".repeat(4).slice(0, 39)].join("_");
-test("append-only typing, one letter, whole rewrites and secret-like tokens are refused", () => {
-  for (const [a, b] of [[before, before + " tomorrow"], ["a", "b"], ["Please cancel this meeting", "Send everyone the revised schedule"], ["Please use password", `Please use ${FAKE_STRIPE_KEY}`]]) {
-    expect(composerCorrections(a, b)).toEqual([]);
-  }
-});
-test("Chinese word boundaries and Japanese kana names keep the corrected term whole", () => {
-  const text = "今天請用拉菲爾來整理昨天的會議紀錄並且寄給大家確認。";
-  expect(composerCorrections(text, text.replace("拉菲爾", "拉斐爾"))).toEqual([{ word: "拉斐爾", misheard: "拉菲爾" }]);
-  const japanese = "今日はラファエルに昨日の議事録を整理して送ってもらいます。";
-  expect(composerCorrections(japanese, japanese.replace("ラファエル", "ラフィエル"))).toEqual([{ word: "ラフィエル", misheard: "ラファエル" }]);
+  expect(composerCorrections(before, before)).toEqual([]);
+  expect(composerCorrections("", after)).toEqual([]);
+  expect(composerCorrections("x".repeat(20_001), after)).toEqual([]);
 });
 test("only a known dictation seeds a draft; it is consumed once, cleared on navigation and expires", () => {
   vi.useFakeTimers();
@@ -60,24 +46,35 @@ test("pending-send retry evidence is erased at the original deadline", () => {
   expect(retry?.text).toBe("");
   learning.restore(retry); expect(learning.take(after)).toEqual([]);
 });
-test("only core-confirmed learned terms receive one localized notice, without a confirmation", async () => {
-  setLocale("en");
+test("learning uses native IPC and leaves notice ownership to the passive pill", async () => {
   api.core.mockResolvedValue({ learned: ["OpenMausBot"] });
   await learnComposerCorrections(correction);
-  expect(api.core).toHaveBeenCalledWith("dictionary.learn", { corrections: correction });
-  expect(document.querySelectorAll(".toast")).toHaveLength(1);
-  expect(document.querySelector(".toast")?.textContent).toContain("Added OpenMausBot to the dictionary.");
-  api.core.mockResolvedValue({ learned: [] }); await learnComposerCorrections(correction);
-  api.core.mockRejectedValue(new Error("offline")); await learnComposerCorrections(correction);
-  expect(document.querySelectorAll(".toast")).toHaveLength(1);
+  expect(api.core).toHaveBeenCalledWith("dictionary.correct", { edits: correction });
+  expect(document.querySelectorAll(".toast")).toHaveLength(0);
+  api.core.mockRejectedValue(new Error("offline"));
+  await expect(learnComposerCorrections(correction)).resolves.toBeUndefined();
 });
 
-test.each([
-  ["zh-TW", "已將「OpenMausBot」加入字典。"],
-  ["ja", "「OpenMausBot」を辞書に追加しました。"],
-] as const)("the %s notice renders real localized text", async (locale, message) => {
-  setLocale(locale);
-  api.core.mockResolvedValue({ learned: ["OpenMausBot"] });
-  await learnComposerCorrections(correction);
-  expect(document.querySelector(".toast")?.textContent).toBe(message);
+test("sequential input snapshots retain separate corrections for one native batch", () => {
+  const input = document.createElement("textarea"), learning = bindComposerLearning(input);
+  const before = "Please ask Allice and Cloude to review the next release notes carefully.";
+  const middle = before.replace("Allice", "Alice"), after = middle.replace("Cloude", "Claude");
+  input.value = before; learning.seed(before);
+  input.value = middle; input.dispatchEvent(new Event("input"));
+  input.value = after; input.dispatchEvent(new Event("input"));
+  expect(learning.take(after)).toEqual([{before,after:middle},{before:middle,after}]);
+});
+
+test("snapshot history is bounded and erased at the dictation deadline", () => {
+  vi.useFakeTimers();
+  const learning = new ComposerLearning(); learning.seed(before);
+  const baseline = learning.snapshot()!;
+  learning.observe(after);
+  expect(baseline.edits).toHaveLength(1);
+  vi.advanceTimersByTime(60_000);
+  expect(baseline.edits).toEqual([]);
+  expect(baseline.text).toBe("");
+  learning.seed(before);
+  for (let i = 0; i < 129; i++) learning.observe(after + "x".repeat(i));
+  expect(learning.snapshot()).toBeUndefined();
 });

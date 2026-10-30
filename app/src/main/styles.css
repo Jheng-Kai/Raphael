@@ -319,6 +319,9 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .tabs .tab:hover { color: var(--text); }
 .tabs.seg { display: inline-flex; gap: var(--sp-1); padding: var(--sp-1); border-radius: var(--r-pill); background: var(--surface-2); }
 .tabs.seg .tab { height: 30px; padding: 0 var(--sp-3); border: 0; border-radius: var(--r-lg); }
+.tabs.seg .tab-label { display: grid; grid-template-columns: minmax(0, 1fr); }
+.tabs.seg .tab-label::after { content: attr(data-label); visibility: hidden; font-weight: 600; }
+.tabs.seg .tab-label > span, .tabs.seg .tab-label::after { grid-area: 1 / 1; }
 .tabs.seg .tab[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 600; box-shadow: var(--tab-shadow), 0 0 0 1px var(--edge); }
 .tabs.switch { display: inline-flex; border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); overflow: hidden; }
 .tabs.switch .tab { min-height: 32px; padding: var(--sp-1) var(--sp-4); border: 0; border-radius: 0; }

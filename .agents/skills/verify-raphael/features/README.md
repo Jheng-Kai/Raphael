@@ -1,5 +1,74 @@
 # Raphael feature map
 
+## Owner round 10 connected apps and chosen models
+
+API and CLI brain prompts share the Composio discovery/execution contract:
+COMPOSIO_SEARCH_TOOLS returns a tool slug and schema; execute that slug through
+COMPOSIO_MULTI_EXECUTE_TOOL with its arguments. Discovery alone does not establish
+that the requested app is unavailable. The execute envelope accepts the documented
+optional string fields thought/current_step/current_step_metric/session_id and a
+boolean sync_response_to_workbench that must stay false. Unknown fields, malformed
+per-call objects, disabled slugs and draft-only violations are blocked. The actual
+contained slugs use the same read/write classifier as Connections: all enabled
+reads are T1 and run without a permission card; any write is T2 and requires one.
+Production agent/gate/MCP flow is exercised with a fake MCP and synthetic email.
+
+Conversation and routing fallback controls are absent from the UI. Only the chosen
+model is called; hidden legacy agent_fallbacks/router_fallbacks confer no consent.
+Implicit CLEANUP_FALLBACKS are removed from agent, tool-selection, computer and
+memory consumer defaults. Dictation cleanup retains its separate documented retry
+contract and saved fallback behavior. Each provider attempt receives the complete
+caller timeout. A failed answer names the selected model, a localized failure and
+an actionable next step; successful history records the actual answering model.
+
+Focused evidence: core/tests/agent/test_composio.py (21), test_persona.py (121),
+test_model_choice.py (11), test_service.py (174), test_routing.py (111),
+core/tests/test_connectors.py (91), core/tests/brain/test_provider_registry.py (26),
+test_providers_more.py (48). All use fakes or mock transports. No live owner
+Composio, Gmail, OpenRouter, judge or live verification was exercised. Full verify,
+look, native tests and builds await maintainer authorization.
+
+
+## Owner round 10 contracts (supersedes round 9 message previews)
+
+Only owner messages use eight-line faded previews with a quiet expand action inside
+the bubble. Assistant messages render fully; authored reply envelopes retain separate
+bubbles and complete Markdown blocks in private and room conversations. Chief,
+member and room scrollers hide their scrollbar, retain normal scrolling and expose
+an accessible jump-to-latest action only when away from the bottom. New messages do
+not move an owner reading older messages. Recording/STT cancels on one Escape;
+in-flight in-app answers require two. Menus, dialogs and ordinary overlay keep their
+existing Escape handling.
+
+`dictionary.correct` carries bounded dictation snapshots to the same Rust Tracker
+used for external editor corrections. Core owns final term acceptance and opaque,
+single-use batch Undo, including prior evidence restoration. A separate passive
+`learned.html` native window shows the learned batch and localized Undo at the active
+monitor's horizontal center, 56% down its work area. It expires after five seconds
+without hover. The ordinary overlay remains click-through. Fixture pill evidence
+does not establish native hit-testing, positioning, paste or persistence.
+
+`stable-click` records the clicked view control and persistent content above it,
+then rejects position/size changes over 1px after settling. Normal look clicks on
+tabs, switches, pressed filters, Settings panes and view controls automatically use
+it (sidebar/Home excluded for the parallel redesign). Explicit scenes cover
+Connections tabs/categories, Dictionary filters and Models/Settings tabs. Existing
+Calendar, member and Plugins scene clicks inherit this check. Connections search is
+below the fixed Installed/Store switch in both states. A selected look report is
+required to establish the actual covered controls and any remaining movements.
+
+Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
+`long-room-messages`, `reply-split-bubbles`, `conversation-chief-up`,
+`conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
+`conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
+`stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
+Run both themes at 1120,720,1920x1080 only after maintainer authorization. One heavy
+process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
+CARGO_TARGET_DIR apply. Full verify, look and builds are currently deferred at the
+maintainer's request; only focused single-file tests are authorized. Judge and all
+OpenRouter/live owner Composio requests are prohibited.
+
+
 ## Owner round 9 contracts
 
 Home paints local records before live allowances and calendar data. Four fixed equal

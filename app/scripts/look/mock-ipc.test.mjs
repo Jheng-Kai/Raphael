@@ -5,6 +5,15 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("accepts only the declared native correction snapshot without duplicating acceptance rules", async () => {
+    const target = {}, edit = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
+    const state = installMock(fixture, { fixture: { dictationText: edit } }, target);
+    const call = (params) => target.__TAURI_INTERNALS__.invoke("core_call", { method: "dictionary.correct", params });
+    expect(await call({ edits: [edit] })).toEqual({ learned: ["OpenMausBot"], undo: "synthetic-correction-batch" });
+    expect(state.errors).toEqual([]);
+    await expect(call({ edits: [{ ...edit, after: "A different edit" }] })).rejects.toThrow("fixture edit");
+  });
+
   it("loads the one-member and eight-member team roster without replacing its fixture data with the flag", async () => {
     const target = {}; installMock(fixture, { fixture: { teamBoardRoster: true } }, target);
     const invoke = (method) => target.__TAURI_INTERNALS__.invoke('core_call', { method, params: {} });

@@ -37,7 +37,7 @@ describe("look browser interaction contracts", () => {
   it("requeries a replaced click target without replaying application errors", async () => {
     const stale = { click: vi.fn().mockRejectedValue(new Error("Node is either not clickable or not an Element")), dispose: vi.fn() };
     const current = { click: vi.fn().mockResolvedValue(undefined), dispose: vi.fn() };
-    const page = { waitForFunction: vi.fn().mockResolvedValueOnce({ asElement: () => stale }).mockResolvedValue({ asElement: () => current }) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValueOnce({ asElement: () => stale }).mockResolvedValue({ asElement: () => current }) };
     await perform(page, { action: "click", selector: ".target" });
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(stale.dispose).toHaveBeenCalledOnce();
@@ -58,7 +58,7 @@ describe("look browser interaction contracts", () => {
   });
   it("fails after three pre-dispatch stale handles", async () => {
     const target = { click: vi.fn().mockRejectedValue(new Error("Node is detached from document")), dispose: vi.fn() };
-    const page = { waitForFunction: vi.fn().mockResolvedValue({ asElement: () => target }) };
+    const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValue({ asElement: () => target }) };
     await expect(perform(page, { action: "click", selector: ".target" })).rejects.toThrow("Node is detached");
     expect(target.click).toHaveBeenCalledTimes(3);
     expect(target.dispose).toHaveBeenCalledTimes(3);

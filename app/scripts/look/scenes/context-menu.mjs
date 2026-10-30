@@ -17,6 +17,6 @@ export default [
   scene("context-menu-cli-account", "A right click on a subscription account's card opens the menu of its ⋯", rightClicked('.cli-card:has([data-cli-menu="codex"])', [
     ...settings("models"), scroll(".cli-accounts"),
   ])),
-  scene("context-menu-message", "A right click on Raphael's answer opens the menu of its ⋯", rightClicked(".ra .chat-message[data-expandable]")),
+  scene("context-menu-message", "A right click on Raphael's answer opens the menu of its ⋯", rightClicked(".ra .chat-message[data-reply]")),
   scene("context-menu-key", "Shift+F10 on a focused member row opens the menu of its ⋯ under that button", [column, ...keyed, check("context-menu-key"), ...keyed]),
 ];

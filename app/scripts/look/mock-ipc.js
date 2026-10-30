@@ -179,6 +179,12 @@ export function installMock(fixture, config = {}, target = window) {
       turn.messages = [{ seq: 1, kind: "reply", text: turn.text, at_ms: turn.created_at_ms }];
     }
   }
+  if (variant.splitReplies) {
+    const turn = data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4);
+    const parts = ["我先核對了來源與時間。", "接著確認資料：\n\n- 第一個來源已更新\n- 第二個來源日期一致", "最後一步保留完整範例：\n\n```ts\nconst ready = true;\n```"];
+    turn.text = parts.at(-1);
+    turn.messages = parts.map((text, index) => ({ seq: index + 1, kind: "reply", text, at_ms: turn.created_at_ms + index }));
+  }
   if (variant.longRoomMessages) {
     const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：核對來源、日期與重點，再保留下一次編輯需要的完整脈絡。\n\n完成後依主題整理，確認所有素材都有可追溯的來源。`).join("\n\n");
     for (const message of data.messages.slice(0, 2)) message.text = text;
@@ -323,6 +329,14 @@ export function installMock(fixture, config = {}, target = window) {
       case "history.delete": data.history = data.history.filter(item => item.id !== p.id); return { deleted: true };
       case "dictionary.list": return { entries: data.dictionary };
       case "dictionary.add": { const entry = { ...p, id: nextId(data.dictionary), misheard: [], source: "manual", created_at_ms: data.now }; data.dictionary.push(entry); return { entry }; }
+      case "dictionary.correct": {
+        // Model only this scene's declared IPC response; acceptance belongs to native/core tests.
+        const edit = variant.dictationText;
+        if (!edit || JSON.stringify(p.edits) !== JSON.stringify([{ before: edit.before, after: edit.after }])) return unsupported("dictionary.correct fixture edit");
+        const word = "OpenMausBot";
+        if (!data.dictionary.some(entry => entry.word === word)) data.dictionary.push({ id: nextId(data.dictionary), word, misheard: [], source: "learned", created_at_ms: data.now });
+        return { learned: [word], undo: "synthetic-correction-batch" };
+      }
       case "dictionary.learn": {
         const learned = [];
         for (const { word } of p.corrections) {
@@ -682,6 +696,12 @@ export function installMock(fixture, config = {}, target = window) {
         for (const event of variant.overlayEvents ?? []) args.channel.onmessage(copy(event));
         return;
       }
+      if (command === "learned_subscribe") {
+        state.learnedChannel = args.channel;
+        for (const notice of variant.learnedNotices ?? []) args.channel.onmessage({ ...copy(notice), theme: config.theme ?? "light" });
+        return;
+      }
+      if (command === "learned_layout" || command === "learned_finish") return;
       if (command === "overlay_log") return;
       if (command === "overlay_confirm") return;
       if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }

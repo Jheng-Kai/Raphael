@@ -316,6 +316,7 @@ class Brain:
             "dictionary.import": self._dictionary_import,
             "dictionary.delete": self._dictionary_delete,
             "dictionary.learn": self._dictionary_learn,
+            "dictionary.undo": self._dictionary_undo,
             "settings.get": self._settings_get,
             "settings.set": self._settings_set,
             "languages.list": self._languages_list,
@@ -558,6 +559,9 @@ class Brain:
         with _store_call():
             return {"deleted": self._dictionary.delete(entry_id)}
 
+    async def _dictionary_undo(self, params: dict) -> dict:
+        return {"undone": self._dictionary.undo_learning(_str(params, "token"))}
+
     async def _dictionary_learn(self, params: dict) -> dict:
         """`{corrections: [{word, misheard}]}` from the app's correction watch: the user replaced
         `misheard` with `word` in a dictation it pasted. Learns at most LEARN_MAX different ones
@@ -579,23 +583,28 @@ class Brain:
             if not isinstance(correction, dict):
                 raise invalid_params("corrections must be a list of objects")
             pairs.append((_str(correction, "word").strip(), _str(correction, "misheard").strip()))
+        snapshots: list[dict] = []
         learned: list[str] = []
         rules: list[str] = []
         reverted: list[str] = []
         # The same pair twice in one dictation is one sighting, not two.
         for word, misheard in list(dict.fromkeys(pairs))[:LEARN_MAX]:
+            snapshot = self._dictionary.learning_snapshot(word)
             outcome = self._dictionary.learn_pair(word, misheard)
             if outcome is Learned.REVERTED:
                 if misheard not in reverted:
                     reverted.append(misheard)  # the word whose rule was withdrawn
             elif outcome is not Learned.NOTHING and word not in learned:
                 learned.append(word)
+                snapshots.append(snapshot)
             if outcome is Learned.RULE and word not in rules:
                 rules.append(word)
         logger.info(
             "Learned %d of %d corrections, withdrew %d", len(learned), len(pairs), len(reverted)
         )
         result: dict = {"learned": learned}
+        if snapshots and params.get("undoable") is True:
+            result["undo"] = self._dictionary.remember_learning(snapshots)
         if rules:
             result["rules"] = rules
         if reverted:

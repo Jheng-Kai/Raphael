@@ -15,6 +15,7 @@ mod holdtap;
 mod hotkey;
 mod identity;
 mod learn;
+mod learned;
 mod media;
 mod member_notifications;
 mod mic_access;
@@ -161,6 +162,9 @@ pub fn run() {
             overlay::overlay_confirm,
             overlay::overlay_cancel,
             commands::core_call,
+            learned::learned_subscribe,
+            learned::learned_layout,
+            learned::learned_finish,
             commands::save_usage_csv,
             commands::schedule_keep_awake_get,
             commands::schedule_keep_awake_set,
@@ -243,6 +247,12 @@ pub fn run() {
                     }
                     Err(err) => log::error!("could not create the overlay window: {err}"),
                 }
+            }
+
+            // ---- Learned corrections ----
+            // Learned corrections have their own passive window, including isolated native tests.
+            if let Err(err) = learned::start(app.handle()) {
+                log::error!("could not create the learned word window: {err}");
             }
 
             // ---- Python core ----

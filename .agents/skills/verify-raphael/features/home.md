@@ -105,3 +105,7 @@ The expanded sidebar keeps its connected-app count after the label, vertically c
 ```powershell
 npm run look -- home-sparse --theme both --width 1120,720,1920x1080,1280x800
 ```
+
+```powershell
+npm run look -- home-hover --theme both --width 1120,720,1920x1080
+```

@@ -14,8 +14,8 @@ export function messageTooltip(host: HTMLElement): () => void {
   };
   const show = (event: Event): void => {
     const button = (event.target as Element).closest<HTMLElement>("[data-tooltip]");
-    if (!button || !host.contains(button)) return;
     hide();
+    if (!button || !host.contains(button) || button.dataset.cancelArmed === "true") return;
     target = button;
     tip.textContent = button.dataset.tooltip!;
     tip.hidden = false;

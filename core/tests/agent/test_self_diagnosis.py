@@ -375,4 +375,4 @@ async def test_transient_api_retry_is_three_times_and_never_replays_after_a_tool
     sleeps.clear()
     client.chats = [chat("Checking.", ("local_time", {})), OpenRouterError(503, "server", "Temporarily unavailable")]
     result = await typed(rig)
-    assert result["text"] == Failure("server", "Temporarily unavailable").sentence("Raphael", "en") and not sleeps
+    assert result["text"] == Failure("server", "Temporarily unavailable").sentence("openai/gpt-6-luna", "en") and not sleeps

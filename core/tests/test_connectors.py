@@ -209,7 +209,7 @@ async def test_connect_poll_enable_managed_mcp_and_local_enforcement(tmp_path, c
     assert hub.tier_of(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL")) == Tier.T2
     assert not any(x.name == "COMPOSIO_REMOTE_BASH_TOOL" for x in hub.offered())
     args = {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": {}}]}
-    assert not (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="auto")).ok
+    assert (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="auto")).ok
     assert (await hub.call(tool_key(record.id, "COMPOSIO_MULTI_EXECUTE_TOOL"), args, approver="user")).ok
     await router.call("connectors.set_tools", {"id": "composio:gmail", "disabled_tools": ["GMAIL_FETCH_EMAILS"]})
     before = len(fake.requests)
