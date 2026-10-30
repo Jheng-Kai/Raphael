@@ -27,6 +27,7 @@ test("unclosed fences and streaming table cuts retain usable source until comple
   const unclosed = parseMessageBlocks('Intro\n```mermaid\nflowchart LR\nA-->');
   expect(unclosed[1]).toMatchObject({ type: "diagram", complete: false, source: "flowchart LR\nA-->" });
   expect(replyContentHTML('```mermaid\nflowchart LR\nA-->')).toContain('data-complete="false"');
+  expect(replyContentHTML('```mermaid\nflowchart LR\nA-->B\n```')).not.toContain('rich-language">mermaid<');
   expect(parseMessageBlocks('| A | B |\n| --- | --- |\n| cut', true)[0].type).toBe("text");
   expect(parseMessageBlocks('| A | B |\n| --- | --- |\n| cut | row |\n', true)[0].type).toBe("table");
   expect(parseMessageBlocks('| A | B |\n| --- | --- |\n| final | row |')[0].type).toBe("table");
