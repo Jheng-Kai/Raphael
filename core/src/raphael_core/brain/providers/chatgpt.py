@@ -81,7 +81,7 @@ class ChatGPTProvider:
                      "description": tool["function"].get("description", ""),
                      "parameters": tool["function"]["parameters"], "strict": False} for tool in tools]}]
         started = time.perf_counter()
-        completed = None
+        completed, streamed = None, []
         try:
             async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
                     headers={"Authorization": "Bearer " + token}, timeout=timeout_s, follow_redirects=False) as response:
@@ -104,6 +104,8 @@ class ChatGPTProvider:
                     kind = packet.get("type")
                     if kind in ("response.failed", "response.incomplete", "error"):
                         raise failure(200, packet.get("response", packet), response.headers.get("x-request-id"))
+                    if kind == "response.output_item.done":
+                        streamed.append(packet["item"])
                     if kind == "response.completed":
                         completed = packet["response"]
                         if not isinstance(completed, dict):
@@ -125,7 +127,8 @@ class ChatGPTProvider:
         if completed is None or completed.get("status") != "completed" or not isinstance(completed.get("output"), list):
             raise OpenRouterError(200, "tool_broken", "ChatGPT stream ended without completed inference")
         self.auth.check_session(session)
-        output, text, calls = completed["output"], [], []
+        # The plan endpoint streams its items and closes with an empty `output`.
+        output, text, calls = completed["output"] or streamed, [], []
         for item in output:
             if not isinstance(item, dict):
                 raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT output item")

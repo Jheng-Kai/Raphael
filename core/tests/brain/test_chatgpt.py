@@ -140,12 +140,14 @@ async def rig(conn, signing_key):
     await value.http.aclose()
 
 
-def sse(output=(), *, event="response.completed", code=None):
-    response = {"status": "completed", "model": "chosen-model", "output": list(output),
+def sse(output=(), *, event="response.completed", code=None, closing_output=False):
+    """The stream as the plan endpoint really sends it (seen live 2026-10-31): the items, then an empty `output`."""
+    response = {"status": "completed", "model": "chosen-model", "output": list(output) if closing_output else [],
                 "usage": {"input_tokens": 10, "output_tokens": 3}}
     if code:
         response["error"] = {"code": code, "message": "secret-provider-text"}
     packets = [{"type": "response.output_text.delta", "delta": "Unconfirmed text"},
+               *({"type": "response.output_item.done", "item": item} for item in output),
                {"type": event, "response": response}]
     return httpx.Response(200, headers={"content-type": "text/event-stream"},
         text="".join("data: " + json.dumps(packet) + "\n\n" for packet in packets))
@@ -305,6 +307,17 @@ async def test_streamed_tool_round_trip_through_real_narrated_loop(rig):
                for item in rig.body_checks[1]["input"])
     assert rig.body_checks[0]["tools"][0]["type"] == "namespace"
     assert turn.ledger.model == "@chatgpt:chosen-model" and turn.ledger.total == 0
+
+
+@pytest.mark.parametrize("closing_output", [False, True])
+async def test_items_are_read_from_the_stream_or_from_the_closing_event(rig, closing_output):
+    await rig.sign_in()
+    rig.responses = [sse([message('{"text":"Dentist at ten.","detail":""}')], closing_output=closing_output)]
+    async def execute(call_id, name, arguments):
+        raise AssertionError("no tool was called")
+    turn = loop(rig, execute)
+    outcome = await turn.run()
+    assert outcome.status == "done" and turn.reply(outcome).text == "Dentist at ten."
 
 
 async def test_unknown_tool_stays_behind_the_shared_gate(rig):
