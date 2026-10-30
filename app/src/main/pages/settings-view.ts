@@ -27,7 +27,7 @@ import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, priceDescription } from "../model-picker";
+import { type ModelPickerLook, modelPickerHTML, modelsFor, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -255,6 +255,8 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
+  /** An absent runtime is shown once in the existing computer settings area. */
+  desktopRequired?: boolean;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -362,7 +364,9 @@ const MIC_METER_SEGMENTS = 46;
 
 /** The full price of the model chosen for `role`, from the catalog: 「輸入 $0.10 / 輸出 $0.50 每百萬 token」. */
 function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string {
-  const model = modelsFor(catalog, role).find((m) => m.id === id);
+  const models = modelsFor(catalog, role);
+  const base = splitEffort(id, models).model;
+  const model = models.find((m) => m.id === base);
   return model ? priceDescription(model, role) : t("pricing.001");
 }
 
@@ -632,10 +636,11 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  if (apps.length === 0) return [row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
-  return apps.map((app) =>
+  const desktop = v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : [];
+  if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
+  return [...desktop, ...apps.map((app) =>
     row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),
-  );
+  )];
 }
 
 /**

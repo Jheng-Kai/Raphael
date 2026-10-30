@@ -114,6 +114,53 @@ async def test_start_reads_latest_owner_timezone_when_creating_container(desktop
     assert "TZ=Asia/Taipei" in next(args for args, _ in runtime.calls if args[0] == "run")
 
 
+async def test_start_launches_installed_docker_and_builds_missing_image_once(desktop):
+    vm, target, runtime = desktop
+    runtime.up, runtime.built = False, False
+    launches, progress = [], []
+
+    class Desktop:
+        def installed(self):
+            return True
+        async def start(self):
+            launches.append("start")
+            runtime.up = True
+
+    original = runtime.__call__
+
+    async def run(args, **kwargs):
+        if args[0] in ("pull", "build"):
+            kwargs["progress"]("#3 [2/4] Installing desktop tools")
+            progress.append(vm.preparation[target.key].copy())
+        if args[0] == "build":
+            runtime.built = True
+        return await original(args, **kwargs)
+
+    vm.desktop, vm.run = Desktop(), run
+    assert (await vm.start(target))["ready"]
+    assert (await vm.start(target))["ready"]
+    assert launches == ["start"]
+    assert len([args for args, _ in runtime.calls if args[0] == "build"]) == 1
+    assert progress and all(p["state"] == "building" and "[2/4]" in p["progress"] for p in progress)
+    assert target.key not in vm.preparation
+
+
+async def test_absent_docker_never_launches_or_builds(desktop):
+    vm, target, runtime = desktop
+    runtime.up = False
+
+    class Desktop:
+        def installed(self):
+            return False
+        async def start(self):
+            pytest.fail("Absent Docker must never be started")
+
+    vm.desktop = Desktop()
+    with pytest.raises(VmError, match="absent"):
+        await vm.start(target)
+    assert not any(args[0] in ("pull", "build", "run") for args, _ in runtime.calls)
+
+
 @pytest.mark.parametrize("running", [True, False])
 async def test_start_recreates_owned_container_when_owner_zone_arrives(desktop, running):
     vm, target, runtime = desktop

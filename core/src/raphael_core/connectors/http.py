@@ -45,7 +45,7 @@ class PrivateHttp:
         if response.status_code >= 300:
             # Only a bounded, redacted provider message crosses the private boundary.
             diagnostic = None
-            kind = {401: "auth", 403: "auth", 404: "gone", 409: "conflict", 429: "rate_limit"}.get(
+            kind = {400: "invalid_request", 401: "auth", 403: "auth", 404: "gone", 409: "conflict", 422: "invalid_request", 429: "rate_limit"}.get(
                 response.status_code, "http_error")
             try:
                 data = response.json()
@@ -53,12 +53,12 @@ class PrivateHttp:
                 if error == "invalid_grant":
                     kind = "reconnect"
                 detail = error if isinstance(error, dict) else data
-                if isinstance(detail.get("message"), str):
-                    diagnostic = classify({"status": response.status_code, "message": detail["message"]},
-                                          secrets=kwargs.get("headers", {}).values())
                 if response.status_code == 400 and (detail.get("slug") == "ToolRouterV2_ToolkitNotAllowed"
                         or detail.get("code") == "ToolRouterV2_ToolkitNotAllowed"):
                     kind = "toolkit_not_allowed"
+                if isinstance(detail.get("message"), str):
+                    diagnostic = classify({"kind": kind, "status": response.status_code, "message": detail["message"]},
+                                          secrets=kwargs.get("headers", {}).values())
             except (ValueError, AttributeError):
                 pass
             raise ConnectorFailure(kind, response.status_code, diagnostic)

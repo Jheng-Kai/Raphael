@@ -3,6 +3,15 @@ import { homeZh } from "./home-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
   "desktop.open": "即時桌面",
+  "desktop.starting": "正在啟動 Docker…",
+  "desktop.building": "首次使用，正在建立桌面映像…",
+  "desktop.preparing": "正在準備桌面…",
+  "desktop.retry": "重試",
+  "desktop.buildFailed": "桌面映像尚未建立完成，請重試。",
+  "desktop.startFailed": "Docker 尚未啟動完成，請重試。",
+  "desktop.required": "成員電腦需要 Docker Desktop。",
+  "desktop.download": "下載 Docker Desktop",
+  "conn.err.invalid_request": "Raphael 的連線請求格式與服務不相容，需要更新連線功能。",
   "desktop.take": "接手控制",
   "desktop.release": "交還控制",
   "desktop.owner": "你正在控制電腦",

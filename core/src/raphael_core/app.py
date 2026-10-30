@@ -210,6 +210,8 @@ class EchoClient:
         max_tokens: int,
         reasoning_effort: str = "none",
     ) -> Completion:
+        from .native_journeys import record_model_request
+        record_model_request(model, reasoning_effort)
         data: dict
         if schema_name == "raphael_route":  # the assistant's router
             data = {
@@ -273,6 +275,8 @@ class EchoClient:
         )  # fmt: skip
 
     async def chat_tools(self, *, messages: list[dict], tools: list[dict], **kwargs: Any) -> ChatTurn:
+        from .native_journeys import record_model_request
+        record_model_request(kwargs.get("model"), kwargs.get("reasoning_effort", "none"))
         # The scripted task of the background worker (see the class).
         offered = {tool["function"]["name"] for tool in tools}
         seen = sum(1 for message in messages if message.get("role") == "tool")
@@ -851,8 +855,10 @@ class App(Router):
         from .computer.vm import LocalVm
         from .computer.vm_tools import VmTools
 
+        import os
         from .native_journeys import native_enabled
-        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn), enabled=not fake_llm or native_enabled(fake_llm))
+        self.vm = LocalVm(data_dir, settings=SettingsStore(self._conn),
+                          enabled=not fake_llm or (native_enabled(fake_llm) and os.environ.get("RAPHAEL_TEST_NATIVE_COMPUTER") == "1"))
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
         self.desktop_viewer.register(self)

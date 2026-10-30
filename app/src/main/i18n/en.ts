@@ -4,6 +4,15 @@ import type { Messages } from './zh-TW';
 
 export const en = {
   "desktop.open": "Live desktop",
+  "desktop.starting": "Starting Docker…",
+  "desktop.building": "Building the desktop image for first use…",
+  "desktop.preparing": "Preparing the desktop…",
+  "desktop.retry": "Retry",
+  "desktop.buildFailed": "The desktop image could not be prepared. Please retry.",
+  "desktop.startFailed": "Docker did not finish starting. Please retry.",
+  "desktop.required": "Member computers need Docker Desktop.",
+  "desktop.download": "Download Docker Desktop",
+  "conn.err.invalid_request": "Raphael's connection request is incompatible with the service. The connection feature needs updating.",
   "desktop.take": "Take control",
   "desktop.release": "Hand back control",
   "desktop.owner": "You are controlling the computer",

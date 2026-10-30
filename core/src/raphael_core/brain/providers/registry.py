@@ -17,6 +17,7 @@ import httpx
 
 from ...protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
 from ..catalog import CatalogEntry, ModelPrice
+from ..model_ref import split_api_ref
 from ..openrouter import OpenRouterError
 from ..secrets import KeyStore
 from ..settings import DEFAULTS, SettingsStore, api_model
@@ -518,11 +519,14 @@ class ProviderRouter:
     async def _attempt(self, method, kwargs):
         reference = kwargs["model"]
         try:
+            reference, effort = split_api_ref(reference)
             pid, model = self.registry.resolve(reference)
             client = self.registry.client(pid)
         except ValueError:
             raise OpenRouterError(0, "error", "Unknown provider or invalid model reference") from None
         kwargs = {**kwargs, "model": model}
+        if effort is not None and method != "transcribe":
+            kwargs["reasoning_effort"] = effort
         if "fallbacks" in kwargs:
             kwargs["fallbacks"] = []
         try:

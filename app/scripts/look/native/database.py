@@ -58,6 +58,18 @@ elif operation == "init":
         from raphael_core.agent.quota import Quotas
         Quotas(connection).record("codex", {"windows": [{"period": "fiveHour", "remaining_percent": 75,
             "resets_at": 2000000000, "status": "allowed"}], "exhausted": False})
+    if len(sys.argv) > 3 and sys.argv[3] == "model-picker":
+        import os
+        import time
+        from raphael_core.brain.catalog import parse_catalog
+        from raphael_core.brain.pricing import CACHE_KEY, _Snapshot, _encode
+        catalog = json.loads(Path(os.environ["RAPHAEL_NATIVE_MODEL_CATALOG"]).read_text(encoding="utf-8"))
+        entries = parse_catalog(catalog["data"])
+        if not entries:
+            raise RuntimeError("The recorded public model list is empty")
+        with connection:
+            connection.execute("INSERT OR REPLACE INTO settings(key,value) VALUES (?,?)",
+                               (CACHE_KEY, _encode(_Snapshot(int(time.time() * 1000), tuple(entries)))))
     if len(sys.argv) > 3 and sys.argv[3] == "bot-homes":
         import shutil
         from raphael_core.members.store import MemberStore

@@ -44,6 +44,14 @@ test("Docker absent has no entry; a running computer has one accessible icon and
   expect(host.querySelectorAll('[data-desktop="open"]')).toHaveLength(1);
 });
 
+test.each(["pull_failed", "docker_start_timeout"])("%s explains the failed preparation and offers retry", async error => {
+  api.desktopStatus.mockResolvedValue({ ...running, state: "unavailable", error });
+  await open();
+  expect(document.querySelector(".desktop-placeholder")!.textContent).toContain(error === "pull_failed" ? "映像尚未建立完成" : "尚未啟動完成");
+  expect(control().disabled).toBe(false);
+  expect(control().textContent).toBe("重試");
+});
+
 test("the selected member opens in the shared dialog and only a trusted frame can announce a connection", async () => {
   await open();
   expect(api.desktopOpen).toHaveBeenCalledWith(1);
@@ -77,11 +85,28 @@ test.each(["stopped", "missing", "unavailable"] as const)("%s has a clear state 
   expect(frame().hasAttribute("src")).toBe(false);
   expect(frame().hidden).toBe(true);
   expect(document.querySelector(".desktop-placeholder")!.textContent).toMatch(/已停止|無法使用/);
-  expect(control().disabled).toBe(true);
+  expect(control().disabled).toBe(false);
+  expect(control().textContent).toBe("重試");
   await vi.advanceTimersByTimeAsync(2000);
   expect(frame().hasAttribute("src")).toBe(true);
   connected();
   expect(frame().hidden).toBe(false);
+});
+
+test("preparation shows real build progress and hides the control action until ready", async () => {
+  api.desktopStatus.mockResolvedValue({ state: "building", ready: false, control: "member", progress: "#3 [2/4] Installing tools" });
+  await open();
+  expect(document.querySelector(".desktop-placeholder")!.textContent).toContain("[2/4]");
+  expect(control().hidden).toBe(true);
+  expect(frame().hasAttribute("src")).toBe(false);
+});
+
+test("a failed desktop can retry preparation through the same viewer", async () => {
+  api.desktopStatus.mockResolvedValue({ state: "unavailable", ready: false, control: "member" });
+  await open();
+  control().click(); await flush();
+  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
+  expect(api.desktopClose).toHaveBeenCalledWith("session-one");
 });
 
 test("changing member or leaving while open is pending closes the late session", async () => {
@@ -114,12 +139,13 @@ test("an expired session is replaced after waking up and the new desktop reconne
   connected(); expect(frame().hidden).toBe(false);
 });
 
-test("the owner can hand back even when Docker becomes unavailable", async () => {
+test.each(["unavailable", "running"] as const)("the owner can hand back with a disconnected frame while Docker is %s", async state => {
   api.desktopStatus.mockResolvedValue({ ...running, control: "owner" });
   await open(); connected();
-  api.desktopRenew.mockResolvedValue({ ...running, state: "unavailable", control: "owner" });
+  api.desktopRenew.mockResolvedValue({ ...running, state, control: "owner" });
+  window.dispatchEvent(new MessageEvent("message", { source: frame().contentWindow, origin: "http://127.0.0.1:5000", data: { type: "raphael-desktop", state: "disconnected" } }));
   await vi.advanceTimersByTimeAsync(2000);
-  expect(frame().hasAttribute("src")).toBe(false);
+  expect(frame().hasAttribute("src")).toBe(state === "running");
   expect(control().disabled).toBe(false);
   api.desktopControl.mockResolvedValue({ ...running, state: "unavailable" });
   control().click(); await flush();

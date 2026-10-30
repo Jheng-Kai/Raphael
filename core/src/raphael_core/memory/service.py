@@ -183,7 +183,6 @@ class MemoryService(Growth):
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
         self._spend = SpendTracker(conn, now_ms, tz)
-        self._reflector = Reflector(client)
         self.conversation = Conversation(
             conn, client, now_ms=now_ms, clock=clock, reflected_through=self.reflected_through,
             on_change=lambda: self._changed(0),

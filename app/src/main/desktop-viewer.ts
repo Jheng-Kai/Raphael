@@ -6,12 +6,14 @@ import { esc, iconButton } from "./ui";
 import "./desktop-viewer.css";
 
 export interface DesktopState {
-  state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running";
+  state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
   ready: boolean;
   control: "member" | "owner";
+  progress?: string;
+  error?: string;
 }
 export interface DesktopSession { session: string; url: string }
-const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", owner: "desktop.owner", member: "desktop.member" } as const;
+const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number): { show(): void; hide(): void; refresh(): void } {
   host.insertAdjacentHTML("afterbegin", iconButton("monitor", t("desktop.open"), ' data-desktop="open" hidden', "ra-tool"));
@@ -27,19 +29,22 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
   function draw(): void {
     if (!dialog) return;
     const running = state?.state === "running";
-    const label = !running ? (state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable")
+    const preparing = state?.state === "starting" || state?.state === "building" || state?.state === "preparing";
+    const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? (state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable")
       : !connected ? "connecting" : state?.control === "owner" ? "owner" : "member";
     dialog.el.dataset.desktopState = label;
     const status = dialog.el.querySelector<HTMLElement>(".desktop-status")!;
     status.textContent = t(STATUS_KEY[label]);
     status.hidden = !running;
     const action = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="control"]')!;
-    action.textContent = t(state?.control === "owner" ? "desktop.release" : "desktop.take");
-    action.disabled = changing || state?.control !== "owner" && (!running || !connected);
+    action.textContent = t(state?.control === "owner" ? "desktop.release" : !running ? "desktop.retry" : "desktop.take");
+    action.hidden = state?.control !== "owner" && (preparing || running && !connected);
+    action.disabled = changing || state?.control !== "owner" && running && !connected;
     frame!.hidden = !running || !connected;
     const placeholder = dialog.el.querySelector<HTMLElement>(".desktop-placeholder")!;
     placeholder.hidden = !!running && connected;
-    placeholder.textContent = t(STATUS_KEY[label]);
+    const failure = state?.error === "build_failed" || state?.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed";
+    placeholder.textContent = t(!running && state?.error ? failure : STATUS_KEY[label]) + (state?.progress ? `\n${state.progress}` : "");
     if (!running && frame!.hasAttribute("src")) {
       frame!.removeAttribute("src");
       connected = false;
@@ -127,7 +132,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
       draw();
     } catch {
       entry.setAttribute("aria-label", t("desktop.unavailable"));
-    } finally { changing = false; }
+    } finally { changing = false; if (current === generation) draw(); }
   }
 
   async function control(): Promise<void> {
@@ -138,6 +143,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number): { s
     frame?.contentWindow?.postMessage({ type: "raphael-desktop-disable" }, new URL(opened.url).origin);
     draw();
     try {
+      if (state?.state !== "running" && state?.control !== "owner") {
+        await api.desktopClose(opened.session);
+        const next = await api.desktopOpen(member());
+        if (current !== generation) { await api.desktopClose(next.session); return; }
+        session = next;
+        state = { state: "preparing", ready: false, control: "member" };
+        return;
+      }
       const next = await api.desktopControl(opened.session, held);
       if (current !== generation) return;
       state = next;

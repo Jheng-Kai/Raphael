@@ -68,9 +68,10 @@ class SoundDevicePlayer:
         started: Callable[[], None],
     ) -> None:
         import numpy as np
+        from ..device.audio import output_stream_lifetime
 
         block_bytes = max(1, int(rate * BLOCK_SECONDS)) * _SAMPLE_BYTES
-        with self._lock:
+        with self._lock, output_stream_lifetime():
             if stopped.is_set():  # replaced while it waited for the device
                 return
             pending = bytearray()

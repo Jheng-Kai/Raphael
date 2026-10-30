@@ -2,6 +2,11 @@
 export function checkRendered(name) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "desktop-install") {
+    const buttons = document.querySelectorAll('[data-act="docker-download"]');
+    require(buttons.length === 1 && visible(buttons[0]) && !buttons[0].disabled, "one usable Docker download action");
+    return { check: name };
+  }
   if (name === "desktop-frame") {
     const doc = document.querySelector('.desktop-viewer iframe')?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
@@ -35,7 +40,10 @@ export function checkRendered(name) {
     require(!frame.src.includes("password") && !viewer.outerHTML.includes("password="), "no VNC password in the DOM or URL");
     if (name === "desktop-offline") {
       require(!visible(frame) && !frame.hasAttribute("src"), "offline desktops have no blank frame");
-      require(viewer.querySelector('[data-dlg="control"]').disabled, "offline control is unavailable");
+      const action = viewer.querySelector('[data-dlg="control"]');
+      const preparing = ["starting", "building", "preparing"].includes(viewer.dataset.desktopState);
+      require(preparing ? action.hidden : !action.disabled, "preparation hides control; a failed desktop can retry");
+      if (viewer.dataset.desktopState === "building") require(viewer.querySelector('.desktop-placeholder').textContent.includes("[2/4]"), "real build progress remains visible");
     } else {
       require(visible(frame), "the connected desktop is visible");
       if (name === "desktop-owner" || name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === true), "take control acquires the core lease");

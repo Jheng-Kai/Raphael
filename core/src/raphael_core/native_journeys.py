@@ -36,16 +36,26 @@ async def vm_smoke(directory):
     directory = Path(directory)
     conn = connect(directory / "raphael.db")
     vm = LocalVm(directory, settings=SettingsStore(conn))
+    preparation = {"states": [], "last_build_progress": ""}
+    progress = vm._progress
+
+    def record_progress(target, state, text=""):
+        progress(target, state, text)
+        if state not in preparation["states"]:
+            preparation["states"].append(state)
+        if state == "building" and text:
+            preparation["last_build_progress"] = vm.preparation[target.key]["progress"]
+
+    vm._progress = record_progress
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory), conn=conn)
     try:
-        if not await vm.available():
-            raise VmError("Docker engine unavailable; start Docker Desktop yourself, then rerun")
+        await vm.ensure_engine(vm.target())
         await hub.prepare()
         snapshot = take_snapshot(hub)
         assert vm.target(0) == vm.target(1), "Expected shared desktop"
         shot = next((name for name in snapshot.refs if name == "computer__get_desktop_state"), None)
         if not shot:
-            raise VmError("Desktop tool discovery failed; build the pinned image first")
+            raise VmError("Desktop tool discovery failed: " + str(hub.problem or "unavailable"))
         assert "computer__click" in snapshot.refs, "Desktop click tool discovery failed"
         gate, completed = ToolGate(hub, conn=conn), []
         calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480, "scope": "desktop"}),
@@ -92,7 +102,8 @@ async def vm_smoke(directory):
         state.pop("viewer_url", None)
         return {"state": state, "completed": completed, "brain": "fake", "paid_requests": 0,
                 "without_approval": completed, "owner_held_refused": refused,
-                "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments)}
+                "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments),
+                "preparation": preparation}
     finally:
         await vm.aclose()
         conn.close()
@@ -133,6 +144,14 @@ async def vm_timezone_smoke(directory):
 
 def native_enabled(fake_llm: bool) -> bool:
     return fake_llm and os.environ.get("RAPHAEL_TEST_NATIVE") == "1"
+
+
+def record_model_request(model, effort):
+    """Record only public model/effort metadata at the fake provider boundary."""
+    if native_enabled(True) and os.environ.get("RAPHAEL_TEST_NATIVE_MODEL_PICKER") == "1":
+        path = Path(os.environ["RAPHAEL_DATA_DIR"]) / "model-requests.jsonl"
+        with path.open("a", encoding="utf-8") as output:
+            output.write(json.dumps({"model": model, "effort": effort}) + "\n")
 
 
 def gmail_enabled(fake_llm: bool) -> bool:

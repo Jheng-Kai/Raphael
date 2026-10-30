@@ -4,6 +4,7 @@ import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
+  { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
@@ -92,6 +93,89 @@ export async function drive(name, context) {
     await capture("live-allowance");
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
     if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
+    return;
+  }
+  if (name === "model-picker") {
+    const catalog = await context.rpc("models.catalog", {});
+    const usable = catalog.llm.filter(model => model.provider_id === "openrouter" && model.roles.answer.usable);
+    const answer = usable.find(model => model.id === "openai/gpt-6.1-terra") ?? usable.find(model => model.reasoning_efforts?.includes("high"));
+    const quick = usable.find(model => model.id !== answer?.id && model.reasoning_efforts?.includes("high"));
+    const memberModel = usable.find(model => !model.capabilities.reasoning && !model.reasoning_efforts?.length);
+    if (!answer || !quick || !memberModel) throw new Error("The real catalog must contain two reasoning models and one non-reasoning model");
+    result.catalog = { source: catalog.source, count: catalog.llm.length, selected: [answer.id, quick.id, memberModel.id] };
+    const choose = async (trigger, model, effort, label) => {
+      await click(page, trigger); await wait(page, ".model-chooser");
+      await click(page, '.model-chooser [data-source="openrouter"]');
+      await type(page, '.model-chooser input[type="search"]', model.id);
+      await click(page, `.model-chooser [data-model="${model.id}"]`);
+      if (effort) await click(page, `.model-chooser [data-effort="${effort}"]`);
+      else if (await page.$('.model-chooser [data-effort]')) throw new Error("A non-reasoning model offered effort controls");
+      await capture(`${label}-choice`);
+      await click(page, '.model-chooser [data-dlg="use"]');
+      await page.waitForSelector(".model-chooser", { hidden: true });
+    };
+    const saved = async (key, expected, label) => {
+      for (let i = 0; i < 60; i++) {
+        const settings = (await context.rpc("settings.get", {})).settings;
+        if (settings[key] === expected) return settings;
+        const error = await page.$eval("body", el => el.querySelector(".toasts .toast")?.textContent ?? "");
+        if (error.includes("Invalid params")) { await capture(`${label}-refused`); throw new Error(error); }
+        await pause(100);
+      }
+      throw new Error(`${key} did not persist ${expected}`);
+    };
+    const shown = async (trigger, model, effort, label) => {
+      await page.waitForFunction((selector, name) => document.querySelector(selector)?.textContent.includes(name), {}, trigger, model.name);
+      await click(page, trigger); await wait(page, `.model-chooser [data-model="${model.id}"][aria-checked="true"]`);
+      if (effort) await wait(page, `.model-chooser [data-effort="${effort}"][aria-pressed="true"]`);
+      else if (await page.$('.model-chooser [data-effort]')) throw new Error("A saved non-reasoning model offered effort");
+      await capture(`${label}-reopened`);
+      await click(page, '.model-chooser [data-dlg="close"]');
+    };
+    await click(page, '#nav [data-go="settings"]');
+    await click(page, '.modal-scrim [data-pane="models"]');
+    await click(page, '[data-models-tab="models"]');
+    await choose('[data-row]:not([data-row="quick-model"]) [data-model-picker="answer"] .mp-trigger', answer, "high", "answer");
+    await saved("agent_model", `${answer.id}?effort=high`, "answer");
+    await shown('[data-row="agent-model"] .mp-trigger', answer, "high", "answer");
+    await choose('[data-k="quick-model"]', quick, "high", "quick");
+    const settings = await saved("quick_model", quick.id, "quick");
+    if (settings.quick_effort !== "high") await saved("quick_effort", "high", "quick");
+    await shown('[data-k="quick-model"]', quick, "high", "quick");
+    await capture("settings-saved");
+    const answerPrice = await page.$eval('[data-price="agent-model"]', element => element.textContent);
+    if (!answerPrice || answerPrice.includes("價格未知")) throw new Error("The selected reasoning model lost its catalog price");
+    await click(page, '.modal-scrim [data-act="close"]');
+    const assertTurn = async (model, effort, label, conversation) => {
+      let before = 0;
+      try { before = (await context.modelRequests()).length; } catch { /* No model requests yet. */ }
+      await typed(context, `Native model selection ${label}`, conversation);
+      const requests = (await context.modelRequests()).slice(before);
+      if (!requests.some(request => request.model === model && request.effort === effort)) throw new Error(`Next ${label} turn did not use the selected model/effort: ${JSON.stringify(requests)}`);
+      result[label] = { model, effort, requests };
+      await capture(`${label}-turn`);
+    };
+    await chat(page); await perform(page, { action: "member", id: 0 });
+    const main = (await snapshot()).conversations.find(row => row.member_id === 0 && row.is_default && row.kind !== "quick");
+    await assertTurn(answer.id, "high", "answer", main.id);
+    await details(page);
+    const quickConversation = (await snapshot()).conversations.find(row => row.kind === "quick");
+    await click(page, `[data-conversation-open="${quickConversation.id}"]`);
+    await assertTurn(quick.id, "high", "quick", quickConversation.id);
+    const created = await context.rpc("members.create", { name: "NativeModel", role: "Model routing audit" });
+    await perform(page, { action: "member", id: created.member.id }); await details(page);
+    await choose('[data-member-brain] .mp-trigger', memberModel, "", "member");
+    for (let i = 0; i < 60; i++) {
+      if ((await snapshot()).members.find(row => row.id === created.member.id)?.model === memberModel.id) break;
+      if (i === 59) throw new Error("Member model did not persist");
+      await pause(100);
+    }
+    await capture("member-saved");
+    await shown('[data-member-brain] .mp-trigger', memberModel, "", "member");
+    const memberConversation = await newConversation(context);
+    await assertTurn(memberModel.id, "none", "member", memberConversation);
+    result.paid_requests = 0;
+    result.transport = "Fake provider; real picker, RPC, catalog cache, settings, member and agent routing";
     return;
   }
   if (name === "member-computer") {
@@ -196,11 +280,13 @@ export async function drive(name, context) {
   }
   if (name === "catalog-connect") {
     const app = context.catalogApp;
-    if (!/^[a-z0-9_-]{1,100}$/.test(app) || app === "gmail") throw new Error("Select a non-Gmail catalog slug with RAPHAEL_NATIVE_APP");
+    if (!/^[a-z0-9_-]{1,100}$/.test(app)) throw new Error("Select a real catalog slug with RAPHAEL_NATIVE_APP");
     const catalog = await context.rpc("connectors.catalog", {});
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
     if (!catalog.items.some(item => item.slug === app && item.can_connect)) throw new Error(`Catalog app ${app} is absent or has no managed sign-in`);
     result.providerChoice = "Deterministic native fake brain; production find_app, connect_app, policy, persistence and Composio login";
+    const pendingAccounts = async () => (await context.rpc("connectors.status", { refresh: false }))
+      .connectors?.find(item => item.id === `composio:${app}`)?.accounts ?? [];
     result.cards = [];
     await chat(page);
     await perform(page, { action: "member-column", collapsed: false });
@@ -229,18 +315,45 @@ export async function drive(name, context) {
       if (JSON.stringify(steps.map(step => step.tool)) !== JSON.stringify(['find_app', 'connect_app']) || steps.some(step => step.outcome !== 'ok'))
         throw new Error(`Expected only successful discovery and card tools before authorization: ${JSON.stringify(steps)}`);
       await capture(`member-${memberId}-pending`);
+      const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
       await click(page, '[data-connector] [data-act="card-connect"]');
       await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="authorizing"]'), { timeout: 30000 });
+      for (let attempt = 0; ; attempt++) {
+        const status = await context.rpc("connectors.status", { refresh: false });
+        const connector = status.connectors?.find(item => item.id === `composio:${app}`);
+        const card = (await snapshot()).connect_cards.find(item => item.id === before.id);
+        if (card?.state === "failed") throw new Error(`Real sign-in failed: ${card.error}`);
+        if (connector?.accounts?.some(account => !previousAccounts.has(account.id)) && card?.state === "authorizing") break;
+        if (attempt >= 120) throw new Error("Authorizing state never reached a real Composio pending link");
+        await pause(250);
+      }
       const authorized = (await snapshot()).connect_cards.find(card => card.id === before.id);
       if (authorized.state !== 'authorizing' || authorized.resumed_at_ms) throw new Error("Expected authorizing without resumption or account access");
       result.cards.push({ ...authorized, steps });
       await capture(`member-${memberId}-authorizing`);
-      if (memberId === 0) {
+      {
         await click(page, '[data-connector] [data-act="card-cancel"]');
         await page.waitForFunction(() => !!document.querySelector('[data-connector][data-card-state="cancelled"]'));
       }
     }
-    result.stop = "Stopped at authorizing; no external consent page was driven or approved";
+    await click(page, '#nav [data-go="settings"]');
+    await click(page, '.modal-scrim [data-pane="connections"]');
+    await click(page, '[data-conn="tab"][data-id="store"]');
+    await type(page, '#conn-search', app);
+    const previousAccounts = new Set((await pendingAccounts()).map(account => account.id));
+    await page.waitForSelector(`[data-conn="join"][data-id="${app}"]`, { timeout: 30000 });
+    await click(page, `[data-conn="join"][data-id="${app}"]`);
+    for (let attempt = 0; ; attempt++) {
+      const status = await context.rpc("connectors.status", { refresh: false });
+      const entry = status.connectors?.find(item => item.id === `composio:${app}`);
+      const pending = await page.$('[data-conn="cancel-login"]');
+      if (entry?.accounts?.some(account => !previousAccounts.has(account.id)) && pending) break;
+      if (attempt >= 120) throw new Error("Settings did not reach a real pending provider sign-in");
+      await pause(250);
+    }
+    await capture("settings-authorizing");
+    result.settingsSignIn = "Real Composio pending link; consent not approved";
+    result.stop = "Real pending links from both conversation cards and Settings; no consent approved";
     return;
   }
   if (name === "store-finder") {

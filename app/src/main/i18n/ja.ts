@@ -4,6 +4,15 @@ import type { Messages } from './zh-TW';
 
 export const ja = {
   "desktop.open": "ライブデスクトップ",
+  "desktop.starting": "Docker を起動中…",
+  "desktop.building": "初回のデスクトップイメージを構築中…",
+  "desktop.preparing": "デスクトップを準備中…",
+  "desktop.retry": "再試行",
+  "desktop.buildFailed": "デスクトップイメージを準備できませんでした。もう一度お試しください。",
+  "desktop.startFailed": "Docker の起動が完了しませんでした。もう一度お試しください。",
+  "desktop.required": "メンバーのコンピューターには Docker Desktop が必要です。",
+  "desktop.download": "Docker Desktop をダウンロード",
+  "conn.err.invalid_request": "Raphael の接続リクエストに互換性がありません。接続機能の更新が必要です。",
   "desktop.take": "操作を引き継ぐ",
   "desktop.release": "操作を返す",
   "desktop.owner": "あなたがコンピューターを操作中",

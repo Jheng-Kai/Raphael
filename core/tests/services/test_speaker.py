@@ -629,6 +629,18 @@ def test_the_player_writes_the_stream_in_blocks_then_lets_the_device_drain():
     assert began == [["start"]]  # started: once, after the device is open, before the first write
 
 
+def test_microphone_device_refresh_never_terminates_portaudio_during_playback(monkeypatch):
+    from raphael_core.device import audio
+    refreshes = []
+    monkeypatch.setattr(audio.sd, "_terminate", lambda: refreshes.append("terminate"))
+    monkeypatch.setattr(audio.sd, "_initialize", lambda: refreshes.append("initialize"))
+    player = a_player([], on_write=lambda: audio._read_devices_again())
+    player.play(a_stream_of(a_tone()), 44_100, threading.Event(), lambda: None)
+    assert refreshes == []
+    assert audio._read_devices_again()
+    assert refreshes == ["terminate", "initialize"]
+
+
 def test_a_sample_split_between_two_chunks_is_kept_whole():
     log = []
     tone = a_tone(0.2)

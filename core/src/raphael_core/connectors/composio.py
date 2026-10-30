@@ -35,7 +35,7 @@ class ComposioClient:
         self._key = key
         self.http = PrivateHttp(transport=transport)
         self.now = now
-        # [U] Prose documents this field; OpenAPI omits it. Never silently downgrade on conflict.
+        # Retained as a constructor compatibility seam; v3.1 rejects this request field.
         self.expected_version = expected_version
         self._cache: dict[tuple, tuple[float, dict]] = {}
 
@@ -77,7 +77,6 @@ class ComposioClient:
         raise ConnectorFailure("pagination")
 
     async def patch(self, session_id: str, config: dict, version: int | None) -> dict:
-        body = dict(config)
-        if version is not None and self.expected_version:
-            body["expected_config_version"] = version
-        return await self.request("PATCH", f"/tool_router/session/{segment(session_id)}", json=body)
+        # config_version is response metadata, not a supported PATCH input. The
+        # service serializes mutations and still fails closed on provider conflict.
+        return await self.request("PATCH", f"/tool_router/session/{segment(session_id)}", json=dict(config))

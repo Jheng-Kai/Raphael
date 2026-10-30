@@ -138,3 +138,21 @@ says Quick questions, its shared picker shows model/source, and its price remain
 visible. No helper paragraph is required or permitted. The affected matrix is
 models, quick-model-menu, quick-effort-menu and quick-model-selection, both themes
 at 1120,720,1920x1080. The audit regression rejects a generic Model label.
+
+## OpenRouter selection identity (2026-10-30)
+
+The shared chooser can save an answer/member API reference with `?effort=`;
+quick questions retain a bare model plus separate `quick_effort`. Core validation,
+catalog refresh, capability/context lookups and prices use the catalog model identity.
+The provider router sends that bare model and maps a selected effort to OpenRouter's
+`reasoning.effort`. An explicit `@openrouter:` alias is canonicalized at settings save.
+Only reasoning models with supported metadata offer effort; non-reasoning choices
+have no effort controls. Cleanup keeps its existing bare-reference contract.
+
+Affected look scope: models, model-choices-answer, quick-model-menu,
+quick-effort-menu, quick-model-selection and member-brain-saved, both themes at
+1120,720,1920x1080. Native `model-picker` uses an isolated SQLite cache seeded from
+a real public catalog response (`RAPHAEL_NATIVE_MODEL_CATALOG`) and exercises
+save/reopen/next-turn routing for answer, quick questions and a member. Its provider
+is fake; HTTP-body tests separately assert the exact model/reasoning payload.
+Neither check is paid OpenRouter acceptance. See the shared look README for launch.

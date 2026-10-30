@@ -135,7 +135,8 @@ import httpx
 from ..background.brief import background_block, background_line
 from ..background.tasks import Refused
 from ..background.snapshot import FIND, MCP, take_snapshot
-from ..brain.catalog import CatalogEntry
+from ..brain.catalog import CatalogEntry, LLM, find
+from ..brain.model_ref import split_api_ref
 from ..clock import wall_clock_ms
 from ..computer.run import ComputerRun, ComputerRuns, Final, Handback, Question, conversation_block
 from ..computer.words import answers as answer_labels
@@ -2831,7 +2832,7 @@ class AgentService:
     def _memory_context(self, speaker, conversation_id, *, quick=False):
         conversation = self._conversation_of(speaker.id, conversation_id)
         model = self._read_settings(speaker, conversation_id).model
-        entry = next((entry for entry in (self._tool_support._catalog() or []) if entry.id == model), None)
+        entry = find(self._tool_support._catalog() or [], LLM, model)
         if entry is not None and entry.context_length:
             conversation.context_window = entry.context_length
         if self._memory is not None:
@@ -4135,13 +4136,16 @@ class AgentService:
     def _read_settings(self, speaker: Speaker = RAPHAEL, conversation_id: int | None = None) -> _Settings:
         """The member's selected brain, with the global answer brain as fallback."""
         model = speaker.model or self._settings.get("agent_model")
-        effort = "none"
+        effort = split_api_ref(model)[1] or "none"
         quick = bool(conversation_id and self.conversations.get(conversation_id, speaker.id)["kind"] == "quick")
         if quick:
             model = self._settings.get("quick_model") or model
             effort = self._settings.get("quick_effort")
             if brain_ref(model):
                 model = self._cli_brains.with_effort(model, effort)
+            else:
+                # The quick row's separate effort overrides an inherited answer effort.
+                model, _ = split_api_ref(model)
         city = self._settings.get("agent_city")
         return _Settings(
             quick=quick,
@@ -4155,7 +4159,7 @@ class AgentService:
         if settings.effort == "none" and not settings.quick:
             return "none"
         entries = self._tool_support._catalog() or []
-        entry = next((m for m in entries if m.id == settings.model), None)
+        entry = find(entries, LLM, settings.model)
         if entry is None:
             return settings.effort
         levels = entry.reasoning_efforts

@@ -29,6 +29,21 @@ async def test_api_effort_respects_selected_models_supported_levels(make_rig, cl
     assert client.chat_calls[-1]["reasoning_effort"] == expected
 
 
+async def test_quick_inheritance_overrides_the_answers_reference_effort(make_rig, client):
+    from .test_plugin_model import llm
+    entry = replace(llm("openai/reasoner"), reasoning_efforts=("low", "high"))
+    rig = make_rig(models=lambda: [entry])
+    rig.settings.set("agent_model", entry.id + "?effort=high")
+    rig.settings.set("quick_effort", "low")
+    client.chats.append(chat('{"text":"Quick answer","prefix":"Answer"}'))
+    await rig.call("agent.ask", {"session_id": "quick-effort", "text": "Hello", "ui_language": "en",
+        "source": "app", "destination": "quick", "conversation_id": rig.service.conversations.quick()})
+    assert client.chat_calls[-1]["model"] == entry.id
+    assert client.chat_calls[-1]["reasoning_effort"] == "low"
+    settings = rig.service._read_settings()
+    assert settings.model == entry.id + "?effort=high" and rig.service._effort(settings) == "high"
+
+
 def test_database_migration_preserves_formal_conversations_and_enforces_one_quick(tmp_path):
     from raphael_core.brain import db
     path = tmp_path / "v27.db"
