@@ -144,3 +144,37 @@ Native member-computer signs in only to the disposable local page via the real
 side-panel noVNC stream, verifies no member calls while held, then one continuation.
 Docker runs only in an exclusive heavy slot. Stop only the journey-created container by exact name afterward; never stop Docker Desktop or another member computer. No paid/live provider
 or judge request is authorized.
+
+## On-demand member permission (2026-10-31)
+
+Computer access defaults off per member, including Raphael (0). The only computer
+capability offered before permission is computer__request_computer(reason), a pinned
+T2 request answered by the existing private-chat permission card (YES/NO; no Always).
+YES persists a per-member computer_grants row (schema 45), prepares the VM and updates
+the same turn's production snapshot before the next API model step. CLI loops reload
+the MCP catalog in a new isolated CLI attempt within the same owner turn, preserving
+the native session and without replaying completed actions. NO/expiry explicitly say
+that the computer cannot be used. Routines cannot acquire a grant; requesting access
+ends the routine as failed with computer_permission_required and an owner-facing reason.
+
+Explicit computer.viewer_open (not preview or status) grants that member before launch.
+The maintenance CLI start/run does likewise. Revoke through computer.revoke in core RPC
+or python -m raphael_core.computer.vm_cli revoke --data-dir <dir> --member <id>.
+The window has no revoke control yet, and the revoke RPC is not shell-allowlisted;
+use the maintenance CLI today. Revocation blocks subsequent calls, including stale
+snapshots, but does not kill already running commands, containers or owner viewers.
+
+Container state never grants access. Without an explicit per-member grant, prepare
+does not probe the engine or container, offer operation tools, or persist any grant
+row, even if a compatible VM is already running. The member must request permission.
+After permission, prepare rechecks revocation before starting the VM; viewer launch
+also rechecks after its status probe. No lifecycle, idle-stop, attachment, takeover
+or handback semantics change under a grant. Both native VM journeys grant explicitly.
+
+Offline regressions: core/tests/computer/test_grants.py and
+core/tests/agent/test_computer_grants.py, plus the existing computer/agent/background
+suites. Native member-computer grants first and runs only with an already running
+Docker engine. This brief prohibits judge and live/paid providers; core-only code
+has no changed visual scene or new UI. Fixture/fake results are not native acceptance.
+
+The panel view has a start button for a stopped computer and a take-back button for a granted member. `computer.revoke` keeps the row at 0, so a later request asks again. Looking at the panel never starts a computer.

@@ -28,7 +28,7 @@ async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
     bridge, _, _ = viewer
     public = await bridge.status({"member_id": 1})
     opened = await bridge.open({"member_id": 1})
-    assert public == {"state": "running", "ready": True, "control": "member"}
+    assert public == {"state": "running", "ready": True, "control": "member", "granted": False}
     assert "private" not in json.dumps([public, opened, await bridge.vm.status(bridge.vm.target())])
     assert "password" not in opened["url"]
     assert bridge.server.sockets[0].getsockname()[0] == "127.0.0.1"

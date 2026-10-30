@@ -251,3 +251,17 @@ addition to the default Traditional Chinese; native locale-sweep checks all thre
 History and Dictionary filter labels also reserve their selected weight through
 the shared segmented component. The same scene clicks every filter in both pages
 before returning to Dictionary; locale changes update both visible and reserve labels.
+
+## Dictation intent cleanup (2026-10-31)
+
+Cleanup preserves every intended fact and qualification while removing abandoned drafting,
+resolving self-corrections and regrouping ideas. Short clear sentences retain the existing
+conservative normalization fast path. The dictionary, language variants and target-app inputs
+still apply. Commands and questions stay the speaker's text, never instructions to the cleaner.
+
+Every long cleanup request is split at sentence boundaries (1500 characters, with clause/space
+and hard-cut recovery for unpunctuated speech). Bounded neighboring context (600 characters
+on either side) resolves local boundary references/corrections. Successful list continuations
+keep item lines and numbering; explicit paragraph boundaries retain separate lists. One failed
+piece makes the whole dictation unsuccessful, with recovery text and its reason retained in
+history. The words are still pasted, so nothing is lost, and the NOT_CLEANED notice says so every time.

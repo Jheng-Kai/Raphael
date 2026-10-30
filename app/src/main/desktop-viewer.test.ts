@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn() }));
+const api = vi.hoisted(() => ({ desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, type DesktopState } from "./desktop-viewer";
 import { setLocale } from "./i18n";
@@ -53,6 +53,11 @@ test('leaving keeps the stream for a moment, so coming back costs no reconnect',
   await vi.advanceTimersByTimeAsync(60_000);mounted.show();await flush();
   expect(frame()).toBe(same);expect(api.desktopOpen).toHaveBeenCalledTimes(1);
   mounted.hide();await vi.advanceTimersByTimeAsync(120_000);await flush();expect(api.desktopClose).toHaveBeenCalledWith('one');
+});
+test('access can be taken back from the panel',async()=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue({...running,granted:true});api.desktopRevoke.mockResolvedValue({granted:false});mounted.show();await flush();
+  const revoke=host.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;expect(revoke.hidden).toBe(false);
+  revoke.click();await flush();expect(api.desktopRevoke).toHaveBeenCalledTimes(1);expect(revoke.hidden).toBe(true);
 });
 test('a stopped computer is shown, not started, until the owner presses start',async()=>{
   panelOpen=true;api.desktopStatus.mockResolvedValue({state:'stopped',ready:false,control:'member'});mounted.show();await flush();

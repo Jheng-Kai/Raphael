@@ -159,7 +159,7 @@ class DesktopViewer:
             return {"state": "absent", "control": "member", "ready": False}
         state = await self.status_for(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
-        return {**state, **({"works": works} if works else {})}
+        return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {})}
 
     async def open(self, params):
         async with self.open_lock:
@@ -204,7 +204,7 @@ class DesktopViewer:
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
         return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
-                "preview_allowed": state["control"] == "member",
+                "preview_allowed": state["control"] == "member", "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {})}
 
     async def status_for(self, target):

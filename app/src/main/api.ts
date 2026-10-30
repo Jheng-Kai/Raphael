@@ -81,6 +81,7 @@ export const desktopOpen = (member_id: number, options?: { conversation_id?: num
 export const desktopRenew = (session: string): Promise<DesktopState> => core("computer.viewer_renew", { session });
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
+export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
 
 // ---------- usage and prices ----------
 

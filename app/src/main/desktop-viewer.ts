@@ -13,6 +13,8 @@ export interface DesktopState {
   error?: string;
   works?: DesktopWork[];
   preview_allowed?: boolean;
+  /** Whether the owner has allowed this member its computer. */
+  granted?: boolean;
 }
 export interface DesktopSession { session: string; url: string }
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
@@ -37,13 +39,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<p class="desktop-request" role="status" hidden></p><div class="desktop-screen"><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-hit" data-desktop="take" hidden></button><span class="desktop-owner" role="status" hidden></span></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
+    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
   frame.remove();
   (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
   const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
   const action = panel.querySelector<HTMLButtonElement>('[data-desktop="return"]')!;
   const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
+  const revoke = panel.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;
   const error = panel.querySelector<HTMLElement>('.desktop-error')!;
   const timeline = mountDesktopTimeline(options.timeline, options.name);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
@@ -86,7 +89,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
     status.textContent = t("desktop.operating"); status.hidden = !owner || !connected;
     action.textContent = t(pending() ? "desktop.done" : "desktop.release"); action.hidden = !owner; action.disabled = changing;
-    retry.textContent = t("desktop.retry"); retry.hidden = !!running || !!preparing; retry.disabled = opening;
+    const asleep = state?.state === "stopped" || state?.state === "missing";
+    retry.textContent = t(asleep ? "desktop.start" : "desktop.retry"); retry.hidden = !!running || !!preparing; retry.disabled = opening;
+    revoke.textContent = t("desktop.revoke"); revoke.hidden = !state?.granted || owner || !!preparing;
     const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
     const picture = running && !connected ? lastFrames.get(member()) : undefined;
     last.hidden = !picture;
@@ -192,6 +197,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   });
   action.addEventListener('click', () => { expand(false); void control(false); });
   retry.addEventListener('click', () => { closeStream(); void openStream(); });
+  revoke.addEventListener('click', () => {
+    void api.desktopRevoke(member()).then(() => { if (state) state = { ...state, granted: false }; draw(); })
+      .catch(() => { error.textContent = t('desktop.busy'); error.hidden = false; });
+  });
   panel.querySelector('[data-desktop="expand"]')!.addEventListener('click', () => {
     expand(!panel.hasAttribute('data-expanded')); draw();
   });

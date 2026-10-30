@@ -391,6 +391,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_renew",
     "computer.viewer_control",
     "computer.viewer_close",
+    "computer.revoke",
     "home.overview",
     "connectors.catalog",
     "connectors.categories",
@@ -2266,7 +2267,7 @@ mod tests {
 
     #[test]
     fn desktop_viewer_exposes_only_named_main_window_operations() {
-        for method in ["computer.viewer_status", "computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close"] {
+        for method in ["computer.viewer_status", "computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close", "computer.revoke"] {
             assert!(is_allowed_method(method));
         }
         assert!(!is_allowed_method("computer.viewer_credentials"));
