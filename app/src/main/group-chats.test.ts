@@ -230,6 +230,17 @@ test("reply chips identify their recipient including Raphael's zero id and escap
  expect(document.querySelector('.au-room-reply img')).toBeNull();
 });
 
+test("a streamed room table stays provisional and becomes a rich card only after completion",async()=>{
+ const message={id:91,member_id:1,text:'Summary\n\n| Name | Value |\n| --- | --- |\n| partial',created:1,status:'running'};
+ api.roomMessages.mockResolvedValue({messages:[message]});await pane();
+ expect(document.querySelector('.message-table')).toBeNull();
+ expect(document.querySelector('.au-room-message .message-text')!.textContent).toContain('| partial');
+ api.roomMessages.mockResolvedValue({messages:[{...message,status:'done',text:message.text+' | complete |'}]});
+ event({type:'RoomsChanged',room_id:1});await flush();
+ expect(document.querySelector('.message-table td')!.textContent).toBe('partial');
+ expect(document.querySelector('.ans .message-table')).toBeNull();
+});
+
 test("multiple queued replies show one speaking row which disappears when completed",async()=>{
  const replies=[{id:1,member_id:1,text:'',created:1,status:'running'},{id:2,member_id:0,text:'',created:2,status:'running'}];
  api.roomMessages.mockResolvedValue({messages:replies});await pane();

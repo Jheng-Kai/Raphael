@@ -38,6 +38,65 @@ export function checkRendered(name, context = {}) {
     require(getComputedStyle(date).fontSize===root.getPropertyValue('--fs-md').trim(),'Home date keeps its existing type size');
     return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
   }
+  if (name.startsWith("rich-")) {
+    const scope = document.querySelector('.page-agent:not([hidden])');
+    const cards = [...scope.querySelectorAll('.rich-block')];
+    require(cards.length > 0 && !scope.querySelector('.ans .rich-block, .bubble .rich-block'), "rich cards are timeline blocks outside text bubbles");
+    require(document.documentElement.scrollWidth <= innerWidth + 1 && scope.scrollWidth <= scope.clientWidth + 1, "rich content never overflows the page sideways");
+    for (const card of cards) {
+      require(card.scrollWidth <= card.clientWidth + 1, "each card contains its own overflow");
+      require(card.getBoundingClientRect().right <= innerWidth + 1, "card fits the conversation column");
+    }
+    const diagram = scope.querySelector('.message-diagram');
+    if (["rich-content", "rich-diagram", "rich-source", "rich-expand"].includes(name)) {
+      require(diagram?.dataset.diagramState === "rendered" && diagram.querySelector('.diagram-view svg'), "Mermaid produces a visible SVG");
+      const canvas = diagram.querySelector('.diagram-view > svg'), intrinsicWidth = canvas.viewBox.baseVal.width;
+      require(!intrinsicWidth || canvas.getBoundingClientRect().width <= intrinsicWidth + 1, "inline diagrams fit the column without enlarging narrow diagrams into oversized text");
+      const rows = [...canvas.querySelectorAll('.row-rect-odd path, .row-rect-even path')];
+      if (rows.length) {
+        const probe = document.createElement('span'); diagram.append(probe);
+        const palette = ['--panel', '--surface-2'].map(token => { probe.style.color = getComputedStyle(scope).getPropertyValue(token); return getComputedStyle(probe).color; });
+        probe.remove();
+        require(rows.every(row => getComputedStyle(row).fill === 'none' || palette.includes(getComputedStyle(row).fill)), "ER data rows use theme token backgrounds in every theme");
+        require([...canvas.querySelectorAll('marker circle')].every(circle => palette.includes(getComputedStyle(circle).fill)), "ER optional markers use the theme panel instead of fixed white");
+        const label = canvas.querySelector('.edgeLabel text');
+        require(label?.textContent.includes('contains'), "ER relationship retains its source label as SVG text");
+        const background = canvas.querySelector('.edgeLabel rect');
+        require(visible(label) && (!background || getComputedStyle(label).fill !== getComputedStyle(background).fill), "ER relationship text remains visible against its label background");
+      }
+      require(!diagram.querySelector('svg foreignObject, svg image, svg a, svg script, svg [onclick]'), "diagram contains no HTML, external images or click handlers");
+    }
+    if (name === "rich-content") {
+      require(scope.querySelector('h2') && scope.querySelector('blockquote') && scope.querySelector('.message-task input:disabled') && scope.querySelector('ul ul'), "text additions stay in the text bubble");
+      require(scope.querySelector('.message-table th strong') === null && scope.querySelector('.message-table td strong') && scope.querySelector('.message-table a'), "table cells support inline Markdown");
+      require(scope.querySelector('.message-image') && !scope.querySelector('.message-image img'), "remote image is initially a consent card");
+    }
+    if (["rich-content", "rich-image"].includes(name)) require(!performance.getEntriesByType('resource').some(entry => entry.name.includes('images.example.test')), "no remote image request before consent");
+    if (name === "rich-code") {
+      const code = scope.querySelector('.message-code:not(.message-diagram)'), pre = code.querySelector('pre');
+      require(code.querySelector('.rich-head').textContent.includes('bash') && code.querySelector('.hljs-built_in, .hljs-string'), "code language and syntax highlighting are visible");
+      require(getComputedStyle(pre).whiteSpace === 'pre' && pre.scrollWidth > pre.clientWidth, "long commands scroll within their code block without wrapping");
+    }
+    if (name === "rich-source") require(!diagram.querySelector('pre').hidden && diagram.querySelector('[data-rich-act="view-source"]').getAttribute('aria-expanded') === 'true', "source toggle reveals complete source");
+    if (name === "rich-expand") {
+      const dialog = document.querySelector('.rich-view-dialog');
+      require(visible(dialog?.querySelector('.diagram-view svg')) && dialog.querySelector('[data-dlg="close"]'), "expanded diagram uses the shared accessible dialog");
+      require(dialog.getBoundingClientRect().width >= Math.min(1200, innerWidth - 48) - 1, "expanded view uses the large viewport-bound dialog width");
+    }
+    if (name === "rich-image") require(scope.querySelector('[data-rich-act="load-image"]') && !scope.querySelector('.message-image [src]'), "a real load control precedes any image source");
+    if (name === "rich-image-loaded") require(scope.querySelector('.message-image img')?.referrerPolicy === 'no-referrer', "consented image omits referrer");
+    if (name === "rich-table-example") {
+      require(scope.querySelectorAll('th').length === 3 && scope.querySelector('.message-table a') && scope.querySelector('.message-table td code'), "owner example has three aligned columns, links and inline code");
+      require(getComputedStyle(scope.querySelector('.message-table td')).overflowWrap === 'anywhere', "long Chinese cells wrap within the column");
+    }
+    if (name === "rich-wide-table") {
+      const scroller = scope.querySelector('.message-table .rich-scroll');
+      require(getComputedStyle(scroller).overflowX === 'auto', "wide table has a local horizontal scrollport");
+      if (innerWidth < 1920) require(scroller.scrollWidth > scroller.clientWidth, "many columns use the card's local fallback scrolling");
+    }
+    if (name === "rich-fallback") require(diagram && !diagram.querySelector('pre').hidden && visible(diagram.querySelector('.rich-note')) && !diagram.querySelector('.diagram-view svg'), "incomplete or invalid diagram keeps source and a quiet note");
+    return { check:name, cards:cards.length, diagram:diagram?.dataset.diagramState ?? null };
+  }
   const selection = () => {
     const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav [data-go][aria-current="page"]')];
     const home = !document.querySelector('.page-home').hidden;
@@ -270,7 +329,7 @@ export function checkRendered(name, context = {}) {
       if (!visible(node)) continue;
       const style = getComputedStyle(node);
       require(!['auto', 'scroll'].includes(style.overflowY) || node.scrollHeight <= node.clientHeight + 1, `message has an inner vertical scrollbar: ${node.className}`);
-      require(!['auto', 'scroll'].includes(style.overflowX) || node.scrollWidth <= node.clientWidth + 1, `message has an inner horizontal scrollbar: ${node.className}`);
+      require(node.matches('.rich-block.message-code pre') || !['auto', 'scroll'].includes(style.overflowX) || node.scrollWidth <= node.clientWidth + 1, `message has an inner horizontal scrollbar: ${node.className}`);
     }
     return { check: name };
   }

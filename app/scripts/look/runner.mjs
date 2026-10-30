@@ -109,6 +109,10 @@ export async function run(options) {
         await page.setRequestInterception(true);
         page.on("request", request => {
           const url = request.url();
+          if (url.startsWith("https://images.example.test/")) {
+            (result.consentedImages ??= []).push({ url, referrer: request.headers().referer ?? null });
+            if (request.headers().referer) error("privacy", "Markdown image sent a referrer");
+          }
           const disposition = requestDisposition(url, origin);
           const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
           if (desktopResponse && new URL(url).pathname.endsWith('/control')) {

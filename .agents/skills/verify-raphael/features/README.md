@@ -1,5 +1,41 @@
 # Raphael feature map
 
+## Rich replies (2026-10-30)
+
+One parser in `message-content.ts` returns ordered text, table, code, diagram and
+image blocks for chief, member and group replies, stored/streamed content, search
+and copy. Text keeps the round 10 authored bubbles; rich cards are siblings outside
+bubbles. Owner content stays plain with its existing collapse. Tables wrap first,
+copy as TSV and preserve Markdown in whole-reply copy. Code scrolls locally, never
+executes, and loads only eight small highlighting grammars when needed. Mermaid
+loads on demand with strict security, SVG labels, no directives, HTML, clicks or
+external resources. Invalid/unclosed diagrams retain escaped source with a quiet
+note. Source, copy and expand use shared controls and dialogs. Colors derive only
+from theme tokens, including a future black palette. Markdown images initially
+have no src; only Load image assigns a source, always without a referrer.
+
+```powershell
+npm run verify -- --core
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+```
+
+Native regression: `npm run native -- rich-content` reads a synthetic persisted
+reply from the existing history store, verifies the same rendered checks at all
+three widths and retains source/expanded captures. It makes no provider request
+and leaves Markdown image consent unclicked. Build offline with two Cargo jobs;
+copy the completed binary immediately and select it with RAPHAEL_NATIVE_BINARY.
+
+Inspect every contact sheet and full-size table, code, diagram, source, image and
+expanded dialog. Compare rich controls with link/media cards and shared dialogs at
+the same theme/width. The rendered rich-* checks reject page overflow, rich cards
+inside bubbles, active SVG content and image requests before consent; the runner
+records consented image referrer headers. Parser tests cover alignment, code pipes,
+unclosed fences, cut tables and escaped cells. Diagram tests enforce strict settings
+and fail-quietly behavior. The shared doctrine advertises blocks to every brain;
+offline core verification does not establish live provider acceptance. One heavy
+process at a time, Vitest maxWorkers=2, explicit process checks, and shared Python
+apply. Judge and all OpenRouter requests are prohibited by this task: SKIP.
+
 ## Sidebar redesign (2026-10-30)
 
 One 296px sidebar has no brand: collapse and Home icons and a plus share the top row, with a

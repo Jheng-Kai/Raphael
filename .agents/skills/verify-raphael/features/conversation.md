@@ -664,3 +664,11 @@ checks enforce its round shape and separate surface in chief, member and room vi
 Composer learning retains bounded consecutive input snapshots, replayed through the
 same Rust Tracker as external editors. Two corrections separated by unchanged
 words remain two terms in one batch; the final core acceptance stays authoritative.
+
+## Rich replies
+
+See the feature map. Selected acceptance:
+
+```powershell
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+```

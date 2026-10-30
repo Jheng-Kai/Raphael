@@ -1,5 +1,4 @@
-// A deliberately small Markdown renderer. Only generated tags enter HTML; message text always
-// passes through highlightHTML/esc. Images and raw HTML are never interpreted or fetched.
+// One typed reply parser for history, streaming, search and copy. Only generated tags enter HTML.
 import { highlightHTML } from "./conversation";
 import { t } from "./i18n";
 import { esc, iconBtn } from "./ui";
@@ -37,10 +36,20 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     return `<a class="message-link" href="${esc(url)}" data-act="open-url" data-url="${esc(url)}" rel="noreferrer noopener">${highlightHTML(label ?? shortUrl(url), query)}</a>`;
   };
   while (at < text.length) {
+    if (markdown && text.startsWith("\\![", at)) {
+      const end = text.indexOf(")", at + 3);
+      plain += text.slice(at + 1, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
+    }
     if (markdown && text[at] === "\\" && at + 1 < text.length) { plain += text[at + 1]; at += 2; continue; }
     if (markdown && text[at] === "`") {
-      const end = text.indexOf("`", at + 1);
-      if (end > at + 1) { flush(); out += `<code>${esc(text.slice(at + 1, end))}</code>`; at = end + 1; continue; }
+      const marker = /^`+/.exec(text.slice(at))![0];
+      const end = text.indexOf(marker, at + marker.length);
+      if (end > at + marker.length) { flush(); out += `<code>${highlightHTML(text.slice(at + marker.length, end), query)}</code>`; at = end + marker.length; continue; }
+    }
+    // An unfinished image must never become an automatic link preview while streaming.
+    if (markdown && text.startsWith("![", at)) {
+      const end = text.indexOf(")", at + 2);
+      plain += text.slice(at, end < 0 ? text.length : end + 1); at = end < 0 ? text.length : end + 1; continue;
     }
     if (markdown && text[at] === "[") {
       const middle = text.indexOf("](", at + 1);
@@ -58,11 +67,12 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       const html = link(raw);
       if (html) { flush(); out += html; at += raw.length; continue; }
     }
-    if (markdown && depth < 8 && /[*_]/.test(text[at])) {
+    if (markdown && depth < 8 && /[*_~]/.test(text[at])) {
       const marker = text[at + 1] === text[at] ? text.slice(at, at + 2) : text[at];
+      if (marker === "~") { plain += text[at++]; continue; }
       const end = text.indexOf(marker, at + marker.length);
       if (end > at + marker.length) {
-        flush(); const tag = marker.length === 2 ? "strong" : "em";
+        flush(); const tag = marker === "~~" ? "del" : marker.length === 2 ? "strong" : "em";
         out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1)}</${tag}>`;
         at = end + marker.length; continue;
       }
@@ -72,45 +82,141 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
   flush(); return out;
 }
 
-function render(text: string, query: string, markdown: boolean, urls: Set<string>): string {
-  if (!markdown) return inline(text, query, false, urls);
+export type MessageBlock =
+  | { type: "text"; source: string }
+  | { type: "table"; source: string; headers: string[]; align: ("left" | "center" | "right")[]; rows: string[][] }
+  | { type: "code" | "diagram"; source: string; language: string; complete: boolean }
+  | { type: "image"; source: string; alt: string; url: string };
+
+/** Split only structural pipes; code spans and escaped pipes belong to the cell. */
+export function tableCells(line: string): string[] {
+  const cells: string[] = []; let cell = "", ticks = 0;
+  const value = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === "\\" && value[i + 1] === "|") { cell += "|"; i++; continue; }
+    if (value[i] === "`") {
+      const run = /^`+/.exec(value.slice(i))![0];
+      ticks = ticks === run.length ? 0 : ticks || run.length;
+      cell += run; i += run.length - 1; continue;
+    }
+    if (value[i] === "|" && !ticks) { cells.push(cell.trim()); cell = ""; }
+    else cell += value[i];
+  }
+  cells.push(cell.trim()); return cells;
+}
+
+export function parseMessageBlocks(text: string, streaming = false): MessageBlock[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  let out = "", list = "", paragraph: string[] = [];
+  const blocks: MessageBlock[] = [], pending: string[] = [];
+  const flush = (): void => { const source = pending.join("\n").trim(); if (source) blocks.push({ type: "text", source }); pending.length = 0; };
+  for (let i = 0; i < lines.length; i++) {
+    const fence = /^\s*(`{3,}|~{3,})\s*([^\s`]*)[^`]*$/.exec(lines[i]);
+    if (fence) {
+      flush(); const source: string[] = [];
+      const end = new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`);
+      while (++i < lines.length && !end.test(lines[i])) source.push(lines[i]);
+      const language = fence[2].toLowerCase();
+      blocks.push({ type: language === "mermaid" ? "diagram" : "code", source: source.join("\n"), language, complete: i < lines.length }); continue;
+    }
+    const separators = i + 1 < lines.length ? tableCells(lines[i + 1]) : [];
+    const headers = tableCells(lines[i]);
+    if (lines[i].includes("|") && headers.length === separators.length && separators.every(cell => /^:?-+:?$/.test(cell))) {
+      const start = i, rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+        const cells = tableCells(lines[i]); rows.push(headers.map((_, index) => cells[index] ?? "")); i++;
+      }
+      const source = lines.slice(start, i).join("\n");
+      // A cut row is provisional until its newline or the final stored reply arrives.
+      if (streaming && i === lines.length && !text.endsWith("\n")) pending.push(source);
+      else { flush(); blocks.push({ type: "table", source, headers, rows, align: separators.map(cell => cell.endsWith(":") ? cell.startsWith(":") ? "center" : "right" : "left") }); }
+      i--; continue;
+    }
+    const images = /!\[([^\]]*)\]\(/g;
+    let at = 0;
+    let image: RegExpExecArray | null;
+    while ((image = images.exec(lines[i]))) {
+      let ticks = 0;
+      for (const run of lines[i].slice(0, image.index).matchAll(/(?<!\\)`+/g)) ticks = ticks === run[0].length ? 0 : ticks || run[0].length;
+      if (ticks || lines[i][image.index - 1] === "\\") continue;
+      const start = images.lastIndex;
+      let end = start, level = 1;
+      for (; end < lines[i].length && level; end++) { if (lines[i][end] === "(") level++; if (lines[i][end] === ")") level--; }
+      if (level) continue;
+      const url = messageUrl(lines[i].slice(start, end - 1)); if (!url) continue;
+      pending.push(lines[i].slice(at, image.index)); flush();
+      blocks.push({ type: "image", source: lines[i].slice(image.index, end), alt: image[1], url }); at = end; images.lastIndex = end;
+    }
+    pending.push(lines[i].slice(at));
+  }
+  flush(); return blocks;
+}
+
+function textHTML(text: string, query: string, urls: Set<string>, depth = 0): string {
+  const lines = text.split("\n");
+  let out = "", paragraph: string[] = [];
+  const lists: { tag: string; indent: number }[] = [];
   const flush = (): void => { if (paragraph.length) out += `<p>${paragraph.join("<br>")}</p>`; paragraph = []; };
-  const closeList = (): void => { if (list) out += `</${list}>`; list = ""; };
+  const closeList = (): void => { while (lists.length) out += `</li></${lists.pop()!.tag}>`; };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const fence = /^\s*(`{3,}|~{3,})[^`]*$/.exec(line);
-    if (fence) {
-      flush(); closeList(); const code: string[] = [];
-      const ending = new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`);
-      while (++i < lines.length && !ending.test(lines[i])) code.push(lines[i]);
-      out += `<div class="message-code"><pre><code>${esc(code.join("\n"))}</code></pre>${iconBtn("copy", t("chat.copyCode"), ' data-act="copy-code"')}</div>`;
-      continue;
-    }
-    const item = /^\s*(?:([-+*])|([0-9]+)[.)])\s+(.+)$/.exec(line);
+    const item = /^(\s*)(?:([-+*])|([0-9]+)[.)])\s+(.+)$/.exec(line);
     if (item) {
-      flush(); const tag = item[1] ? "ul" : "ol";
-      if (tag !== list) { closeList(); list = tag; out += `<${tag}${item[2] ? ` start="${Number(item[2])}"` : ""}>`; }
-      out += `<li>${inline(item[3], query, true, urls)}</li>`;
+      flush(); const tag = item[2] ? "ul" : "ol", indent = item[1].length;
+      while (lists.length && (lists[lists.length - 1].indent > indent || (lists[lists.length - 1].indent === indent && lists[lists.length - 1].tag !== tag))) out += `</li></${lists.pop()!.tag}>`;
+      if (!lists.length || lists[lists.length - 1].indent < indent) { lists.push({ tag, indent }); out += `<${tag}${item[3] ? ` start="${Number(item[3])}"` : ""}>`; }
+      else out += "</li>";
+      const task = /^\[([ xX])\]\s+(.*)$/.exec(item[4]);
+      out += `<li${task ? ' class="message-task"' : ""}>${task ? `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} aria-label="${esc(task[2])}">` : ""}${inline(task ? task[2] : item[4], query, true, urls)}`;
     } else {
       closeList();
-      if (!line.trim()) flush();
+      const heading = /^\s{0,3}(#{1,6})\s+(.+?)(?:\s+#+)?$/.exec(line);
+      if (heading) { flush(); out += `<h${heading[1].length}>${inline(heading[2], query, true, urls)}</h${heading[1].length}>`; }
+      else if (/^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out += "<hr>"; }
+      else if (depth < 8 && /^\s*>/.test(line)) {
+        flush(); const quote: string[] = [line.replace(/^\s*> ?/, "")];
+        while (i + 1 < lines.length && /^\s*>/.test(lines[i + 1])) quote.push(lines[++i].replace(/^\s*> ?/, ""));
+        out += `<blockquote>${textHTML(quote.join("\n"), query, urls, depth + 1)}</blockquote>`;
+      }
+      else if (!line.trim()) flush();
       else paragraph.push(inline(line, query, true, urls));
     }
   }
   flush(); closeList(); return out;
 }
 
-export const messageHTML = (text: string, query = "", markdown = false): string => render(text, query, markdown, new Set());
+function blockHTML(block: MessageBlock, query: string, urls: Set<string>): string {
+  if (block.type === "text") return textHTML(block.source, query, urls);
+  if (block.type === "table") {
+    const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, urls)}</${tag}>`).join("");
+    return `<section class="rich-block message-table" data-source="${esc(block.source)}"><header class="rich-head"><span>${esc(t("chat.table"))}</span>${iconBtn("copy", t("chat.copyTable"), ' data-rich-act="copy-table"')}</header><div class="rich-scroll" tabindex="0" role="region" aria-label="${esc(t("chat.table"))}"><table${block.headers.length > 6 ? ` style="min-width:${block.headers.length * 96}px"` : ""}><thead><tr>${cells(block.headers, "th")}</tr></thead><tbody>${block.rows.map(row => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div></section>`;
+  }
+  if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
+  const diagram = block.type === "diagram";
+  const showSource = diagram && !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+  return `<section class="rich-block message-code${diagram ? " message-diagram" : ""}" data-source="${esc(block.source)}" data-language="${esc(block.language)}" data-complete="${block.complete}" data-query="${esc(query)}"><header class="rich-head"><span class="rich-language">${esc(block.language || t("chat.code"))}</span><div>${iconBtn("copy", t(diagram ? "chat.copySource" : "chat.copyCode"), ' data-rich-act="copy-source" data-act="copy-code"')}${diagram ? iconBtn("steps", t("chat.viewSource"), ` data-rich-act="view-source" aria-expanded="${showSource}"`) + iconBtn("external", t("chat.expandBlock"), ' data-rich-act="expand" hidden') : ""}</div></header><div class="diagram-view"${diagram ? "" : " hidden"}></div><pre><code>${highlightHTML(block.source, query)}</code></pre>${diagram ? `<p class="rich-note">${esc(t(block.complete ? "chat.diagramFallback" : "chat.diagramStreaming"))}</p>` : ""}</section>`;
+}
+
+export const messageHTML = (text: string, query = "", markdown = false): string => markdown
+  ? parseMessageBlocks(text).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set());
+
+/** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
+export function replyContentHTML(text: string, query = "", streaming = false, renderText = (source: string) => textHTML(source, query, new Set())): string {
+  return parseMessageBlocks(text, streaming).map(block => block.type === "text"
+    ? `<div class="ans"><div class="message-text">${renderText(block.source)}</div></div>` : blockHTML(block, query, new Set())).join("");
+}
 export function messageUrls(text: string): string[] {
-  const urls = new Set<string>(); render(text, "", true, urls); return [...urls];
+  const urls = new Set<string>(); parseMessageBlocks(text).forEach(block => { if (block.type === "text" || block.type === "table") blockHTML(block, "", urls); }); return [...urls];
 }
 
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
 export function messagePlainText(text: string, markdown = false): string {
   if (!markdown) return text;
-  const el = document.createElement("div"); el.innerHTML = messageHTML(text, "", true);
+  return parseMessageBlocks(text).map(block => block.type === "text" ? plainTextBlock(block.source) : block.source).join("\n");
+}
+
+function plainTextBlock(source: string): string {
+  const el = document.createElement("div"); el.innerHTML = textHTML(source, "", new Set());
   el.querySelectorAll("button").forEach(button => button.remove());
   for (const link of el.querySelectorAll<HTMLAnchorElement>("a")) {
     const url = link.dataset.url!;
@@ -120,13 +226,21 @@ export function messagePlainText(text: string, markdown = false): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
     if (!(node instanceof Element)) return "";
     if (node.tagName === "BR") return "\n";
+    if (node.tagName === "INPUT") return node.hasAttribute("checked") ? "[x] " : "[ ] ";
     const content = [...node.childNodes].map(read).join("");
     if (node.tagName === "LI") {
       const parent = node.parentElement;
       const number = parent?.tagName === "OL" ? Number(parent.getAttribute("start") || 1) + [...parent.children].indexOf(node) : null;
       return `${number === null ? "-" : `${number}.`} ${content}\n`;
     }
-    return /^(P|LI|PRE)$/.test(node.tagName) ? content + "\n" : content;
+    if (/^(UL|OL)$/.test(node.tagName) && node.parentElement?.tagName === "LI") return "\n" + content;
+    return /^(P|LI|PRE|H[1-6]|BLOCKQUOTE)$/.test(node.tagName) ? content + "\n" : content;
   };
   return read(el).trimEnd();
+}
+
+export function tablePlainText(source: string): string {
+  const block = parseMessageBlocks(source).find(block => block.type === "table");
+  if (!block || block.type !== "table") return source;
+  return [block.headers, ...block.rows].map(row => row.map(cell => messagePlainText(cell, true).replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n");
 }

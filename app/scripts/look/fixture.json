@@ -1,6 +1,18 @@
 {
   "desktop": null,
-  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg" },
+  "richContent": {
+    "table": "| 項目 | 說明 | 參考 |\n| :--- | :---: | ---: |\n| **會議摘要** | 這是一段較長的中文說明，整理本週討論的重點、負責人與下一步，欄位應自然換行並維持清晰可讀。 | [參考文件](https://example.com/research) |\n| 進度追蹤 | 請逐項確認每個工作階段的結果，並把尚待決定的事項與已完成的工作分開呈現，方便下週繼續討論。 | `準備中` |",
+    "reply": "## 本週研究整理\n\n先比較進展，再看執行方式與流程。\n\n> 以下資料供本次討論使用。\n\n- [x] 已完成資料整理\n  - 保留來源與說明\n- [ ] 確認下一步\n\n~~舊版摘要~~ 已更新。\n\n---\n\n| 項目 | 說明 | 參考 |\n| :--- | :---: | ---: |\n| **會議摘要** | 這是一段較長的中文說明，整理本週討論的重點、負責人與下一步，欄位應自然換行並維持清晰可讀。 | [參考文件](https://example.com/research) |\n| 進度追蹤 | 請逐項確認每個工作階段的結果，並把尚待決定的事項與已完成的工作分開呈現，方便下週繼續討論。 | `準備中` |\n\n接著是參考指令，程式碼只會顯示。\n\n```bash\n# Print a local summary\necho \"Research complete\"\nprintf '%s\\n' 'A deliberately long command for horizontal scrolling inside this code block only, while the conversation column stays within the viewport at every supported width.'\n```\n\n以下流程說明從整理到確認的順序。\n\n```mermaid\nflowchart LR\n  A[整理資料] --> B{確認來源}\n  B -->|完成| C[分享摘要]\n  B -->|待確認| A\n```\n\n參考圖片可由你決定是否載入。\n\n![研究參考圖](https://images.example.test/rich-preview.svg?synthetic=consent)\n\n摘要已備妥，可以接著確認下一步。",
+    "invalid": "圖表暫時無法預覽，原始碼仍可閱讀。\n\n```mermaid\nthis is not a diagram\n```\n\n可以複製後再修改。",
+    "streaming": "正在整理圖表。\n\n```mermaid\nflowchart LR\nA[整理資料] -->",
+    "sequence": "以下是確認摘要的順序。\n\n```mermaid\nsequenceDiagram\nOwner->>Member: Prepare summary\nMember-->>Owner: Review sources\nOwner->>Member: Confirm\n```\n\n確認後即可繼續。",
+    "class": "以下說明資料之間的關係。\n\n```mermaid\nclassDiagram\nclass Research {\n  +String title\n  +review()\n}\nclass Summary {\n  +String text\n}\nResearch --> Summary\n```\n\n摘要保留研究的來源。",
+    "state": "以下是確認進度的狀態。\n\n```mermaid\nstateDiagram-v2\n[*] --> Draft\nDraft --> Review\nReview --> Complete\nComplete --> [*]\n```\n\n完成後即可分享。",
+    "er": "以下是研究資料的結構。\n\n```mermaid\nerDiagram\nRESEARCH ||--o{ SOURCE : contains\nRESEARCH {\n  int id\n  string title\n}\nSOURCE {\n  int id\n  string address\n}\n```\n\n每份研究可以保留多個來源。",
+    "architecture": "以下是摘要系統的結構。\n\n```mermaid\narchitecture-beta\ngroup api(cloud)[Research]\nservice db(database)[Sources] in api\nservice server(server)[Summary] in api\ndb:R -- L:server\n```\n\n資料與摘要在同一個系統內整理。",
+    "wide": "以下表格欄位較多，可以在卡片內左右捲動。\n\n| 一 | 二 | 三 | 四 | 五 | 六 | 七 | 八 | 九 | 十 |\n| - | - | - | - | - | - | - | - | - | - |\n| 第一項 | 第二項 | 第三項 | 第四項 | 第五項 | 第六項 | 第七項 | 第八項 | 第九項 | 第十項 |\n\n頁面仍保持原本的閱讀寬度。"
+  },
+  "imageResponses": { "https://logos.composio.dev/api/slack": "assets/slack.svg", "https://images.example.test/rich-preview.svg?synthetic=consent": "assets/slack.svg" },
   "ownerRound": {
     "memberConversation": {
       "id": 12,
