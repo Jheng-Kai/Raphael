@@ -138,10 +138,17 @@ class VmTools:
             return self.tools[key].tier if self._available and matches else None
         return self.delegate.tier_of(key)
 
+    def tier_for_call(self, key, arguments):
+        # The hub knows nothing about computer tools, so it must not be asked about them.
+        return self.tier_of(key) if key in self.tools else self.delegate.tier_for_call(key, arguments)
+
     def kind_of(self, server, name):
         if server == "computer":
             return "read" if name in READS or name == "attach_file" else "write"
         return self.delegate.kind_of(server, name)
+
+    def kind_for_call(self, server, name, arguments):
+        return self.kind_of(server, name) if server == "computer" else self.delegate.kind_for_call(server, name, arguments)
 
     def _audit(self, key, outcome, approver, task_id):
         if self.audit:
