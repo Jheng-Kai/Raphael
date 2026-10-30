@@ -13,6 +13,7 @@ export interface HomeItem {
   turn_id: number | null;
   conversation_id: number | null;
   routine_id: number | null;
+  all_day?: boolean;
 }
 export interface HomeOverview {
   generated_at_ms: number;

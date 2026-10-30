@@ -1,4 +1,7 @@
 export const homeZh = {
+  "overview.allClear": "沒有待辦或新回報",
+  "overview.noSpend": "近期沒有花費紀錄",
+  "overview.noDictation": "聽寫紀錄會顯示在這裡",
   "nav.overview": "首頁",
   "overview.title": "一切，都在這裡。",
   "overview.subtitle": "今天的安排、成員的進度，以及值得你留意的事。",
@@ -35,6 +38,9 @@ export const homeZh = {
   "overview.reset": "重設：{p0}",
 } as const;
 export const homeEn: Record<keyof typeof homeZh, string> = {
+  "overview.allClear": "No pending work or new reports",
+  "overview.noSpend": "No recent spending",
+  "overview.noDictation": "Your dictation activity will appear here",
   "nav.overview": "Home",
   "overview.title": "Everything, in view.",
   "overview.subtitle": "Today's plans, your team's progress, and what needs your attention.",
@@ -52,6 +58,9 @@ export const homeEn: Record<keyof typeof homeZh, string> = {
   "overview.reset": "Resets: {p0}",
 };
 export const homeJa: Record<keyof typeof homeZh, string> = {
+  "overview.allClear": "確認事項や新しい報告はありません",
+  "overview.noSpend": "最近の支出記録はありません",
+  "overview.noDictation": "音声入力の記録がここに表示されます",
   "nav.overview": "ホーム", "overview.title": "すべてを、ひと目で。",
   "overview.subtitle": "今日の予定、メンバーの進捗、あなたへのお知らせ。",
   "overview.today": "今日", "overview.noSchedule": "今日の予定はありません", "overview.nothing": "確認事項なし", "overview.noReports": "新しい報告なし", "overview.allowance": "利用枠", "overview.wordsChart": "過去14日間の日別入力文字数：{p0}", "overview.reports": "メンバーの報告", "overview.calendar": "今後の予定",

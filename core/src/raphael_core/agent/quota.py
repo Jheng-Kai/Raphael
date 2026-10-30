@@ -147,7 +147,7 @@ class Quotas:
         self.conn, self.now_ms, self.notify = conn, now_ms, notify
         self.credits: dict[str, dict] = {}
 
-    def record(self, provider: str, data: dict) -> None:
+    def record(self, provider: str, data: dict, *, notify: bool = True) -> None:
         if provider not in ("codex", "claude", "gemini"):
             return
         before = self._state(provider)
@@ -177,7 +177,7 @@ class Quotas:
                 self.conn.execute("INSERT INTO subscription_quotas VALUES (?, ?, ?) ON CONFLICT(provider) DO UPDATE SET reset_at_ms = excluded.reset_at_ms, updated_at_ms = excluded.updated_at_ms",
                                   (provider, reset if type(reset) is int else None, self.now_ms()))
         # Usage reads record live windows; only a real change may notify, or every reader reloads forever.
-        if self.notify and self._state(provider) != before:
+        if notify and self.notify and self._state(provider) != before:
             self.notify("quota.changed", {})
 
     def _state(self, provider: str):

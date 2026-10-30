@@ -2,8 +2,8 @@
 //
 // Rust (overlay.rs) sends events on a channel that this page opens once. The window itself is
 // transparent, click-through and never hidden: "hidden" here means the page draws nothing and
-// the animation loop (see emblem.ts) is stopped. Active tasks expose Stop; a question exposes
-// its confirmation card. While either accepts input the window takes the mouse (overlay.rs).
+// the animation loop (see emblem.ts) is stopped. Only a question exposes Stop and its confirmation
+// card. While a question accepts input the window takes the mouse (overlay.rs).
 //
 // The controller below holds all the logic and takes the emblem and the DOM through small
 // interfaces, so the tests run it in Node.
@@ -884,9 +884,9 @@ async function start(): Promise<void> {
     stop.setAttribute("aria-label", stopLabel.textContent);
   };
   labelStop("zh-TW");
-  let taskRun = 0, language: UiLanguage = "zh-TW";
+  let taskRun = 0, taskActive = false, language: UiLanguage = "zh-TW";
   const gesture = cancelGesture();
-  gesture.register(() => !stop.hidden ? {key:`overlay:${taskRun}`,button:stop,hint:questionLabels(language).hint,cancel:()=>stop.click()} : null);
+  gesture.register(() => taskActive ? {key:`overlay:${taskRun}`,button:stop.hidden ? canvas : stop,hint:questionLabels(language).hint,cancel:()=>stop.click()} : null);
   stop.onclick = () => { void invoke("overlay_cancel").catch(error => pageLog("warn", describeError(error))); };
   const scheme = matchMedia("(prefers-color-scheme: dark)");
   const theme = () => { document.documentElement.dataset.theme = scheme.matches ? "dark" : "light"; };
@@ -915,9 +915,9 @@ async function start(): Promise<void> {
   const handle = guardHandler((event) => {
     if (event.type === "cancelkey") { if(event.reset)gesture.clear();else gesture.press();return; }
     if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }
-    if (event.type === "show" || event.type === "mode") { taskRun++;stop.hidden=false; }
-    if (["hide","complete","release","notice","operate"].includes(event.type) || event.type === "say" && !event.hold) stop.hidden=true;
-    if (event.type === "ask") { taskRun++;stop.hidden=false; }
+    if (event.type === "show" || event.type === "mode") { taskRun++;taskActive=true;stop.hidden=true; }
+    if (["hide","complete","release","notice","operate"].includes(event.type) || event.type === "say" && !event.hold) { taskActive=false;stop.hidden=true; }
+    if (event.type === "ask") { taskRun++;taskActive=true;stop.hidden=false; }
     gesture.sync();
     if (event.type === "avatar") {
       void picture();

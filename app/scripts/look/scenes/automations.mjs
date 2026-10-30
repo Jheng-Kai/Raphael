@@ -1,6 +1,6 @@
 import { scene, click, hover, type, wait, page, key, scroll, room, newRoom, check, rightClick } from "./steps.mjs";
 
-const auto = [page("home"), click('.ho-today [data-home-go="calendar"]'), wait(".au-toolbar")];
+const auto = [page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
 const dialog = [...auto, click('[data-au="new"]'), wait(".mb-dialog")];
 const more = [...dialog, click('[data-dlg="more"]')];
@@ -33,7 +33,11 @@ export default [
   scene("room-mention-blocked", "Rate-limited and stopped replies stand in the thread where their exchange stopped", [room(1), check("p02-blocked")], { p02Blocked: true }),
   scene("room-wrapup-after-replies", "Chief conclusion follows completed reply intents", [room(1), check("room-wrapup"), check("p02-long-exchange")], { p02LongExchange: true, roomWrapup: true }),
   scene("automations-hover", "Calendar chip hover", [...calendar, hover('.au-occurrence')]),
-  scene("automations-empty", "Calendar without routines", [...auto, check("calendar-shell")], { routines: [] }),
+  scene("automations-empty", "Calendar without routines or events", [...auto, check("calendar-shell")], { routines: [], homeEmpty: true }),
+  scene("automations-day-empty", "Empty day with compact working hours and a pinned all-day row", [...auto, click('[data-period="day"]'), check("calendar-shell")], { routines: [], homeEmpty: true }),
+  scene("automations-sparse", "Sparse week keeps working hours in view", [...auto, check("calendar-shell")], { calendarSparse: true }),
+  scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, click('[data-period="day"]'), check("calendar-shell")], { calendarSparse: true }),
+  scene("automations-all-day", "A full week retains all-day items above compact timed rows", [...auto, check("calendar-shell"), check("calendar-all-day")], { calendarAllDay: true }),
   scene("automations-calendar", "Automation week calendar", calendar),
   scene("automations-day", "Automation day calendar", [...calendar, click('[data-period="day"]'), check("calendar-shell")]),
   scene("automations-tools", "Responsive calendar month, members and keep-awake", tools),

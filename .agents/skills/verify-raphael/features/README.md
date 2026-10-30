@@ -1,11 +1,30 @@
 # Raphael feature map
 
+## Owner round 9 contracts
+
+Home paints local records before live allowances and calendar data. Four fixed equal
+summary blocks and a small week calendar retain their geometry in empty, sparse and
+full states. Every whole block navigates, including keyboard operation, while inner
+report controls retain their actions. See [Home](home.md). Day/week working hours
+fit the viewport below a pinned all-day row; see [Automations](automations.md).
+Owner/member/room messages share eight-line faded previews and the existing
+expand-message control, without inner scrolling. CLI envelope parsing is shared by
+normal, quick, resumed, failure, room and background routes; see
+[Conversation](conversation.md). The ordinary orb has no Stop; focused double-Escape
+and permission/question actions remain. See [Dictation](dictation.md).
+
+Native readable-layout includes Home, compact week/day and long owner expansion;
+home-timing measures stored allowance first paint before a two-second offline CLI
+transport. Run these with self-diagnosis and memory-growth after an offline debug
+build, one heavy process at a time. The owner prohibits judge and paid/live requests
+for this round; report those as SKIP, not design or provider acceptance.
+
 ## Owner round 8 contracts
 
 Details controls, including the shared brain picker, fill the same panel content width.
 The conversation mask has a fully transparent top band before its fade in both themes.
-Home wraps its unchanged report at CJK sentence boundaries, sizes Today to its content,
-and keeps all three complete stat cards on the first 1280x800 screen. Compact dictation
+Home wraps its report at CJK sentence boundaries. Owner round 9 supersedes the old
+Today/stat arrangement with four fixed equal blocks and a mini calendar. Compact dictation
 orders totals, activity, then a column-filling shortcut card; that card is a page-level
 overview section, exempt from the generic short-card cap, with exact column alignment
 checked by dictation-overview. Conversation toasts reserve the bottom composer's space; when
@@ -95,13 +114,12 @@ characters at the existing 15px body type size. Three capped cards plus
 existing gutters set the ordinary page measure. The spatial workspace keeps its
 previous 1760px capacity, expressed on the same scale.
 
-Available width may shrink any measure. Home follows its supplied mockup: a 1080px
-page (including 40px gutters), a borderless full-grid emblem/date/headline lead,
-Today/inbox tracks of 7/12 and 5/12, then three equal stat tracks. At <=1100px the
-first pair stacks; at <=760px all five cards stack. This composition deliberately
-uses page-level agenda/inbox containers instead of the generic short-card cap.
-Short inbox/agenda rows remain reading-capped; the Home check rejects an orphan
-stat row, a narrow/reordered lead and unequal chart baselines.
+Available width may shrink any measure. Home uses a 1080px page (including 40px
+gutters), a borderless full-grid emblem/date/headline lead, two rows of two equal
+blocks, then a mini week (owner, 2026-10-30). Blocks retain size and position for
+empty/sparse/full data, including at 720px. This composition uses page-level
+summary containers instead of the generic short-card cap. Short inbox rows remain
+reading-capped; checks reject unequal blocks, overflow and a narrow/reordered lead.
 The 896px thread measure is 28 existing 32px spaces, adding room for conversation
 content while prose keeps 20 spaces. Team's chief and every group member use
 the same compact card track, capped at 384px, inside the shared 896px board column.
@@ -116,8 +134,8 @@ limits and all measurements in `report.json`. Explicit team pan/zoom is normaliz
 to layout size so 50/100/150% does not masquerade as responsive stretching. Hidden
 pages are excluded. A 1px tolerance covers fractional layout rounding. Limits are
 calculated from the spacing tokens, not copied from a potentially stretched element.
-Home also requires its hero to precede and span the grid, and the final stat row to
-fill all three columns (or one on narrow windows). The lead is a page-level element, not a short card.
+Home requires its hero to precede and span the grid and both block rows to fill
+two equal columns. The lead is a page-level element, not a short card.
 The existing long-choice two-column audit applies to skins, not dictionary entries.
 
 Representative main-page acceptance (all consumers of the shared layout):

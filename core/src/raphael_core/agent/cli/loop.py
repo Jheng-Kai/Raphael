@@ -10,12 +10,11 @@ from contextlib import aclosing
 
 from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
 from ...worker.guards import RepeatGuard, wrap_untrusted
-from ..answers import MEMORY_ITEM, parse_reply
+from ..answers import MEMORY_ITEM, MESSAGE_BREAK, parse_reply
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
-from ..narration import _content
 from ..policy import CONFIRM_TIMEOUT_S
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
@@ -25,8 +24,6 @@ from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, RepeatFailures, 
 
 logger = logging.getLogger(__name__)
 
-# The line a CLI brain puts between two chat messages of one reply.
-MESSAGE_BREAK = "<<<next message>>>"
 # A rate-limited turn that has not acted yet runs again after each of these waits.
 RATE_LIMIT_WAITS_S = RETRY_WAITS
 # A room or background turn has no one sitting on it: it rides out a throttle of minutes (live, 429s lasted several).
@@ -423,14 +420,4 @@ class CliLoop:
             return await self._permission(args)
 
     def reply(self, outcome):
-        if self.spoken:
-            objects, prose = _content(outcome.final)
-            data = next((obj for obj in reversed(objects) if isinstance(obj, dict) and ("text" in obj or "messages" in obj)), None)
-            if data is not None:
-                return parse_reply(data, self.language, plain=self.plain, long=True)
-        # paragraphs stay in one message; only the model's own breaks make several
-        parts = [part.strip() for part in re.split(rf"^\s*{re.escape(MESSAGE_BREAK)}\s*$", outcome.final, flags=re.M) if part.strip()]
-        if len(parts) > 4:
-            parts = parts[:3] + ["\n\n".join(parts[3:])]
-        text = "\n\n".join(parts) if parts else outcome.final
-        return parse_reply({"text": text, "messages": parts or [outcome.final]}, self.language, plain=self.plain, long=True)
+        return parse_reply(outcome.final, self.language, plain=self.plain, long=True)

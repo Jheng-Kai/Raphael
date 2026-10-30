@@ -56,6 +56,8 @@ async function run(options) {
       const env = { ...process.env, RAPHAEL_DATA_DIR: data, RAPHAEL_FAKE_LLM: "1", RAPHAEL_TEST_NATIVE: "1", RAPHAEL_CORE_PYTHON: python, PYTHONPATH: join(root, "core/src"), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1", CARGO_BUILD_JOBS: "2" };
       delete env.RAPHAEL_TEST_NATIVE_GMAIL;
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
+      delete env.RAPHAEL_TEST_NATIVE_HOME;
+      if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;
@@ -107,6 +109,19 @@ async function run(options) {
         result.url = page.url();
         await page.setViewport({ width: 1120, height: 900 });
         await collectErrors(page, result.runtimeErrors);
+        if (journey.name === "home-timing") await page.evaluateOnNewDocument(() => {
+          window.__homeTiming = { firstPaintMs: null, firstAllowance: null };
+          const observer = new MutationObserver(() => {
+            const hero = document.querySelector('.page-home:not([hidden]) .ho-hero');
+            if (!hero || window.__homeTiming.firstPaintMs !== null) return;
+            observer.disconnect();
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              window.__homeTiming.firstPaintMs = performance.now();
+              window.__homeTiming.firstAllowance = document.querySelector('.ho-allowance')?.textContent;
+            }));
+          });
+          observer.observe(document, { childList: true, subtree: true, attributes: true });
+        });
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
         const capture = async label => {

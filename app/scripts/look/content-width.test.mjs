@@ -78,7 +78,7 @@ it("keeps Home's lead across the grid and fills every summary row", () => {
   const doc = browser.document;
   doc.documentElement.style.setProperty('--sp-6', '32px');
   doc.documentElement.style.setProperty('--sp-5', '24px');
-  doc.body.innerHTML = '<section class="page-home" style="padding:32px"><section class="ho-hero"></section>' + '<section class="ho-card"></section>'.repeat(5) + '</section>';
+  doc.body.innerHTML = '<section class="page-home" style="padding:32px"><section class="ho-hero"></section>' + '<section class="ho-card"></section>'.repeat(4) + '</section>';
   const page = doc.querySelector('.page-home'), hero = page.firstElementChild, cards = [...page.querySelectorAll('.ho-card')];
   const measure = (element, width, top) => { element.getBoundingClientRect = () => ({ width, height: 100, top, bottom: top + 100 }); };
   measure(page, 1264, 0); measure(hero, 384, 32);
@@ -89,10 +89,10 @@ it("keeps Home's lead across the grid and fills every summary row", () => {
   try {
     expect(() => checkRendered('content-width')).toThrow(/hero spans/);
     measure(hero, 1200, 32);
-    expect(checkRendered('content-width').home).toEqual({ heroWidth: 1200, available: 1200, columns: 2, rows: [2, 3] });
-    measure(cards[4], 384, 404);
+    expect(checkRendered('content-width').home).toEqual({ heroWidth: 1200, available: 1200, columns: 2, rows: [2, 2] });
+    measure(cards[3], 384, 404);
     expect(() => checkRendered('content-width')).toThrow(/rows fill/);
-    measure(cards[4], 384, 280); measure(cards[0], 384, 32);
+    measure(cards[3], 384, 280); measure(cards[0], 384, 32);
     expect(() => checkRendered('content-width')).toThrow(/hero leads/);
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });

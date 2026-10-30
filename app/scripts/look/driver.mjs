@@ -236,6 +236,46 @@ export async function perform(page, step) {
       break;
     }
     case "check": return page.evaluate(checkRendered, step.name);
+    case "click-position": {
+      const element = await visible(step.selector);
+      try {
+        await element.scrollIntoView();
+        const box = await element.boundingBox();
+        await page.mouse.click(box.x + box.width * step.x, box.y + box.height * step.y);
+        const destination = await visible(step.expect);
+        await destination.dispose();
+        return { check: "surface-navigation", selector: step.selector, x: step.x, y: step.y, destination: step.expect };
+      } finally { await element.dispose(); }
+    }
+    case "surface-interactions": {
+      const element = await visible(step.selector);
+      try {
+        await element.scrollIntoView();
+        const measure = () => element.evaluate(button => {
+          const style = getComputedStyle(button), surface = getComputedStyle(button.parentElement);
+          const color = token => { const probe = document.createElement('span'); probe.style.color = `var(${token})`; button.append(probe); const value = getComputedStyle(probe).color; probe.remove(); return value; };
+          return { background: surface.backgroundColor, hover: color('--hover'), pressed: color('--pressed'), outline: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+        });
+        const box = await element.boundingBox();
+        await page.mouse.move(box.x + box.width * .98, box.y + box.height * .02);
+        await new Promise(resolve => setTimeout(resolve, 180));
+        const hovered = await measure();
+        if (hovered.background !== hovered.hover) throw new Error('Whole block hover needs the hover token');
+        await page.mouse.down();
+        let pressed;
+        try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await measure(); }
+        finally { await page.mouse.move(0, 100); await page.mouse.up(); }
+        if (pressed.background !== pressed.pressed) throw new Error('Whole block press needs the pressed token');
+        await element.focus();
+        const pointer = await measure();
+        if (pointer.outline !== 'none' && pointer.width > 0) throw new Error('Pointer focus must not show a keyboard ring');
+        await page.keyboard.press('Tab'); await element.focus();
+        const focus = await measure();
+        if (focus.outline === 'none' || focus.width < 2) throw new Error('Whole block keyboard focus needs a visible ring');
+        if (step.hoverOnly) { await element.evaluate(button => button.blur()); await element.hover(); }
+        return { check: "surface-interactions", selector: step.selector, hovered, pressed, pointer, focus };
+      } finally { await element.dispose(); }
+    }
     case "click": await click(step.selector); break;
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }

@@ -118,7 +118,7 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   expect(copy.mock.lastCall?.[0]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith("a < b");
-  const expand = latest.querySelector<HTMLButtonElement>('[data-act="expand-message"]')!;
+  const expand = latest.querySelector<HTMLButtonElement>('.ra [data-act="expand-message"]')!;
   expect(expand.hidden).toBe(false); expand.click();
   expect(document.querySelector('.tn[data-id="2"] .is-expanded')).not.toBeNull();
   document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();

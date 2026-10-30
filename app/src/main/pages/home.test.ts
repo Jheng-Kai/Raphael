@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeOverview } from "../home-types";
 import type { AppContext, MainEvent } from "../types";
 
-const { queue } = vi.hoisted(() => ({ queue: [] as unknown[] }));
-vi.mock("../api", () => ({ homeOverview: vi.fn(async () => queue.length > 1 ? queue.shift() : queue[0]), statusCheckOpenrouter: vi.fn() }));
+const { queue, retained } = vi.hoisted(() => ({ queue: [] as unknown[], retained: { value: undefined as unknown } }));
+vi.mock("../api", () => ({ homeOverview: vi.fn(async (refresh = false) => refresh ? retained.value : (retained.value = queue.length > 1 ? queue.shift() : queue[0])), statusCheckOpenrouter: vi.fn() }));
 vi.mock("../team-navigation", () => ({ openMemberThread: vi.fn() }));
 
 let reduce = true;
@@ -26,7 +26,6 @@ const overview = (month: number, state: "ok" | "no_key" = "ok"): HomeOverview =>
 });
 
 async function load() {
-  vi.resetModules();
   return import("./home");
 }
 
@@ -35,6 +34,7 @@ const flush = async (): Promise<void> => {
 };
 
 beforeEach(() => {
+  vi.resetModules();
   change = null;
   reduce = true;
   queue.length = 0;
@@ -71,6 +71,21 @@ async function mount() {
 }
 
 describe("the hero", () => {
+  test("paints local records before the shared live refresh and does not reload on its completion", async () => {
+    const { homeOverview } = await import("../api");
+    let finish!: (value: HomeOverview) => void;
+    vi.mocked(homeOverview).mockResolvedValueOnce(overview(2)).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { page } = await mount();
+    expect(page.el.querySelector('.ho-spend .ho-big')?.textContent).toContain('2.00');
+    const before = vi.mocked(homeOverview).mock.calls.length;
+    const emblem = page.el.querySelector('.ho-hero > .av');
+    finish(overview(3));
+    await flush();
+    expect(page.el.querySelector('.ho-spend .ho-big')?.textContent).toContain('3.00');
+    expect(page.el.querySelector('.ho-hero > .av')).toBe(emblem);
+    expect(vi.mocked(homeOverview).mock.calls.length).toBe(before);
+    page.hide(); page.el.remove();
+  });
   test("translates the retained Home behind Settings immediately in every locale", async () => {
     const sample = overview(5);
     sample.usage.allowances.brains.push({ id: "codex", name: "Codex CLI", windows: [{ period: "fiveHour", remaining_percent: 75, resets_at: 1_800_000_000 }] });
@@ -86,21 +101,20 @@ describe("the hero", () => {
       for (const locale of ["en", "ja", "zh-TW"] as const) {
         setLocale(locale);
         // Settings retains the page DOM. Translation must not wait for another RPC or show().
-        expect(page.el.querySelector(".ho-today h2")!.textContent).toContain(t("overview.today"));
-        for (const [card, key] of [["pending", "overview.pending"], ["reports", "overview.reports"], ["spend", "overview.month"], ["allowance", "overview.allowance"], ["dictation", "nav.dictation"]] as const) {
+        expect(page.el.querySelector(".ho-calendar h2")!.textContent).toContain(t("overview.calendar"));
+        for (const [card, key] of [["inbox", "overview.needsYou"], ["spend", "overview.month"], ["allowance", "overview.allowance"], ["dictation", "nav.dictation"]] as const) {
           expect(page.el.querySelector(`.ho-${card} :is(h2, h3)`)!.textContent).toContain(t(key));
         }
         expect(page.el.querySelector(".ho-said")!.textContent).toBe(buildReport(sample.report, sample.generated_at_ms).text);
-        expect(page.el.querySelector(".ho-today .ho-empty")!.textContent).toBe(t("overview.noSchedule"));
-        expect(page.el.querySelector(".ho-pending .ho-empty")!.textContent).toBe(t("overview.nothing"));
-        expect(page.el.querySelector(".ho-reports .ho-empty")!.textContent).toBe(t("overview.noReports"));
+        expect(page.el.querySelector(".ho-inbox .ho-empty")!.textContent).toBe(t("overview.allClear"));
         expect(page.el.querySelector(".ho-meter-row small")!.textContent).toBe("Codex");
         expect(page.el.querySelector(".ho-meter-row")!.getAttribute("title")).toContain(t("overview.reset", { p0: "" }));
         expect(page.el.querySelector(".ho-spend svg[role=img]")!.getAttribute("aria-label")).toBe(t("overview.chart", { p0: "0.00, 5.00" }));
-        expect(page.el.querySelector(".ho-dictation .ho-bars")!.getAttribute("aria-label")).toBe(t("overview.wordsChart", { p0: "" }));
+        expect(page.el.querySelector(".ho-dictation .ho-bars")).toBeNull();
+        expect(page.el.querySelector(".ho-dictation .ho-chart")!.textContent).toBe(t("overview.noDictation"));
         expect(page.el.querySelector(".ho-dictation .ho-big small")!.textContent).toBe(t("home.003"));
         expect(page.el.querySelector(".ho-dictation .ho-sub")!.textContent).toBe(`${t("home.005")} 0${t("unit.seconds")}`);
-        for (const open of page.el.querySelectorAll(".ho-open")) expect(open.getAttribute("aria-label")).toBe(t("overview.all"));
+        for (const target of page.el.querySelectorAll(".ho-target")) expect(target.getAttribute("aria-label")).toBe(target.parentElement!.querySelector("h2")!.childNodes[0].textContent);
       }
       expect(vi.mocked(homeOverview).mock.calls.length).toBe(calls);
       expect(page.el.querySelector(".ho-hero > .av")).toBe(emblem);

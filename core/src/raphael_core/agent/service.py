@@ -834,15 +834,18 @@ class AgentService:
             router.register(method, handler)
 
     async def _allowances(self, params: dict) -> dict:
-        from .cli.allowances import read_allowances
+        from .cli.allowances import cached_allowances, read_allowances
+        if type(params.get("refresh", True)) is not bool:
+            raise invalid_params("refresh must be a boolean")
+        if not params.get("refresh", True):
+            return cached_allowances(self._cli_brains, self.quotas)
         result = await read_allowances(self._cli_brains)
         for brain in result["brains"]:
             if brain["windows"]:
                 brain["source"] = "live"
-                if brain.get("credits") is not None:
-                    self.quotas.record(brain["id"], {"windows": [
-                        {**window, "status": "rejected" if window.get("remaining_percent") == 0 else "allowed"}
-                        for window in brain["windows"]], "credits": brain["credits"], "exhausted": False})
+                self.quotas.record(brain["id"], {"windows": [
+                    {**window, "status": "rejected" if window.get("remaining_percent") == 0 else "allowed"}
+                    for window in brain["windows"]], "credits": brain.get("credits"), "exhausted": False}, notify=False)
             else:
                 brain["windows"] = self.quotas.allowances(brain["id"])
                 brain["source"] = "reported" if brain["windows"] else "unavailable"

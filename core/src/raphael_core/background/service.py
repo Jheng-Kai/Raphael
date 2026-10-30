@@ -79,7 +79,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from datetime import tzinfo
 from typing import Any
 
-from ..agent.answers import Reply, loose_reply, parse_reply
+from ..agent.answers import Reply, parse_reply
 from ..agent.failure import KINDS, AgentFailure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
 from ..agent.history import VOICE, AgentHistory, Turn
@@ -136,8 +136,6 @@ AT_THIS_COMPUTER = "app"
 # The assistant's history calls a task by the status of a turn.
 _TURN_STATUS = {"done": "done", "cancelled": "denied"}
 
-_FINAL_FENCE = "```"
-
 # The states of a task that can be run again: it did not finish. A task that is done is not run
 # again, and one that is not over is still running.
 BUILTIN_TOOLS = (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS, "find_tools")
@@ -191,22 +189,8 @@ def report_from(final: str, language: str, *, plain: bool = False) -> Reply | No
     it was asked, possibly in a code fence or with words around it; or, when it wrote plain text, that
     text as a report. None when it said nothing usable. A `plain` report is a member's: no prefix,
     and its lines kept (`answers.parse_reply`)."""
-    text = final.strip()
-    if not text:
-        return None
-    start, end = text.find("{"), text.rfind("}")
-    data: Any = None
-    if 0 <= start < end:
-        try:
-            data = json.loads(text[start : end + 1])
-        except ValueError:
-            data = None
-    if not isinstance(data, dict):
-        if text.startswith(("{", "[", _FINAL_FENCE)):
-            return None  # an attempt at JSON that is not: showing it would show braces
-        data = loose_reply(text) or {"prefix": PREFIXES[language].notice, "text": text, "detail": ""}
     try:
-        return parse_reply(data, language, plain=plain)
+        return parse_reply(final, language, plain=plain, default_prefix=PREFIXES[language].notice)
     except AgentFailure:
         return None
 

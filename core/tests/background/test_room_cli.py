@@ -1,5 +1,6 @@
 """Room CLI turns use the same background task, tool gate and approval lifecycle."""
 import asyncio
+import json
 import pytest
 
 from raphael_core.agent.cli.drivers import Event
@@ -21,6 +22,25 @@ def submit_room(rig):
     task = rig.service.submit(session_id="room:1:1:0", text="Plan", language="en", model="cli:codex:gpt-5.6-terra")
     rig.service.attach_turn(task, turn)
     return task, turn
+
+
+@pytest.mark.parametrize("room", [True, False], ids=["room", "background"])
+async def test_cli_envelopes_are_unwrapped_before_room_or_background_storage(make_rig, monkeypatch, room):
+    rig = make_rig()
+    async def work(loop):
+        loop._queue.put_nowait(Outcome("done", final=json.dumps({"text": "The plan is ready.", "messages": ["The plan is ready."]})))
+    monkeypatch.setattr(CliLoop, "_work", work)
+    if room:
+        task, turn = submit_room(rig)
+    else:
+        rig.service.use_cli(object())
+        task = rig.service.submit(session_id="background-envelope", text="Plan", language="en", model="cli:codex:test")
+        turn = None
+    await until(lambda: rig.task(task).state in ("done", "failed"))
+    assert rig.task(task).state == "done"
+    assert rig.task(task).report_text == "The plan is ready."
+    if turn:
+        assert AgentHistory(rig.conn).get(turn).text == "The plan is ready."
 
 
 async def test_cli_room_turn_uses_shared_tools_and_keeps_private_sessions_separate(make_rig, monkeypatch):

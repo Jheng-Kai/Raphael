@@ -1221,6 +1221,7 @@ export const zhTW = {
   "auto.done": "已完成",
   "auto.error": "未完成",
   "auto.today": "今天",
+  "auto.allDay": "全天",
   "auto.day": "日",
   "auto.week": "週",
   "auto.previous": "上一期",

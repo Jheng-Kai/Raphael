@@ -1222,6 +1222,7 @@ export const en = {
   "auto.done": "Completed",
   "auto.error": "Incomplete",
   "auto.today": "Today",
+  "auto.allDay": "All day",
   "auto.day": "Day",
   "auto.week": "Week",
   "auto.previous": "Previous",

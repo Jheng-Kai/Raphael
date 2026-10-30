@@ -378,7 +378,7 @@ test("a stored-file read finishing after a thread switch cannot fill the new com
 test("a selected member reply travels separately, renders on the pending bubble, and returns on cancel", async () => {
   api.agentAskText.mockImplementation(() => new Promise<void>(() => {}));
   const agent = mount(); await flush(); await pick(3);
-  const message = $('[data-id="31"] .message-text');
+  const message = $('[data-id="31"] .ra .message-text');
   const range = document.createRange(); range.selectNodeContents(message);
   range.getClientRects = () => [{ left: 100, right: 200, top: 100, bottom: 120, width: 100, height: 20 }] as unknown as DOMRectList;
   const selection = document.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
@@ -411,7 +411,7 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   const agent = mount(); await flush(); await pick(3);
   running = false; send({ type: "AgentTurn", turn_id: 50, member_id: 3 });
   await vi.advanceTimersByTimeAsync(150); await flush();
-  const replies = () => [...document.querySelectorAll('[data-id="50"] .message-text')].map(element => element.textContent);
+  const replies = () => [...document.querySelectorAll('[data-id="50"] .ra .message-text')].map(element => element.textContent);
   expect(replies()).toEqual(["First"]);
   expect(document.querySelector('[data-id="50"] .ans.thinking, [data-id="50"] .work-section.is-live')).toBeNull();
   expect($('[data-id="50"] .work-toggle').textContent).toContain("已處理");

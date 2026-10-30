@@ -8,19 +8,21 @@ import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
 import { openRoutineDialog } from "../routine-dialog";
 import { dateKey, localDay, shiftDay, monthLabel, monthGrid } from "../schedule-picker";
 import type { AppContext, Member, Page, Routine, RoutineRun } from "../types";
+import type { HomeItem } from "../home-types";
 import { btn, closeMenu, esc, ico, iconButton, openPopover, tg, toaster } from "../ui";
 import "../members.css";
 import "../automations.css";
 
 export const runStatus = (status: string): string => t(status === "skipped" ? "auto.skipped" : status === "running" || status === "confirm" ? "auto.running" : status === "done" ? "auto.done" : "auto.error");
-const HOUR_PX = 64;
 
 export function createAutomationsPage(app: AppContext): Page {
   const el = document.createElement("section"); el.className = "au-page";
   let members: Member[] = [], routines: Routine[] = [];
+  let calendarEvents: HomeItem[] = [];
   let runCounts = new Map<number, number>();
   let logs = new Map<number, RoutineRun[]>(), period = "week", date = new Date(), mini = new Date();
   let visible = false, awake = false, loads = 0, pending = true;
+  let resetPosition = true;
   let timer: ReturnType<typeof setInterval> | undefined;
   let tools: HTMLElement | null = null;
   const member = (id: number): Member | undefined => members.find(m => m.id === id);
@@ -30,10 +32,10 @@ export function createAutomationsPage(app: AppContext): Page {
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const [people, plans] = await Promise.all([api.membersList(getLocale()), api.routinesList()]);
+      const [people, plans, home] = await Promise.all([api.membersList(getLocale()), api.routinesList(), api.homeOverview()]);
       const histories = await Promise.all(plans.routines.map(async r => [r.id, await api.routineRuns(r.id)] as const));
       if (mine !== loads || !visible) return;
-      members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines; logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
+      members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines; calendarEvents = home.calendar.filter(item => item.kind === "event"); logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
     } catch (error) { if (mine === loads && visible) { pending = false; draw(); toaster.info(describeError(error)); } }
   }
   function rangeLabel(start: Date, end: Date): string {
@@ -62,7 +64,8 @@ export function createAutomationsPage(app: AppContext): Page {
     const all: { routine: Routine; at: number; run?: RoutineRun }[] = [...history, ...future.filter(o => !history.some(h => h.routine.id === o.routine.id && h.at === o.at))].sort((a, b) => a.at - b.at);
     const today = dateKey(now);
     const zone = Intl.DateTimeFormat(getLocale(), { timeZoneName: "shortOffset" }).formatToParts(now).find(p => p.type === "timeZoneName")?.value ?? "";
-    return `<div class="au-calendar-scroll"><div class="au-grid" style="--au-days:${n}"><div class="au-grid-head"><span>${esc(zone)}</span>${days.map(d => `<b class="${dateKey(d) === today ? "is-today" : ""}">${esc(dayName(d.getDay()))}<strong>${d.getDate()}</strong></b>`).join("")}</div><div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${String(h).padStart(2, "0")}:00</div>`).join("")}</div>` +
+    return `<div class="au-calendar-scroll"><div class="au-grid" style="--au-days:${n}"><div class="au-grid-head"><span>${esc(zone)}</span>${days.map(d => `<b class="${dateKey(d) === today ? "is-today" : ""}">${esc(dayName(d.getDay()))}<strong>${d.getDate()}</strong></b>`).join("")}` +
+      `<span class="au-all-day-label">${esc(t("auto.allDay"))}</span>${days.map(day => `<div class="au-all-day">${calendarEvents.filter(event => event.all_day && dateKey(new Date(event.at_ms)) === dateKey(day)).map(event => `<span class="au-all-day-event" title="${esc(event.title)}">${esc(event.title)}</span>`).join("")}</div>`).join("")}</div><div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${String(h).padStart(2, "0")}:00</div>`).join("")}</div>` +
       days.map(d => {
         const key = dateKey(d), events = all.filter(o => dateKey(new Date(o.at)) === key);
         return `<div class="au-day-col" data-day="${key}">${Array.from({ length: 24 }, (_, h) => `<div class="au-slot" data-slot="${key}" data-hour="${h}"></div>`).join("")}` +
@@ -71,21 +74,44 @@ export function createAutomationsPage(app: AppContext): Page {
             const overlaps = events.filter(e => Math.abs(e.at - o.at) < 1800000).length, lane = events.slice(0, index).filter(e => Math.abs(e.at - o.at) < 1800000).length;
             const clock = formatClock(o.at), label = [m?.name, o.routine.title, clock, o.run ? runStatus(o.run.status) : ""].filter(Boolean).join(" · ");
             return btn(`<span class="au-occurrence-copy"><time datetime="${at.toISOString()}">${clock}</time><b>${esc(o.routine.title)}</b></span>${m ? faceHTML(m, 20) : ""}${o.run ? `<i class="au-history-mark" data-status="${o.run.status}"></i>` : ""}`,
-              `au-occurrence${o.run ? " is-past" : ""}`, ` ${o.run ? `data-run="${o.run.id}" data-status="${o.run.status}"` : ""} aria-label="${esc(label)}" title="${esc(label)}" data-au="edit" data-id="${o.routine.id}" style="top:${(at.getHours() + at.getMinutes() / 60) * HOUR_PX}px;left:calc(${lane * 100 / overlaps}% + 2px);width:calc(${100 / overlaps}% - 4px)"`);
-          }).join("") + (key === today ? `<i class="au-now" style="top:${(now.getHours() + now.getMinutes() / 60) * HOUR_PX}px"></i>` : "") + `</div>`;
+              `au-occurrence${o.run ? " is-past" : ""}`, ` ${o.run ? `data-run="${o.run.id}" data-status="${o.run.status}"` : ""} aria-label="${esc(label)}" title="${esc(label)}" data-au="edit" data-id="${o.routine.id}" data-at-hour="${at.getHours()}" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour));left:calc(${lane * 100 / overlaps}% + 2px);width:calc(${100 / overlaps}% - 4px)"`);
+          }).join("") + calendarEvents.filter(event => !event.all_day && dateKey(new Date(event.at_ms)) === key).map(event => {
+            const at = new Date(event.at_ms);
+            return `<div class="au-calendar-event" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour))" title="${esc(event.title)}"><time>${esc(formatClock(event.at_ms))}</time><b>${esc(event.title)}</b></div>`;
+          }).join("") + (key === today ? `<i class="au-now" style="top:calc(${now.getHours() + now.getMinutes() / 60} * var(--au-hour))"></i>` : "") + `</div>`;
       }).join("") + `</div></div>`;
   }
   function draw(): void {
     const reopenTools = tools?.isConnected;
     if (reopenTools) closeMenu();
-    const scroll = el.querySelector(".au-calendar-scroll"), top = scroll?.scrollTop ?? 8 * HOUR_PX;
+    const scroll = el.querySelector<HTMLElement>(".au-calendar-scroll");
+    const previousHour = scroll && !resetPosition ? scroll.scrollTop / (parseFloat(el.style.getPropertyValue("--au-hour")) || 48) : null;
     const start = period === "day" ? localDay(dateKey(date)) : shiftDay(localDay(dateKey(date)), -((date.getDay() + 6) % 7));
     const n = period === "day" ? 1 : 7, end = shiftDay(start, n);
     el.innerHTML = toolbarHTML(start, end) + (pending ? `<div class="au-empty" role="status">${esc(t("common.loading"))}</div>`
       : `<div class="au-calendar">${gridHTML(start, n, end)}${sideHTML()}</div>`);
-    const grid = el.querySelector(".au-calendar-scroll"); if (grid) grid.scrollTop = top;
+    fitHours(previousHour);
+    if (!pending) resetPosition = false;
     if (reopenTools) openTools();
   }
+  function fitHours(previousHour: number | null = null): void {
+    const grid = el.querySelector<HTMLElement>(".au-calendar-scroll"), head = grid?.querySelector<HTMLElement>(".au-grid-head");
+    if (!grid || !head || !grid.clientHeight) return;
+    const height = Math.max(28, Math.min(54, (grid.clientHeight - head.offsetHeight) / 11));
+    el.style.setProperty("--au-hour", `${height}px`);
+    const first = [...grid.querySelectorAll<HTMLElement>('[data-at-hour]')].map(item => Number(item.dataset.atHour));
+    const now = new Date(), current = dateKey(date) === dateKey(now);
+    const focus = current ? now.getHours() : first.length ? Math.min(...first) : 8;
+    // Keep the working day together; off-hours focus stays reachable without a long initial scroll.
+    const initial = focus >= 8 && focus <= 19 ? 8 : Math.max(0, Math.min(13, focus - 1));
+    grid.scrollTop = (previousHour ?? initial) * height;
+  }
+  const resize = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+    if (!visible) return;
+    const grid = el.querySelector<HTMLElement>(".au-calendar-scroll");
+    fitHours(grid ? grid.scrollTop / (parseFloat(el.style.getPropertyValue("--au-hour")) || 48) : null);
+  }) : null;
+  resize?.observe(el);
   function openTools(): void {
     const anchor = el.querySelector<HTMLElement>('[data-au="tools"]'); if (!anchor) return;
     tools = openPopover(anchor, sideHTML(), { className: "au-calendar-tools", role: "dialog", label: t("auto.tools"), onClose: () => { tools = null; } });
@@ -94,15 +120,15 @@ export function createAutomationsPage(app: AppContext): Page {
   }
   function onClick(e: Event): void {
     const target = (e.target as Element).closest<HTMLElement>("[data-au], [data-mini-date]"); if (!target) return;
-    if (target.dataset.miniDate) { if (tools?.isConnected) closeMenu(); date = localDay(target.dataset.miniDate); draw(); return; }
+    if (target.dataset.miniDate) { if (tools?.isConnected) closeMenu(); date = localDay(target.dataset.miniDate); resetPosition = true; draw(); return; }
     const act = target.dataset.au, r = routines.find(r => r.id === Number(target.dataset.id));
     if (act === "tools") { if (tools?.isConnected) closeMenu(); else openTools(); }
     else if (act === "new") edit();
     else if (act === "edit" && r) edit(r);
     else if (act === "awake") { e.preventDefault(); (target as HTMLButtonElement).disabled = true; void api.keepAwakeSet(!awake).then(value => { awake = value; draw(); }).catch(error => { (target as HTMLButtonElement).disabled = false; toaster.info(describeError(error)); }); }
-    else if (act === "period") { period = target.dataset.period!; draw(); }
-    else if (act === "today") { date = new Date(); mini = date; draw(); }
-    else if (act === "prev" || act === "next") { date = shiftDay(date, (act === "prev" ? -1 : 1) * (period === "day" ? 1 : 7)); mini = date; draw(); }
+    else if (act === "period") { period = target.dataset.period!; resetPosition = true; draw(); }
+    else if (act === "today") { date = new Date(); mini = date; resetPosition = true; draw(); }
+    else if (act === "prev" || act === "next") { date = shiftDay(date, (act === "prev" ? -1 : 1) * (period === "day" ? 1 : 7)); mini = date; resetPosition = true; draw(); }
     else if (act === "month-prev" || act === "month-next") { mini = new Date(mini.getFullYear(), mini.getMonth() + (act === "month-prev" ? -1 : 1), 1); draw(); }
   }
   function onDragStart(e: DragEvent): void {

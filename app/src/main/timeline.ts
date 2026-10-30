@@ -19,6 +19,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
+import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { messageHTML } from "./message-content";
@@ -548,7 +549,7 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
 
 /** Media stands above the owner's bubble, whose quote precedes the words. */
 function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined, quote?: MessageQuote | null): string {
-  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}${words}</div>` : "";
+  const bubble = words || quote ? `<div class="bubble">${quote ? quoteHTML(quote) : ""}<div class="message-text">${words}</div></div>` : "";
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
@@ -563,10 +564,11 @@ export function messageActionsHTML(time: number, regenerate = false, owner?: "ed
 }
 
 function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: number, query: string, state: TimelineState, reply: boolean, regenerate = false): string {
+  if (reply) text = plainReplies([text])[0];
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-expandable="true"' : ""}>` +
     `<div class="ans${reply ? "" : " progress"}"><div class="message-text">${messageHTML(text, query, reply)}</div></div>` +
-    (reply ? btn(esc(t(expanded ? "chat.showLess" : "chat.showAll")), "sm message-expand", ` data-act="expand-message" aria-expanded="${expanded}"${text.split("\n").length > 30 || text.length > 3000 || expanded ? "" : " hidden"}`) : "") +
+    (reply ? messageExpandHTML(text, expanded) : "") +
     messageActionsHTML(time, regenerate, undefined, reply) + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 
@@ -813,8 +815,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
       ? `<div class="me">` +
-        `<div class="chat-message owner-message" data-message="question">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
+        `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote) + messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`)) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
@@ -844,13 +846,13 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
  * a bubble with light passing over it until the words arrive) and Raphael thinking. A typed
  * question shows the chips of the files it was sent with.
  */
-export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now()): string {
+export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false): string {
   const start = request?.time ?? nowMs;
   const words =
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim());
   return (
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
-    `<div class="me"><div class="chat-message owner-message" data-message="question">${bubbleHTML(words, files, request?.quote)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
+    `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote)}${messageExpandHTML(question ?? "", expanded)}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
     `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
     `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML(Math.max(0, Math.round((nowMs - start) / 1000)))}</div></div>` +
     `</div></div></li>`
