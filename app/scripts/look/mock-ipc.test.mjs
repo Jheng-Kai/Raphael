@@ -5,6 +5,13 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("returns offline link metadata without fetching a table cell's URL or thumbnail", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    const url = 'https://example.com/research';
+    const preview = await target.__TAURI_INTERNALS__.invoke('core_call', { method: 'links.preview', params: { url } });
+    expect(preview).toEqual({ url, site: 'example.com', title: '', description: '', thumbnail: null });
+    expect(state.errors).toEqual([]);
+  });
   it("accepts only the declared native correction snapshot without duplicating acceptance rules", async () => {
     const target = {}, edit = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
     const state = installMock(fixture, { fixture: { dictationText: edit } }, target);

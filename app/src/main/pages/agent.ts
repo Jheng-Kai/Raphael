@@ -44,6 +44,7 @@ import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
+import { mountRichContent, preserveRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
 import { measureMessagePreviews } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
@@ -554,6 +555,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
   mountConversationScroll(scroller);
+  mountRichContent(scroller);
   const atBottom = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= BOTTOM_SLACK_PX;
   const newestId = (): number => turns.reduce((max, turn) => Math.max(max, turn.id), 0);
   const isEmpty = (): boolean =>
@@ -873,7 +875,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawDock();
     state.nowMs = Date.now();
     noteTaskEnds(shown, state);
-    drawThread();
+    preserveRichScroll(scroller, drawThread);
     drawDock();
     markSeen(shown, state);
     const searchingNow = searching && query.trim() !== "";

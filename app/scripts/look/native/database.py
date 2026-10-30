@@ -129,6 +129,14 @@ elif operation == "init":
         path.write_text(skill, encoding="utf-8")
         for name in ("memory", "member-skills"):
             shutil.copytree(seed / name, directory / name)
+    if len(sys.argv) > 3 and sys.argv[3] == "rich-content":
+        from raphael_core.agent.history import AgentHistory
+
+        fixture = json.loads((Path(__file__).resolve().parent.parent / "fixture.json").read_text(encoding="utf-8"))
+        AgentHistory(connection).add(
+            session_id="native-rich-content", question="Review the research summary.", route="answer",
+            prefix="", text=fixture["richContent"]["reply"], status="done", source="app",
+        )
     connection.close()
     print("{}")
 else:

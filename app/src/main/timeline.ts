@@ -23,7 +23,7 @@ import { plainReplies } from "../shared/anime";
 import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
-import { messageHTML } from "./message-content";
+import { messageHTML, replyContentHTML } from "./message-content";
 import { quoteHTML } from "./message-quote";
 import { previewCardsHTML } from "./link-previews";
 import { formatClock, formatUsd } from "./format";
@@ -568,7 +568,7 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   if (reply) text = plainReplies([text])[0];
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
-    `<div class="ans${reply ? "" : " progress"}"><div class="message-text">${messageHTML(text, query, reply)}</div></div>` +
+    (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
     messageActionsHTML(time, regenerate, undefined, reply) + (reply ? previewCardsHTML(text) : "") + `</div>`;
 }
 

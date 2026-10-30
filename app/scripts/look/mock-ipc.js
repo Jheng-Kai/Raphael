@@ -2,6 +2,13 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.richReply) {
+    const source = data.richContent[variant.richReply === true ? "reply" : variant.richReply];
+    data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member && turn.conversation_id !== 4)), id: 701 + index,
+      member_id: member, text: source, question: "請整理研究資料，並提供表格與流程。", status: "done", route: "answer", steps: [],
+      messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
+    data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
+  }
   const desktopSessions = new Map();
   let desktopSequence = 0;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
@@ -321,6 +328,7 @@ export function installMock(fixture, config = {}, target = window) {
   };
   async function core(method, p = {}) {
     switch (method) {
+      case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         const session = `look-desktop-${++desktopSequence}`;

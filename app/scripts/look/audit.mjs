@@ -40,7 +40,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
   const checkMarkdown = element => {
-    if (element.matches("textarea")) return;
+    if (element.closest("textarea, .message-code pre, .diagram-view")) return;
     for (const node of element.childNodes) if (node.nodeType === 3 && markdownPattern.test(node.textContent))
       rawMarkdown.push({ ...describe(element), text: node.textContent.trim().slice(0, 200) });
   };
@@ -56,7 +56,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const description = describe(element);
     if (!element.matches(".window-resize") && !clipped(element) && (box.left < -1 || box.top < -1 || box.right > viewport.width + 1 || box.bottom > viewport.height + 1))
       outsideViewport.push({ ...description, bounds: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } });
-    if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
+    // SVG uses viewBox coordinates, so text clientWidth and scrollWidth are not CSS overflow measurements.
+    if (element.namespaceURI !== 'http://www.w3.org/2000/svg' && element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
@@ -169,7 +170,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed && !element.closest('.message-code pre code')) for (const value of strings) {
+    if (allowed && !element.closest('.message-code pre code, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;

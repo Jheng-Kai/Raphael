@@ -6,11 +6,43 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("does not mistake a fallback card's action glyph for a rendered Mermaid diagram", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="page-agent"><section class="rich-block message-diagram"><header><button><svg></svg></button></header><div class="diagram-view"></div><pre>unfinished</pre><p class="rich-note">Still writing</p></section></div>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ right: 110, width: 100, height: 40 });
+    vi.stubGlobal('document', window.document); vi.stubGlobal('innerWidth', 1120);
+    try {
+      expect(() => checkRendered('rich-fallback')).not.toThrow();
+      window.document.querySelector('.diagram-view').innerHTML = '<svg></svg>';
+      expect(() => checkRendered('rich-fallback')).toThrow('keeps source');
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
+  it("measures SVG overflow at its CSS container and allows only rich code's local horizontal scroll", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="page-agent"><div class="chat-message"><div class="rich-block message-code"><pre style="overflow-x:auto">long command</pre></div><svg><text>Diagram</text></svg></div></div>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 50, width: 100, height: 40 });
+    const text = window.document.querySelector('text'), pre = window.document.querySelector('pre');
+    for (const node of [text, pre]) {
+      Object.defineProperty(node, 'clientWidth', { value: 100 });
+      Object.defineProperty(node, 'scrollWidth', { value: 300 });
+    }
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).horizontalOverflow.elements).toEqual([]);
+    vi.stubGlobal('document', window.document); vi.stubGlobal('getComputedStyle', window.getComputedStyle.bind(window));
+    try { expect(() => checkRendered('message-no-inner-scroll')).not.toThrow(); }
+    finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
+  it("treats diagram labels and code languages as authored content while still checking rich actions", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="message-diagram"><span class="rich-language">bash</span><div class="diagram-view"><svg><text>Review sources</text></svg></div><button>Copy</button></div><button>Load image</button>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Load", "image"]);
+  });
   it("keeps authored code intact while still checking its interface controls for translation", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<div class="message-code"><pre><code>const ready = true;</code></pre><button>Copy</button></div><p>Settings</p>';
+    window.document.body.innerHTML = '<div class="message-code"><pre><code><span class="hljs-comment"># Print a summary</span>const ready = true;</code></pre><button>Copy</button></div><p>Settings</p>';
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings"]);
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, []).rawMarkdown).toEqual([]);
   });
   it("quick model purpose comes from its localized row label without a helper paragraph", () => {
     const win = new Window();

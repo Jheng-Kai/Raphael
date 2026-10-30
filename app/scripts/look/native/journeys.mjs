@@ -3,6 +3,7 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
@@ -90,6 +91,31 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "rich-content") {
+    await chat(page);
+    result.richContent = [];
+    const code = '.message-code:not(.message-diagram)', diagram = '.message-diagram[data-diagram-state="rendered"]';
+    await wait(page, '.message-table');
+    await perform(page, { action: "scroll", selector: code });
+    await wait(page, '.message-code[data-highlighted="true"]');
+    await perform(page, { action: "scroll", selector: '.message-diagram' });
+    await wait(page, diagram);
+    for (const [width, height] of [[1120, 900], [720, 900], [1920, 1080]]) {
+      await page.setViewport({ width, height });
+      for (const [label, selector, check] of [["table", '.message-table', 'rich-content'], ["code", code, 'rich-code'], ["diagram", diagram, 'rich-diagram'], ["image-consent", '.message-image', 'rich-image']]) {
+        await perform(page, { action: "scroll", selector });
+        result.richContent.push(await page.evaluate(checkRendered, check));
+        await capture(`${label}-${width}`);
+      }
+    }
+    await click(page, `${diagram} [data-rich-act="view-source"]`);
+    result.richContent.push(await page.evaluate(checkRendered, "rich-source")); await capture("source");
+    await click(page, `${diagram} [data-rich-act="expand"]`); await wait(page, '.rich-view-dialog svg');
+    result.richContent.push(await page.evaluate(checkRendered, "rich-expand")); await capture("expanded");
+    result.stored = (await snapshot()).agent_turns.filter(turn => turn.session_id === "native-rich-content");
+    if (result.stored.length !== 1 || !result.stored[0].text.includes('```mermaid')) throw new Error("Rich reply source was not persisted intact");
+    return;
+  }
   if (name === "home-timing") {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);

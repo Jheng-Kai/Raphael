@@ -7,7 +7,8 @@ import { getLocale, onLocaleChange, t } from "./i18n";
 import { askGroupName, confirmDelete, openDialog } from "./member-dialogs";
 import { openActions } from "./member-column";
 import { createChatComposer } from "./chat-composer";
-import { messageHTML } from "./message-content";
+import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
+import { mountRichContent, preserveRichScroll } from "./message-rich";
 import { mountConversationScroll } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
@@ -217,6 +218,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const drafts=new Map<number,string>();
   const expandedMessages = new Set<number>();
   mountConversationScroll(scroll);
+  mountRichContent(scroll);
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread)) : null;
   messageResize?.observe(thread);
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
@@ -236,7 +238,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     quote.innerHTML=replyTo?`<span>${esc(t("rooms.replyTo",{p0:person(replyTo.member_id)?.name??t("members.title")}))}</span>${iconButton("x",t("common.cancel"),' data-room-act="cancel-reply"')}`:"";
     if (exchange?.routing?.fallback) status.innerHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
     older.innerHTML=canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"";
-    const follow=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<80,top=scroll.scrollTop;
+    const follow=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<80;
     const thinking=messages.find(m=>m.member_id!==null&&m.status==="running");
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
@@ -246,7 +248,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     });
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
-    thread.innerHTML=entries.length?entries.map(entry=>{
+    preserveRichScroll(scroll, () => { thread.innerHTML=entries.length?entries.map(entry=>{
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
@@ -256,7 +258,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn handoff-row">${handoffLineHTML(entry.task,faceOf(entry.task.member_id,entry.task.member_name),source&&{author:person(source.member_id)?.name??"",text:source.text})}</li>`;
       }
       const m=entry.message;
-      if(m.member_id!==null&&m.status==="running") {
+      if(m.member_id!==null&&m.status==="running"&&!m.text.trim()) {
         if(m!==thinking)return "";
         const member=person(m.member_id);
         return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><span class="ra-face">${member?faceHTML(member,30):""}</span><span>${esc(t("rooms.speaking",{p0:member?.name??t("members.title")}))}</span></li>`;
@@ -266,10 +268,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}"><div class="ans"><div class="message-text">${m.kind==="wrapup"?roomWrapupHTML(part,list.members.map(member=>member.name)):messageHTML(part,"",true)}</div></div>${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
     measureMessagePreviews(thread);
-    scroll.scrollTop=follow?scroll.scrollHeight:top;composer.draw();onRender();
+    composer.draw(); });
+    if(follow)scroll.scrollTop=scroll.scrollHeight;onRender();
   }
   async function refresh():Promise<void>{
     const mine=++generation,id=roomId;if(!opened||!id)return;
@@ -308,7 +311,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}
     else if(act==="cancel-reply"){replyTo=undefined;draw();composer.input.focus();}
-    else if(act==="copy-message"){const m=messages.find(m=>m.id===Number(target.closest<HTMLElement>('[data-room-message]')?.dataset.roomMessage));if(m)void copyText(m.text).catch(error=>toaster.info(describeError(error)));}
+    else if(act==="copy-message"){const m=messages.find(m=>m.id===Number(target.closest<HTMLElement>('[data-room-message]')?.dataset.roomMessage));if(m)void copyText(messagePlainText(m.member_id===null?m.text:plainReplies(replyMessages(m.text)).join("\n\n"),m.member_id!==null)).catch(error=>toaster.info(describeError(error)));}
     else if(act==="copy-code")void copyText(target.closest('.message-code')?.querySelector('code')?.textContent??"").catch(error=>toaster.info(describeError(error)));
     else if(act==="attachment-open")void api.openAttachment(target.dataset.id??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}

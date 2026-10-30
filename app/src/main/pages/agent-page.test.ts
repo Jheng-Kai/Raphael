@@ -119,7 +119,8 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith("a < b");
   expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
-  expect(latest.querySelector('.ra .message-text')!.textContent).toContain("line 34");
+  expect([...latest.querySelectorAll('.ra .message-text')].map(node => node.textContent).join("\n")).toContain("line 34");
+  expect(latest.querySelector('.ans .message-code')).toBeNull();
   document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));
