@@ -122,7 +122,7 @@ async def test_today_limits_pending_questions_after_ordering(home, rig):
 
 async def test_calendar_seam_and_invalid_timezone(home, rig):
     async def events(start, end):
-        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": start + 1000, "member_id": 0, "name": "Raphael", "avatar_url": None, "turn_id": None, "conversation_id": None, "routine_id": None}]
+        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": rig.wall.now + 1000, "member_id": 0, "name": "Raphael", "avatar_url": None, "turn_id": None, "conversation_id": None, "routine_id": None}]
     home.calendar_events = events
     assert (await rig.call("home.overview", {"refresh": True}))["calendar"][0]["title"] == "Planning"
     with pytest.raises(RpcError) as caught:
@@ -149,6 +149,62 @@ async def test_occurrences_stop_at_maximum_runs_and_calendar_is_bounded(home, ri
     await rig.call("routines.create", {"member_id": 0, "title": "Hourly", "prompt": "Report",
                                       "schedule": {"kind": "every", "hours": 1}})
     assert len((await rig.call("home.overview"))["calendar"]) == 24
+
+
+async def test_month_marks_routines_and_events_beyond_the_week_without_changing_records(home, rig):
+    from datetime import datetime
+    zone = rig.service._tz
+    await rig.call("routines.create", {"member_id": 0, "title": "Daily", "prompt": "Report",
+                                      "schedule": {"kind": "daily", "time": "09:00"}})
+    requested = []
+    event_at = int(datetime(2026, 10, 31, 12, tzinfo=zone).timestamp() * 1000)
+
+    async def events(start, end):
+        requested.append((start, end))
+        return [{"kind": "event", "at_ms": event_at, "title": "Month end"}]
+
+    home.calendar_events = events
+    before = rig.conn.total_changes
+    value = await rig.call("home.overview", {"refresh": True})
+    assert len(value["calendar_days"]) == 42
+    assert "2026-10-01" in value["calendar_days"]
+    assert "2026-10-31" in value["calendar_days"]
+    assert all(item["at_ms"] < event_at for item in value["calendar"])
+    assert value["calendar_events"][0]["title"] == "Month end"
+    assert len(value["calendar"]) == 7
+    assert datetime.fromtimestamp(requested[0][0] / 1000, zone).date().isoformat() == "2026-09-28"
+    assert datetime.fromtimestamp(requested[0][1] / 1000, zone).date().isoformat() == "2026-11-09"
+    assert rig.conn.total_changes == before
+
+
+async def test_changing_month_requests_that_grid_and_rejects_invalid_keys(home, rig):
+    from datetime import datetime
+    ranges = []
+    async def events(start, end):
+        ranges.append((start, end))
+        return []
+    home.calendar_events = events
+    await rig.call("home.overview", {"month": "2026-12", "refresh": True})
+    assert datetime.fromtimestamp(ranges[0][0] / 1000, rig.service._tz).date().isoformat() == "2026-11-30"
+    assert datetime.fromtimestamp(ranges[0][1] / 1000, rig.service._tz).date().isoformat() == "2027-01-11"
+    for value in [None, 202612, "2026-13", "2026-2", "bad"]:
+        with pytest.raises(RpcError) as caught:
+            await rig.call("home.overview", {"month": value})
+        assert caught.value.code == INVALID_PARAMS
+
+
+async def test_month_agenda_keeps_three_earliest_items_and_full_daily_counts(home, rig):
+    await rig.call("routines.create", {"member_id": 0, "title": "Hourly", "prompt": "Report",
+                                      "schedule": {"kind": "every", "hours": 1}})
+    value = await rig.call("home.overview")
+    assert len(value["calendar_counts"]) == 42
+    assert set(value["calendar_counts"].values()) == {24}
+    assert len(value["calendar_items"]) == 42 * 3
+    for key in value["calendar_counts"]:
+        from datetime import datetime
+        items = [item for item in value["calendar_items"] if datetime.fromtimestamp(item["at_ms"] / 1000, rig.service._tz).date().isoformat() == key]
+        assert len(items) == 3
+        assert [item["at_ms"] for item in items] == sorted(item["at_ms"] for item in items)
 
 
 async def test_worker_question_keeps_its_conversation_and_connector_failure_is_isolated(home, rig):

@@ -65,7 +65,8 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
 // ---------- status ----------
 
 export const statusGet = (): Promise<Status> => core("status.get");
-export const homeOverview = (refresh = false): Promise<HomeOverview> => core("home.overview", {
+export const homeOverview = (refresh = false, month?: string): Promise<HomeOverview> => core("home.overview", {
+  ...(month ? { month } : {}),
   refresh,
   tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   ui_language: document.documentElement.lang || "zh-TW",
@@ -466,7 +467,7 @@ export const routineRuns = (routineId: number): Promise<{ runs: RoutineRun[]; to
 export const roomsList = (): Promise<{ rooms: Room[] }> => core("rooms.list");
 export const roomsCreate = (room: { name?: string; member_ids: number[]; group_id?: number | null; is_team?: boolean; default_responder?: string; request_id?: string }): Promise<{ room: Room }> => core("rooms.create", room);
 export const roomsDelete = (roomId: number): Promise<{ deleted: boolean }> => core("rooms.delete", { room_id: roomId });
-export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string> }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
+export const roomsUpdate = (roomId: number, patch: { name?: string; member_ids?: number[]; default_responder?: string; roles?: Record<string, string>; pinned?: boolean; hidden?: boolean; read?: boolean; read_through?: number }): Promise<{ room: Room }> => core("rooms.update", { room_id: roomId, ...patch });
 export const roomTranscribe = (data: string, uiLanguage: string): Promise<{ text: string }> => core("rooms.transcribe", { data, ui_language: uiLanguage });
 export const roomMessages = (roomId: number, before?: number): Promise<{ messages: RoomMessage[]; exchange?: import("./types").RoomExchange | null; handoffs?: import("./types").HandoffView[] }> => core("rooms.messages", { room_id: roomId, before });
 export const roomSend = (roomId: number, text: string, requestId: string, uiLanguage: string, attachments: WireAttachment[] = [], replyTo?: number): Promise<{ message_id: number; duplicate: boolean }> => core("rooms.send", { room_id: roomId, text, request_id: requestId, ui_language: uiLanguage, ...(attachments.length ? { attachments } : {}), ...(replyTo !== undefined ? { reply_to: replyTo } : {}) });

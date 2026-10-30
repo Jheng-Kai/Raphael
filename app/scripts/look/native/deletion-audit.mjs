@@ -23,7 +23,7 @@ export async function deletionAudit(context, helpers) {
     throw new Error(`Deletion audit prerequisite: ${label}`);
   };
   const select = async member => {
-    await click(page, '#nav [data-go="agent"]');
+    await click(page, '.mb-chief');
     await perform(page, { action: "member-column", collapsed: false });
     await perform(page, { action: "member", id: member });
     await wait(page, ".composer .cmp-input");
@@ -141,7 +141,7 @@ export async function deletionAudit(context, helpers) {
     const main = (await snapshot()).conversations.find(row => row.member_id === member && row.is_default);
     await inspect(member, main.id, "deleted-source-default");
     await select(member);
-    const named = await newConversation(context);
+    const named = await newConversation(context, member);
     await inspect(member, named, "new-named-control");
   }
   audit.after = await snapshot();

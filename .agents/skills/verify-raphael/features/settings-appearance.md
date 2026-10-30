@@ -1,5 +1,12 @@
 # Settings and appearance
 
+Owner decision 2026-10-30 adds the owner's avatar to the account/profile section.
+Use the existing presets or file picker and drag/zoom crop dialog. A bounded 192px
+WebP is stored in the existing owner_photo setting. Sidebar account footer and all
+owner messages share the same face and owner_name, with a person-icon fallback.
+The footer opens account settings; connected apps live only in Connections.
+
+
 Models in use includes one Quick questions row directly below Raphael's answer.
 The model uses the shared provider/model card and chooser, with the shortcut's
 purpose and price on the left, or above the picker at narrow widths. An empty quick model displays and inherits the answer
@@ -38,9 +45,9 @@ theme borders and visible keyboard focus, with metadata wrapping inside narrow p
 
 ## How to get to it (user POV)
 
-Open the navigation gear, then a settings pane. Appearance has skin previews/theme
-controls; General has owner name/about. The owner navigation menu and owner photo
-were removed deliberately.
+Open the sidebar account footer, then a settings pane. Appearance has skin previews/theme
+controls; General has owner name/about and the shared avatar picker. Use presets or
+upload and crop an image; the resulting face appears on the footer and outgoing messages.
 
 ## Driving it with look
 
@@ -90,7 +97,7 @@ source scrolls fully into view when opening or switching sources (R-UI-01).
 
 Dictionary translates its current template, without touching the removed subtitle.
 Locale listeners are isolated so a broken surface cannot reject the device setting
-or stop settings navigation, sidebar/rail, pages or notices from refreshing. Failures
+or stop settings navigation, sidebar/drawer, pages or notices from refreshing. Failures
 are diagnostic warnings, never owner error toasts. Transient menus and closable shared
 dialogs dismiss on a locale change; reopening builds their current-language snapshot.
 Persistent surfaces use their existing locale listener or redraw on entry.

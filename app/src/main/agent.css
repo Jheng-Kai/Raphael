@@ -17,11 +17,10 @@
    (its dialogs and menus), so no other page changes with them (they are not in :root). The faces
    are drawn by the markup at `--av: <px>` (members.ts, avatar.ts); the rules below set `--av` again
    with !important where a face must follow these sizes, which the inline value would otherwise win. */
-.page-agent, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .toasts {
+.page-agent, .side, .mb-scrim, .menu.mb-avpop, .menu.mb-menu, .menu.mb-toolpop, .toasts {
   --pa-t: clamp(0px, calc(100vw - 960px), 960px);
   --pa-u: calc(var(--pa-t) / 960);
   /* the three columns */
-  --pa-col: clamp(260px, 21vw, 400px);
   --pa-det: clamp(300px, 24vw, 460px);
   /* the member column */
   --pa-pad: var(--sp-2);
@@ -31,7 +30,6 @@
   --pa-gh-btn: calc(24px + 8 * var(--pa-u));
   --pa-row-h: 64px;
   --pa-row-av: 40px;
-  --pa-chief-av: clamp(64px, 5vw, 96px);
   --pa-row-gap: var(--sp-2);
   --pa-row-name: var(--fs-sm);
   --pa-row-role: var(--fs-2xs);

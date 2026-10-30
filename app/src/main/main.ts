@@ -1,19 +1,10 @@
-// The main window: home overview first, conversations, automation, team and dictation, this
-// month's spend and the way to the settings at the bottom, and the page that is chosen. The
-// settings open as a panel over the window. The pages are in pages/; this file holds what they
-// share. On the 拉斐爾 page the sidebar is a rail of its icons alone (52 px), to leave room for the
-// members' column: `data-rail` on <html> says so to the style sheet, and each icon is named in its
-// tooltip then.
-
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { loadGlyphTexture } from "../overlay/emblem";
 import * as api from "./api";
-import { avatarHTML, loadAvatar, onAvatarChange } from "./avatar";
 import { createAutomationsPage } from "./pages/automations";
-import { createTeamPage } from "./pages/team";
 import { createHome } from "./pages/home";
 import { configureRooms } from "./group-chats";
 import { createAgent } from "./pages/agent";
@@ -29,20 +20,21 @@ import { resumeModels } from "./models";
 import { mountOnboarding } from "./onboarding";
 import { Navigation, type Place, samePage } from "./nav-history";
 import { installNavInput } from "./nav-input";
-import { labelNavItem, navAppsHTML, navItemHTML, navHomeHTML, renderAppsEntry } from "./nav-items";
-import type { InventoryView } from "./apps-inventory";
+import { createSidebar } from "./sidebar";
+import { setOwnerProfile } from "./owner-avatar";
+import { loadAvatar } from "./avatar";
 import { installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
 import { followTray } from "./tray-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
-import type { AgentDraft, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId, SettingsPane } from "./types";
-import { spendMini } from "./spend";
+import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId, SettingsPane } from "./types";
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
-import { type IconName, esc, ico, leave, toaster } from "./ui";
+import { leave, toaster } from "./ui";
 import "./styles.css";
+import "./sidebar.css";
 
 /** The glyph ring texture (app/public/brand/glyph-ring.png); if it fails to load the emblem draws a plain ring. */
 const GLYPH_URL = "/brand/glyph-ring.png";
@@ -66,13 +58,6 @@ const DEFAULT_DEVICE: DeviceSettings = {
 /** A page that comes on screen again within this time of the last time is not loaded again. */
 const RESHOW_MS = 1000;
 
-/** Rail destinations; Raphael uses his face rather than a line icon. */
-const NAV: { id: MainPageId; name: string; icon: IconName | "face" }[] = [
-  { id: "home", get name() { return t("nav.overview"); }, icon: "home" },
-  { id: "agent", get name() { return t("nav.agent"); }, icon: "face" },
-  { id: "team", get name() { return t("nav.team"); }, icon: "grid" },
-  { id: "dictation", get name() { return t("nav.dictation"); }, icon: "mic" },
-];
 
 // ---------- the theme ----------
 
@@ -169,83 +154,15 @@ async function start(): Promise<void> {
   const agent = createAgent(ctx);
   const settings = createSettings(ctx);
   configureRooms(ctx);
-  registerNavigationPages({ automations: createAutomationsPage, team: createTeamPage });
-  const pages: Record<MainPageId | "settings", Page> = { home: createHome(ctx), dictation, agent, settings, automations: createNavigationPage("automations", ctx), team: createNavigationPage("team", ctx) };
+  registerNavigationPages({ automations: createAutomationsPage });
+  const pages: Record<MainPageId | "settings", Page> = { home: createHome(ctx), dictation, agent, settings, automations: createNavigationPage("automations", ctx) };
 
   const nav = document.getElementById("nav")!;
   const main = document.getElementById("main")!;
   const guide = document.getElementById("ob")!;
-  const face = (): string => avatarHTML({ size: 18, cls: "nav-face" });
-  const button = (id: PageId, name: string, icon: IconName | "face"): string => navItemHTML(id, name, icon === "face" ? face() : ico(icon));
-  nav.innerHTML =
-    navHomeHTML() +
-    NAV.map((item) => button(item.id, item.name, item.icon)).join("") +
-    `<div class="side-fill"></div>` +
-    `<button type="button" class="usage-box" data-go="settings" data-pane="usage" hidden></button>` +
-    `<div class="side-foot">${navAppsHTML()}${button("settings", t("nav.settings"), "gear")}</div>`;
-  const usageBox = nav.querySelector<HTMLElement>(".usage-box")!;
-  const agentItem = nav.querySelector<HTMLElement>('.nav[data-go="agent"]')!;
-  // 拉斐爾 shows Raphael's face, the person's picture once there is one.
-  onAvatarChange(() => agentItem.querySelector(".av")?.replaceWith(document.createRange().createContextualFragment(face())));
+  createSidebar(nav, agent.sidebar);
   void loadAvatar(api.avatarGet);
-  /** A gold dot on 拉斐爾 while one of his YES/NO questions waits for its answer. */
-  let waitingQuestion: string | null = null;
-  const markQuestion = (id: string | null): void => {
-    waitingQuestion = id;
-    agentItem.classList.toggle("is-asking", id !== null);
-    agentItem.querySelector(".nav-dot")?.remove();
-    if (id !== null) agentItem.insertAdjacentHTML("beforeend", `<span class="nav-dot" role="img" aria-label="${esc(t("agent.asking"))}"></span>`);
-  };
-  void api.agentQuestionOpen().then((open) => markQuestion(open?.id ?? null), () => {});
-  function translateNavigation(): void {
-    nav.setAttribute("aria-label", t("nav.pages"));
-    const homeButton = nav.querySelector<HTMLElement>(".brand")!;
-    homeButton.setAttribute("aria-label", t("nav.home"));
-    homeButton.title = t("nav.home");
-    markQuestion(waitingQuestion);
-    for (const item of NAV) labelNavItem(nav, item.id, item.name);
-    labelNavItem(nav, "settings", t("nav.settings"));
-    renderAppsEntry(nav, appsInventory);
-    nameRailItems();
-  }
-
-  /** The owner's apps as the core counts them, for the sidebar's 「連結應用程式」: the one number every screen shows. */
-  let appsInventory: InventoryView = "loading";
-  let appsReads = 0;
-  async function refreshApps(): Promise<void> {
-    const mine = ++appsReads;
-    let next: InventoryView;
-    try {
-      next = await api.integrationsInventory();
-    } catch {
-      next = "failed";
-    }
-    if (mine !== appsReads) return;
-    appsInventory = next;
-    renderAppsEntry(nav, appsInventory);
-    nameRailItems();
-  }
-
-  /** Whether the sidebar is the rail of icons: while the 拉斐爾 page is the one on screen. */
-  let rail = false;
-  /** In the rail each icon says its page in its tooltip; in the whole sidebar the name is beside it. */
-  function nameRailItems(): void {
-    nav.querySelectorAll<HTMLElement>(".nav").forEach((item) => {
-      const name = item.dataset.navTitle ?? item.querySelector(".nav-t")?.textContent ?? "";
-      if (rail && name) item.title = name;
-      else item.removeAttribute("title");
-    });
-  }
-  function setRail(on: boolean): void {
-    rail = on;
-    document.documentElement.dataset.rail = String(on);
-    nameRailItems();
-  }
-  translateNavigation();
-  onLocaleChange(() => {
-    translateNavigation();
-    void refreshUsage();
-  });
+  void agent.loadSidebar();
   nav.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("[data-go]");
     if (target) go(target.dataset.go as PageId, target.dataset.pane as SettingsPane | undefined);
@@ -253,15 +170,13 @@ async function start(): Promise<void> {
   async function refreshOwner(): Promise<void> {
     try {
       const { settings: value } = await api.settingsGet();
+      setOwnerProfile(value);
       skin = value.skin ?? "default";
       applyTheme();
     } catch { /* The window remains usable while the core restarts. */ }
   }
   ctx.onEvent(event => { if (event.type === "SettingsChanged") void refreshOwner(); });
   void refreshOwner();
-  // The count of connected apps moves with them: a sign-in, a switch, an uninstall, a call that failed.
-  ctx.onEvent(event => { if (event.type === "ConnectionsChanged") void refreshApps(); });
-  void refreshApps();
   for (const page of Object.values(pages)) if (page !== settings) main.append(page.el);
   // The panel goes before the window controls, which come last in the document.
   document.getElementById("window-chrome")!.before(settings.el);
@@ -323,10 +238,10 @@ async function start(): Promise<void> {
    * Goes to a page, or opens the settings panel over the one on screen (at the tab `arg` names, if
    * any). The 拉斐爾 page is handed a draft for its composer the same way.
    */
-  function go(id: PageId, arg?: SettingsPane | AgentDraft): void {
+  function go(id: PageId, arg?: PageArgument): void {
     navigation.visit(() => {
       if (id === "settings") openSettings(arg?.startsWith("draft:") ? undefined : (arg as SettingsPane | undefined));
-      else showPage(id, arg?.startsWith("draft:") ? arg : undefined);
+      else showPage(id, id === "automations" || arg?.startsWith("draft:") ? arg : undefined);
     });
   }
 
@@ -334,13 +249,12 @@ async function start(): Promise<void> {
    * Shows a page in place of the one on screen. A page that comes on screen fades in and rises a
    * little (styles.css, on its becoming visible); the same page shown again stands still.
    */
-  function showPage(target: Exclude<PageId, "settings">, arg?: SettingsPane | AgentDraft): void {
+  function showPage(target: Exclude<PageId, "settings">, arg?: PageArgument): void {
     const { page: id, tab } = resolvePage(target);
     if (settingsOpen) closeSettings(false);
     if (current && current !== id) pages[current].hide();
     if (tab) dictation.setTab(tab, false);
     current = id;
-    setRail(id === "agent");
     for (const page of Object.values(pages)) if (page !== settings) page.el.hidden = page.id !== id;
     // The calendar opens from Home and has no rail entry of its own.
     const railId = id === "automations" ? "home" : id;
@@ -351,7 +265,6 @@ async function start(): Promise<void> {
     shownAt = performance.now();
     void pages[id].show(arg);
     tellAgentPage();
-    void refreshUsage();
   }
 
   /** Stops the settings' way out (`closeSettings`) when they are opened again before it is over. */
@@ -387,20 +300,6 @@ async function start(): Promise<void> {
     if (restoreFocus) opener?.focus();
     opener = null;
     tellAgentPage();
-    void refreshUsage();
-    void refreshApps();
-  }
-
-  /** This month's spend in the sidebar; hidden when the core does not answer. */
-  async function refreshUsage(): Promise<void> {
-    try {
-      const { spend } = await api.statusGet();
-      usageBox.innerHTML = t("main.005", { p0: spendMini(spend.month_usd, spend.limit_usd) });
-      usageBox.setAttribute("aria-label", t("main.006", { p0: usageBox.querySelector(".usage-num")?.textContent ?? "" }));
-      usageBox.hidden = false;
-    } catch {
-      usageBox.hidden = true;
-    }
   }
 
   // Back from the tray: what a page shows may be old. (The settings keep what is being typed.)
@@ -408,18 +307,12 @@ async function start(): Promise<void> {
     if (!current || settingsOpen || performance.now() - shownAt < RESHOW_MS) return;
     shownAt = performance.now();
     void pages[current].show();
-    void refreshUsage();
-    void refreshApps();
   };
   window.addEventListener("focus", comeBack);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) comeBack();
   });
 
-  ctx.onEvent((event) => {
-    if (event.type === "AgentQuestion") markQuestion(event.id);
-    else if (event.type === "AgentQuestionClosed" && event.id === waitingQuestion) markQuestion(null);
-  });
 
   // The tray's menu asks for a page. Rust sends this before it shows the window.
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));

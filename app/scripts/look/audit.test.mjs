@@ -48,23 +48,6 @@ describe("rendered look checks", () => {
       expect(() => checkRendered('failure-owner-copy')).toThrow('sidebar preview are visible');
     } finally { vi.unstubAllGlobals(); win.happyDOM.abort(); }
   });
-  it("allows movable canvas wrappers to extend while retaining card and document overflow checks", () => {
-    const win = new Window();
-    win.document.body.innerHTML = '<div class="team-board-scroll" style="overflow:hidden"><div class="team-board"><div class="team-groups"><section class="team-group" style="transform:translate(36px,64px)"><span id="label">Long member name</span></section></div></div></div><div id="outside">Other content</div>';
-    for (const element of win.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left:10,top:10,right:510,bottom:210,width:500,height:200});
-    for (const element of win.document.querySelectorAll('.team-board,.team-groups,#label,#outside')) {
-      Object.defineProperty(element,'clientWidth',{value:100,configurable:true});
-      Object.defineProperty(element,'scrollWidth',{value:140,configurable:true});
-    }
-    Object.defineProperty(win.document.documentElement,'scrollWidth',{value:1200,configurable:true});
-    try {
-      const result=auditDocument(win.document,{width:1120,height:900});
-      expect(result.horizontalOverflow.elements.map(element=>element.id)).toEqual(['label','outside']);
-      expect(result.horizontalOverflow.document).toBe(true);
-      win.document.querySelector('.team-board-scroll').style.overflow='visible';
-      expect(auditDocument(win.document,{width:1120,height:900}).horizontalOverflow.elements).toHaveLength(4);
-    } finally { win.happyDOM.abort(); }
-  });
   it("checks every dialog footer button and accepts hits on its children", () => {
     const win = new Window();
     win.document.body.innerHTML = '<div class="cs-scrim"><div class="cs-dialog"><div class="action-row"><button><span>Retry</span></button><button>Done</button></div></div></div><div class="toast">Saved</div>';
@@ -148,59 +131,6 @@ describe("rendered look checks", () => {
       expect(() => checkRendered('primary-calendar')).toThrow(/exchange/);
     } finally { vi.unstubAllGlobals(); }
   });
-  it("rejects ragged team column edges at full screen", () => {
-    const window = new Window();
-    window.document.body.innerHTML = '<div class="team-board-scroll"><div class="team-group"></div><div class="team-group"></div></div>';
-    const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
-    window.document.querySelector('.team-board-scroll').getBoundingClientRect = () => rect(232, 100, 1688, 894);
-    const groups = window.document.querySelectorAll('.team-group');
-    groups[0].getBoundingClientRect = () => rect(780, 273, 278, 334);
-    groups[1].getBoundingClientRect = () => rect(1082, 273, 278, 198);
-    vi.stubGlobal('document', window.document); vi.stubGlobal('innerWidth', 1920);
-    try {
-      expect(() => checkRendered('team-board-space')).toThrow(/aligned column/);
-      groups[0].getBoundingClientRect = () => rect(300, 340, 742, 400);
-      groups[1].getBoundingClientRect = () => rect(300, 780, 742, 400);
-      expect(checkRendered('team-board-space').widthShare).toBeCloseTo(742 / 1688);
-      groups[0].getBoundingClientRect = () => rect(300, 340, 742, 120);
-      groups[1].getBoundingClientRect = () => rect(300, 480, 742, 120);
-      expect(checkRendered('team-board-space').widthShare).toBeCloseTo(742 / 1688);
-      vi.stubGlobal('innerWidth', 1120);
-      expect(checkRendered('team-board-space')).toEqual({ check: 'team-board-space', wide: false });
-    } finally { vi.unstubAllGlobals(); }
-  });
-  it("rejects a stretched team panel and raw CLI labels while accepting content-sized panels", () => {
-    const window = new Window();
-    window.document.body.innerHTML = '<section class="team-group" style="padding:12px"><header style="margin-bottom:12px"></header><div class="team-group-members"><article class="team-member"><span class="team-model">Haiku / Claude Code</span></article></div></section>';
-    const group = window.document.querySelector('.team-group'), header = group.querySelector('header'), members = group.querySelector('.team-group-members');
-    Object.defineProperty(header, 'offsetHeight', { value: 30 }); Object.defineProperty(members, 'offsetHeight', { value: 140 });
-    let height = 206; Object.defineProperty(group, 'offsetHeight', { get: () => height });
-    vi.stubGlobal('document', window.document); vi.stubGlobal('getComputedStyle', window.getComputedStyle.bind(window));
-    try {
-      expect(checkRendered('team-content-size').panels[0].height).toBe(206);
-      height = 900; expect(() => checkRendered('team-content-size')).toThrow(/own content/);
-      height = 206; members.querySelector('span').textContent = 'cli:claude:haiku'; expect(() => checkRendered('team-content-size')).toThrow(/raw CLI/);
-      members.querySelector('span').textContent = 'GPT-6.1 Sol?effort=high'; expect(() => checkRendered('team-content-size')).toThrow(/raw CLI/);
-    } finally { vi.unstubAllGlobals(); }
-  });
-  it("rejects a tall single-column team group and more than three columns", () => {
-    const window = new Window();
-    window.document.body.innerHTML = '<section class="team-group" style="--team-card-width:220px"><div class="team-group-members" style="display:grid;column-gap:12px"></div></section>';
-    const members = window.document.querySelector('.team-group-members');
-    members.innerHTML = '<article></article>'.repeat(8);
-    let width = 684, columns = 3;
-    Object.defineProperty(members, 'clientWidth', { get: () => width });
-    [...members.children].forEach((card, index) => Object.defineProperty(card, 'offsetTop', { get: () => Math.floor(index / columns) * 120 }));
-    vi.stubGlobal('document', window.document); vi.stubGlobal('getComputedStyle', window.getComputedStyle.bind(window));
-    const draw = () => { members.style.gridTemplateColumns = Array(columns).fill('220px').join(' '); return checkRendered('team-member-columns'); };
-    try {
-      expect(draw().panels[0].columns).toBe(3);
-      columns = 1; expect(draw).toThrow(/all available columns/);
-      columns = 4; expect(draw).toThrow(/at most three/);
-      columns = 2; width = 452; expect(draw().panels[0].columns).toBe(2);
-      columns = 1; width = 220; expect(draw().panels[0].columns).toBe(1);
-    } finally { vi.unstubAllGlobals(); }
-  });
   it("rejects mismatched adjacent import heights and schedule widths (R-UI-17)", () => {
     const { window, audit } = productAudit('<div class="mp-add"><input><button class="btn" style="border:1px solid gray">Import</button></div><label class="au-field"><button class="sel">End</button><input class="mb-fin"></label>');
     const input = window.document.querySelector('.mp-add input');
@@ -228,26 +158,6 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-19', 'R-UI-19']);
     button.style.background = 'transparent';
     glyph.getBoundingClientRect = () => ({ left: 52, top: 17, right: 68, bottom: 33, width: 16, height: 16 });
-    expect(audit().productRules).toEqual([]);
-  });
-  it("measures glyphs in a zoomed board at their unzoomed size (R-UI-19)", () => {
-    const { window, audit } = productAudit('<div class="team-board" style="zoom:1.1"><button class="btn icon" style="border:0;background:transparent"><svg class="i"></svg></button></div>');
-    const glyph = window.document.querySelector('svg');
-    glyph.getBoundingClientRect = () => ({ left: 51.2, top: 16.2, right: 68.8, bottom: 33.8, width: 17.6, height: 17.6 });
-    expect(audit().productRules).toEqual([]);
-    glyph.getBoundingClientRect = () => ({ left: 52.3, top: 17.3, right: 67.7, bottom: 32.7, width: 15.4, height: 15.4 });
-    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-19']);
-  });
-  it.each([0.5, 0.8, 1.1, 1.5])("measures transformed canvas glyphs at scale %s without allowing wrong sizes (R-UI-19)", scale => {
-    const { window, audit } = productAudit(`<div class="team-board" style="transform:matrix(${scale},0,0,${scale},60,-40)"><button class="btn icon" style="border:0;background:transparent"><svg class="i"></svg></button></div>`);
-    const glyph = window.document.querySelector('svg');
-    const rect = size => ({ left: 60 - size / 2, top: 25 - size / 2, right: 60 + size / 2, bottom: 25 + size / 2, width: size, height: size });
-    glyph.getBoundingClientRect = () => rect(16 * scale);
-    expect(audit().productRules).toEqual([]);
-    glyph.getBoundingClientRect = () => rect(14 * scale);
-    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-19']);
-    window.document.querySelector('.team-board').style.transform = `translate(60px, -40px) scale(${scale})`;
-    glyph.getBoundingClientRect = () => rect(16 * scale);
     expect(audit().productRules).toEqual([]);
   });
   it("rejects low-contrast selected dates, including hover overrides (R-UI-22)", () => {
@@ -316,7 +226,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
   });
   it("distinguishes date choices and navigation from ordinary text actions", () => {
-    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><button class="btn conversation-new" style="border:0">New conversation</button>');
+    const { audit } = productAudit('<div class="au-month-grid"><button class="btn" style="border:0">25</button></div><button class="btn mb-panel-back" style="border:0">Members</button><button class="btn mc-source" style="border:0">Provider</button><button class="btn cs-main" style="border:0">Notion service details</button><div class="ho-month"><button class="btn ho-day" style="border:0">30</button></div><button class="btn conversation-new" style="border:0">New conversation</button>');
     expect(audit().productRules.map(item => item.text)).toEqual(['New conversation']);
   });
   it.each(scenes.filter(scene => scene.name.endsWith("composer-learn")))("keeps $name correction data distinct from untranslated UI", scene => {

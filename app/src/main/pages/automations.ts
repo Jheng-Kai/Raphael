@@ -21,6 +21,7 @@ export function createAutomationsPage(app: AppContext): Page {
   let calendarEvents: HomeItem[] = [];
   let runCounts = new Map<number, number>();
   let logs = new Map<number, RoutineRun[]>(), period = "week", date = new Date(), mini = new Date();
+  let focusedHomeItem = "";
   let visible = false, awake = false, loads = 0, pending = true;
   let resetPosition = true;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -32,10 +33,14 @@ export function createAutomationsPage(app: AppContext): Page {
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const [people, plans, home] = await Promise.all([api.membersList(getLocale()), api.routinesList(), api.homeOverview()]);
+      const [people, plans, home] = await Promise.all([api.membersList(getLocale()), api.routinesList(), api.homeOverview(false, dateKey(date).slice(0, 7))]);
       const histories = await Promise.all(plans.routines.map(async r => [r.id, await api.routineRuns(r.id)] as const));
       if (mine !== loads || !visible) return;
-      members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines; calendarEvents = home.calendar.filter(item => item.kind === "event"); logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
+      members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines; calendarEvents = (home.calendar_events ?? home.calendar).filter(item => item.kind === "event"); logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
+      if (focusedHomeItem) {
+        const target = [...el.querySelectorAll<HTMLElement>('[data-calendar-item]')].find(item => item.dataset.calendarItem === focusedHomeItem);
+        target?.scrollIntoView?.({ block: "center" }); target?.focus({ preventScroll: true });
+      }
     } catch (error) { if (mine === loads && visible) { pending = false; draw(); toaster.info(describeError(error)); } }
   }
   function rangeLabel(start: Date, end: Date): string {
@@ -65,7 +70,7 @@ export function createAutomationsPage(app: AppContext): Page {
     const today = dateKey(now);
     const zone = Intl.DateTimeFormat(getLocale(), { timeZoneName: "shortOffset" }).formatToParts(now).find(p => p.type === "timeZoneName")?.value ?? "";
     return `<div class="au-calendar-scroll"><div class="au-grid" style="--au-days:${n}"><div class="au-grid-head"><span>${esc(zone)}</span>${days.map(d => `<b class="${dateKey(d) === today ? "is-today" : ""}">${esc(dayName(d.getDay()))}<strong>${d.getDate()}</strong></b>`).join("")}` +
-      `<span class="au-all-day-label">${esc(t("auto.allDay"))}</span>${days.map(day => `<div class="au-all-day">${calendarEvents.filter(event => event.all_day && dateKey(new Date(event.at_ms)) === dateKey(day)).map(event => `<span class="au-all-day-event" title="${esc(event.title)}">${esc(event.title)}</span>`).join("")}</div>`).join("")}</div><div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${String(h).padStart(2, "0")}:00</div>`).join("")}</div>` +
+      `<span class="au-all-day-label">${esc(t("auto.allDay"))}</span>${days.map(day => `<div class="au-all-day">${calendarEvents.filter(event => event.all_day && dateKey(new Date(event.at_ms)) === dateKey(day)).map(event => `<span class="au-all-day-event${event.id === focusedHomeItem ? " is-home-focus" : ""}" tabindex="-1" data-calendar-item="${esc(event.id)}" title="${esc(event.title)}">${esc(event.title)}</span>`).join("")}</div>`).join("")}</div><div class="au-hours">${Array.from({ length: 24 }, (_, h) => `<div>${String(h).padStart(2, "0")}:00</div>`).join("")}</div>` +
       days.map(d => {
         const key = dateKey(d), events = all.filter(o => dateKey(new Date(o.at)) === key);
         return `<div class="au-day-col" data-day="${key}">${Array.from({ length: 24 }, (_, h) => `<div class="au-slot" data-slot="${key}" data-hour="${h}"></div>`).join("")}` +
@@ -74,10 +79,10 @@ export function createAutomationsPage(app: AppContext): Page {
             const overlaps = events.filter(e => Math.abs(e.at - o.at) < 1800000).length, lane = events.slice(0, index).filter(e => Math.abs(e.at - o.at) < 1800000).length;
             const clock = formatClock(o.at), label = [m?.name, o.routine.title, clock, o.run ? runStatus(o.run.status) : ""].filter(Boolean).join(" · ");
             return btn(`<span class="au-occurrence-copy"><time datetime="${at.toISOString()}">${clock}</time><b>${esc(o.routine.title)}</b></span>${m ? faceHTML(m, 20) : ""}${o.run ? `<i class="au-history-mark" data-status="${o.run.status}"></i>` : ""}`,
-              `au-occurrence${o.run ? " is-past" : ""}`, ` ${o.run ? `data-run="${o.run.id}" data-status="${o.run.status}"` : ""} aria-label="${esc(label)}" title="${esc(label)}" data-au="edit" data-id="${o.routine.id}" data-at-hour="${at.getHours()}" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour));left:calc(${lane * 100 / overlaps}% + 2px);width:calc(${100 / overlaps}% - 4px)"`);
+              `au-occurrence${o.run ? " is-past" : ""}`, ` ${o.run ? `data-run="${o.run.id}" data-status="${o.run.status}"` : ""} aria-label="${esc(label)}" title="${esc(label)}" data-calendar-item="routine:${o.routine.id}:${o.at}"${focusedHomeItem === `routine:${o.routine.id}:${o.at}` ? ' aria-current="true"' : ""} data-au="edit" data-id="${o.routine.id}" data-at-hour="${at.getHours()}" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour));left:calc(${lane * 100 / overlaps}% + 2px);width:calc(${100 / overlaps}% - 4px)"`);
           }).join("") + calendarEvents.filter(event => !event.all_day && dateKey(new Date(event.at_ms)) === key).map(event => {
             const at = new Date(event.at_ms);
-            return `<div class="au-calendar-event" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour))" title="${esc(event.title)}"><time>${esc(formatClock(event.at_ms))}</time><b>${esc(event.title)}</b></div>`;
+            return `<div class="au-calendar-event${event.id === focusedHomeItem ? " is-home-focus" : ""}" tabindex="-1" data-calendar-item="${esc(event.id)}" style="top:calc(${at.getHours() + at.getMinutes() / 60} * var(--au-hour))" title="${esc(event.title)}"><time>${esc(formatClock(event.at_ms))}</time><b>${esc(event.title)}</b></div>`;
           }).join("") + (key === today ? `<i class="au-now" style="top:calc(${now.getHours() + now.getMinutes() / 60} * var(--au-hour))"></i>` : "") + `</div>`;
       }).join("") + `</div></div>`;
   }
@@ -143,7 +148,13 @@ export function createAutomationsPage(app: AppContext): Page {
   onLocaleChange(() => { if (visible) { draw(); void load(); } });
   return {
     id: "automations", el,
-    show() {
+    show(arg) {
+      const focus = arg?.match(/^calendar:(\d{4}-\d{2}-\d{2}):(.*)$/);
+      focusedHomeItem = focus ? decodeURIComponent(focus[2]) : "";
+      if (focus) arg = focus[1] as import("../types").CalendarDate;
+      if (arg && /^\d{4}-\d{2}-\d{2}$/.test(arg) && !Number.isNaN(localDay(arg).getTime())) {
+        date = localDay(arg); mini = date; period = "day"; resetPosition = true;
+      }
       visible = true;
       draw(); void load();
       void api.keepAwakeGet().then(v => { awake = v; if (visible) draw(); }).catch(() => {});

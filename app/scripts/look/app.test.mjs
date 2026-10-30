@@ -19,7 +19,7 @@ describe("real app entry with the shared look fixture", () => {
   });
   it("boots and navigates all primary destinations and settings without unmocked calls", async () => {
     expect(document.querySelector('#nav .nav')?.dataset.go).toBe("home");
-    document.querySelector('#nav .nav[data-go="agent"]').click();
+    document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
     expect(document.body.textContent).toContain("這週的研究與安排");
     // A reply wait must not select the earlier, collapsed work messages.
@@ -28,9 +28,9 @@ describe("real app entry with the shared look fixture", () => {
       expect(reply?.querySelector(".message-text")?.textContent).toContain("這週的研究有三個重點");
       expect(reply?.closest("[hidden]")).toBeNull();
     });
-    for (const destination of ["home", "team", "dictation", "agent"]) {
-      document.querySelector(`#nav .nav[data-go="${destination}"]`).click();
-      await vi.waitFor(() => expect(document.querySelector(`#nav .nav[data-go="${destination}"]`).getAttribute("aria-current"), destination).toBe("page"));
+    for (const destination of ["home", "dictation", "agent"]) {
+      document.querySelector(destination === "agent" ? ".mb-chief" : `#nav [data-go="${destination}"]`).click();
+      await vi.waitFor(() => expect(document.querySelector(destination === "agent" ? ".page.page-agent:not([hidden])" : `#nav [data-go="${destination}"][aria-current="page"]`), destination).not.toBeNull());
     }
     document.querySelector('#nav .nav[data-go="home"]').click();
     await vi.waitFor(() => expect(document.querySelector('.ho-calendar [data-home-go="calendar"]')).not.toBeNull());

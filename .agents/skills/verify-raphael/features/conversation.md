@@ -61,7 +61,7 @@ npm run look -- quick-conversation-list quick-conversation quick-question-result
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
 npm run look -- work composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
 npm run look -- member-composer-empty member-text member-composer-hover conversation-notice --theme both --width 1120,720,1920x1080
-npm run look -- composer-learn member-composer-learn room-composer-learn team-composer-learn --theme both --width 1120,720,1920x1080
+npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- plain-bot-chat centred-system-events --theme both --width 1120,720,1920x1080
 ```
 

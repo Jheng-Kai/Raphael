@@ -6,12 +6,12 @@ import { applySkin, createOwnerControls, ownerProfileHTML, SKINS, skinsHTML } fr
 import type { BrainSettings } from "./types";
 
 afterEach(() => document.body.replaceChildren());
-it("keeps name and about without a rail portrait control", () => {
+it("keeps name and about beside the shared owner avatar picker", () => {
   const settings = { owner_name: "<Jack>", owner_about: "Brief & kind" } as BrainSettings;
   expect(ownerProfileHTML(settings)).toContain("&lt;Jack&gt;");
   expect(ownerProfileHTML(settings)).toContain("Brief &amp; kind");
   expect(ownerProfileHTML(settings)).not.toContain('type="file"');
-  expect(ownerProfileHTML(settings)).not.toContain("photo");
+  expect(ownerProfileHTML(settings)).toContain("data-owner-photo");
 });
 it("applies explicit and system appearances to every skin", () => {
   for (const skin of SKINS) {

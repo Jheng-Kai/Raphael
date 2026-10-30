@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 43
+LATEST = 44
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -470,6 +470,28 @@ SCHEMA_V39 = {**SCHEMA_V38, "members": [*SCHEMA_V38["members"], "primary_contact
 SCHEMA_V42 = {**SCHEMA_V39, "connect_cards": [*SCHEMA_V39["connect_cards"],
     "app_name TEXT NOT NULL DEFAULT ''", "provider TEXT NOT NULL DEFAULT 'google'"]}
 SCHEMA_V43 = {**SCHEMA_V42, "connect_cards": [*SCHEMA_V42["connect_cards"], "app_logo TEXT NOT NULL DEFAULT ''"]}
+SCHEMA_V44 = {**SCHEMA_V43, "rooms": [*SCHEMA_V43["rooms"], "read_message_id INTEGER NOT NULL DEFAULT 0", "pinned INTEGER NOT NULL DEFAULT 0", "hidden INTEGER NOT NULL DEFAULT 0"]}
+
+
+def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):
+    path = tmp_path / "v43.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 44):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO rooms (name,created) VALUES ('Planning',1)")
+    raw.execute("INSERT INTO room_messages (room_id,text,created) VALUES (1,'Keep this message',1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert tuple(migrated.execute("SELECT name,read_message_id,pinned,hidden FROM rooms").fetchone()) == ("Planning", 0, 0, 0)
+    assert migrated.execute("SELECT text FROM room_messages").fetchone()[0] == "Keep this message"
+    with migrated:
+        migrated.execute("UPDATE rooms SET read_message_id=1,pinned=1,hidden=1")
+    migrated.close()
+    reopened = db.connect(path)
+    assert tuple(reopened.execute("SELECT read_message_id,pinned,hidden FROM rooms").fetchone()) == (1, 1, 1)
+    reopened.close()
 
 
 def test_v43_preserves_catalog_card_metadata_and_defaults_older_logos(tmp_path):
@@ -568,7 +590,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V43) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V44) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -582,7 +604,7 @@ def test_connect_creates_the_latest_schema(conn):
         "worker_questions_task",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V43.items():
+    for table, columns in SCHEMA_V44.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

@@ -21,6 +21,10 @@ export interface HomeOverview {
   today: HomeItem[];
   reports: HomeItem[];
   calendar: HomeItem[];
+  calendar_days?: string[];
+  calendar_events?: HomeItem[];
+  calendar_items?: HomeItem[];
+  calendar_counts?: Record<string, number>;
   counts: { today: number; reports: number; calendar: number };
   usage: { month_usd: number; limit_usd: number; daily: number[]; allowances: CliAllowances };
   dictation: { words: number; time_saved_seconds: number; speed_wpm: number | null; audio_seconds: number; daily: number[] };

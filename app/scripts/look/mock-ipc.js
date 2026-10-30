@@ -19,12 +19,17 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.ownerVoice) data.conversations.push(structuredClone(data.ownerRound.memberConversation));
   if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.ownerRound.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
-  if (variant.teamBoardRoster) {
-    const roster = data.teamBoard;
+  if (variant.sidebarMany) {
+    const roster = data.sidebarRoster;
     data.members = roster.members.map((member, position) => ({ ...structuredClone(data.members.find(item => item.id === member.id) ?? data.members[1]), ...member, position }));
     data.groups = structuredClone(roster.groups);
     for (const cli of data.clis) if (roster.models[cli.id]) cli.models.push(structuredClone(roster.models[cli.id]));
     data.settings.agent_model = "cli:codex:gpt-6.1-sol?effort=high";
+  }
+  if (variant.sidebarUnread) {
+    data.members[1].unread = true;
+    data.members[1].last_at = data.now;
+    data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
@@ -183,7 +188,24 @@ export function installMock(fixture, config = {}, target = window) {
     const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：核對來源、日期與重點，再保留下一次編輯需要的完整脈絡。\n\n完成後依主題整理，確認所有素材都有可追溯的來源。`).join("\n\n");
     for (const message of data.messages.slice(0, 2)) message.text = text;
   }
+  const daily = structuredClone(data.home.calendar.find(item => item.kind === "routine" && item.routine_id === 1));
+  const routineTime = new Date(daily.at_ms); routineTime.setHours(9, 0, 0, 0);
+  daily.at_ms = routineTime.getTime(); daily.id = `routine:1:${daily.at_ms}`;
+  const eventAt = (day, hour) => new Date(2026, 9, day, hour).getTime();
+  data.home.calendar_events = [
+    ...data.home.calendar.filter(item => item.kind === "event"),
+    ...[["month-start",2,10,"月初規劃"],["month-end",30,15,"月末回顧"],["busy-1",24,10,"設計審查"],["busy-2",24,11,"衝刺規劃"],["busy-3",24,16,"研究同步"]].map(([id,day,hour,title]) => ({...daily,id:`event:${id}`,kind:"event",routine_id:null,at_ms:eventAt(day,hour),title})),
+  ];
+  const monthly = [daily, ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
+  data.home.calendar_counts = {};
+  data.home.calendar_items = monthly.filter(item => {
+    const key = new Date(item.at_ms).toISOString().slice(0,10);
+    data.home.calendar_counts[key] = (data.home.calendar_counts[key] ?? 0) + 1;
+    return data.home.calendar_counts[key] <= 3;
+  });
+  data.home.calendar_days = Object.keys(data.home.calendar_counts);
   if (variant.homeSparse || variant.homeEmpty) {
+    data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
     data.home.counts = { today: 0, reports: 0, calendar: 0 };
     data.home.usage = { month_usd: 0, limit_usd: 20, daily: Array(14).fill(0), allowances: { brains: [] } };
@@ -315,7 +337,14 @@ export function installMock(fixture, config = {}, target = window) {
       case "settings.get": return { settings: data.settings };
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
-      case "home.overview": return { ...data.home, report: data.status };
+      case "home.overview": {
+        if (!p.month) return {...data.home,report:data.status};
+        const shift = at => { const old = new Date(at), [year,month] = p.month.split('-').map(Number); return new Date(year,month-1,Math.min(old.getDate(),new Date(year,month,0).getDate()),old.getHours(),old.getMinutes()).getTime(); };
+        const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,id:item.kind==='routine'?`routine:${item.routine_id}:${at_ms}`:item.id}; };
+        const calendar_items = data.home.calendar_items.map(project), calendar_events = data.home.calendar_events.map(project);
+        const calendar_counts = Object.fromEntries(Object.entries(data.home.calendar_counts).map(([key,count])=>[new Date(shift(new Date(`${key}T12:00:00`).getTime())).toISOString().slice(0,10),count]));
+        return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts),report:data.status};
+      }
       case "status.check_openrouter": data.status.openrouter.state = "ok"; return data.status.openrouter;
       case "secrets.status": return { has_key: !variant.problem };
       case "stats.summary": return data.stats;
@@ -431,10 +460,21 @@ export function installMock(fixture, config = {}, target = window) {
       case "routines.create": { const routine = { ...p, id: nextId(data.routines), enabled: true, last_run: null, next_run: data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": { const routine = update(data.routines, p.id, p); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.delete": data.routines = data.routines.filter(item => item.id !== p.id); notify("RoutinesChanged", { member_id: 0 }); return { deleted: true };
-      case "rooms.list": return { rooms: data.rooms };
+      case "rooms.list": return { rooms: data.rooms.map(room => {
+        const messages = data.messages.filter(message => message.room_id === room.id && (message.member_id == null || message.status === "done" && message.text.trim() && !/^[(（]?\s*pass\s*[)）]?[.。]?$/i.test(message.text.trim()))).sort((a, b) => b.id - a.id);
+        const latest = messages[0];
+        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null,
+          unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
+      }) };
       case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
-      case "rooms.create": { const room = { ...p, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
-      case "rooms.update": return { room: update(data.rooms, p.room_id, p) };
+      case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
+      case "rooms.update": {
+        const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;
+        update(data.rooms, p.room_id, p);
+        if (p.read) room.read_message_id = Math.max(previous, p.read_through ?? Math.max(0, ...data.messages.filter(message => message.room_id === room.id).map(message => message.id)));
+        if ((p.read && room.read_message_id > previous) || p.pinned !== undefined || p.hidden !== undefined || p.name !== undefined) notify("RoomsChanged", { room_id:room.id });
+        return { room };
+      }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
       case "rooms.send": { const message = { id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message" }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }

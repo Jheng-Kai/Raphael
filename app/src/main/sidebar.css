@@ -1,0 +1,60 @@
+/* One fixed conversation list, shared by Home, chat, calendar and dictation. */
+.side { overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
+.sidebar-brand { display: flex; align-items: center; flex: none; }
+.sidebar-brand .brand { margin: 0; }
+.btn.sidebar-close, .btn.sidebar-toggle { display: none; }
+.sidebar-conversations { display: flex; flex: 1; min-height: 0; }
+.side .mb-col { flex: 1; width: 100%; padding-top: 0; }
+.side .mb-top { padding: var(--sp-2) 0; gap: var(--sp-2); }
+.side .mb-find { height: 36px; }
+.side .mb-tool { width: 32px; min-height: 32px; }
+.side .mb-scroll { padding: 0 0 var(--sp-3); }
+.side .mb-list { gap: var(--sp-1); }
+.side .mb-row-t i { display: none; }
+.side .mb-chief .mb-row-t i { display: inline; }
+.side .mb-row-t b:not(:only-child) { max-width: none; }
+.side .mb-row-t:has(time) b { max-width: 140px; }
+.side .mb-row-p { min-height: 19px; }
+.side .mb-row { min-height: 66px; }
+.side .mb-row > .av, .side .mb-row > .room-avatar { --av: 40px !important; }
+.side .mb-item:hover .nav.mb-chief { padding-right: calc(var(--pa-more) + 8px); }
+.side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
+.side .mb-ghead { cursor: grab; }
+.side-foot { flex: none; margin: 0; }
+.sidebar-account { gap: var(--sp-3); }
+.sidebar-account-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-face { display: inline-flex; flex: none; width: var(--owner-face); height: var(--owner-face); align-items: center; justify-content: center; overflow: hidden; border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); }
+.owner-face img { width: 100%; height: 100%; object-fit: cover; }
+.me { gap: var(--sp-2); }
+.me > .owner-face { order: 2; margin-top: var(--sp-1); }
+.owner-photo-row { display: flex; align-items: center; gap: var(--sp-4); padding-block: var(--sp-3); }
+.owner-photo-row .owner-photo-label { flex: 1; }
+.owner-photo-row .btn.owner-photo { width: 64px; height: 64px; border: 0; padding: 0; border-radius: var(--r-pill); }
+.room-avatar { position: relative; display: inline-block; flex: none; width: var(--av, 40px); height: var(--av, 40px); overflow: visible; }
+.room-avatar > .av { position: absolute; --av: 70% !important; width: 70%; height: 70%; box-sizing: border-box; overflow: hidden; border: 2px solid var(--room-avatar-ring, var(--content)); border-radius: var(--r-pill); background: var(--surface-2); }
+.room-avatar > .av > svg.i { width: 16px; height: 16px; }
+.room-avatar > .av:first-child { top: 0; left: 0; }
+.room-avatar > .av:nth-child(2) { bottom: 0; right: 0; }
+.room-avatar[data-faces="3"] > .av { --av: 65% !important; width: 65%; height: 65%; }
+.room-avatar[data-faces="3"] > .av:first-child { top: 0; left: 17.5%; }
+.room-avatar[data-faces="3"] > .av:nth-child(2) { bottom: 0; left: 0; }
+.room-avatar[data-faces="3"] > .av:nth-child(3) { bottom: 0; right: 0; }
+.au-room-heading > .room-avatar { --av: 40px; }
+.side .au-room-row > .nav { --room-avatar-ring: var(--side); }
+.side .au-room-row > .nav:hover { --room-avatar-ring: var(--hover); }
+.side .au-room-row > .nav[aria-current="true"] { --room-avatar-ring: var(--selected); }
+.side .au-room-row > .nav.mb-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; font-size: var(--fs-sm); }
+.side .au-room-row > .nav.mb-row .mb-row-main { display: grid; grid-template-columns: minmax(0, 1fr); }
+.side .au-room-row [aria-current="true"] { background: var(--selected) !important; }
+.sidebar-scrim { display: none; }
+@media (max-width: 859px) {
+  :root { --sidebar-width: 0px; }
+  .side { position: fixed; inset: 0 auto 0 0; width: min(320px, calc(100vw - 48px)); z-index: 95; background: var(--side); box-shadow: var(--pop); visibility: hidden; transform: translateX(-100%); }
+  :root[data-sidebar-open] .side { visibility: visible; transform: none; }
+  .btn.sidebar-close { display: inline-flex; }
+  .btn.sidebar-toggle { display: inline-flex; width: 40px; min-height: 32px; }
+  .sidebar-scrim:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 94; background: var(--scrim); }
+  .wbody { grid-template-columns: minmax(0, 1fr); }
+  .main { grid-column: 1; }
+  :root[data-window-layout="main"] .window-chrome { left: 0; }
+}

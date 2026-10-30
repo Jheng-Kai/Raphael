@@ -55,24 +55,6 @@ it("rejects the owner's stretched dictionary and Home geometry on 97fa61bd", () 
   } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
 });
 
-it("measures every team card, including the chief, before canvas zoom", () => {
-  const browser = new Window();
-  browser.document.documentElement.style.setProperty('--sp-6', '32px');
-  browser.document.documentElement.style.setProperty('--sp-5', '24px');
-  browser.document.body.innerHTML = '<div class="team-board" style="transform:scale(1.5)"><div class="team-chief"><div class="team-member"></div></div></div>';
-  const board = browser.document.querySelector('.team-board'), card = board.querySelector('.team-member');
-  board.getBoundingClientRect = () => ({ width: 1760 * 1.5, height: 900 });
-  card.getBoundingClientRect = () => ({ width: 384 * 1.5, height: 200 });
-  vi.stubGlobal('document', browser.document);
-  vi.stubGlobal('getComputedStyle', browser.getComputedStyle.bind(browser));
-  vi.stubGlobal('DOMMatrix', class { constructor() { this.a = 1.5; } });
-  try {
-    expect(checkRendered('content-width').measurements.map(item => item.width)).toEqual([384, 1760]);
-    card.getBoundingClientRect = () => ({ width: 600 * 1.5, height: 200 });
-    expect(() => checkRendered('content-width')).toThrow(/team-member.*600.*384/);
-  } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
-});
-
 it("keeps Home's lead across the grid and fills every summary row", () => {
   const browser = new Window();
   const doc = browser.document;

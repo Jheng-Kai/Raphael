@@ -8,7 +8,7 @@ export const key = value => ({ action: "key", key: value });
 export const scroll = selector => ({ action: "scroll", selector });
 export const waitScrollEnd = selector => ({ action: "wait-scroll-end", selector });
 export const rightClick = selector => ({ action: "right-click", selector });
-export const page = name => click(`#nav .nav[data-go="${name}"]`);
+export const page = name => click(name === "agent" ? ".mb-chief" : `#nav [data-go="${name}"]`);
 export const settings = pane => [page("settings"), wait(".modal-scrim [data-pane]"), check("settings-shell"), click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`)];
 export const scene = (name, description, steps = [], fixture = {}) => ({ name, description, steps, fixture });
 

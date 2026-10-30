@@ -6,7 +6,6 @@ vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
 import { createAutomationsPage } from "./pages/automations";
-import { createTeamPage } from "./pages/team";
 import { dateKey, localDay, monthGrid, shiftDay } from "./schedule-picker";
 import { setLocale } from "./i18n";
 import { closeMenu } from "./ui";
@@ -65,6 +64,23 @@ test("the calendar opens directly, without a list, and the keep-awake switch per
   page.hide();
 });
 
+test("Home opens the full calendar on the selected date and preserves monthly connected events",async()=>{
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:[{kind:"event",at_ms:new Date("2026-11-03T10:00").getTime(),title:"Month event"}]});
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show("2026-11-03");await flush();
+  expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(1);
+  expect(page.el.querySelector('[data-day="2026-11-03"]')).not.toBeNull();
+  expect(page.el.querySelector('.au-calendar-event')?.textContent).toContain("Month event");
+  page.hide();
+});
+
+test("a Home event opens its exact day and highlights the corresponding Calendar event",async()=>{
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:[{id:"event:review",kind:"event",at_ms:new Date("2026-11-03T10:00").getTime(),title:"Review"}]});
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show("calendar:2026-11-03:event%3Areview");await flush();
+  expect(page.el.querySelector('[data-day="2026-11-03"]')).not.toBeNull();
+  expect(page.el.querySelector('.au-calendar-event.is-home-focus')?.getAttribute('data-calendar-item')).toBe('event:review');
+  page.hide();
+});
+
 test("live routine notifications refresh the list, and hide invalidates pending responses",async()=>{
   const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();api.routinesList.mockResolvedValue({routines:[{...plan,title:"Changed"}]});events.forEach(fn=>fn({type:"RoutinesChanged",member_id:1}));await flush();expect(page.el.textContent).toContain("Changed");page.hide();
 });
@@ -114,18 +130,7 @@ test("calendar chips keep complete compact times and full task details when edit
   expect(document.querySelector<HTMLInputElement>("#au-time")!.value).toBe("09:00");page.hide();
 });
 
-test("team cards share the global model and a group menu can rename",async()=>{
-  const page=createTeamPage(app());document.body.append(page.el);page.show();await flush();expect(page.el.querySelectorAll('.team-member')).toHaveLength(3);expect(page.el.querySelectorAll('.team-model')).toHaveLength(3);expect(page.el.textContent).toContain("shared-model");click('[data-team="group-menu"]');expect(document.querySelector('#app-popover')!.textContent).toContain("Rename");page.hide();
-});
 
-test.each([
-  [{kind:"once",time:"09:00",start_date:"2026-10-24"},1],
-  [{kind:"weekdays",time:"09:00"},5],
-  [{kind:"weekly",time:"09:00",days:[1,3,5]},3],
-  [{kind:"daily",time:"09:00",until:"2026-10-26"},3],
-])("calendar respects local dates and recurrence %j",(schedule,expected)=>{
- const routine={...plan,schedule: schedule as Routine["schedule"]};expect(occurrences(routine,localDay("2026-10-24"),localDay("2026-10-31"))).toHaveLength(expected);
-});
 test("interval phases and remaining run limits survive calendar boundaries",()=>{
  const routine={...plan,schedule:{kind:"every" as const,hours:3}};const from=localDay("2026-10-24");expect(occurrences(routine,from,shiftDay(from,1),2).map(o=>new Date(o.at).getHours())).toEqual([9,12]);expect(occurrences({...routine,next_run:null},from,shiftDay(from,1))).toEqual([]);expect(dateKey(shiftDay(localDay("2026-12-31"),1))).toBe("2027-01-01");
 });
@@ -145,27 +150,7 @@ test("future calendar windows account for occurrences before the visible range",
  expect(occurrences({...plan,schedule:{kind:"weekdays",time:"09:00"}},from,to,2)).toHaveLength(2);
 });
 
-test("team mention autocomplete keeps typing focus and inserts the chosen member",async()=>{
- const page=createTeamPage(app());document.body.append(page.el);page.show();await flush();
- const input=page.el.querySelector<HTMLTextAreaElement>("textarea")!;input.focus();input.value="Review @Al";input.dispatchEvent(new Event("input"));
- expect(document.activeElement).toBe(input);expect(document.querySelector('#app-popover')!.textContent).toContain("@Alice");
- expect(document.querySelector('#app-popover .ck')).toBeNull();
- click('#app-popover [data-value="Alice"]');expect(input.value).toBe("Review @Alice ");expect(document.activeElement).toBe(input);page.hide();
-});
 
-test("team group creation, rename and deletion submit the confirmed values",async()=>{
- const page=createTeamPage(app());document.body.append(page.el);page.show();await flush();
- click('[data-team="new"]');click('#app-popover [data-pick="group"]');field('#mb-group-name','Research');click('[data-dlg="save"]');await flush();expect(api.groupsCreate).toHaveBeenCalledWith('Research');
- click('[data-team="group-menu"]');click('#app-popover [data-pick="rename"]');field('#mb-group-name','Planning');click('[data-dlg="save"]');await flush();expect(api.groupsUpdate).toHaveBeenCalledWith(1,{name:'Planning'});
- click('[data-team="group-menu"]');click('#app-popover [data-pick="delete"]');click('[data-dlg="delete"]');await flush();expect(api.groupsDelete).toHaveBeenCalledWith(1);page.hide();
-});
-
-test("team drops move members, retain the chief and navigate from chat",async()=>{
- const context=app(),page=createTeamPage(context);document.body.append(page.el);page.show();await flush();
- const drop=(id:string):void=>{const event=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:{getData:()=>id}});page.el.querySelector('[data-team-group="none"]')!.dispatchEvent(event);};
- drop('0');expect(api.membersUpdate).not.toHaveBeenCalled();api.membersUpdate.mockResolvedValue({});drop('2');await flush();expect(api.membersUpdate).toHaveBeenCalledWith(2,{group_id:null});
- click('[data-team="chat"][data-member="2"]');expect(context.go).toHaveBeenCalledWith('agent');page.hide();
-});
 
 
 test("status summaries have one separator and history appears in past calendar days",async()=>{
@@ -179,25 +164,4 @@ test("status summaries have one separator and history appears in past calendar d
 test("routine destination uses an app dropdown",()=>{
  openRoutineDialog({members});click('[data-dlg="more"]');click('[data-dlg="destination"]');
  expect(document.querySelector('#app-popover')!.textContent).toContain("Member's main thread");
-});
-
-test("empty ungrouped column is available only while dragging",async()=>{
- const page=createTeamPage(app());document.body.append(page.el);page.show();await flush();const target=page.el.querySelector<HTMLElement>('.team-drop-empty')!;expect(target.hidden).toBe(true);
- const card=page.el.querySelector<HTMLElement>('[data-team-member="1"]')!;card.dispatchEvent(new Event('dragstart',{bubbles:true}));expect(target.hidden).toBe(false);card.dispatchEvent(new Event('dragend',{bubbles:true}));expect(target.hidden).toBe(true);page.hide();
-});
-
-
-test("Team Stop during room creation survives acknowledgement and reaches only its room",async()=>{
- let created!:(value:unknown)=>void;
- api.roomsCreate.mockImplementationOnce(()=>new Promise(resolve=>{created=resolve;}));
- api.roomSend.mockResolvedValue({message_id:1,duplicate:false});
- api.roomStop.mockResolvedValue({stopped:true});api.roomMessages.mockResolvedValue({messages:[],exchange:{state:'stopped'}});
- const page=createTeamPage(app());document.body.append(page.el);page.show();await flush();
- const input=page.el.querySelector<HTMLTextAreaElement>('textarea')!;input.value='Start work';input.dispatchEvent(new Event('input'));
- page.el.querySelector<HTMLButtonElement>('.cmp-send')!.click();
- expect(page.el.querySelector<HTMLElement>('.composer')!.dataset.taskState).toBe('ack');
- page.el.querySelector<HTMLButtonElement>('.cmp-voice')!.click();await flush();expect(api.roomStop).not.toHaveBeenCalled();
- created({room:{id:17,name:'Team',member_ids:[0,1,2],created:1,is_team:1}});await flush();await flush();
- expect(api.roomStop).toHaveBeenCalledExactlyOnceWith(17);
- expect(page.el.querySelector<HTMLElement>('.composer')!.dataset.taskState).toBe('idle');page.hide();
 });

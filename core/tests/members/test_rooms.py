@@ -21,6 +21,64 @@ async def create(rig, ids, **kwargs):
     return (await rig.call("rooms.create", {"name":"Team", "member_ids":ids, **kwargs}))["room"]
 
 
+async def test_sidebar_room_summary_read_position_and_actions_persist(rig, rooms):
+    room = await create(rig, [0])
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "Please review", "request_id": "sidebar"})
+    turn_id = rig.background.attached[-1][1]
+    AgentHistory(rig.conn).resolve(turn_id, prefix="", text="The review is complete.", status="done")
+    rooms.turn_arrived(turn_id)
+    await rooms.wait_idle()
+    before = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert before["preview"] == "The review is complete."
+    assert before["unread"] and before["last_at"] is not None
+    await rig.call("rooms.update", {"room_id": room["id"], "pinned": True, "hidden": True, "read": True})
+    after = (await rig.call("rooms.list", {}))["rooms"][0]
+    assert after["pinned"] and after["hidden"] and not after["unread"]
+    latest = [message for message in (await rig.call("rooms.messages", {"room_id": room["id"]}))["messages"]
+              if message["member_id"] is None or message["status"] == "done" and message["text"] != "(pass)"][-1]
+    assert before["last_at"] == latest["created"]
+    assert (after["preview"], after["last_at"]) == (latest["text"][:300], latest["created"])
+    assert rig.conn.execute("SELECT read_message_id FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] > 0
+    # Repeating the acknowledgement must not create a notification/refresh loop.
+    count = len(rig.notes)
+    await rig.call("rooms.update", {"room_id": room["id"], "read": True})
+    assert len(rig.notes) == count
+
+
+@pytest.mark.parametrize("key", ["read", "hidden", "pinned"])
+async def test_sidebar_room_actions_reject_non_boolean_flags(rig, rooms, key):
+    room = await create(rig, [0])
+    with pytest.raises(RpcError):
+        await rig.call("rooms.update", {"room_id": room["id"], key: "true"})
+
+
+async def test_sidebar_summary_excludes_silent_passes_and_other_rooms(rig, rooms):
+    first = await create(rig, [0])
+    other = await create(rig, first["member_ids"])
+    await rig.call("rooms.send", {"room_id": first["id"], "text": "Private room one", "request_id": "summary-pass"})
+    turn_id = rig.background.attached[-1][1]
+    AgentHistory(rig.conn).resolve(turn_id, prefix="", text="(pass)", status="done")
+    rooms.turn_arrived(turn_id)
+    await rooms.wait_idle()
+    listed = {item["id"]: item for item in (await rig.call("rooms.list", {}))["rooms"]}
+    assert listed[first["id"]]["preview"] == "Private room one"
+    assert not listed[first["id"]]["unread"]
+    assert listed[other["id"]]["preview"] == ""
+
+
+async def test_sidebar_read_acknowledges_only_messages_the_owner_saw(rig, rooms):
+    room = await create(rig, [0])
+    other = await create(rig, room["member_ids"])
+    for room_id, text in [(room["id"], "Seen"), (room["id"], "Arrived later"), (other["id"], "Other room")]:
+        rig.conn.execute("INSERT INTO room_messages (room_id,text,created) VALUES (?,?,?)", (room_id, text, rig.wall()))
+    rig.conn.commit()
+    ids = [row[0] for row in rig.conn.execute("SELECT id FROM room_messages ORDER BY id")]
+    await rig.call("rooms.update", {"room_id": room["id"], "read": True, "read_through": ids[0]})
+    assert rig.conn.execute("SELECT read_message_id FROM rooms WHERE id=?", (room["id"],)).fetchone()[0] == ids[0]
+    with pytest.raises(RpcError):
+        await rig.call("rooms.update", {"room_id": room["id"], "read": True, "read_through": ids[2]})
+
+
 async def test_mentions_use_whole_names_text_order_and_ignore_email_addresses(rig, rooms):
     ids = [(await rig.call("members.create", {"name":name}))["member"]["id"]
            for name in ("Ops", "Ops Lead", "Sam")]

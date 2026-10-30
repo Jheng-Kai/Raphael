@@ -4,6 +4,8 @@
 // panel and the thread. (The design page once drew a gold disc behind it by a selector that matched
 // the emblem by accident; the owner does not want it.) These read the style sheets for any rule that
 // could reach the emblem's element or what it is drawn into, and look at the HTML that draws it.
+// Owner review 2026-10-30: only a face inside a composite group avatar has its own
+// round background and a 2px separator matching the surface behind that group.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -34,6 +36,7 @@ const subject = (selector: string): string => selector.split(/\s+|>|\+|~/).filte
  * the face of a turn and of the card.
  */
 function reachesEmblem(selector: string): boolean {
+  if (selector === ".room-avatar > .av") return false;
   if (/\.av-custom|\.mb-av\b|\.mb-av-/.test(selector)) return false;
   const last = subject(selector);
   return /\.av(?![\w-])|\.mb-pill-face|\.sys-face|\.mb-avbtn|\.ra-face|\.ask-face|\.nav-face/.test(last);
@@ -49,6 +52,13 @@ function framing(body: string): string[] {
 }
 
 describe("Raphael's emblem stands bare", () => {
+  test("only the composite group face adds the owner's round background and 2px separator", () => {
+    const composite = rules.find(rule => rule.name === "sidebar.css" && rule.selector === ".room-avatar > .av")!;
+    expect(framing(composite.body)).toEqual([
+      "border: 2px solid var(--room-avatar-ring, var(--content))",
+      "border-radius: var(--r-pill)", "background: var(--surface-2)",
+    ]);
+  });
   test("no style sheet gives the emblem, or what it is drawn into, a background, an edge, a shadow or a round crop", () => {
     const hits = rules.filter((r) => reachesEmblem(r.selector));
     // the rules that size and place it are found, so the reading works
@@ -69,7 +79,7 @@ describe("Raphael's emblem stands bare", () => {
     column.innerHTML = columnHTML({ list: null, current: 0, previews: new Map(), query: "", folded: new Set(), fresh: new Set() });
     const face = column.querySelector(".mb-chief > .av")!;
     expect(face.className).toBe("av");
-    expect(face.getAttribute("style")).toBe("--av:64px");
+    expect(face.getAttribute("style")).toBe("--av:40px");
   });
 
   test("on the line of what he asked a member, too", () => {

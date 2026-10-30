@@ -42,7 +42,7 @@ async def test_home_calendar_uses_only_enabled_private_google_tool(tmp_path, con
         assert request.method == "GET"
         assert request.url.params["singleEvents"] == "true"
         assert request.url.params["orderBy"] == "startTime"
-        assert request.url.params["maxResults"] == "24"
+        assert request.url.params["maxResults"] == "2500"
         assert request.url.params["timeMin"] == "2026-10-24T00:00:00+00:00"
         assert request.url.params["timeMax"] == "2026-10-31T00:00:00+00:00"
         if state == "expired":

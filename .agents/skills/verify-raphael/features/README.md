@@ -1,9 +1,28 @@
 # Raphael feature map
 
+## Sidebar redesign (2026-10-30)
+
+One fixed 296px sidebar contains Home brand, permanent conversation search, plus,
+chief, collapsible member folders, group chats, dictation and owner/account settings.
+Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and
+focus containment. Team route/canvas are removed. Settings > Connections owns apps;
+Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
+existing picker/crop component and presets; footer and owner messages share identity.
+
+Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
+sidebar-unread, sidebar-drawer, sidebar-search, sidebar-plus, sidebar-group-avatar,
+sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, sidebar-everyone, chat, details, profile, plugins-installed,
+all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800.
+Run `npm run verify -- --core`, then the selected look matrix and inspect every
+contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
+delete-conversation cover navigation in an isolated fake-brain app. No judge,
+OpenRouter or Claude session search; one heavy process at a time.
+
+
 ## Owner round 9 contracts
 
 Home paints local records before live allowances and calendar data. Four fixed equal
-summary blocks and a small week calendar retain their geometry in empty, sparse and
+summary blocks and a full month calendar retain their geometry in empty, sparse and
 full states. Every whole block navigates, including keyboard operation, while inner
 report controls retain their actions. See [Home](home.md). Day/week working hours
 fit the viewport below a pinned all-day row; see [Automations](automations.md).
@@ -68,12 +87,12 @@ behavior the fixture cannot prove.
 | [Home](home.md) | Startup overview, pending work, reports, calendar, usage and dictation totals |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
 | [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, in-conversation live desktop and native fake-brain journey |
-| [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved team administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
+| [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved sidebar administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
 | [Automations](automations.md) | Home-owned day/week calendar, schedules, advanced options and deletion |
-| [Team and rooms](team-and-rooms.md) | Grouped board, member navigation, rooms and mentions |
+| [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
 | [Settings and appearance](settings-appearance.md) | Profile/preferences, skins, languages, models and app information |
-| [Connections and MCP](connections-mcp.md) | Connected apps and their count, the sidebar's connected-apps entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
+| [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
 | [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
 
@@ -103,9 +122,9 @@ Owner item 9 (2026-10-28), R-UI-45: no page becomes a stripe at any window size.
 | `--layout-word-min/max` | 7 / 10 spaces = 224 / 320px | Dictionary auto-fill grid; a sparse grid keeps empty tracks |
 | `--layout-card-min/max` | 9 / 12 spaces = 288 / 384px | Short cards, totals, store cards and calendar events |
 | `--layout-reading-max` | 20 spaces = 640px | History, shared lists, aligned settings panes, connected apps and routines |
-| `--layout-thread-max` | 28 spaces = 896px | Raphael/member/room threads and composers; outer team group column |
+| `--layout-thread-max` | 28 spaces = 896px | Raphael/member/room threads and composers; outer sidebar group column |
 | `--layout-page-max` | 3 card maxima + 2 grid gaps + 2 page gutters = 1264px | Ordinary pages and the calendar's own container |
-| `--layout-workspace-max` | 55 spaces = 1760px | Spatial team workspace; its member cards still obey the short-card cap |
+| `--layout-workspace-max` | 55 spaces = 1760px | Spatial sidebar workspace; its member cards still obey the short-card cap |
 
 The word minimum rounds the previous 220px track to seven existing spaces. Its
 ten-space cap leaves room for a short term and its actions. A twelve-space card
@@ -116,21 +135,20 @@ previous 1760px capacity, expressed on the same scale.
 
 Available width may shrink any measure. Home uses a 1080px page (including 40px
 gutters), a borderless full-grid emblem/date/headline lead, two rows of two equal
-blocks, then a mini week (owner, 2026-10-30). Blocks retain size and position for
+blocks, then an adaptive six-week month (owner refinement, 2026-10-30). Blocks retain size and position for
 empty/sparse/full data, including at 720px. This composition uses page-level
 summary containers instead of the generic short-card cap. Short inbox rows remain
 reading-capped; checks reject unequal blocks, overflow and a narrow/reordered lead.
 The 896px thread measure is 28 existing 32px spaces, adding room for conversation
-content while prose keeps 20 spaces. Team's chief and every group member use
-the same compact card track, capped at 384px, inside the shared 896px board column.
-Empty tracks remain when a group has one member. Settings retains its 1000px modal and uses one
+content while prose keeps 20 spaces. The fixed 296px sidebar holds chief, folders
+and group chats; below 860px the same list opens in a 320px drawer. Settings retains its 1000px modal and uses one
 640px content measure for every pane header, toolbar, row and grid. Charts and
 heatmaps contain several data columns inside their capped containers.
 
 The look runner invokes `checkRendered("content-width")` on **every main-entry scene**
 after its interactions (overlay entry is separate). It measures rendered border boxes,
 including list rows and offscreen items in a visible scrolling page, and records the
-limits and all measurements in `report.json`. Explicit team pan/zoom is normalized
+limits and all measurements in `report.json`. Explicit sidebar pan/zoom is normalized
 to layout size so 50/100/150% does not masquerade as responsive stretching. Hidden
 pages are excluded. A 1px tolerance covers fractional layout rounding. Limits are
 calculated from the spacing tokens, not copied from a potentially stretched element.
@@ -141,7 +159,7 @@ The existing long-choice two-column audit applies to skins, not dictionary entri
 Representative main-page acceptance (all consumers of the shared layout):
 
 ```powershell
-npm run look -- home home-empty home-720 home-many home-motion chat details details-routines team team-crisp-50 team-crisp-100 team-crisp-150 dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging data about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
+npm run look -- home home-empty home-720 home-many home-motion chat details details-routines sidebar sidebar-folders dictation-overview dictation-history dictation-history-day dictation-dictionary dictation-keyboard profile appearance models dictation agent messaging data about plugins-installed plugins-store usage automations-calendar automations-day automation-weekly --theme both --width 1120,720,1920x1080
 ```
 
 The dictionary scene uses twelve words to expose column count and wrapping; the
@@ -163,7 +181,7 @@ are assignments, not coverage claims. Current executions live in app/.native/run
 | Conversation | readable-layout checks shared details edges and compact identity; locale-sweep, voice-conversation, delete-conversation; drive locale/composer/sidebar, real member consultations and room reports, delete recipient conversations/source member; reject old rows/date/exchange chrome in replacement defaults and new named threads, compare actual history IPC with read-only production SQL and NULL conversation rows; native fake brain. Planned conversation-cards: approvals, attachments, Stop and reconnect; fake or signed-in Codex CLI. |
 | Members | delete-conversation creates/deletes members through UI and checks orphan exchange rows/deleted source names. Planned members-persistence: edit/hide/duplicate/primary/resources/voice and right-click menus, restart; assert member/resource/primary state and shared agent path; fake brain, Codex CLI for administration. |
 | Automations | Planned automations-worker: create/edit/delete schedule, trigger worker, cancel/restart; assert schedule, task and report persistence and no late writes; fake brain. |
-| Team and rooms | readable-layout checks 100% opening, compact chief alignment and explicit Fit on a persisted roster; locale-sweep visits team; delete-conversation creates a room, mentions Raphael/member, waits for reports/wrap-up and checks room rows stay out of private history. Legacy quarantine rows cannot be created through current UI and are not fabricated. Planned rooms-routing: group management and stop; assert routing and cancellation; fake brain, Codex CLI for reasoning. |
+| Team and rooms | readable-layout checks the fixed sidebar and folded folders on a persisted roster; locale-sweep visits the current main pages; delete-conversation creates a room, mentions Raphael/member, waits for reports/wrap-up and checks room rows stay out of private history. Legacy quarantine rows cannot be created through current UI and are not fabricated. Planned rooms-routing: group management and stop; assert routing and cancellation; fake brain, Codex CLI for reasoning. |
 | Dictation | locale-sweep visits all tabs; voice-conversation uses WAV/local STT. Planned dictation-paste-learning: injected hotkeys in an isolated target, microphone/WAV, paste and correction; assert target text, history, dictionary learning and overlay focus; fake brain/local STT. |
 | Settings and appearance | locale-sweep drives every locale/settings section. Planned settings-restart: change theme/skin/model/mic/preferences and restart; assert device/core persistence and window behavior; fake brain. |
 | Connections and MCP | gmail-connect (explicit opt-in only): ask/connect card, assert final state/error and redacted CLI event/stderr diagnostics in the run log; configured signed-in Codex model, run-local workspace/state, fake API clients, declared Composio only, stop at authorizing without Google consent approval. Restricted-network failures before a card are not OAuth acceptance. Planned MCP lifecycle/permissions/private skills: assert discovery and real tool gates; local fake server/CLI. |
@@ -189,10 +207,10 @@ both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 deskt
 840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
 
 ```powershell
-npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming team dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store skins usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store skins usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
 ```
 
-Home, dictation, thread-measure, settings-alignment, team-alignment and welcome
+Home, dictation, thread-measure, settings-alignment, sidebar-shell and welcome
 checks extend the ordinary scenes. Details checks pointer focus before separately
 exercising keyboard focus. The retired first-bot scenarios are replaced by no-naming.
 This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
@@ -208,8 +226,8 @@ The complete command/evidence record is OWNER-ROUND-4-NOTES.md in the worktree.
 
 ## Owner round 5 acceptance
 
-Team opens at 100%, with explicit Fit and a chief card on the same compact track
-as group members. The details scroll container owns the single horizontal inset.
+The historical Team Fit/card checks below were retired with the canvas on
+2026-10-30; sidebar-shell now covers chief and folder rows. The details scroll container owns the single horizontal inset.
 Compact conversation headers show identity once; caption/identity lines cannot
 flex-shrink. Shared checks cover these contracts in browser and native WebView.
 The owner's specific 1920 half-line clipping was not reproduced on the baseline;
@@ -244,7 +262,7 @@ member home. Its implementation and selected memory-pane scenes are mapped in
 
 ## Owner round 7 contracts
 
-Owner round 7 extends the existing affected journeys with sidebar-count-alignment, home-lead-width, team-card-lines, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800. Judge is intentionally left to the owner for this handoff.
+Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800. Judge is intentionally left to the owner for this handoff.
 
 
 ## Connect and Docker acceptance (2026-10-30)

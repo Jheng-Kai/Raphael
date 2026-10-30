@@ -7,20 +7,15 @@ const language = locale => [click('[data-k="ui-language"]'), click(`#app-popover
 const panes = ["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"];
 
 export default [
-  ...[50, 100, 150].map(zoom => scene(`team-crisp-${zoom}`, `Team text at rest at ${zoom}%`, [
-    page("team"), wait('[data-team-card="3"]'),
-    { action: "team-zoom", percent: zoom },
-    check(`team-crisp-${zoom}`),
-  ], { teamBoardRoster: true })),
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [
     ...settings("general"), ...language(locale === "zh-TW" ? "en" : locale),
     ...(locale === "zh-TW" ? language(locale) : []),
     ...panes.flatMap(pane => [click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), check(`locale-${locale}`)]),
     click('.modal-scrim [data-act="close"]'),
-    ...["home", "agent", "team", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
+    ...["home", "agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
     ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
     page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-occurrence'), check(`locale-${locale}`),
-    click('#nav .nav-apps'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
+    click('#nav [data-go="settings"]'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...settings("general"), check(`locale-${locale}`),
   ])),
   scene("conversation-sections", "Quick questions and named conversations have separate shared headings", [...details, check("conversation-sections")]),

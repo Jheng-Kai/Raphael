@@ -5,7 +5,7 @@
 
 /* ---------- tokens ---------- */
 :root {
-  --sidebar-width: 208px; --window-controls-height: 32px;
+  --sidebar-width: 296px; --window-controls-height: 32px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
   /* Content measures: see the verification feature map's content-width contract. */
@@ -168,25 +168,6 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .usage-t { font-size: var(--fs-xs); color: var(--text-2); }
 .usage-num { font-size: var(--fs-xs); color: var(--text-2); }
 .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
-/* 連結應用程式: how many apps are connected, beside its name; in the rail a small badge over its icon. 「—」 is a number that cannot be known. */
-.nav-count { margin-left: auto; min-width: 20px; padding: 0 var(--sp-1); border-radius: var(--r-pill); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); font-weight: 600; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
-.nav-count[data-unknown] { background: var(--warn-soft); color: var(--warn); }
-/* On the 拉斐爾 page the sidebar is a rail of its icons (main.ts `data-rail`): the same buttons, their
-   names kept for a screen reader and shown in their tooltips, the spend left out. The rules carry
-   :root[data-rail] so that they win over the wide windows' sidebar below. */
-:root[data-rail="true"] { --sidebar-width: 52px; }
-:root[data-rail="true"] .side { align-items: center; padding: var(--sp-2) var(--sp-1) var(--sp-3); }
-:root[data-rail="true"] .brand { justify-content: center; padding: 0; margin-bottom: var(--sp-2); }
-:root[data-rail="true"] .brand > span, :root[data-rail="true"] .side .nav-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-:root[data-rail="true"] .brand .app-icon { width: 32px; height: 32px; }
-:root[data-rail="true"] .side .nav { justify-content: center; width: 40px; min-height: 40px; padding: 0; }
-:root[data-rail="true"] .side .nav-dot { top: 6px; right: 6px; margin-top: 0; }
-:root[data-rail="true"] .side .nav-count { position: absolute; top: 1px; right: 1px; left: auto; margin: 0; min-width: 16px; padding: 0 2px; line-height: 16px; box-shadow: 0 0 0 2px var(--side); }
-:root[data-rail="true"] .usage-box { display: none; }
-:root[data-rail="true"] .side-foot { width: 40px; }
-/* the members' column runs up under the window controls: their bar takes its colours, not the content's */
-:root[data-rail="true"][data-window-layout="main"] .window-chrome { background: transparent; }
-:root[data-rail="true"] .main { scrollbar-gutter: auto; }
 .main { position: relative; overflow-x: hidden; overflow-y: auto; background: var(--content); border-top-left-radius: var(--r-lg); border-left: 0; border-top: 0; min-height: 0; container: main / inline-size; scrollbar-gutter: stable; }
 /* Each page is a column centred in the window: wide windows get margins, nothing stretches edge to edge. */
 .page { width: 100%; max-width: var(--layout-page-max); margin: 0 auto; padding: calc(var(--window-controls-height) + 8px) 32px 40px; }
@@ -194,7 +175,6 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 36px; }
 .lede { margin: var(--sp-2) 0 0; color: var(--text-2); font-size: var(--fs-sm); max-width: 64ch; text-wrap: pretty; }
 @media (max-width: 880px) {
-  :root { --sidebar-width: 176px; }
   .side .nav:has(.nav-count) { gap: var(--sp-1); }
   .side .nav:has(.nav-count) .nav-t { margin-left: var(--sp-1); }
   .side .nav-count { min-width: 18px; padding-inline: calc(var(--sp-1) / 2); }
@@ -636,7 +616,6 @@ kbd.ob-cap { white-space: nowrap; }
 
 /* Wide, tall windows give the same focused pages more readable space. */
 @media (min-width: 1440px) and (min-height: 800px) {
-  :root { --sidebar-width: 232px; }
   .side { padding: var(--sp-2) var(--sp-3) var(--sp-4); }
   .side .nav { min-height: 44px; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-md); }
   .brand { min-height: 52px; margin-bottom: var(--sp-4); font-size: var(--fs-lg); }
@@ -1755,7 +1734,5 @@ kbd.ob-cap { white-space: nowrap; }
 :where(:root[data-keys]) .window-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .menu .btn.icon:is(:hover, :active, :focus-visible) { background: transparent; }
 
-:root[data-rail="true"] .side .nav:is(:hover, :active, [aria-current="page"]) { background: transparent; color: var(--text); }
-:root[data-rail="true"] .side .nav:is(:active, [aria-current="page"]) { color: var(--accent-icon); }
 :where(:root[data-keys]) .side .nav:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .window-controls .window-button:focus-visible { outline-offset: -3px; }
