@@ -9,7 +9,7 @@ import { avatarHTML } from "./avatar";
 import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
-import { closeMenu, esc, ico, iconButton, openMenu, sendGlyph, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, sendGlyph, toaster } from "./ui";
 import "./agent.css";
 
 export type ComposerTaskState = "idle" | "ack" | "running" | "waiting";
@@ -30,29 +30,37 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
 
 export function composerHTML(): string {
   return `<div class="cmp-quote" hidden></div><div class="cmp-file" hidden></div><div class="cmp-row">` +
-    `<button type="button" class="btn cmp-attach" data-act="attach" aria-haspopup="menu" aria-expanded="false">${ico("plus")}</button>` +
     `<textarea class="cmp-input" rows="1" autocomplete="off" enterkeyhint="send"></textarea>` +
+    `<div class="cmp-bar"><button type="button" class="btn cmp-attach" data-act="attach">${ico("plus")}</button>` +
+    `<button type="button" class="btn sm cmp-mode" aria-haspopup="menu" aria-expanded="false">${ico("shield")}<span></span></button>` +
+    `<span class="cmp-bar-fill"></span><span class="cmp-model"></span>` +
     `<span class="cmp-pair">` +
     iconButton("send", t("chat.send"), " disabled", "cmp-send task-action").replace('type="button"', 'type="submit"').replace(" title=", " data-tooltip=").replace(ico("send"), sendGlyph()) +
-    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div><input class="cmp-picker" type="file" multiple hidden>`;
+    `<button type="button" class="btn cmp-voice" data-act="voice"></button></span></div></div><input class="cmp-picker" type="file" multiple hidden>`;
 }
 
-/** The same attachment and global action policy menu for member, room and team composers. */
-export async function openComposerMenu(anchor: HTMLElement, attach: () => void): Promise<void> {
+const MODE_CHANGED = "raphael:action-mode";
+/** The one global choice of what a member does before it acts, named where the owner writes. */
+export function bindActionMode(button: HTMLElement): void {
   let mode: "ask" | "direct" = "direct";
-  try {
-    const result = await api.core<{ settings: { action_mode?: "ask" | "direct" } }>("settings.get");
-    mode = result?.settings?.action_mode ?? "direct";
-  } catch { /* A reconnecting core keeps the menu available; saving still requires the core. */ }
-  if (!anchor.isConnected) return;
-  openMenu(anchor, [], "", () => {}, undefined, [
-    { label: t("agent.attach"), icon: "file", run() { closeMenu(); attach(); } },
-    { label: t("chat.beforeAct"), desc: t(mode === "ask" ? "chat.askFirst" : "chat.direct"), icon: "shield", submenu: true, run(row) {
-      openMenu(row, [{ value: "ask", label: t("chat.askFirst") }, { value: "direct", label: t("chat.direct") }], mode, value => {
-        void api.core("settings.set", { key: "action_mode", value }).catch(error => toaster.info(describeError(error)));
-      }, t("chat.beforeAct"), [], { placement: "beside" });
-    } },
-  ]);
+  const name = (value: "ask" | "direct"): string => t(value === "ask" ? "chat.modeAsk" : "chat.modeDirect");
+  const draw = (): void => {
+    button.querySelector("span")!.textContent = name(mode);
+    button.setAttribute("aria-label", `${t("chat.beforeAct")}: ${name(mode)}`);
+  };
+  const read = async (): Promise<void> => {
+    try { mode = (await api.core<{ settings: { action_mode?: "ask" | "direct" } }>("settings.get"))?.settings?.action_mode ?? "direct"; draw(); }
+    catch { /* A reconnecting core keeps the last answer; saving still requires the core. */ }
+  };
+  button.addEventListener("click", () => {
+    openMenu(button, [{ value: "ask", label: name("ask") }, { value: "direct", label: name("direct") }], mode, value => {
+      mode = value as "ask" | "direct"; draw();
+      void api.core("settings.set", { key: "action_mode", value }).then(() => window.dispatchEvent(new Event(MODE_CHANGED))).catch(error => toaster.info(describeError(error)));
+    }, t("chat.beforeAct"));
+  });
+  window.addEventListener(MODE_CHANGED, () => void read());
+  onLocaleChange(draw);
+  draw(); void read();
 }
 
 export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8Array {
@@ -76,7 +84,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   const fit=():void=>{input.style.height="auto";input.style.height=`${Math.min(180,input.scrollHeight)}px`;draw();};
   el.addEventListener("submit",e=>{e.preventDefault();if(send.disabled)return;const text=input.value,snapshot=files,submitted=revision,dictation=learning.snapshot(),corrections=learning.take(text);busy=true;if(options.stopTask)taskState="ack";draw();void options.send(text.trim(),snapshot).then(()=>{void learnComposerCorrections(corrections);if(submitted===revision){if(input.value===text)input.value="";if(files===snapshot)files=[];}}).catch(error=>{if(submitted===revision&&!learning.snapshot())learning.restore(dictation);taskState="idle";toaster.info(describeError(error));}).finally(()=>{busy=false;fit();input.focus();});});
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
-  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",event=>{void openComposerMenu(event.currentTarget as HTMLElement,()=>{picker.value="";picker.click();});});
+  el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
   picker.addEventListener("change",()=>{attaching=true;draw();void(async()=>{const picked=[...picker.files??[]];if(files.length+picked.length>4||picked.some(f=>f.size>50*1024*1024)||picked.reduce((n,f)=>n+f.size,files.reduce((n,f)=>n+f.data.length*0.75,0))>100*1024*1024)throw new Error(t("rooms.fileLimit"));const added=await Promise.all(picked.map(async f=>({name:f.name,mime:f.type||"application/octet-stream",data:base64(new Uint8Array(await f.arrayBuffer()))})));files=[...files,...added];})().catch(error=>toaster.info(describeError(error))).finally(()=>{attaching=false;draw();});});
   const release=():void=>{stream?.getTracks().forEach(track=>track.stop());stream=undefined;recording=false;draw();};

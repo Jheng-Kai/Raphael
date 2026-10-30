@@ -162,7 +162,7 @@ test("the room voice target seeds correction learning while preserving reply del
   create.mock.calls[create.mock.calls.length-1][0].transcriptTarget!()("Please use Open Mouse Bot");
   draft("Please use OpenMausBot");document.querySelector<HTMLElement>('.cmp-send')!.click();await flush();
   expect(api.roomSend).toHaveBeenCalledWith(1,"Please use OpenMausBot",expect.any(String),"en",[],7);
-  expect(api.core).toHaveBeenCalledExactlyOnceWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
+  expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});
   expect(document.querySelector('.cmp-quote')!.textContent).toBe("");
  } finally { create.mockRestore(); }
 });

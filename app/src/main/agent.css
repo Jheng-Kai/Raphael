@@ -375,7 +375,21 @@
 .composer { width: 100%; max-width: var(--layout-thread-max); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); background: var(--panel); border: 1px solid var(--edge); border-radius: var(--pa-cmp-r); padding: var(--pa-cmp-p) calc(var(--pa-cmp-p) + 1px) var(--pa-cmp-p) calc(var(--pa-cmp-p) + 2px); box-shadow: 0 6px 20px color-mix(in srgb, var(--text) 6%, transparent); transition: border-color 0.16s ease, box-shadow 0.16s ease; }
 /* Typing into it deepens its shadow a little; its edge keeps its colour, as no frame shows where the focus is. */
 .composer:focus-within { box-shadow: 0 6px 24px color-mix(in srgb, var(--text) 10%, transparent); }
-.cmp-row { display: flex; align-items: flex-end; gap: var(--sp-1); }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+/* Under the words: what to add and how it acts on the left, which model and send on the right. */
+.cmp-bar { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.cmp-bar-fill { flex: 1; min-width: 0; }
+.cmp-model:empty { display: none; }
+.composer .btn.cmp-mode { gap: var(--sp-1); min-height: 32px; padding-inline: var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); white-space: nowrap; }
+.composer .btn.cmp-mode:hover:not(:disabled) { color: var(--text); }
+.composer .btn.cmp-mode .i { width: 16px; height: 16px; }
+.cmp-model .mp-slot { display: inline-flex; min-width: 0; }
+.cmp-model .sel.mp-trigger { width: fit-content; min-width: 0; max-width: 220px; min-height: 32px; gap: var(--sp-1); padding: 0 var(--sp-2); border-color: transparent; background: transparent; color: var(--text-2); font-size: var(--fs-xs); }
+.cmp-model .sel.mp-trigger:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.cmp-model .mp-source, .cmp-model .mp-trigger .mono { display: none; }
+.cmp-model .mp-ttext { flex: none; max-width: 170px; }
+.cmp-model .mp-trigger .i { flex: none; width: 16px; height: 16px; }
+.cmp-model .mp-tname { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .page-agent .btn.cmp-attach { flex: none; width: var(--pa-cmp-btn); min-height: var(--pa-cmp-btn); padding: 0; border-radius: var(--r-pill); border-color: transparent; background: transparent; color: var(--text-2); }
 .page-agent .btn.cmp-attach:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }
 .page-agent .btn.cmp-attach:is(:active, [aria-expanded="true"]):not(:disabled) { color: var(--accent-icon); }
@@ -520,8 +534,6 @@
 .bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-bubble); border-color: currentColor; }
 /* Send and Raphael voice form one quiet, equal-sized pair in every composer. */
 .cmp-pair { display: inline-flex; flex: none; align-items: center; gap: var(--sp-1); }
-/* The row sits at the bottom of a growing draft; the 32px slot centres on its last line. */
-.cmp-row > .cmp-pair { margin-bottom: calc((var(--pa-cmp-lh) + 2 * var(--pa-cmp-py) - 32px) / 2); }
 .composer .cmp-pair .btn { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; }
 .composer .cmp-pair .cmp-voice:is(:hover, :active) { transform: none; }
 

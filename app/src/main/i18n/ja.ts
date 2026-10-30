@@ -97,8 +97,6 @@ export const ja = {
   "chat.deleteTurn": "メッセージを削除",
   "chat.readAloud": "読み上げ",
   "chat.beforeAct": "操作の前に",
-  "chat.askFirst": "先に確認する",
-  "chat.direct": "そのまま実行",
   "chat.workedFor": "{p0} 秒で処理",
   "chat.workingFor": "· {p0} 秒",
   "chat.quota": "{p0} の上限に到達",

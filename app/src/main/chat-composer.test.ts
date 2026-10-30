@@ -43,18 +43,15 @@ test("attachment-only delivery uses the shared composer and keeps the file on fa
  view.el.requestSubmit();await flush();expect(send).toHaveBeenLastCalledWith("",[{name:"notes.txt",mime:"text/plain",data:btoa("notes")}]);expect(view.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(true);
 });
 
-test("shared composer plus menu preserves attachment picking and the global action mode submenu", async () => {
+test("plus only attaches, and the action mode is its own named control", async () => {
  const {view}=mount();
  const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!,pick=vi.spyOn(picker,"click");
- view.el.querySelector<HTMLButtonElement>(".cmp-attach")!.click();await flush();
- expect(document.querySelector("#app-popover .menu-sep")).toBeNull();
- document.querySelector<HTMLButtonElement>('#app-popover [data-action="1"]')!.click();
- expect(document.querySelector("#app-popover")).not.toBeNull();
- document.querySelector<HTMLButtonElement>('#app-submenu [data-value="direct"]')!.click();await flush();
- expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"direct"});
- view.el.querySelector<HTMLButtonElement>(".cmp-attach")!.click();await flush();
- document.querySelector<HTMLButtonElement>('#app-popover [data-action="0"]')!.click();
- expect(pick).toHaveBeenCalledOnce();
+ view.el.querySelector<HTMLButtonElement>(".cmp-attach")!.click();
+ expect(pick).toHaveBeenCalledTimes(1);expect(document.querySelector("#app-popover")).toBeNull();
+ view.el.querySelector<HTMLButtonElement>(".cmp-mode")!.click();await flush();
+ document.querySelector<HTMLButtonElement>('#app-popover [data-value="ask"]')!.click();await flush();
+ expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"ask"});
+ expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Ask before acting");
 });
 test("voice records until manual Stop and learns an edited transcript only on send",async()=>{
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});

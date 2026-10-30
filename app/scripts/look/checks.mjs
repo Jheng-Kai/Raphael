@@ -446,7 +446,7 @@ export function checkRendered(name, context = {}) {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
     require(window.__look.data.members.find(member => member.id === 1).model === saved[0].params.model, "the member retains its own brain");
-    require(document.querySelector('.mb-det [data-member-brain] .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
+    require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
     return { check: name, model: saved[0].params.model };
   }

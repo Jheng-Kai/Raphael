@@ -68,14 +68,6 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
-  test("offers the shared brain picker in member details", async () => {
-    const panel = mount(); await flush();
-    const trigger = panel.el.querySelector<HTMLButtonElement>('[data-model-picker="answer"] button');
-    expect(trigger).not.toBeNull();
-    expect(trigger?.getAttribute("aria-label")).toContain("大腦");
-    trigger?.click(); await flush();
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  });
   test("conversation slot loads the selected member, preserves search on redraw, navigates and collapses when empty", async () => {
     const panel = mount();
     const open = vi.fn();
@@ -239,10 +231,10 @@ describe("a member's panel", () => {
     expect(host.update).toHaveBeenCalledWith(3, { group_id: 21 });
   });
 
-  test("the member brain uses the shared picker, and the group's places are chips", async () => {
+  test("the brain is chosen next to the composer, not here, and the group's places are chips", async () => {
     const panel = mount();
     await flush();
-    expect(panel.el.querySelectorAll(".mp-trigger")).toHaveLength(1);
+    expect(panel.el.querySelectorAll(".mp-trigger")).toHaveLength(0);
     expect([...panel.el.querySelectorAll(".mb-chips .mb-chip")].map((c) => c.textContent)).toEqual(["example/app"]);
   });
 

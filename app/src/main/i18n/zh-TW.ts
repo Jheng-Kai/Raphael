@@ -96,8 +96,6 @@ export const zhTW = {
   "chat.deleteTurn": "刪除這則",
   "chat.readAloud": "朗讀",
   "chat.beforeAct": "動手前",
-  "chat.askFirst": "先問我",
-  "chat.direct": "直接做",
   "chat.workedFor": "已處理 {p0} 秒",
   "chat.workingFor": "· {p0} 秒",
   "chat.quota": "{p0} 額度已滿",

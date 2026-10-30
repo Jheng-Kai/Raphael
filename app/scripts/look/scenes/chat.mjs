@@ -2,7 +2,7 @@ import { scene, click, hover, type, wait, waitGone, member, room, search, check,
 
 const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 const details = [member(1), { action: "open-details" }, check("member-details")];
-const composer = [click(".cmp-attach"), wait("#app-popover")];
+const composer = [click(".cmp-mode"), wait("#app-popover")];
 const dictationText = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
 // A key made up for the scenes: it is typed into a secret card and must reach nothing but `integrations.card_save`.
 const lookKey = "sk-look-4c9f2b7e81d3";
@@ -173,7 +173,7 @@ export default [
     click('.mb-dialog [data-dlg="delete"]'), waitGone('.mb-det [data-conversation-open="1"]'), wait(".toast"), check("conversation-deleted")]),
   scene("details", "Title opens member details", [...details, { action: "icon-interactions", selector: '.mb-det [data-det="close"]' }, click('.mb-det-head'), check("details-pointer-focus")]),
   scene("raphael-details", "Title opens Raphael details", [{ action: "open-details" }, check("member-details")]),
-  scene("member-brain-saved", "Choose a member CLI brain and reopen its shared chooser", [...details, click('[data-member-brain] .mp-trigger'), wait('.model-chooser'), click('[data-source="cli:codex"]'), click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), { action: "close-details" }, { action: "open-details" }, check("member-brain-saved"), click('[data-member-brain] .mp-trigger'), wait('.model-chooser [data-model="cli:codex:gpt-6.1"]'), check("member-brain-saved")]),
+  scene("member-brain-saved", "Choose a member CLI brain next to the composer and reopen its shared chooser", [member(1), click('.composer .cmp-model .mp-trigger'), wait('.model-chooser'), click('[data-source="cli:codex"]'), click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), check("member-brain-saved"), click('.composer .cmp-model .mp-trigger'), wait('.model-chooser [data-model="cli:codex:gpt-6.1"]'), check("member-brain-saved")]),
   scene("raphael-skills", "Raphael uses the same skills pane as every member", [{ action: "open-details" }, click('[data-det="tab"][data-tab="skills"]'), wait('#mp-skill-source'), click('[data-res="skill-menu"][data-id="31"]'), click('#app-popover [data-pick="skill-delete"]'), wait('[data-res="skill-undo"]'), click('[data-res="skill-undo"]'), wait('[data-res="skill-menu"][data-id="31"]'), click('[data-res="skill-menu"][data-id="31"]'), click('#app-popover [data-pick="skill-edit"]'), wait('#mp-skill-text'), check("growing-skills")], { skills: [learnedSkill(0)] }),
   scene("details-closed", "Scrim or title closes details after expanding the member column", [{ action: "member-column", collapsed: false }, ...details, { action: "close-details" }, wait('.conversation-trigger[aria-expanded="false"]')]),
   scene("conversation-filter", "Search conversations in details", [...details, type(".mb-det .conversation-tools input", "no matching conversation"), wait(".mb-det .conversation-empty")]),

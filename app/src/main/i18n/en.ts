@@ -97,8 +97,6 @@ export const en = {
   "chat.deleteTurn": "Delete message",
   "chat.readAloud": "Read aloud",
   "chat.beforeAct": "Before acting",
-  "chat.askFirst": "Ask me first",
-  "chat.direct": "Just do it",
   "chat.workedFor": "Worked for {p0}s",
   "chat.workingFor": "· {p0}s",
   "chat.quota": "{p0} at its limit",

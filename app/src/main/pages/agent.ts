@@ -88,7 +88,8 @@ import {
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
 import { copyText, esc, ico, iconButton, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
-import { composerHTML, drawTaskSlot, openComposerMenu } from "../chat-composer";
+import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
+import { mountComposerBrain } from "../composer-brain";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
 import { createProblemNotice } from "../problem-notice";
@@ -286,6 +287,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // ---------- the members ----------
 
   let visible = false;
+  let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
@@ -294,6 +296,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => desktop.sync()); },
     onSelect: () => { app.go("agent"); switchThread(); },
     onUpdate: () => {
+      composerBrain?.draw();
       drawComposer();
       drawDock();
       drawFaces();
@@ -448,6 +451,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const correctionLearning = bindComposerLearning(input);
   const slashMenu = mountSlashMenu(input, { memberId });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
+  bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member());
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
@@ -1449,6 +1454,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function switchThread(): void {
     desktop.refresh();
+    composerBrain?.draw();
     drawConversation();
     if (roomPane.active) roomPane.close();
     void slashMenu.refresh();
@@ -2007,7 +2013,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void rerun(act);
         break;
       case "attach":
-        void openComposerMenu(attachButton, () => { picker.value = ""; picker.click(); });
+        picker.value = ""; picker.click();
         break;
       case "unattach-file": {
         const id = Number(act.dataset.file);

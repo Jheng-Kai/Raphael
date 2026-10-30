@@ -141,7 +141,6 @@
 .mb-fin:focus-visible { outline: 0; }
 .mb-ta { min-height: calc(72px + 32 * var(--pa-u)); resize: vertical; line-height: 1.55; }
 .mb-field .sel, .mb-frow .sel, .mb-rsched .sel { width: 100%; max-width: 100%; justify-content: space-between; height: var(--pa-dctl); font-size: var(--pa-dfs); }
-.mb-field [data-member-brain] .mp-trigger { width: 100%; min-width: 0; max-width: none; }
 .mb-field .sel > span, .mb-frow .sel > span { flex: 1; min-width: 0; text-align: left; }
 .mb-dialog .btn { min-height: var(--pa-dctl); font-size: var(--pa-dfs); }
 .mb-det .btn.sm, .mb-dialog .btn.sm { min-height: calc(28px + 10 * var(--pa-u)); font-size: var(--pa-dfs); }
