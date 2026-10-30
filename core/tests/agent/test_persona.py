@@ -479,3 +479,16 @@ def test_only_raphael_knows_his_replies_at_this_computer_are_voiced(language, na
             language, "answer", name="Tutor", role="Teacher", instructions="Teach examples.",
             narrated=narrated,
         )
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_composio_two_step_doctrine_reaches_every_api_and_cli_brain(language):
+    member = dict(name="Member", role="Assistant", instructions="", personality="")
+    prompts = [persona.system_prompt(language, "answer"), persona.cli_system_prompt(language),
+               persona.cli_system_prompt(language, **member), persona.member_system_prompt(language, "answer", **member),
+               persona.worker_system_prompt(language, model_calls=5, tool_calls=10),
+               persona.member_worker_system_prompt(language, **member, model_calls=5, tool_calls=10)]
+    for prompt in prompts:
+        for clause in ("COMPOSIO_SEARCH_TOOLS", "COMPOSIO_MULTI_EXECUTE_TOOL", "tool_slug", "input schema",
+                       "searching alone does not read mail", "sync_response_to_workbench false"):
+            assert clause in prompt

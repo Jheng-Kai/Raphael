@@ -276,6 +276,8 @@ class EchoClient:
 
     async def chat_tools(self, *, messages: list[dict], tools: list[dict], **kwargs: Any) -> ChatTurn:
         from .native_journeys import record_model_request
+        from .native_journeys import wait_for_native_cancel
+        await wait_for_native_cancel(messages)
         record_model_request(kwargs.get("model"), kwargs.get("reasoning_effort", "none"))
         # The scripted task of the background worker (see the class).
         offered = {tool["function"]["name"] for tool in tools}

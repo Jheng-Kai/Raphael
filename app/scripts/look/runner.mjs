@@ -150,7 +150,7 @@ export async function run(options) {
         await page.goto(`${origin}/${scene.entry ?? ""}`, { waitUntil: "networkidle0", timeout: 20000 });
         await page.waitForSelector(scene.ready ?? (scene.entry === "overlay.html" ? "#progress:not([hidden])" : scene.fixture.onboarding ? '#ob:not([hidden]) [data-ob="next"]' : '.page-home:not([hidden]) .ho-hero'), { visible: true, timeout: 10000 });
         // Existing conversation journeys enter through the real rail after the home is ready.
-        if (scene.entry !== "overlay.html" && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
+        if (!scene.entry && !scene.fixture.onboarding && !scene.name.startsWith("home")) {
           await perform(page, { action: "click", selector: '.mb-chief' });
           await page.waitForSelector('.page-agent:not([hidden]) .conversation-trigger', { visible: true, timeout: 10000 });
         }
@@ -201,13 +201,13 @@ export async function run(options) {
           return [...new Set(Object.entries(en).filter(([key, value]) => typeof value === 'string' && /[A-Za-z]/.test(value) && !/[<{}]/.test(value) && /[\u3400-\u9fff]/.test(zhTW[key] ?? '') && value !== zhTW[key]).map(([, value]) => value.trim()))];
         }) : [];
         // The ⋯ buttons that no row of the app's own table (context-menu.ts) reaches with a right click: R-UI-44.
-        const unreached = scene.entry === "overlay.html" ? [] : await page.evaluate(async () => {
+        const unreached = scene.entry ? [] : await page.evaluate(async () => {
           const { uncoveredOverflows } = await import('/src/main/context-menu.ts');
           return uncoveredOverflows(document).map(button => ({ tag: "button", id: button.id, class: button.className, text: button.getAttribute("aria-label") ?? "" }));
         });
         result.viewport=page.viewport();
         Object.assign(result, await page.evaluate(auditDocument, undefined, result.viewport, namespaces, latinFor(scene, actualLocale), englishUI, unreached));
-        if (scene.entry !== "overlay.html") {
+        if (!scene.entry) {
           for (const name of ["content-width", "message-no-inner-scroll", "message-no-raw-envelope"]) {
             try { (result.assertions ??= []).push(await page.evaluate(checkRendered, name)); }
             catch (value) { error("layout", value.message); }

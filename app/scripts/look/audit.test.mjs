@@ -6,6 +6,12 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("keeps authored code intact while still checking its interface controls for translation", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="message-code"><pre><code>const ready = true;</code></pre><button>Copy</button></div><p>Settings</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings"]);
+  });
   it("quick model purpose comes from its localized row label without a helper paragraph", () => {
     const win = new Window();
     win.document.documentElement.lang = "zh-TW";
@@ -214,6 +220,10 @@ describe("rendered look checks", () => {
     const result = auditDocument(window.document, { width: 1120, height: 900 }, [], null, [], [orphan]);
     expect(result.productRules.map(item => item.rule)).toEqual(["R-UI-44"]);
     expect(failedChecks({ ...result, runtimeErrors: [] })).toBe(true);
+  });
+  it("permits the scoped floating latest action without relaxing ordinary icon rules", () => {
+    const { audit } = productAudit('<div class="page-agent"><div class="ra-stage"><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button></div></div><button class="btn icon conversation-latest" style="border:1px solid gray;background:white"></button>');
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("checks text frames and bare icon borders", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button><button class="btn brand" style="border:none">Raphael</button>');

@@ -44,6 +44,7 @@ import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
 import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
+import { mountConversationScroll } from "../conversation-scroll";
 import { measureMessagePreviews } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
@@ -552,6 +553,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** The thread's own turns: what colleagues asked this member is drawn, never stopped or searched here. */
   const own = (): AgentTurn[] => turns.filter((turn) => !exchangeTurn(turn));
+  mountConversationScroll(scroller);
   const atBottom = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= BOTTOM_SLACK_PX;
   const newestId = (): number => turns.reduce((max, turn) => Math.max(max, turn.id), 0);
   const isEmpty = (): boolean =>
@@ -2043,7 +2045,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   cancelGesture().register(() => {
     const task = composerTask();
     return visible && !roomPane.active && task ? {
-      key: task.key, button: voiceButton, hint: t("common.cancelAgain"),
+      key: task.key, immediate: task.key.startsWith("listening:") || task.key.startsWith("voice:"), button: voiceButton, hint: t("common.cancelAgain"),
       cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
     } : null;
   });

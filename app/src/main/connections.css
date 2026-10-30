@@ -8,12 +8,12 @@
 
 /* The bar: 已安裝 N and 商店 N as quiet tabs, the search on the right */
 .cs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); }
-.cs-find { display: flex; margin-left: auto; min-width: 0; }
+.cs-find { display: flex; width: 100%; margin: 0; min-width: 0; }
 .cs-find { gap: var(--sp-2); }
 .cs-find .sel { max-width: 180px; }
 .cs-find .sel span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-find .field { width: 220px; height: 32px; }
-.cs:has([data-conn="store-group"]) .cs-find { order: -1; width: 100%; margin: 0; }
+.cs:has([data-conn="store-group"]) .cs-find { order: 0; width: 100%; margin: 0; }
 .cs:has([data-conn="store-group"]) .cs-find .field { width: 100%; height: 40px; }
 .cs-store-groups { display: flex; flex-wrap: nowrap; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; margin-bottom: var(--sp-3); padding-right: var(--sp-5); mask-image: linear-gradient(to right, var(--text) calc(100% - var(--sp-5)), transparent); }
 .cs-store-groups::-webkit-scrollbar { display: none; }

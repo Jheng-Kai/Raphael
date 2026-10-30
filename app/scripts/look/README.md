@@ -201,6 +201,11 @@ npm run judge -- .look/run-EXAMPLE --references <external-reference.png>
 npm run verify -- --live
 ```
 
+On memory-constrained Windows machines shared by worktrees, set
+`RAPHAEL_VERIFY_WAIT_FOR_IDLE=1` to query `Get-CimInstance Win32_Process` before
+each verification boundary and wait for active cargo, rustc, pytest, Vitest,
+look or native runs. This never stops another process.
+
 For local changes, select scenes from the affected feature map and run those at both
 themes and 1120/720/1920x1080. A shared confirmation dialog, for example, uses
 `npm run look -- delete automation-delete team-delete room-delete --theme both --width 1120,720,1920x1080`.
@@ -368,3 +373,38 @@ record their actual viewport dimensions.
 ## Owner round 7 layout
 
 The feature map names the affected scene matrix and shared checks. Native readable-layout now also checks separate model/source lines, aligned card actions, a single quick-question row label, the conversation fade and Home/sidebar geometry. Keep the pre-fix binary identity separate from exact source build evidence. The owner runs design judge from their shell for this round.
+
+### Stable view controls (R-UI-49)
+
+`stableClick(selector, then)` records the clicked control and persistent preceding
+layout, performs real clicks and dependent actions, settles motion and rejects any
+position or size change over 1px. Missing controls or anchors fail. Normal click
+steps on tabs, switches, pressed filters, Settings panes and view controls also
+record this assertion, including alongside existing paint measurements. Sidebar
+and Home are excluded while their parallel redesign is owned elsewhere. Evidence
+is stored in the existing action assertions; there is no separate browser harness.
+The learned notification uses the real `learned.html` entry with only IPC mocked.
+
+## Native round 10 regression journey
+
+```powershell
+npm.cmd run native -- owner-round10 voice-conversation locale-sweep delete-conversation
+```
+
+`owner-round10` uses the bundled debug shell, real Rust correction Tracker, core
+acceptance and SQLite evidence. It checks owner expansion, conversation scrolling,
+two Escape presses for a pending fake answer, a complete learned batch, five-second
+hover retention, exact batch/evidence Undo and expiry. Read-only Win32 inspection
+checks the learned window's NOACTIVATE style, rounded click region, click-through
+expiry, active-monitor placement and foreground continuity. The passive learned
+window starts independently of the ordinary overlay, including native isolation.
+`voice-conversation` additionally verifies one Escape cancels a new native recording.
+Its speech path still requires installed local Qwen3 ASR and VAD; missing models
+are BLOCKED. The pending-answer marker is inert outside isolated fake native runs.
+No real provider, owner data, Gmail, Composio or OpenRouter is used.
+
+When multiple worktrees share a Cargo target, copy the completed debug app.exe
+into this worktree immediately after its build and set RAPHAEL_NATIVE_BINARY to
+that copy. The native runner records the selected executable, so a later build
+from another worktree cannot replace the binary under test. CARGO_TARGET_DIR
+continues to select the shared build cache.

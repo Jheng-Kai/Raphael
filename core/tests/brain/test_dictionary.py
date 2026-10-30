@@ -211,15 +211,9 @@ def test_the_count_of_a_pair_survives_reopening_the_database(tmp_path):
 @pytest.mark.parametrize(
     ("word", "misheard", "sentence"),
     [
-        ("two", "to", "Go to the station."),  # at most two letters
         ("parser", "py", "Run py today."),
-        ("them", "the", "Read the report."),  # a function word
-        ("which", "this", "Keep this here."),
-        ("他", "我", "我是學生。"),  # a single CJK character
-        ("轉錄", "轉入", "我想把錢轉入帳戶"),  # two CJK characters
-        ("後天", "明天", "明天我們再見。"),
-        ("workshop", "meeting", "Join the meeting."),  # a synonym, not alike
-        ("服務器", "電腦網", "電腦網已連接。"),  # CJK with no character in common
+        ("轉錄", "轉入", "我想把錢轉入帳戶"),
+        ("workshop", "meeting", "Join the meeting."),
     ],
 )
 def test_pairs_that_may_not_be_rules_stay_hints_however_often_they_are_seen(
@@ -232,6 +226,71 @@ def test_pairs_that_may_not_be_rules_stay_hints_however_often_they_are_seen(
     assert d.hint_words() == [word]
     assert d.hint_forms() == [(misheard, word)]
     assert apply_replacements(sentence, d.replacements()) == sentence
+
+
+@pytest.mark.parametrize(("word", "misheard"), [
+    ("two", "to"), ("them", "the"), ("which", "this"),
+    ("他", "我"), ("後天", "明天"), ("服務器", "電腦網"),
+    ("但是", "單是"), ("今天", "津天"),
+    ("release", "release，please review the remaining notes"),
+    ("明日再討論", "等待完成後再來討論"),
+    ("release", "release review"), ("Claude Code", "Claude Code today"),
+    ("Delta!", "Dalta"), ("Delta", "Dalta!"),
+])
+def test_automatic_learning_rejects_common_words_clauses_punctuation_and_shortening(conn, word, misheard):
+    d = DictionaryStore(conn)
+    for _ in range(3):
+        assert d.learn_pair(word, misheard) is Learned.NOTHING
+    assert d.list() == []
+    assert conn.execute("SELECT COUNT(*) FROM dictionary_evidence").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize(("word", "misheard"), [
+    ("Composio", "Compose"), ("cron", "Chrome"), ("HiKari", "Kari"), ("bot", "box"),
+    ("Notion", "noting"), ("Canva", "kanva"), ("STT", "CTT"), ("token", "偷看"),
+    ("平假名", "評價"), ("額度", "耳朵"), ("Claude Code", "Cloud Code"),
+])
+def test_automatic_learning_keeps_corrected_names_and_technical_terms(conn, word, misheard):
+    d = DictionaryStore(conn)
+    assert d.learn_pair(word, misheard) is Learned.TERM
+    assert [(entry.word, entry.source) for entry in d.list()] == [(word, "learned")]
+
+
+def test_direct_learned_add_cannot_bypass_term_acceptance(conn):
+    d = DictionaryStore(conn)
+    for word in ("please review this clause", "但是", "Name!"):
+        with pytest.raises(ValueError, match="single terms"):
+            d.add(word, source="learned")
+    assert d.list() == []
+
+
+def test_undo_learning_removes_only_its_batch_and_evidence_once(conn):
+    d = DictionaryStore(conn)
+    untouched = d.add("Existing")
+    before = [d.learning_snapshot(word) for word in ("Composio", "HiKari")]
+    d.learn_pair("Composio", "Compose")
+    d.learn_pair("HiKari", "Kari")
+    token = d.remember_learning(before)
+    assert d.undo_learning(token) is True
+    assert d.list() == [untouched]
+    assert conn.execute("SELECT COUNT(*) FROM dictionary_evidence").fetchone()[0] == 0
+    assert d.undo_learning(token) is False
+
+
+def test_undo_restores_prior_evidence_and_preserves_later_edits(conn):
+    d = DictionaryStore(conn)
+    d.learn_pair("Composio", "Compose")
+    before = d.learning_snapshot("Composio")
+    d.learn_pair("Composio", "Compose")
+    token = d.remember_learning([before])
+    assert d.undo_learning(token) is True
+    assert d.learning_snapshot("Composio") == before
+    snapshot = d.learning_snapshot("HiKari")
+    d.learn_pair("HiKari", "Kari")
+    token = d.remember_learning([snapshot])
+    d.add("HiKari", ["Hikarii"])
+    assert d.undo_learning(token) is False
+    assert any(entry.word == "HiKari" and entry.misheard == ["Hikarii"] for entry in d.list())
 
 
 @pytest.mark.parametrize(
@@ -485,3 +544,20 @@ def test_hint_forms_are_the_rules_and_then_the_newest_hints_first(conn):
     learn(d, "Typeless", "type list")
     assert d.hint_forms() == [("拉菲爾", "拉斐爾"), ("type list", "Typeless"), ("cloud", "Claude")]
     assert d.replacements() == [("拉菲爾", "拉斐爾")]
+
+
+def test_undo_matches_existing_entry_spelling_without_changing_its_identity(conn):
+    d = DictionaryStore(conn)
+    d.add("Composio")
+    before = d.learning_snapshot("composio")
+    d.learn_pair("composio", "Compose")
+    token = d.remember_learning([before])
+    assert d.undo_learning(token) is True
+    assert d.learning_snapshot("Composio") == before
+
+
+def test_direct_learned_add_cannot_smuggle_a_clause_as_a_replacement(conn):
+    d = DictionaryStore(conn)
+    with pytest.raises(ValueError):
+        d.add("Composio", ["Compose, then remove the whole trailing explanation"], source="learned")
+    assert d.list() == []

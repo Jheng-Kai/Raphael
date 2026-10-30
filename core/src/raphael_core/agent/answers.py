@@ -550,13 +550,13 @@ class Voice:
             )
         except OpenRouterError as error:
             logger.warning("The answering model failed: kind=%s status=%s", error.kind, error.status)
-            raise AgentFailure(failure_kind(error)) from None
+            raise AgentFailure(failure_kind(error), model=model) from None
         except TimeoutError:
             logger.warning("The answering model timed out")
-            raise AgentFailure("timeout") from None
+            raise AgentFailure("timeout", model=model) from None
         except Exception as exc:
             logger.warning("The answering model failed unexpectedly: %s", type(exc).__name__)
-            raise AgentFailure(failure_kind(exc)) from None
+            raise AgentFailure(failure_kind(exc), model=model) from None
         ledger.add(
             model=completion.model,
             cost_usd=completion.cost_usd,

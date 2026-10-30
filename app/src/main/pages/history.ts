@@ -250,7 +250,11 @@ export function createHistory(app: AppContext): HistoryPage {
   onLocaleChange(() => {
     el.querySelector("h1")!.textContent = t("main.002");
     el.querySelector(".tabs")!.setAttribute("aria-label", t("common.filter"));
-    for (const f of FILTERS) el.querySelector<HTMLElement>(`[data-filter="${f.id}"]`)!.textContent = f.name;
+    for (const f of FILTERS) {
+      const label = el.querySelector<HTMLElement>(`[data-filter="${f.id}"] .tab-label`)!;
+      label.dataset.label = f.name;
+      label.querySelector("span")!.textContent = f.name;
+    }
     search.placeholder = t("history.007");
     search.setAttribute("aria-label", t("history.008"));
     more.querySelector("button")!.textContent = t("history.009");

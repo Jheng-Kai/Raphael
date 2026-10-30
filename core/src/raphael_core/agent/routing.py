@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..brain.providers.registry import ProviderRouter, for_purpose
-from ..brain.openrouter import CLEANUP_FALLBACKS, Completion, OpenRouterClient, OpenRouterError
+from ..brain.openrouter import Completion, OpenRouterClient, OpenRouterError
 from .commands import COMMAND_NAMES, COMMANDS, NONE
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
@@ -384,9 +384,7 @@ class Router:
         """What `text` is: Jev's decision if Jev is sure, else the language model's `model`.
         `background` is one line about the tasks in the background, if there are any. AgentFailure
         (of a kind) when nothing decides."""
-        if isinstance(self._client, ProviderRouter) and (
-                self._client.registry.settings.get("router_model") or
-                self._client.registry.settings.get("router_fallbacks")):
+        if isinstance(self._client, ProviderRouter) and self._client.registry.settings.get("router_model"):
             return await self.ask_luna(text, model, ledger, background, context=context)
         if model.startswith("@"):
             # Jev is an OpenRouter-only alpha API. Other providers need no OpenRouter key.
@@ -498,7 +496,7 @@ class Router:
             completion = await asyncio.wait_for(
                 self._client.complete_json(
                     model=model,
-                    fallbacks=CLEANUP_FALLBACKS,
+                    fallbacks=[],
                     system=system,
                     user=user,
                     schema=schema,
@@ -511,13 +509,13 @@ class Router:
             )
         except OpenRouterError as error:
             logger.warning("The language model failed (%s): kind=%s", name, error.kind)
-            raise AgentFailure(failure_kind(error)) from None
+            raise AgentFailure(failure_kind(error), model=model) from None
         except TimeoutError:
             logger.warning("The language model timed out (%s)", name)
-            raise AgentFailure("timeout") from None
+            raise AgentFailure("timeout", model=model) from None
         except Exception as exc:
             logger.warning("The language model failed (%s): %s", name, type(exc).__name__)
-            raise AgentFailure(failure_kind(exc)) from None
+            raise AgentFailure(failure_kind(exc), model=model) from None
         ledger.add(
             model=completion.model,
             cost_usd=completion.cost_usd,

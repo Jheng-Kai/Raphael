@@ -103,7 +103,7 @@ test("message links and preview cards use the safe opener with the full target; 
   agent.hide();
 });
 
-test("messages copy plain text, code copies exactly, only the latest reply regenerates, and long replies expand", async () => {
+test("messages copy plain text, code copies exactly, only the latest reply regenerates, and long replies stay full", async () => {
   const body = "**bold**\n\n```js\na < b\n```\n" + Array.from({ length: 35 }, (_, i) => `line ${i}`).join("\n");
   api.agentHistoryList.mockResolvedValue({ turns: [turn(2, { text: body }), turn(1)] });
   api.agentAskText.mockResolvedValue(undefined);
@@ -118,9 +118,8 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   expect(copy.mock.lastCall?.[0]).not.toContain("**");
   latest.querySelector<HTMLButtonElement>('[data-act="copy-code"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith("a < b");
-  const expand = latest.querySelector<HTMLButtonElement>('.ra [data-act="expand-message"]')!;
-  expect(expand.hidden).toBe(false); expand.click();
-  expect(document.querySelector('.tn[data-id="2"] .is-expanded')).not.toBeNull();
+  expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
+  expect(latest.querySelector('.ra .message-text')!.textContent).toContain("line 34");
   document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));

@@ -7,7 +7,48 @@ from pathlib import Path
 directory = Path(sys.argv[1]).resolve()
 database = directory / "raphael.db"
 operation = sys.argv[2]
-if operation == "voice-models":
+if operation == "windows":
+    import ctypes
+    from ctypes import wintypes as w
+    user, gdi = ctypes.windll.user32, ctypes.windll.gdi32
+    user.GetForegroundWindow.restype = w.HWND
+    user.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
+    user.GetWindowLongW.argtypes = [w.HWND, ctypes.c_int]
+    user.GetWindowRect.argtypes = [w.HWND, ctypes.POINTER(w.RECT)]
+    user.GetWindowRgn.argtypes = [w.HWND, w.HANDLE]
+    user.GetWindowThreadProcessId.argtypes = [w.HWND, ctypes.POINTER(w.DWORD)]
+    gdi.CreateRectRgn.restype = w.HANDLE
+    gdi.PtInRegion.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_int]
+    gdi.DeleteObject.argtypes = [w.HANDLE]
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = [("cbSize", w.DWORD), ("monitor", w.RECT), ("work", w.RECT), ("flags", w.DWORD)]
+    user.MonitorFromWindow.argtypes = [w.HWND, w.DWORD]
+    user.MonitorFromWindow.restype = w.HANDLE
+    user.GetMonitorInfoW.argtypes = [w.HANDLE, ctypes.POINTER(MonitorInfo)]
+    monitor = MonitorInfo()
+    monitor.cbSize = ctypes.sizeof(monitor)
+    user.GetMonitorInfoW(user.MonitorFromWindow(user.GetForegroundWindow(), 2), ctypes.byref(monitor))
+    windows = []
+    @ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+    def visit(hwnd, _):
+        pid = w.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value != int(sys.argv[3]):
+            return True
+        title = ctypes.create_unicode_buffer(512)
+        user.GetWindowTextW(hwnd, title, len(title))
+        rect = w.RECT()
+        user.GetWindowRect(hwnd, ctypes.byref(rect))
+        region = gdi.CreateRectRgn(0, 0, 0, 0)
+        shape = user.GetWindowRgn(hwnd, region)
+        windows.append({"title": title.value, "style": user.GetWindowLongW(hwnd, -20),
+                        "rect": [rect.left, rect.top, rect.right, rect.bottom],
+                        "rounded": bool(shape and not gdi.PtInRegion(region, 0, 0) and gdi.PtInRegion(region, (rect.right-rect.left)//2, (rect.bottom-rect.top)//2))})
+        gdi.DeleteObject(region)
+        return True
+    user.EnumWindows(visit, 0)
+    print(json.dumps({"foreground": user.GetForegroundWindow(), "workArea": [monitor.work.left, monitor.work.top, monitor.work.right, monitor.work.bottom], "windows": windows}))
+elif operation == "voice-models":
     from raphael_core.device.models import REGISTRY
 
     root = Path(sys.argv[3]).resolve()
@@ -114,7 +155,7 @@ else:
         result = {}
         for table in tables:
             columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
-            if table in {"conversations", "members", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit"} or "conversation_id" in columns:
+            if table in {"conversations", "members", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit", "dictionary", "dictionary_evidence"} or "conversation_id" in columns:
                 result[table] = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]
         print(json.dumps(result, ensure_ascii=False))
     elif operation == "thread":

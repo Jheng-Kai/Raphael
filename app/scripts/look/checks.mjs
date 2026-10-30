@@ -219,6 +219,41 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name };
   }
+  if (name === "reply-split") {
+    const messages = [...document.querySelectorAll('.tn[data-id="2"] .ra-body .chat-message[data-reply]')];
+    require(messages.length === 3, "three authored messages have separate bubbles");
+    require(messages[1].querySelector('ul') && messages[2].querySelector('pre'), "lists and code blocks remain whole");
+    return { check: name, messages: messages.length };
+  }
+  if (name === "reply-full") {
+    const replies = [...document.querySelectorAll('.ra .chat-message:has(> .ans:not(.progress))')];
+    require(replies.length > 0, "reply bubbles are present");
+    for (const message of replies) {
+      require(!message.hasAttribute('data-expandable') && !message.querySelector('[data-act="expand-message"]'), "replies never collapse");
+      const text = message.querySelector('.message-text');
+      if (text) require(text.clientHeight >= text.scrollHeight - 1, "the full reply is readable");
+    }
+    return { check: name, replies: replies.length };
+  }
+  if (name === "conversation-up" || name === "conversation-bottom") {
+    const scroll = [...document.querySelectorAll('.ra-scroll')].find(visible);
+    require(scroll, "a conversation scrollport is visible");
+    require(getComputedStyle(scroll).scrollbarWidth === 'none' && scroll.offsetWidth - scroll.clientWidth <= 1, "only content occupies the message scrollport");
+    const latest = scroll.parentElement.querySelector('.conversation-latest');
+    require(visible(latest) === (name === "conversation-up"), "latest is visible only away from the bottom");
+    if (visible(latest)) {
+      const box = latest.getBoundingClientRect(), style = getComputedStyle(latest);
+      require(Math.abs(box.width - box.height) <= 1 && parseFloat(style.borderRadius) >= box.width / 2, "latest is a round button");
+      require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && parseFloat(style.borderWidth) >= 1, "latest has its own opaque surface above message content");
+    }
+    return { check: name, top: scroll.scrollTop, height: scroll.scrollHeight };
+  }
+  if (name === "learned-pill") {
+    const pill = document.querySelector('#learned-pill');
+    require(visible(pill) && !!pill.querySelector('img').getAttribute('src'), "one learned pill has Raphael's emblem");
+    require(pill.textContent.includes('Composio') && !!pill.querySelector('button').textContent, "the batch and Undo are visible");
+    return { check: name };
+  }
   if (["message-preview", "message-expanded", "message-preview-member", "message-expanded-member"].includes(name)) {
     const message = [...document.querySelectorAll('.chat-message')].find(node => node.textContent.includes('整理每日新聞素材') && (!name.endsWith('-member') || node.closest('.ra')));
     require(!!message, "the long numbered workflow is visible");
@@ -228,6 +263,11 @@ export function checkRendered(name, context = {}) {
     const expanded = name.startsWith("message-expanded");
     require(message.classList.contains('is-expanded') === expanded && toggle.getAttribute('aria-expanded') === String(expanded), "the expanded state and accessible control agree");
     const style = getComputedStyle(text);
+    require(!!toggle.closest(".bubble"), "owner expansion remains inside the bubble");
+    const control = getComputedStyle(toggle);
+    require(control.fontSize === style.fontSize && control.color === style.color, "the expand control inherits the owner's message typography");
+    require(control.borderColor === 'rgba(0, 0, 0, 0)', "the quiet expand control has no outline at rest or on hover");
+    if (!toggle.matches(':hover')) require(control.backgroundColor === 'rgba(0, 0, 0, 0)', "the quiet expand control has no fill at rest");
     if (message.classList.contains('owner-message')) require(text.innerText.includes('\n\n'), "owner paragraphs retain their rendered line breaks");
     if (expanded) require(text.clientHeight >= text.scrollHeight - 1 && style.maskImage === 'none', "expanded text displays its complete body without a fade");
     else {
@@ -351,7 +391,7 @@ export function checkRendered(name, context = {}) {
     return {check:name,captionHeight:caption.getBoundingClientRect().height,identity:visible(identity)};
   }
   if (name === "failure-owner-copy") {
-    const replies = [...document.querySelectorAll('.tn .ra .chat-message[data-expandable]')].filter(visible);
+    const replies = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible);
     const reply = replies.at(-1), preview = document.querySelector('.mb-col [data-member][aria-current="true"] .mb-row-p');
     require(visible(reply) && visible(preview), "the reply and its sidebar preview are visible");
     const copy = { reply: reply.textContent.trim(), preview: preview.textContent.trim() };
@@ -460,12 +500,13 @@ export function checkRendered(name, context = {}) {
     require(button.classList.contains("task-action"),"Stop shares the Send action component");
     const send=button.closest('form')?.querySelector('.cmp-send');
     if(send)require(getComputedStyle(send).color===getComputedStyle(button).color,"Stop and Send have exactly the same color");
-    require(!window.__look.calls.some(call=>["agent_retract","overlay_cancel"].includes(call.command)||["rooms.stop","worker.cancel","agent.history.stop"].includes(call.method)||call.command==="window_hotkey"&&call.kind==="cancel"),"first Escape performs no cancellation");
+    require(!(window.__look?.calls ?? []).some(call=>["agent_retract","overlay_cancel"].includes(call.command)||["rooms.stop","worker.cancel","agent.history.stop"].includes(call.method)||call.command==="window_hotkey"&&call.kind==="cancel"),"first Escape performs no cancellation");
+    require(![...document.querySelectorAll(".message-tooltip")].some(visible),"the Escape hint replaces the ordinary Stop tooltip");
     return {check:name,hint:button.dataset.cancelHint};
   }
-  if(name === "cancel-native-result" || name === "cancel-overlay-result") {
+  if(name === "cancel-native-result" || name === "cancel-overlay-result" || name === "cancel-recording-result") {
     const command=name==="cancel-overlay-result"?"overlay_cancel":"window_hotkey";
-    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind==="cancel")).length===1,"only the second Escape cancels once");
+    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind==="cancel")).length===1,name === "cancel-recording-result" ? "one Escape cancels recording or STT once" : "only the second Escape cancels once");
     require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
   }
   if(name === "deleted-view") {
@@ -767,7 +808,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, created: created.length };
   }
   if (name === "plain-bot-chat") {
-    const replies = [...document.querySelectorAll('.tn[data-id="1"] .ra [data-expandable] .message-text')].filter(visible);
+    const replies = [...document.querySelectorAll('.tn[data-id="1"] .ra .chat-message .message-text')].filter(visible);
     require(replies.length === 2, "the core's two-message reply shows as two answers");
     require(replies[0].textContent.startsWith("這週的研究有三個重點") && replies[1].textContent.trim().endsWith("方便你接著討論。"), "the reply loses only its opening and closing marks");
     return { check: name, words: plainWords() };
@@ -829,12 +870,12 @@ export function checkRendered(name, context = {}) {
     const calls = window.__look.calls.filter(call => call.method === "agent.history.list");
     require(calls.some(call => (call.params?.member_id ?? 0) === 0 && (call.params?.conversation_id ?? 1) === 1), "R-UI-32: running turn belongs to the open formal conversation");
     require([...document.querySelectorAll('.ra .work-toggle')].some(visible), "R-UI-32: running progress is visible");
-    require(![...document.querySelectorAll('.ra .chat-message[data-expandable]')].some(visible), "R-UI-32: completed answer is absent while running");
+    require(![...document.querySelectorAll('.ra .chat-message')].some(visible), "R-UI-32: completed answer is absent while running");
     require(document.querySelector('.work-latest')?.textContent === "已核對三份報告，正在彙整研究結論。", "R-UI-42: the running state shows the latest step plainly");
     return { check: name, running: true, words: plainWords() };
   }
   if (name === "live-scenario-owner-view") {
-    const answers = [...document.querySelectorAll('.ra [data-expandable] > .ans')].filter(visible);
+    const answers = [...document.querySelectorAll('.ra .chat-message > .ans')].filter(visible);
     require(answers.length === 1, "one owner-visible terminal answer");
     require(answers[0].textContent.includes("需要重新登入並授予讀取權限。"), "actionable zh-TW failure survives the real renderer");
     require(!answers[0].textContent.includes("正在查看"), "progress stays outside final messages");
@@ -843,17 +884,11 @@ export function checkRendered(name, context = {}) {
     return { check: name, answers: answers.length, scope: "personal", status: "missing-connection" };
   }
   if (name === "composer-learn") {
-    const calls = window.__look.calls.filter(call => call.method === "dictionary.learn");
-    if (calls.length !== 1 || JSON.stringify(calls[0].params.corrections) !== JSON.stringify([{ word: "OpenMausBot", misheard: "Open Mouse Bot" }])) throw new Error("The sent voice correction did not reach dictionary.learn exactly once");
-    if (document.querySelectorAll(".toast").length !== 1) throw new Error("A learned correction must show exactly one notice");
-    if (!document.querySelector(".toast")?.textContent.includes("OpenMausBot")) throw new Error("The learned name is missing from the notice");
-    if (document.querySelector(".toast")?.textContent.includes("???")) throw new Error("The learned notice contains corrupted localized text");
-    const toast = document.querySelector(".toast").getBoundingClientRect();
-    for (const form of document.querySelectorAll(".composer")) {
-      const box = form.getBoundingClientRect();
-      if (box.width > 0 && box.height > 0 && toast.left < box.right && toast.right > box.left && toast.top < box.bottom && toast.bottom > box.top) throw new Error("The learned notice covers the composer");
-    }
-    return { check: name, corrections: calls[0].params.corrections };
+    const calls = window.__look.calls.filter(call => call.method === "dictionary.correct");
+    require(calls.length === 1, "one native correction request");
+    require(JSON.stringify(calls[0].params.edits) === JSON.stringify([{ before: "Please use Open Mouse", after: "Please use OpenMausBot" }]), "dictation evidence reaches the shared native tracker unchanged");
+    require(!document.querySelector(".toast"), "the passive learned pill owns the notice, independently of the composer");
+    return { check: name, edits: calls[0].params.edits, nativePill: "separate entry" };
   }
   if (name === "room-required-chief") {
     const chief = document.querySelector('[data-dlg="member"][data-member="0"]');
@@ -908,7 +943,7 @@ export function checkRendered(name, context = {}) {
   if (name === "quick-question-result") {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
-    require(visible(turn.querySelector('.ra [data-expandable]')) && turn.querySelector('.ra [data-expandable]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
+    require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
     const meta = turn.querySelector('.ra-face')?.getAttribute('title') ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
     require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
@@ -1572,7 +1607,7 @@ export function checkRendered(name, context = {}) {
     return { check: name, desktop, cardWidth: boxes[0].width };
   }
   if (name === "conversation-design") {
-    const bubble = document.querySelector(".bubble"), answer = document.querySelector('[data-expandable] > .ans');
+    const bubble = document.querySelector(".bubble"), answer = document.querySelector('[data-reply] > .ans');
     for (const element of [bubble, answer]) {
       require(visible(element), "owner and assistant messages are visible");
       const style = getComputedStyle(element);
@@ -1981,7 +2016,7 @@ export function checkRendered(name, context = {}) {
     require(visible(mark) && mark.querySelector('svg.logo path, img.logo'), "R-UI-34: the app's own catalog or bundled mark");
     if (name.startsWith('connector-slack')) require(mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card uses exactly the store's catalog logo");
     require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
-    const reply = [...card.closest('.tn').querySelectorAll('.chat-message[data-expandable]')].filter(visible).at(-1);
+    const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");
     const buttons = [...card.querySelectorAll('button')].filter(visible);
     for (const button of buttons) {
@@ -2036,7 +2071,7 @@ export function checkRendered(name, context = {}) {
     require(visible(mark) && mark.querySelector('svg'), "the card has its mark");
     require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     if (secret) require(mark.querySelector('svg.logo path'), "R-UI-34: the connection's own drawn mark, not a letter");
-    const reply = [...card.closest('.tn').querySelectorAll('.chat-message[data-expandable]')].filter(visible).at(-1);
+    const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");
     const buttons = [...card.querySelectorAll('button')].filter(visible);
     for (const button of buttons) {

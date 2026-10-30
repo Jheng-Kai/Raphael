@@ -59,10 +59,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && !/auto|scroll|hidden|clip/.test(style.overflowX || style.overflow))
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
+    const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
     if (element.matches('button.btn.icon')) {
-      if (!['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!floatingLatest && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
@@ -147,7 +148,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
       const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
-      if (element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
+      if (element.classList.contains('icon') && hasBorder && !floatingLatest) violation('R-UI-18', 'Icon button has a visible border');
       if (!navigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
     if (element.matches('.action-row')) {
@@ -168,7 +169,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed) for (const value of strings) {
+    if (allowed && !element.closest('.message-code pre code')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;

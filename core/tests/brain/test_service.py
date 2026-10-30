@@ -46,6 +46,7 @@ METHODS = [
     "dictionary.import",
     "dictionary.delete",
     "dictionary.learn",
+    "dictionary.undo",
     "settings.get",
     "settings.set",
     "languages.list",
@@ -920,21 +921,21 @@ async def test_dictionary_learn_makes_a_rule_only_when_a_pair_is_seen_again(rout
 
 
 async def test_a_single_name_correction_adds_the_term_and_repeated_forms_are_not_missed(router):
-    assert await learn(router, "OpenMausBot", "Open Mouse Bot") == {"learned": ["OpenMausBot"]}
+    assert await learn(router, "OpenMausBot", "Open Mouse") == {"learned": ["OpenMausBot"]}
     entry = (await router.call("dictionary.list", {}))["entries"][0]
     assert entry["word"] == "OpenMausBot" and entry["source"] == "learned"
     assert entry["misheard"] == []  # First sighting is already a term, without a risky rule.
-    assert await learn(router, "OpenMausBot", "Open Mouse Bot") == {
+    assert await learn(router, "OpenMausBot", "Open Mouse") == {
         "learned": ["OpenMausBot"], "rules": ["OpenMausBot"]
     }
-    assert await learn(router, "OpenMausBot", "open maus bot") == {"learned": ["OpenMausBot"]}
-    assert await learn(router, "OpenMausBot", "open maus bot") == {
+    assert await learn(router, "OpenMausBot", "open maus") == {"learned": ["OpenMausBot"]}
+    assert await learn(router, "OpenMausBot", "open maus") == {
         "learned": ["OpenMausBot"], "rules": ["OpenMausBot"]
     }
-    assert await learn(router, "OpenMausBot", "Open Mouse Bot") == {"learned": []}
+    assert await learn(router, "OpenMausBot", "Open Mouse") == {"learned": []}
     entries = (await router.call("dictionary.list", {}))["entries"]
     assert len(entries) == 1
-    assert entries[0]["misheard"] == ["Open Mouse Bot", "open maus bot"]
+    assert entries[0]["misheard"] == ["Open Mouse", "open maus"]
 
 
 async def test_dictionary_learn_counts_the_same_pair_once_in_a_dictation(router):
@@ -1845,3 +1846,17 @@ async def test_agent_cleanup_without_a_key_retains_normalization_without_history
     assert result["text"] == "Raphael \u6211\u5011\u958b\u6703"
     assert not result["cleaned"] and result["id"] is None
     assert (await router.call("history.latest", {}))["item"] is None
+
+
+async def test_dictionary_undo_uses_an_opaque_batch_token(router, conn):
+    result = await router.call("dictionary.learn", {
+        "corrections": [{"word": "Composio", "misheard": "Compose"}, {"word": "HiKari", "misheard": "Kari"}],
+        "undoable": True,
+    })
+    assert result["learned"] == ["Composio", "HiKari"]
+    assert isinstance(result["undo"], str) and len(result["undo"]) >= 24
+    assert await router.call("dictionary.undo", {"token": "unknown"}) == {"undone": False}
+    assert await router.call("dictionary.undo", {"token": result["undo"]}) == {"undone": True}
+    assert (await router.call("dictionary.list", {}))["entries"] == []
+    assert conn.execute("SELECT COUNT(*) FROM dictionary_evidence").fetchone()[0] == 0
+    assert await router.call("dictionary.undo", {"token": result["undo"]}) == {"undone": False}
