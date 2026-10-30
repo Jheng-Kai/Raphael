@@ -109,6 +109,8 @@ export interface ConnectionsView {
   composioCatalog: StoreService[] | "loading" | "failed";
   /** The owner's apps as the core counts them: the number beside 「已連結」 is its count, the one of the sidebar and the roster. */
   inventory: InventoryView;
+  /** Which section each row took when this visit first read it. */
+  placed?: ReadonlyMap<string, boolean | null>;
   /** The private skills of the members, beside the apps. */
   skills: SkillItem[] | "loading" | "failed";
   /** The page of a skill that is open over the list. */
@@ -318,8 +320,10 @@ function installedHTML(v: ConnectionsView): string {
   if (!shown.length && !skills.length && !skillsFailed) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
-  const counted = shown.filter((g) => isConnected(v.inventory, g.id) !== false);
-  const others = shown.filter((g) => isConnected(v.inventory, g.id) === false);
+  // A row keeps its section for the whole visit: flipping its switch must not move it from under the pointer.
+  const connected = (g: ConnectionGroup): boolean => (v.placed?.get(g.id) ?? isConnected(v.inventory, g.id)) !== false;
+  const counted = shown.filter(connected);
+  const others = shown.filter((g) => !connected(g));
   const list = (groups: ConnectionGroup[], key: string): string => `<div class="cs-list" data-stagger="${key}">${groups.map((g) => itemHTML(g, v)).join("")}</div>`;
   const named = others.length > 0 || skills.length > 0 || skillsFailed;
   const section = (title: string, body: string): string => `<section class="cs-sec"><h2>${esc(title)}</h2>${body}</section>`;
@@ -791,6 +795,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   let catalog: ConnectionsView["catalog"] = "loading";
   let composioCatalog: ConnectionsView["composioCatalog"] = "loading";
   let inventory: InventoryView = "loading";
+  const placed = new Map<string, boolean | null>();
   let skills: ConnectionsView["skills"] = "loading";
   let skill: SkillPage | null = null;
   let skillLoads = 0;
@@ -845,7 +850,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   const view = (): ConnectionsView => ({
     configured, categories, category, keyOpen, keyBusy, keyError,
-    groups, catalog, composioCatalog, inventory, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
+    groups, catalog, composioCatalog, inventory, placed, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
   /** Prepare the default first screen while the installed catalog is being read. */
@@ -900,6 +905,7 @@ export function createConnections(host: ConnectionsHost): Connections {
     if (mine !== loads) return;
     // The count is the core's, read with the list it counts: both say the same moment.
     inventory = counted.status === "fulfilled" ? counted.value : "failed";
+    if (inventory !== "failed") for (const app of inventory.apps) if (!placed.has(app.id)) placed.set(app.id, app.connected);
     if (status.status === "fulfilled") {
       configured = status.value.composio_configured;
       managed = status.value.connectors;
@@ -1616,6 +1622,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   function reset(): void {
+    placed.clear();
     storePaint++;
     catalogLoads++;
     category = ""; storePage = 0; clearTimeout(searchTimer);

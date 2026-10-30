@@ -8,7 +8,7 @@ const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'),
 const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
-const modelChooser = role => [...settings("models"), click(`[data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
+const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
 const localChooser = [...modelChooser("stt"), click('[data-source="local-speech"]'), wait(".lm-main")];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [

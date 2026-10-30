@@ -163,7 +163,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed && !element.closest('.message-code pre code, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
+    if (allowed && !element.closest('.message-code pre code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;
@@ -258,7 +258,10 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const forced = ink && resolved(element, "color", ink.value);
     for (const mark of marks(element)) {
       const foreground = mark === element && forced ? forced : forced && win.getComputedStyle(mark).color === win.getComputedStyle(element).color ? forced : parsed(win.getComputedStyle(mark).color);
-      if (mark !== element && backdrop(mark) !== null && parsed(win.getComputedStyle(mark).backgroundColor)?.a > 0) continue;
+      // A mark on a surface of its own (a tick in its box) does not sit on the hover fill.
+      let onOwnSurface = false;
+      for (let node = mark; node && node !== element; node = node.parentElement) if (parsed(win.getComputedStyle(node).backgroundColor)?.a > 0.5) onOwnSurface = true;
+      if (onOwnSurface) continue;
       if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
     }
   }

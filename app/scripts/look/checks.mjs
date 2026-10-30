@@ -1590,7 +1590,7 @@ export function checkRendered(name, context = {}) {
       const created = members.find(member => member.id === 8);
       require(window.__look.data.groups.find(group => group.id === created.group_id)?.name === "個人公司", "member joins the approved group");
       require(created.preview === "" && created.last_at === null, "new conversation has no inherited activity");
-      require(details.querySelector('.mb-av-placeholder svg'), "a member without a preset uses the default silhouette");
+      require(details.querySelector('.mb-av-slime svg'), "a member without a preset is a slime");
     }
     return { check: name, members: members.length };
   }

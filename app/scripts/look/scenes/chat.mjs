@@ -184,7 +184,7 @@ export default [
   scene("member-edit", "Edit member dialog", [...details, click('[data-det="edit"]'), wait(".mb-dialog")]),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
   scene("composer", "Composer attachment menu", composer),
-  scene("mode", "Composer action mode submenu", [...composer, click('[data-action="1"]'), wait("#app-submenu, #app-popover [data-value]")]),
+  scene("mode", "Composer action mode submenu", [...composer, wait("#app-popover [data-value]")]),
   scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),
