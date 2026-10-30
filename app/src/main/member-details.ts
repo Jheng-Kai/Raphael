@@ -351,6 +351,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     }
     openAvatarPicker(anchor, {
       presets: host.presets(),
+      slimes: true,
       onPreset: (avatar) => void host.update(member.id, { avatar }),
       onComputer: () =>
         pickPicture((file) =>

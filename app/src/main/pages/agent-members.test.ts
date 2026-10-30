@@ -1032,7 +1032,7 @@ describe("the details panel", () => {
     name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await flush();
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 嚴格老師");
-    expect($(".thread .mb-av-placeholder svg")).not.toBeNull();
+    expect($(".thread .mb-av-slime svg")).not.toBeNull();
   });
 });
 

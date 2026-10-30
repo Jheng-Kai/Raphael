@@ -1,6 +1,7 @@
 // Inline editable draft panel for `team_admin_batch` confirmations, and the settled one-line
 // summary (`已建立 COO、PM、RD`) once the owner confirms.
 
+import { slimeChoicesHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
@@ -147,7 +148,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     const id = esc(draft.id);
     const expanded = openMore.has(draft.id);
     const avatarUrl = presetUrlOf(draft.avatar_preset, presets);
-    const face = faceHTML({ id: draft.member_id ?? -1, name: draft.name, avatar_url: avatarUrl }, 40);
+    const face = faceHTML({ id: draft.member_id ?? -1, name: draft.name, avatar: draft.avatar_preset, avatar_url: avatarUrl }, 40);
     const peek = morePreview(draft);
     const removeLabel = t("members.draftRemove", { p0: draft.name.trim() || t("members.name") });
     return (
@@ -227,8 +228,9 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
 
   function openDraftAvatarMenu(anchor: HTMLElement, draft: MemberDraft): void {
     const presets = host.presets();
-    const grid = presets.length
+    const grid = presets.length >= 0
       ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
+        slimeChoicesHTML(index => esc(t("members.preset", { p0: index }))) +
         presets
           .map(
             (preset, i) =>

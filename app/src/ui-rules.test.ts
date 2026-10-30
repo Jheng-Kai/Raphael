@@ -174,8 +174,8 @@ describe("colours", () => {
     expect(brand).toContain("--brand-telegram");
   });
 
-  test("no colour literals in the main window's code, apart from the service logos", () => {
-    const logoFiles = ["service-icons.ts", "brand.ts"];
+  test("no colour literals in the main window's code, apart from the service logos and the mascots' art", () => {
+    const logoFiles = ["service-icons.ts", "brand.ts", "slime.ts"];
     const bad = sources
       .filter((f) => !logoFiles.includes(rel(f)))
       .filter((f) => /#[0-9a-fA-F]{6}\b|\brgba?\(/.test(read(f)))

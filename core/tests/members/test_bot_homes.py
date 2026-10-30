@@ -61,7 +61,7 @@ async def test_skill_enable_revision_can_be_reverted_without_changing_the_docume
 async def test_owner_can_explicitly_share_a_team_decision(rig):
     action = Action(op="write", name="ongoing-team-review", type="ongoing",
                     description="Team review decision", body="The team will review this plan on Friday.",
-                    expires="2026-10-30", space="shared")
+                    expires="2099-12-31", space="shared")
     assert rig.memory.apply_said([action], 0, 0, share=True).written
     assert rig.memory.shared.get(action.name)
     assert "Friday" in (rig.local / "shared/team.md").read_text()

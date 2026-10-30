@@ -92,7 +92,7 @@ export async function usageAnalytics(params: UsageRequest): Promise<UsageAnalyti
   const [report,members] = await Promise.all([core<UsageAnalytics>("usage.analytics",params),membersList().catch(() => null)]);
   return !report.members ? report : {...report,members:report.members.map(row => {
     const member=members?.members?.find(member=>member.id===row.id);
-    return {...row,name:member?.name ?? row.name,avatar_url:member?.avatar_url};
+    return {...row,name:member?.name ?? row.name,avatar:member?.avatar,avatar_url:member?.avatar_url};
   })};
 }
 /** Every OpenRouter model Raphael could use, with its price and what each role can make of it. */
@@ -462,7 +462,7 @@ export async function usageRuns(params: RunRequest): Promise<RunReport> {
   const [report, members] = await Promise.all([core<RunReport>("usage.runs", params), membersList().catch(() => null)]);
   return { ...report, ...(report.groups ? { groups: { ...report.groups, member: report.groups.member.map(group => {
     const member = members?.members.find(member => member.name === group.label || member.id === 0 && group.label === "Raphael");
-    return { ...group, member_id: member?.id ?? (group.label === "Raphael" ? 0 : undefined), avatar_url: member?.avatar_url };
+    return { ...group, member_id: member?.id ?? (group.label === "Raphael" ? 0 : undefined), avatar: member?.avatar, avatar_url: member?.avatar_url };
   }) } } : {}) };
 }
 export const usageExport = (params: RunRequest): Promise<{ csv: string }> => core("usage.export", params);

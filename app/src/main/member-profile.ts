@@ -174,6 +174,7 @@ export function openMemberProfile(host: MemberProfileHost, member?: Member, init
   }
   function avatarMenu(anchor: HTMLElement): void {
     openAvatarPicker(anchor, {
+      slimes: true,
       presets: host.presets,
       onPreset(next) { avatar = next; picture = null; pictureUrl = host.presets.find(p => p.avatar === next)?.url ?? null; drawFace(); },
       onComputer: () => pickPicture(file => void (async () => {

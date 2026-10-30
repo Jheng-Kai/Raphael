@@ -222,6 +222,7 @@
 .menu.mb-menu { min-width: calc(180px + 40 * var(--pa-u)); }
 .mb-presets { display: grid; grid-template-columns: repeat(4, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: calc(6px + 4 * var(--pa-u)); }
 .menu.mb-avpop .mb-preset { width: var(--pa-preset); height: var(--pa-preset); min-height: var(--pa-preset); padding: 0; justify-content: center; border-radius: var(--r-pill); overflow: hidden; }
+.mb-presets:has(.mb-preset-slime) { grid-template-columns: repeat(6, var(--pa-preset)); }
 .mb-preset img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 @media (prefers-reduced-motion: reduce) {

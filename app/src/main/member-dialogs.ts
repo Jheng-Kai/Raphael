@@ -8,6 +8,7 @@
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
+import { slimeChoicesHTML } from "./slime";
 import { onLocaleChange, t } from "./i18n";
 import { openMemberProfile } from "./member-profile";
 export { openEditMemberDialog, openMemberProfile } from "./member-profile";
@@ -343,12 +344,15 @@ export interface AvatarPickerOptions {
   onComputer(): void;
   /** More actions under 從電腦選 (Raphael's 還原). */
   more?: readonly { label: string; run(): void }[];
+  /** Whether the slimes are offered: a member's picture, not the owner's. */
+  slimes?: boolean;
 }
 
 /** The small popover of a picture: the preset grid, if there are presets, and 「從電腦選…」. */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
-  const grid = o.presets.length
+  const grid = o.presets.length || o.slimes
     ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
+      (o.slimes ? slimeChoicesHTML(index => esc(t("members.preset", { p0: index }))) : "") +
       o.presets
         .map(
           (preset, i) =>

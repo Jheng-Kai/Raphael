@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // The dialogs of the members (member-dialogs.ts): 新增成員 as the mockup draws it, the question before
 // a delete, the routine the core offers, and a group's places.
+import { SLIME_IDS } from "./slime";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType, pickPicture } from "./member-dialogs";
 import { registerDismissal } from "./dismissals";
@@ -121,7 +122,7 @@ describe("新增成員", () => {
     const url = "data:image/png;base64,iVBORw0KGgo=";
     const { $, create } = open({ presets: [{ avatar: "preset:a", name: "a", url }] });
     $('[data-dlg="avatar"]').click();
-    expect([...document.querySelectorAll("#app-popover button")].map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["頭像 1", "從電腦選…"]);
+    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime)")].map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["頭像 1", "從電腦選…"]);
     document.querySelector<HTMLElement>('#app-popover [data-preset="preset:a"]')!.click();
     expect($(".mb-new-av img").getAttribute("src")).toBe(url);
     $<HTMLInputElement>("#mb-new-name").value = "日文老師";
@@ -130,10 +131,11 @@ describe("新增成員", () => {
     expect(create.mock.calls[0]![0].member.avatar).toBe("preset:a");
   });
 
-  test("with no presets, the only choice is a picture from the PC", () => {
+  test("with no presets, the choices are the slimes and a picture from the PC", () => {
     const { $ } = open();
     $('[data-dlg="avatar"]').click();
-    expect([...document.querySelectorAll("#app-popover button")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
+    expect(document.querySelectorAll("#app-popover .mb-preset-slime")).toHaveLength(SLIME_IDS.length);
+    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime)")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
   });
 
   test("the computer picker stays inside its dialog so its synthetic click cannot dismiss the profile", () => {

@@ -137,11 +137,11 @@ describe("the faces", () => {
     expect(html).not.toMatch(/mb-av|letter|拉/);
   });
 
-  test("a member's picture is a data URL of an image, otherwise a neutral silhouette", () => {
+  test("a member's picture is a data URL of an image, otherwise a slime", () => {
     expect(faceHTML(member(1, { name: "進度官", avatar_url: PNG }), 34)).toContain(`<img src="${PNG}"`);
     for (const url of [undefined, "file:///C:/x.png", "https://x/y.png", "data:text/html;base64,AAAA"]) {
       const html = faceHTML(member(1, { name: "進度官", avatar_url: url }), 34);
-      expect(html).toContain('class="av mb-av mb-av-placeholder"');
+      expect(html).toContain('class="av mb-av mb-av-slime"');
       expect(html).toContain("<svg");
       expect(html).not.toContain("進");
       expect(html).not.toContain("<img");

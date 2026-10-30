@@ -6,7 +6,7 @@
 - `members`: a member, with a name (at most NAME_MAX characters, one no other member has and none
   of Raphael's), a role (ROLE_MAX), its character and speaking style (PERSONALITY_MAX), the owner's
   instructions for its work (INSTRUCTIONS_MAX), a picture
-  (`avatar`: "", "preset:<file stem>" or "file:<stored file name>"), a group or none (未分組), a model
+  (`avatar`: "", "preset:<file stem>", "file:<stored file name>" or "slime:<mascot>"), a group or none (未分組), a model
   ("" for the answer model), a place, when it was made, and the tools and connections it may use
   (`tools`: a list of ids, or None for every one that is on).
 - `routines`: what a member does on a schedule (`schedule`, see `schedule.py`), with a title
@@ -58,7 +58,7 @@ _GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,1
 _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.git)?(?:[/?#].*)?")
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _NOTION_URL = re.compile(r"https://(?:www\.)?(?:notion\.so|[a-z0-9-]+\.notion\.site)/\S*")
-_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}")
+_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}|slime:[a-z]{1,32}")
 
 
 class MemberError(ValueError):
@@ -207,7 +207,7 @@ def clean_avatar(value: Any) -> str:
     if value == "":
         return ""
     if not isinstance(value, str) or not _AVATAR.fullmatch(value) or ".." in value:
-        raise MemberError("avatar", 'avatar must be "", "preset:<name>" or "file:<name>"')
+        raise MemberError("avatar", 'avatar must be "", "preset:<name>", "file:<name>" or "slime:<name>"')
     return value
 
 
