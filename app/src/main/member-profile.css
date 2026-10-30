@@ -57,7 +57,6 @@
 
 .mp-dialog .mb-new-av { width: 104px; height: 104px; }
 .mp-dialog .mb-new-av .av { --av: 104px !important; }
-.mp-person { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-pill); overflow: hidden; background: var(--content); color: var(--text-3); border: 1px solid var(--line); }
 .slash-menu [aria-selected=true] { background: var(--hover); }
 
 .member-profile-nav .tabs { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); border: 0; border-radius: 0; padding: 0; background: transparent; }

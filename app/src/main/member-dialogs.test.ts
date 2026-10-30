@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // The dialogs of the members (member-dialogs.ts): 新增成員 as the mockup draws it, the question before
 // a delete, the routine the core offers, and a group's places.
-import { SLIME_IDS } from "./slime";
+import { SLIME_COLOR_COUNT, SLIME_SHAPE_COUNT } from "./slime";
+import { closeMenu } from "./ui";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType, pickPicture } from "./member-dialogs";
 import { registerDismissal } from "./dismissals";
@@ -57,7 +58,7 @@ describe("新增成員", () => {
     expect(dialog.el.querySelector("h2")!.textContent).toBe("新增成員");
     expect([...dialog.el.querySelectorAll("#mp-page-identity .mb-frow > span:first-child")].map((s) => s.textContent)).toEqual(["名字", "角色", "簡介", "分組"]);
     expect(dialog.el.querySelectorAll('[role="tab"]')).toHaveLength(7);
-    expect(dialog.el.querySelector(".mb-new-av .mp-person")).not.toBeNull();
+    expect(dialog.el.querySelector(".mb-new-av .mb-av-slime")).not.toBeNull();
     expect([...dialog.el.querySelectorAll(".mb-dlg-act .btn")].map((b) => b.textContent)).toEqual(["取消", "建立"]);
     // the name takes the focus
     expect(document.activeElement?.id).toBe("mb-new-name");
@@ -68,7 +69,7 @@ describe("新增成員", () => {
     const name = $<HTMLInputElement>("#mb-new-name");
     name.value = "日文老師";
     name.dispatchEvent(new Event("input"));
-    expect($(".mp-person svg")).not.toBeNull();
+    expect($(".mb-new-av .mb-av-slime svg")).not.toBeNull();
   });
 
   test("建立 hands over what was typed", async () => {
@@ -122,7 +123,7 @@ describe("新增成員", () => {
     const url = "data:image/png;base64,iVBORw0KGgo=";
     const { $, create } = open({ presets: [{ avatar: "preset:a", name: "a", url }] });
     $('[data-dlg="avatar"]').click();
-    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime)")].map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["頭像 1", "從電腦選…"]);
+    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime):not(.mb-slime-color)")].map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["頭像 1", "從電腦選…"]);
     document.querySelector<HTMLElement>('#app-popover [data-preset="preset:a"]')!.click();
     expect($(".mb-new-av img").getAttribute("src")).toBe(url);
     $<HTMLInputElement>("#mb-new-name").value = "日文老師";
@@ -134,8 +135,24 @@ describe("新增成員", () => {
   test("with no presets, the choices are the slimes and a picture from the PC", () => {
     const { $ } = open();
     $('[data-dlg="avatar"]').click();
-    expect(document.querySelectorAll("#app-popover .mb-preset-slime")).toHaveLength(SLIME_IDS.length);
-    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime)")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
+    expect(document.querySelectorAll("#app-popover .mb-preset-slime")).toHaveLength(SLIME_SHAPE_COUNT);
+    expect(document.querySelectorAll("#app-popover .mb-slime-color")).toHaveLength(SLIME_COLOR_COUNT);
+    expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime):not(.mb-slime-color)")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
+  });
+
+  test("a shape and a colour are chosen together, in a menu that stays open", async () => {
+    const { $, create } = open();
+    $('[data-dlg="avatar"]').click();
+    document.querySelector<HTMLElement>('#app-popover [data-slime-shape="oni"]')!.click();
+    expect(document.querySelector('#app-popover [data-slime-shape="oni"]')!.getAttribute("aria-pressed")).toBe("true");
+    document.querySelector<HTMLElement>('#app-popover [data-slime-color="coral"]')!.click();
+    expect(document.querySelector('#app-popover [data-slime-color="coral"]')!.getAttribute("aria-pressed")).toBe("true");
+    expect($(".mb-new-av svg.slime")).not.toBeNull();
+    closeMenu();
+    $<HTMLInputElement>("#mb-new-name").value = "日文老師";
+    $('[data-dlg="create"]').click();
+    await flush();
+    expect(create.mock.calls[0]![0].member.avatar).toBe("slime:oni:coral");
   });
 
   test("the computer picker stays inside its dialog so its synthetic click cannot dismiss the profile", () => {
@@ -164,7 +181,7 @@ describe("新增成員", () => {
     const name = $<HTMLInputElement>("#mb-new-name");
     name.value = "進度官";
     name.dispatchEvent(new Event("input"));
-    expect($(".mp-person svg")).not.toBeNull();
+    expect($(".mb-new-av .mb-av-slime svg")).not.toBeNull();
   });
 
   test("Enter in name or role submits (unless composing), and Tab wraps inside the dialog", async () => {

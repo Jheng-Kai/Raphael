@@ -14,6 +14,7 @@ import { currentAvatar } from "./avatar";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { groupChoices, groupFromValue, groupValue, openAvatarPicker, pickPicture, readPicture } from "./member-dialogs";
+import { defaultSlimeAvatar } from "./slime";
 import { createMemory } from "./memory-view";
 import { memoryHTML } from "./memory-view";
 import {
@@ -352,6 +353,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     openAvatarPicker(anchor, {
       presets: host.presets(),
       slimes: true,
+      current: member.avatar || defaultSlimeAvatar(member.id),
       onPreset: (avatar) => void host.update(member.id, { avatar }),
       onComputer: () =>
         pickPicture((file) =>

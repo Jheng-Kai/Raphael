@@ -1,7 +1,8 @@
 // Inline editable draft panel for `team_admin_batch` confirmations, and the settled one-line
 // summary (`已建立 COO、PM、RD`) once the owner confirms.
 
-import { slimeChoicesHTML } from "./slime";
+import { pickSlime, slimePickerHTML } from "./slime";
+import { slimeLabels } from "./member-dialogs";
 import { avatarHTML } from "./avatar";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
@@ -229,8 +230,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
   function openDraftAvatarMenu(anchor: HTMLElement, draft: MemberDraft): void {
     const presets = host.presets();
     const grid = presets.length >= 0
-      ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-        slimeChoicesHTML(index => esc(t("members.preset", { p0: index }))) +
+      ? slimePickerHTML(draft.avatar_preset, slimeLabels) + (presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
         presets
           .map(
             (preset, i) =>
@@ -238,7 +238,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
               `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
           )
           .join("") +
-        `</div><div class="menu-sep" role="separator"></div>`
+        `</div>` : "") + `<div class="menu-sep" role="separator"></div>`
       : "";
     const resetBtn = `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-preset=""><span class="mt">${esc(t("members.draftDefaultAvatar"))}</span></button>`;
     const pop = openPopover(anchor, grid + resetBtn, {
@@ -247,6 +247,8 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       label: t("settings.avatar"),
     });
     pop.addEventListener("click", (e) => {
+      const slime = pickSlime((e.target as Element).closest<HTMLElement>("button") ?? pop, draft.avatar_preset);
+      if (slime) { draft.avatar_preset = slime; draw(); return; }
       const target = (e.target as Element).closest<HTMLElement>("button[data-preset]");
       if (!target) return;
       closeMenu();

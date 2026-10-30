@@ -58,7 +58,7 @@ _GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,1
 _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.git)?(?:[/?#].*)?")
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 _NOTION_URL = re.compile(r"https://(?:www\.)?(?:notion\.so|[a-z0-9-]+\.notion\.site)/\S*")
-_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}|slime:[a-z]{1,32}")
+_AVATAR = re.compile(r"(?:preset|file):[A-Za-z0-9._ -]{1,120}|slime:[a-z]{1,32}(?::[a-z]{1,32})?")
 
 
 class MemberError(ValueError):

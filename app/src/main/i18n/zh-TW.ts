@@ -1186,6 +1186,8 @@ export const zhTW = {
   "members.close": "關閉詳細資訊",
   "members.changeAvatar": "換頭像",
   "members.fromPc": "從電腦選…",
+  "members.slimeShape": "造型 {p0}",
+  "members.slimeColor": "顏色 {p0}",
   "members.preset": "頭像 {p0}",
   "members.name": "名字",
   "members.role": "角色",

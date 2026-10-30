@@ -36,6 +36,7 @@ npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete sidebar-new-conversation conversation-delete-main --theme both --width 1120,720,1920x1080
+npm run look -- slime-states slime-picker --theme both --width 1120,720,1920x1080
 ```
 
 The last command walks the owner's flows of 2026-10-27 to their end: `member-delete`

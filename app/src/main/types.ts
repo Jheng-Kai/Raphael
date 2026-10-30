@@ -711,6 +711,8 @@ export type MainEvent =
   | { type: "TrayOpen"; page: TrayPage; action?: TrayAction }
   /** A turn of the conversations was written or completed, in the thread of `member_id` (0: Raphael's; none from an older shell). */
   | { type: "AgentTurn"; turn_id: number; member_id?: number }
+  /** What a member is doing now, whichever conversation is open (`member.activity`). */
+  | { type: "MemberActivity"; member_id: number; state: "idle" | "thinking" | "working" | "searching" | "computer" | "done" | "error" }
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
   | { type: "MembersChanged" }
@@ -828,6 +830,7 @@ export interface Member {
   created: number;
   unread: boolean;
   waiting: boolean;
+  activity?: string;
   preview: string;
   last_at: number | null;
 }

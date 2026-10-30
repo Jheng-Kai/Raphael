@@ -1187,6 +1187,8 @@ export const ja = {
   "members.close": "詳細を閉じる",
   "members.changeAvatar": "アイコンを変更",
   "members.fromPc": "PC から選ぶ…",
+  "members.slimeShape": "形 {p0}",
+  "members.slimeColor": "色 {p0}",
   "members.preset": "アイコン {p0}",
   "members.name": "名前",
   "members.role": "役割",

@@ -1187,6 +1187,8 @@ export const en = {
   "members.close": "Close details",
   "members.changeAvatar": "Change picture",
   "members.fromPc": "From this PC…",
+  "members.slimeShape": "Shape {p0}",
+  "members.slimeColor": "Colour {p0}",
   "members.preset": "Picture {p0}",
   "members.name": "Name",
   "members.role": "Role",

@@ -1,15 +1,91 @@
-/* A slime has no frame of its own: it stands on the row like Grok Bot's mascots. */
+/* A slime has no frame of its own: it stands on the row like Grok Bot's mascots, and it is always doing something. */
 .av.mb-av-slime { display: inline-flex; flex: none; overflow: visible; border-radius: 0; background: transparent; user-select: none; }
 .room-avatar > .av.mb-av-slime { background: transparent; }
 .slime { display: block; width: 100%; height: 100%; overflow: visible; }
-.slime-all { transform-box: view-box; transform-origin: 50% 94%; }
-.slime-eyes { transform-box: fill-box; transform-origin: center; animation: slime-blink 6s var(--slime-delay, 0s) infinite; }
-/* It breathes only where the owner is looking, so a long list stays still. */
-:is(.mb-row:hover, .mb-row[aria-current="true"], .mb-preset:hover, .mb-avbtn, .mb-new-av) .slime-all { animation: slime-breathe 2.8s ease-in-out infinite; }
-.mb-row:active .slime-all { animation: slime-squish 260ms ease-out; }
+.slime-press, .slime-motion { transform-box: view-box; transform-origin: 50px 86px; }
+.slime-gaze, .slime-z { transform-box: view-box; transform-origin: 0 0; }
+.slime-eye { transform-box: view-box; }
+.slime-eye-l { transform-origin: var(--eye-lx) var(--eye-y); }
+.slime-eye-r { transform-origin: var(--eye-rx) var(--eye-y); }
+/* One bent path per eye, so that a change of state turns one face into the next. */
+.slime-eye-l path { d: var(--eye-l); stroke-width: var(--eye-w); transition: d 180ms ease, stroke-width 180ms ease; }
+.slime-eye-r path { d: var(--eye-r); stroke-width: var(--eye-w); transition: d 180ms ease, stroke-width 180ms ease; }
+.slime-z { display: none; opacity: 0; }
 .mb-preset-slime { display: inline-flex; align-items: center; justify-content: center; }
 .mb-preset-slime .slime { width: 84%; height: 84%; }
-@keyframes slime-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.12); } }
-@keyframes slime-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.035, 0.955); } }
-@keyframes slime-squish { 0% { transform: scale(1, 1); } 40% { transform: scale(1.1, 0.86); } 100% { transform: scale(1, 1); } }
-@media (prefers-reduced-motion: reduce) { .slime-eyes, .slime-all { animation: none !important; } }
+
+/* The eyes */
+.slime { --eye-lx: 43px; --eye-rx: 56px; --eye-y: 48px; --eye-w: 6; --eye-l: path("M 42.04 44.64 Q 43 48 43.96 51.36"); --eye-r: path("M 55.04 44.64 Q 56 48 56.96 51.36"); }
+.slime[data-state="working"] { --eye-rx: 57px; --eye-y: 49px; --eye-w: 4.5; --eye-l: path("M 40.8 48.53 Q 43 49 45.2 49.47"); --eye-r: path("M 54.8 49.47 Q 57 49 59.2 48.53"); }
+.slime[data-state="waiting"] { --eye-rx: 57px; --eye-y: 47px; --eye-w: 7; --eye-l: path("M 42.58 43.02 Q 43 47 43.42 50.98"); --eye-r: path("M 57.42 43.02 Q 57 47 56.58 50.98"); }
+.slime[data-state="error"] { --eye-rx: 57px; --eye-y: 51px; --eye-l: path("M 44.02 48.72 Q 43 51 41.98 53.28"); --eye-r: path("M 55.98 48.72 Q 57 51 58.02 53.28"); }
+.slime[data-state="done"] { --eye-rx: 57px; --eye-w: 3.5; --eye-l: path("M 38.5 50.25 Q 43 41.25 47.5 50.25"); --eye-r: path("M 52.5 50.25 Q 57 41.25 61.5 50.25"); }
+.slime[data-state="sleeping"] { --eye-rx: 57px; --eye-y: 50px; --eye-w: 3.5; --eye-l: path("M 38.51 50.31 Q 43 50 47.49 49.69"); --eye-r: path("M 52.51 49.69 Q 57 50 61.49 50.31"); }
+
+/* What it does in each state. Loops follow the clock (--slime-delay); a moment starts when it starts. */
+.slime[data-state] .slime-motion, .slime[data-state] .slime-gaze, .slime[data-state] .slime-eye { animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1); animation-fill-mode: both; animation-iteration-count: infinite; animation-delay: var(--slime-delay, 0s); }
+
+.slime[data-state="idle"] .slime-motion { animation-name: slime-idle-body; animation-duration: 8.4s; }
+.slime[data-state="idle"] .slime-gaze { animation-name: slime-idle-gaze; animation-duration: 8.4s; }
+.slime[data-state="idle"] .slime-eye { animation-name: slime-idle-eye; animation-duration: 8.4s; }
+@keyframes slime-idle-body { 0%, 100% { transform: none; } 47% { transform: scale(0.985, 1.035); } 72% { transform: scale(1.015, 0.985); } }
+@keyframes slime-idle-gaze { 0%, 58% { transform: none; } 72% { transform: translate(2px, 0); } 84%, 100% { transform: none; } }
+@keyframes slime-idle-eye { 0%, 45.5% { transform: none; } 46% { transform: scale(1, 0.08); } 48%, 100% { transform: none; } }
+
+.slime[data-state="thinking"] .slime-motion { animation-name: slime-thinking-body; animation-duration: 3.6s; }
+.slime[data-state="thinking"] .slime-gaze { animation-name: slime-thinking-gaze; animation-duration: 3.6s; }
+@keyframes slime-thinking-body { 0%, 100% { transform: translate(-1px, 0) rotate(-2deg); } 25% { transform: scale(1, 1.025); } 50% { transform: translate(1px, 0) rotate(2deg); } 75% { transform: none; } }
+@keyframes slime-thinking-gaze { 0%, 100% { transform: translate(-2px, -5px); } 25% { transform: translate(0, -6px); } 50% { transform: translate(2px, -5px); } 75% { transform: translate(0, -4px); } }
+
+.slime[data-state="working"] .slime-motion { animation-name: slime-working-body; animation-duration: 0.9s; }
+.slime[data-state="working"] .slime-eye { animation-name: slime-working-eye; animation-duration: 0.9s; }
+@keyframes slime-working-body { 0%, 100% { transform: none; } 25% { transform: scale(1.07, 0.94); } 50% { transform: translate(0, -4px) scale(0.97, 1.04); } 75% { transform: scale(1.05, 0.96); } }
+@keyframes slime-working-eye { 0%, 50%, 100% { transform: none; } 25% { transform: scale(1, 0.85); } 75% { transform: scale(1, 0.9); } }
+
+.slime[data-state="searching"] .slime-motion { animation-name: slime-searching-body; animation-duration: 2.8s; }
+.slime[data-state="searching"] .slime-gaze { animation-name: slime-searching-gaze; animation-duration: 2.8s; }
+@keyframes slime-searching-body { 0%, 100% { transform: translate(-2px, 0) rotate(-4deg); } 25%, 75% { transform: none; } 50% { transform: translate(2px, 0) rotate(4deg); } }
+@keyframes slime-searching-gaze { 0%, 100% { transform: translate(-4px, 0); } 25%, 75% { transform: none; } 50% { transform: translate(4px, 0); } }
+
+.slime[data-state="computer"] .slime-motion { animation-name: slime-computer-body; animation-duration: 1.2s; }
+.slime[data-state="computer"] .slime-gaze { animation-name: slime-computer-gaze; animation-duration: 1.2s; }
+.slime[data-state="computer"] .slime-eye { transform: scale(1, 0.82); }
+@keyframes slime-computer-body { 0%, 50%, 100% { transform: rotate(-2deg); } 25%, 75% { transform: translate(0, 1px) rotate(2deg) scale(1.025, 0.975); } }
+@keyframes slime-computer-gaze { 0%, 50%, 100% { transform: translate(-1px, 5px); } 25%, 75% { transform: translate(1px, 5px); } }
+
+.slime[data-state="waiting"] .slime-motion { animation-name: slime-waiting-body; animation-duration: 4.8s; }
+@keyframes slime-waiting-body { 0% { transform: none; } 8% { transform: scale(1.045, 0.955); } 16% { transform: translate(0, -7px) scale(0.98, 1.03); } 24% { transform: scale(1.045, 0.955); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 40%, 100% { transform: none; } }
+
+.slime[data-state="done"] .slime-motion { animation: slime-done-body 2s cubic-bezier(0.37, 0, 0.63, 1) both; }
+@keyframes slime-done-body { 0%, 100% { transform: none; } 12% { transform: scale(1.08, 0.91); } 32% { transform: translate(0, -15px) scale(0.96, 1.05); } 52% { transform: scale(1.13, 0.86); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } }
+
+.slime[data-state="error"] .slime-motion { animation: slime-error-body 1.3s cubic-bezier(0.37, 0, 0.63, 1) both; }
+@keyframes slime-error-body { 0% { transform: none; } 20% { transform: rotate(-3deg) scale(1.07, 0.87); } 40% { transform: rotate(3deg) scale(1.07, 0.87); } 60% { transform: rotate(-1.5deg) scale(1.07, 0.87); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 100% { transform: scale(1.07, 0.87); } }
+
+.slime[data-state="sleeping"] .slime-motion { animation-name: slime-sleeping-body; animation-duration: 6s; }
+.slime[data-state="sleeping"] .slime-z { display: block; animation: slime-sleeping-z 6s cubic-bezier(0.37, 0, 0.63, 1) var(--slime-delay, 0s) infinite both; }
+@keyframes slime-sleeping-body { 0%, 100% { transform: scale(1.03, 0.93); } 25%, 75% { transform: scale(1.01, 0.98); } 50% { transform: scale(0.98, 1.04); } }
+@keyframes slime-sleeping-z { 0% { transform: none; opacity: 0; } 25% { transform: translate(0, -3px); opacity: 0.65; } 50% { transform: translate(0, -6px); opacity: 1; } 75% { transform: translate(0, -9px); opacity: 0.65; } 100% { transform: translate(0, -12px); opacity: 0; } }
+.is-tiny .slime[data-state="sleeping"] .slime-z { display: none; }
+
+.slime[data-state="arriving"] .slime-motion { animation: slime-arriving-body 0.7s cubic-bezier(0.37, 0, 0.63, 1) both; }
+@keyframes slime-arriving-body { 0% { transform: translate(0, -25px) scale(0.65, 0.8); opacity: 0; } 30% { transform: translate(0, -12px) scale(0.9, 1.06); opacity: 1; } 55% { transform: rotate(2deg) scale(1.14, 0.8); } 78% { transform: rotate(-1deg) scale(0.96, 1.05); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 100% { transform: none; } }
+
+/* A press squashes it whatever it is doing. */
+:is(.mb-row:active, .mb-avbtn:active, .mb-preset:active) .slime-press { animation: slime-pressed 260ms cubic-bezier(0.37, 0, 0.63, 1) both; }
+@keyframes slime-pressed { 35% { transform: scale(1.1, 0.86); } 70% { transform: scale(0.98, 1.035); animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } 100% { transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .slime .slime-press, .slime[data-state] .slime-motion, .slime[data-state] .slime-gaze, .slime[data-state] .slime-eye, .slime[data-state] .slime-z { animation: none !important; }
+  .slime-eye path { transition: none; }
+  .slime-z { display: none !important; }
+}
+
+/* The picture menu: shapes, then colours */
+.mb-presets.mb-slime-shapes { grid-template-columns: repeat(5, var(--pa-preset)); padding-bottom: 0; }
+.menu.mb-avpop .mb-preset-slime { overflow: visible; border-radius: var(--r-md); }
+.menu.mb-avpop .mb-preset-slime[aria-pressed="true"] { background: var(--hover); box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.mb-slime-colors { display: grid; grid-template-columns: repeat(5, var(--pa-preset)); gap: calc(6px + 4 * var(--pa-u)); padding: 0 calc(6px + 4 * var(--pa-u)) calc(6px + 4 * var(--pa-u)); justify-items: center; }
+.menu.mb-avpop .mb-slime-color { width: calc(var(--pa-preset) * 0.62); height: calc(var(--pa-preset) * 0.62); min-height: 0; padding: 0; border-radius: var(--r-pill); background: var(--slime-color); box-shadow: 0 0 0 2px transparent; }
+.menu.mb-avpop .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
+.menu.mb-avpop .mb-slime-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text-3); }

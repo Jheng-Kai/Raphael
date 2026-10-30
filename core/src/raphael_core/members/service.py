@@ -15,7 +15,7 @@ The RPC methods (the main window only, through the shell's allow-list):
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
-  -> `{member}`. `avatar` here is "", "preset:<stem>" or "slime:<mascot>"; a picture of the owner's own comes by
+  -> `{member}`. `avatar` here is "", "preset:<stem>" or "slime:<shape>:<color>"; a picture of the owner's own comes by
   `members.set_avatar`. Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
   threads with it), its memory folder, its routines, its tasks and its picture. The app asks first.

@@ -1594,6 +1594,33 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, members: members.length };
   }
+  if (name === "slime-states") {
+    const face = id => document.querySelector(`.mb-row[data-member="${id}"] svg.slime`);
+    const wanted = { 1: ["thinking", "slime-thinking-body"], 2: ["working", "slime-working-body"], 3: ["computer", "slime-computer-body"] };
+    for (const [id, [state, animation]] of Object.entries(wanted)) {
+      const svg = face(id);
+      require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);
+      require(svg.getAnimations({ subtree: true }).some(running => running.animationName === animation && running.playState === "running"), `member ${id} is really moving as ${state}`);
+      const eye = getComputedStyle(svg.querySelector(".slime-eye-l path"));
+      require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent paths");
+    }
+    require(getComputedStyle(face(2).querySelector(".slime-eye-l path")).strokeWidth === "4.5px", "working narrows its eyes");
+    const rows = [...document.querySelectorAll(".mb-row svg.slime")];
+    require(rows.length >= 3 && rows.every(svg => svg.getAnimations({ subtree: true }).length > 0), "every slime in the list is alive");
+    for (const svg of rows) {
+      const box = svg.getBoundingClientRect(), row = svg.closest(".mb-row").getBoundingClientRect();
+      require(box.top >= row.top - 1 && box.bottom <= row.bottom + 1, "a slime stays inside its row");
+    }
+    return { check: name, rows: rows.length };
+  }
+  if (name === "slime-picker") {
+    const menu = document.querySelector(".mb-avpop");
+    require(menu && menu.querySelector('[data-slime-shape="oni"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen shape");
+    require(menu.querySelector('[data-slime-color="coral"]').getAttribute("aria-pressed") === "true", "and on the chosen colour");
+    require(menu.querySelectorAll('[aria-pressed="true"]').length === 2, "nothing else looks chosen");
+    require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:oni:coral", "the member keeps both");
+    return { check: name };
+  }
   if (name === "conversation-picker") {
     const list = document.querySelector("#app-popover .conversation-menu-list");
     require(visible(list), "conversation list is visible");

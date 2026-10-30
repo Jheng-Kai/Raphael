@@ -3,6 +3,7 @@
 import * as api from "./api";
 import { openActions } from "./member-column";
 import { cropDialog } from "./avatar-settings";
+import { defaultSlimeAvatar } from "./slime";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { groupChoices, groupFromValue, groupValue, openAvatarPicker, openDialog, pickPicture, readPicture, type Dialog, type NewMemberResult } from "./member-dialogs";
@@ -133,8 +134,7 @@ export function openMemberProfile(host: MemberProfileHost, member?: Member, init
     return `<div class="mp-voice"></div>`;
   }
   function drawFace(): void {
-    dialog.el.querySelector<HTMLElement>(".mb-new-av")!.innerHTML = pictureUrl ? faceHTML({ id: member?.id ?? -1, name: nameInput.value, avatar_url: pictureUrl }, 104) :
-      `<span class="av mp-person" aria-hidden="true"><svg width="80" height="80" viewBox="0 0 64 64" fill="currentColor"><circle cx="32" cy="22" r="11"/><path d="M11 58v-5a21 21 0 0 1 42 0v5Z"/></svg></span>`;
+    dialog.el.querySelector<HTMLElement>(".mb-new-av")!.innerHTML = faceHTML({ id: member?.id ?? -1, name: nameInput.value, avatar, avatar_url: pictureUrl }, 104);
   }
   function drawGroup(): void { dialog.el.querySelector<HTMLElement>(".mb-new-group")!.innerHTML = sel(groupChoices(host.groups), groupValue(groupId), t("members.group"), ' data-dlg="group"'); }
   function drawPreset(): void { dialog.el.querySelector<HTMLElement>(".mp-preset")!.innerHTML = sel(presetChoices(), preset, t("members.profile.preset"), ' data-dlg="preset"'); }
@@ -175,6 +175,7 @@ export function openMemberProfile(host: MemberProfileHost, member?: Member, init
   function avatarMenu(anchor: HTMLElement): void {
     openAvatarPicker(anchor, {
       slimes: true,
+      current: avatar || defaultSlimeAvatar(member?.id ?? -1),
       presets: host.presets,
       onPreset(next) { avatar = next; picture = null; pictureUrl = host.presets.find(p => p.avatar === next)?.url ?? null; drawFace(); },
       onComputer: () => pickPicture(file => void (async () => {

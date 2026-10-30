@@ -8,7 +8,7 @@
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
 // focus back to what had it. What a person types goes into the page through `esc` only.
 
-import { slimeChoicesHTML } from "./slime";
+import { pickSlime, slimePickerHTML } from "./slime";
 import { onLocaleChange, t } from "./i18n";
 import { openMemberProfile } from "./member-profile";
 export { openEditMemberDialog, openMemberProfile } from "./member-profile";
@@ -346,13 +346,21 @@ export interface AvatarPickerOptions {
   more?: readonly { label: string; run(): void }[];
   /** Whether the slimes are offered: a member's picture, not the owner's. */
   slimes?: boolean;
+  /** The picture it has now, which the slimes start from. */
+  current?: string | null;
 }
 
-/** The small popover of a picture: the preset grid, if there are presets, and 「從電腦選…」. */
+export const slimeLabels = {
+  shape: (index: number): string => esc(t("members.slimeShape", { p0: index })),
+  color: (index: number): string => esc(t("members.slimeColor", { p0: index })),
+};
+
+/** The small popover of a picture: the slimes, the preset grid if there are presets, and 「從電腦選…」. */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
+  let current = o.current;
+  const slimes = o.slimes ? slimePickerHTML(current, slimeLabels) : "";
   const grid = o.presets.length || o.slimes
-    ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-      (o.slimes ? slimeChoicesHTML(index => esc(t("members.preset", { p0: index }))) : "") +
+    ? slimes + (o.presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
       o.presets
         .map(
           (preset, i) =>
@@ -360,7 +368,7 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
             `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
         )
         .join("") +
-      `</div><div class="menu-sep" role="separator"></div>`
+      `</div>` : "") + `<div class="menu-sep" role="separator"></div>`
     : "";
   const actions = [{ label: t("members.fromPc"), run: o.onComputer }, ...(o.more ?? [])];
   const el = openPopover(
@@ -374,6 +382,9 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
+    // A shape and a colour are chosen together, so a press on either leaves the menu where it is.
+    const slime = pickSlime(target, current);
+    if (slime) { current = slime; o.onPreset?.(slime); return; }
     closeMenu();
     if (target.dataset.preset !== undefined) o.onPreset?.(target.dataset.preset);
     else actions[Number(target.dataset.pick)]?.run();

@@ -40,9 +40,9 @@ test("tabs retain fields and keyboard navigation selects a visible panel", () =>
 
 test("a blank member has a default silhouette and every pane groups content in cards", async () => {
   const dialog = openMemberProfile(host());
-  expect(dialog.el.querySelector('.mb-new-av .mp-person')).not.toBeNull();
+  expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
   fill(dialog.el, '#mb-new-name', 'Ada');
-  expect(dialog.el.querySelector('.mb-new-av .mp-person')).not.toBeNull();
+  expect(dialog.el.querySelector('.mb-new-av .mb-av-slime')).not.toBeNull();
   for (const tab of ['identity', 'soul', 'skills', 'memory', 'routines', 'permissions', 'voice']) {
     click(dialog.el, `#mp-tab-${tab}`); await flush();
     expect(dialog.el.querySelector(`#mp-page-${tab} .mp-card`)).not.toBeNull();
