@@ -3,6 +3,8 @@ import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
 export const journeys = [
+  { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
+  { name: "sidebar-home", description: "Inspect the Grok-style sidebar, in-place search and Home emblem in the real WebView" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
@@ -90,6 +92,45 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "appearance") {
+    await click(page, '#nav [data-go="settings"]');
+    await click(page, '.modal-scrim [data-pane="appearance"]');
+    await wait(page, '.appearance-settings');
+    result.appearance = [];
+    for (const width of [1120, 720, 1920]) {
+      await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
+      for (const value of ['light', 'dark']) {
+        await click(page, '[data-k="appearance"]');
+        await wait(page, '.menu [data-value="dark"]');
+        result.appearance.push(await page.evaluate(checkRendered, 'appearance-settings'));
+        await click(page, `.menu [data-value="${value}"]`);
+        await page.waitForFunction(value => document.documentElement.dataset.theme === value, {}, value);
+        await capture(`${value}-${width}`);
+      }
+    }
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.waitForSelector('.page-home:not([hidden]) .ho-hero');
+    await page.waitForSelector(':root[data-theme="dark"]');
+    await capture('dark-restored');
+    return;
+  }
+  if (name === "sidebar-home") {
+    result.layout = [];
+    for (const width of [1120, 720, 1920]) {
+      await page.setViewport({ width, height: width === 1920 ? 1080 : 900 });
+      await pause(250);
+      result.layout.push(await page.evaluate(checkRendered, "home-hero"));
+      if (width === 720) await click(page, '[data-sidebar="open"]');
+      result.layout.push(await page.evaluate(checkRendered, "sidebar-shell"));
+      await page.evaluate(checkRendered, "sidebar-search-before");
+      await click(page, '[data-col="search"]');
+      result.layout.push(await page.evaluate(checkRendered, "sidebar-search-open"));
+      await capture(`home-sidebar-${width}`);
+      await click(page, '[data-col="search"]');
+      if (width === 720) await click(page, '.sidebar-scrim');
+    }
+    return;
+  }
   if (name === "home-timing") {
     await page.waitForFunction(() => window.__homeTiming?.firstPaintMs !== null);
     result.homeTiming = await page.evaluate(() => window.__homeTiming);
@@ -203,15 +244,15 @@ export async function drive(name, context) {
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    await wait(page, '[data-desktop="open"]:not([hidden])');
+    await perform(page, { action:"open-details" });
+    await wait(page, ' .desktop-panel:not([hidden])');
     await capture("entry");
-    await click(page, '[data-desktop="open"]');
-    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
-    const iframe = await page.$('.desktop-viewer iframe');
+    await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    const iframe = await page.$('.desktop-panel iframe');
     const desktop = await iframe.contentFrame();
     await desktop.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
     await desktop.waitForFunction(() => document.querySelector('#noVNC_container canvas')?.width > 100, { timeout: 60000 });
-    if (await page.$eval('.desktop-viewer iframe', element => /password/i.test(element.src))) throw new Error("Credential in viewer URL");
+    if (await page.$eval('.desktop-panel iframe', element => /password/i.test(element.src))) throw new Error("Credential in viewer URL");
     const inspectDesktop = async label => {
       await desktop.waitForFunction(() => {
         const canvas = document.querySelector('#noVNC_container canvas');
@@ -223,20 +264,20 @@ export async function drive(name, context) {
     };
     await inspectDesktop("viewer");
     await capture("viewer");
-    await click(page, '[data-dlg="control"]');
-    await page.waitForSelector('.desktop-viewer[data-desktop-state="owner"]', { visible: true, timeout: 60000 });
+    await click(page, '[data-desktop="take"]');
+    await page.waitForSelector('.desktop-panel[data-interactive="true"]', { visible: true, timeout: 60000 });
     const state = await context.rpc("computer.viewer_status", { member_id: 0 });
     if (state.control !== "owner") throw new Error("Take control did not acquire the real lease");
     result.computer.uiHeld = state.control;
     await inspectDesktop("owner");
     await capture("owner");
-    await click(page, '[data-dlg="control"]');
-    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    await click(page, '[data-desktop="return"]');
+    await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
     if ((await context.rpc("computer.viewer_status", { member_id: 0 })).control !== "member") throw new Error("Handback retained the lease");
     result.computer.uiHandback = "member";
     await inspectDesktop("handback");
     await capture("handback");
-    await click(page, '.desktop-viewer [data-dlg="close"]');
+    await click(page, '.mb-det [data-det="close"]');
     const { member: colleague } = await context.rpc("members.create", { name: "Computer tester", role: "Local computer test" });
     await perform(page, { action: "member", id: colleague.id });
     await type(page, ".composer .cmp-input", "Complete the local test sign-in [native-computer:signin]");
@@ -244,11 +285,11 @@ export async function drive(name, context) {
     await page.waitForSelector('[data-desktop-work][data-work-state="waiting_control"]', { visible: true, timeout: 60000 });
     await capture("takeover");
     const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
-    await click(page, '[data-desktop-card-open]');
-    await page.waitForSelector('.desktop-viewer[data-desktop-state="owner"]', { visible: true, timeout: 60000 });
-    const ownerFrame = await (await page.$('.desktop-viewer iframe')).contentFrame();
+    await page.waitForSelector('.desktop-panel iframe:not([hidden])', {visible:true,timeout:60000});
+    await click(page, '[data-desktop="take"]');
+    await page.waitForSelector('.desktop-panel[data-interactive="true"][data-accepted-input-latency-ms]', { visible: true, timeout: 60000 });
+    const ownerFrame = await (await page.$('.desktop-panel iframe')).contentFrame();
     await ownerFrame.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
-    await click(page, '.desktop-viewer iframe');
     const canvas = await ownerFrame.$('#noVNC_container canvas');
     const desktopBox = await canvas.boundingBox();
     // The local page focuses Email when the owner clicks its background. Avoid
@@ -260,11 +301,17 @@ export async function drive(name, context) {
     await pause(700);
     const auditHeld = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
     if (auditHeld !== auditBefore) throw new Error("Member computer call completed while the owner held control");
-    if (await page.$eval('[data-dlg="control"]', el => el.textContent) !== "我完成了") throw new Error("Explicit takeover done action missing");
+    if (await page.$eval('[data-desktop="return"]', el => el.textContent) !== "我完成了") throw new Error("Explicit takeover done action missing");
+    const latency = await page.$eval('.desktop-panel', el => Number(el.dataset.controlLatencyMs));
+    if (!Number.isFinite(latency) || latency >= 300) throw new Error(`Click-to-interactive ${latency}ms exceeds 300ms`);
+    result.computer.clickToInteractiveMs = latency;
+    const acceptedLatency = await page.$eval('.desktop-panel', el => Number(el.dataset.acceptedInputLatencyMs));
+    if (!Number.isFinite(acceptedLatency) || acceptedLatency >= 300) throw new Error(`Click-to-accepted-input ${acceptedLatency}ms exceeds 300ms`);
+    result.computer.clickToAcceptedInputMs = acceptedLatency;
     await capture("signed-in");
-    await click(page, '[data-dlg="control"]');
-    await page.waitForSelector('.desktop-viewer[data-desktop-state="member"]', { visible: true, timeout: 60000 });
-    await click(page, '.desktop-viewer [data-dlg="close"]');
+    await click(page, '[data-desktop="return"]');
+    await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });
+    await click(page, '.mb-det [data-det="close"]');
     let resumed;
     for (let attempt = 0; attempt < 100; attempt++) {
       resumed = (await snapshot()).agent_turns.find(turn => turn.member_id === colleague.id);

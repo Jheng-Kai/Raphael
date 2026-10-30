@@ -105,14 +105,13 @@ const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   confirmingClear: null, localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
 
-test("every skin offers a system, light or dark override", () => {
-  expect(paneHTML(view({ pane: "general" }))).not.toContain('data-k="appearance"');
-  for (const pane of ["appearance"] as const) {
-    expect(paneHTML(view({ pane, brain: { ...brain, skin: "default" } }))).toContain('data-k="appearance"');
-    for (const skin of ["paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"]) {
-      expect(paneHTML(view({ pane, brain: { ...brain, skin } }))).toContain('data-k="appearance"');
-    }
-  }
+test("appearance offers one theme dropdown and language without a preview gallery", () => {
+  const html = paneHTML(view({ pane: "appearance" }));
+  expect(html).toContain('data-k="appearance"');
+  expect(html).toContain('data-k="ui-language"');
+  expect(html).not.toContain("極致黑");
+  expect(html).not.toContain('skin-preview');
+  expect(html).not.toContain('data-skin-choice');
 });
 test("Telegram is in the 訊息平台 tab, and only there", () => {
   expect(tab("messaging")).toContain("data-msg-section");
@@ -292,11 +291,6 @@ describe("the rules for every tab, in every language", () => {
   test("no tab shows the options of a setting in a row: no segmented controls, radio rows or chips", () => {
     for (const id of IDS) {
       const html = tab(id);
-      if (id === "appearance") {
-        expect(html.match(/data-skin-choice=/g)).toHaveLength(9);
-        expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
-        continue;
-      }
       expect(html).not.toMatch(/role="radio|aria-pressed|class="tabs"|class="chip|lchip/);
     }
   });
@@ -314,8 +308,8 @@ describe("一般", () => {
   test("has the interface language, the theme and the emblem's size as dropdowns, the subtitles and the start as switches", () => {
     const html = tab("general");
     expect(groups(html)).toEqual(["個人資料", "介面與桌面", "啟動"]);
-    expect(names(html)).toEqual(["介面語言", "桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
-    for (const k of ["ui-language", "size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
+    expect(names(html)).toEqual(["桌面圖案大小", "字幕", "開機時自動啟動", "重新導覽"]);
+    for (const k of ["size"]) expect(html).toMatch(new RegExp(`<button type="button" class="sel"[^>]*data-k="${k}"`));
     for (const k of ["subtitles", "autostart"]) expect(html).toMatch(new RegExp(`class="tg" role="switch"[^>]*data-k="${k}"`));
   });
 
@@ -326,9 +320,9 @@ describe("一般", () => {
   });
 
   test("offers light, dark, or as Windows is, in that order", () => {
-    expect(APPEARANCES.map((c) => c.label)).toEqual(["淺色", "深色", "跟隨 Windows"]);
+    expect(APPEARANCES.map((c) => c.label)).toEqual(["跟隨系統", "淺色", "深色"]);
     setLocale("en");
-    expect(APPEARANCES.map((c) => c.label)).toEqual(["Light", "Dark", "Follow Windows"]);
+    expect(APPEARANCES.map((c) => c.label)).toEqual(["Follow system", "Light", "Dark"]);
   });
 });
 

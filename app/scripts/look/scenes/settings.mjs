@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check, member } from "./steps.mjs";
 
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
@@ -12,6 +12,7 @@ const modelChooser = role => [...settings("models"), click(`[data-model-picker="
 const localChooser = [...modelChooser("stt"), click('[data-source="local-speech"]'), wait(".lm-main")];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
+  scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
@@ -29,9 +30,9 @@ export default [
   ...["minimize", "maximize", "close"].map(control => scene(`window-hover-${control}`, `Transparent ${control} caption hover`, [{ action: "window-control", control }])),
   scene("window-hover-restore", "Restore caption keeps its centered glyph and transparent hover", [{ action: "window-control", control: "maximize", restore: true }]),
   scene("window-hover-modal", "Caption hover stays usable while settings dim the window", [...settings("models"), { action: "window-control", control: "close", hoverOnly: true }]),
-  ...["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, settings(pane))),
-  scene("skins", "Skin preview hover", [...settings("appearance"), hover('[data-skin-choice="paper"]')]),
-  ...["default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"].map(skin => scene(`skin-${skin}`, `${skin} appearance previews`, [...settings("appearance"), click(`[data-skin-choice="${skin}"]`)])),
+  ...["general", "appearance", "connections", "models", "dictation", "agent", "messaging", "data", "about"].map(pane => scene(pane === "general" ? "profile" : pane, `${pane} settings pane`, [...settings(pane), ...(pane === "appearance" ? [check("appearance-settings")] : [])])),
+  scene("appearance-menu", "One shared theme dropdown without a preview gallery", [...settings("appearance"), click('[data-k="appearance"]'), wait('.menu [data-value="dark"]'), check("appearance-settings")]),
+  scene("appearance-keyboard", "Theme choices retain visible keyboard focus in every palette", [...settings("appearance"), click('[data-k="appearance"]'), key('Tab'), {...key('Tab'),shift:true}, key('ArrowDown'), check('appearance-settings'), check('appearance-focus')]),
   scene("plugins-installed", "Unified managed, private Google and custom MCP plugins", [...connections, wait('[data-conn="open"][data-id="composio:notion"]')]),
   scene("plugins-detail", "Managed tools grouped by write and read", [...connections, click('[data-conn="open"][data-id="composio:notion"]'), click('[data-conn="tool-list"]'), wait('[data-conn="tool"][data-tool="NOTION_SEARCH"]')]),
   scene("plugins-store", "Search-first catalog with connected and popular apps before bounded results", [

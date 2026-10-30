@@ -39,7 +39,7 @@ connect_app shows a connection card; request_secret shows a vault-entry card. Th
 grants consent, or saves the value. Successful cards resume the original request in its own thread
 once, preserving receipts so completed actions are not repeated. A failed card returns a classified
 reason to the same member, who diagnoses it and explains the owner-only step without making a new card.
-General settings hold language, hotkeys and microphone; appearance holds theme and skin;
+General settings hold language, hotkeys and microphone; appearance holds the theme;
 connections holds installed apps, the Store and capability services; models holds providers,
 subscription accounts, model choices and usage; dictation holds transcription choices;
 agent holds conversation preferences; messaging holds gateways; data holds retention and export;

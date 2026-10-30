@@ -1,11 +1,21 @@
-.mb-dialog.desktop-viewer {
-  width: min(var(--layout-thread-max), calc(100vw - var(--sp-6)));
-  max-width: none;
-}
-.desktop-viewer .mb-dlg-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); min-height: 0; }
-.desktop-status { margin: 0; color: var(--text-2); }
-.desktop-screen { position: relative; width: 100%; aspect-ratio: 16 / 10; max-height: 60vh; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
-.desktop-screen iframe { width: 100%; height: 100%; border: 0; }
+/* The computer is a section of the existing details drawer at every width. The drawer widens
+   with it, and again when the member asks for help, before the owner has to click anything. */
+.page.page-agent:has(.desktop-panel:not([hidden])) { --pa-det: clamp(360px, 32vw, 560px); }
+.page.page-agent:has(.desktop-panel[data-request]:not([hidden])) { --pa-det: clamp(480px, 46vw, 760px); }
+.mb-det-scroll:has(> .desktop-panel:not([hidden])) { max-width: none; }
+.mb-det-scroll:has(> .desktop-panel:not([hidden])) > :not(.desktop-panel) { width: 100%; max-width: var(--layout-card-max); align-self: center; }
+.desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-5); }
+.desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.desktop-heading h2 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-md); }
+.desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.desktop-screen iframe { display: block; width: 100%; height: 100%; border: 0; }
+.btn.desktop-hit { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.btn.desktop-hit:is(:hover, :active):not(:disabled) { background: transparent; box-shadow: inset 0 0 0 1px var(--hover-edge); }
+.desktop-hit:disabled { cursor: progress; }
+.desktop-owner { position: absolute; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
+.desktop-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-4); white-space: pre-line; overflow-wrap: anywhere; text-align: center; color: var(--text-2); }
 .desktop-error { margin: 0; color: var(--err); }
 .desktop-preparation { width: min(100%, var(--layout-card-max)); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-4); }
@@ -15,12 +25,10 @@
 .desktop-preparation p { margin: 0; font-size: var(--fs-sm); }
 .desktop-preparation progress { width: 100%; height: var(--sp-2); accent-color: var(--accent); }
 .desktop-build-progress { max-width: 100%; overflow-wrap: anywhere; }
-.desktop-card { display: grid; grid-template-columns: minmax(0, 1fr); width: min(100%, var(--layout-card-max)); border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; margin-top: var(--sp-3); background: var(--content); }
-.btn.desktop-preview { position: relative; width: 100%; aspect-ratio: 16 / 10; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 0; background: var(--surface-2); color: var(--text-2); cursor: pointer; }
-.desktop-preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
-:root[data-keys] .desktop-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.desktop-card-meta { padding: var(--sp-4); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
-.desktop-card-title { display: flex; align-items: center; gap: var(--sp-2); font-weight: 600; }
-.desktop-card-state { margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
-.desktop-card-actions { display: flex; justify-content: flex-end; }
-.desktop-card:not([data-work-state="running"]) .desktop-preview { display: none; }
+
+:root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; }
+:root[data-desktop-expanded] .mb-det-scroll { height: 100%; max-width: none; overflow: hidden; }
+:root[data-desktop-expanded] .mb-det-head, :root[data-desktop-expanded] .mb-det-scroll > :not(.desktop-panel) { display: none; }
+.desktop-panel[data-expanded] { flex: 1; width: 100%; min-height: 0; height: 100%; margin: 0; grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+.desktop-panel[data-expanded] .desktop-screen { grid-row: 3; height: 100%; min-height: 0; aspect-ratio: auto; }
+.desktop-panel[data-expanded] .desktop-actions { grid-row: 5; }

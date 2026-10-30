@@ -319,7 +319,9 @@ class LocalVm:
                     if not await self.image():
                         self._progress(target, "building")
                         await self.build(progress=lambda text: self._progress(target, "building", text))
-                self._progress(target, "preparing")
+                # Every computer tool call passes here: a running desktop is not being prepared.
+                if (await self.status(target, probe=False))["state"] != "running":
+                    self._progress(target, "preparing")
                 return await self._start(target)
             finally:
                 self.preparation.pop(target.key, None)

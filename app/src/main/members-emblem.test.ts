@@ -52,11 +52,11 @@ function framing(body: string): string[] {
 }
 
 describe("Raphael's emblem stands bare", () => {
-  test("only the composite group face adds the owner's round background and 2px separator", () => {
+  test("composite grid cells are round faces on the recessed fill, with no ring", () => {
     const composite = rules.find(rule => rule.name === "sidebar.css" && rule.selector === ".room-avatar > .av")!;
     expect(framing(composite.body)).toEqual([
-      "border: 2px solid var(--room-avatar-ring, var(--content))",
-      "border-radius: var(--r-pill)", "background: var(--surface-2)",
+      "border-radius: var(--r-pill)",
+      "background: var(--surface-2)",
     ]);
   });
   test("no style sheet gives the emblem, or what it is drawn into, a background, an edge, a shadow or a round crop", () => {

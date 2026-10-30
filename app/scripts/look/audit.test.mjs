@@ -126,7 +126,7 @@ describe("rendered look checks", () => {
   });
   it("checks visible primary calendar choices without counting the hidden responsive copy", () => {
     const window = new Window();
-    window.document.body.innerHTML = '<aside hidden><button data-drag-member="0"></button><button data-drag-member="1"></button></aside><div><button data-drag-member="1"></button><button data-drag-member="0"></button></div>';
+    window.document.body.innerHTML = '<nav id="nav"><button class="mb-chief"><i class="mb-star"></i></button></nav><aside hidden><button data-drag-member="0"></button><button data-drag-member="1"></button></aside><div><button data-drag-member="1"></button><button data-drag-member="0"></button></div>';
     for (const element of window.document.querySelectorAll('div button')) element.getBoundingClientRect = () => ({ width: 100, height: 30 });
     window.__look = { data: { primaryId: 1, members: [{ id: 0 }, { id: 1 }] }, calls: [] };
     vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
@@ -147,15 +147,13 @@ describe("rendered look checks", () => {
     input.getBoundingClientRect = count.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
     expect(audit().productRules).toEqual([]);
   });
-  it("rejects three-column choice grids and accepts two columns (R-UI-30)", () => {
-    const { window, audit } = productAudit('<div class="skin-grid"><div></div><div></div><div></div></div>');
-    expect(audit().productRules.map(item => item.rule)).toContain('R-UI-30');
-    window.document.querySelector('.skin-grid').lastElementChild.getBoundingClientRect = () => ({ left: 10, top: 50, right: 110, bottom: 80, width: 100, height: 30 });
-    expect(audit().productRules).toEqual([]);
-  });
   it("lets short dictionary entries add columns instead of treating them as long choices", () => {
     const { audit } = productAudit('<div class="wgrid"><div class="wrow"></div><div class="wrow"></div><div class="wrow"></div></div>');
     expect(audit().productRules).toEqual([]);
+  });
+  it("limits the round sidebar control exception to its search and plus", () => {
+    const { audit } = productAudit('<nav id="nav"><div class="mb-top"><button class="btn icon mb-tool" data-col="search" style="background:#fff;border:1px solid #888"></button><button class="btn icon mb-tool" data-col="add" style="background:#fff;border:1px solid #888"></button><button class="btn icon mb-tool" data-col="other" style="background:#fff;border:1px solid #888"></button></div></nav>');
+    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {
     const { window, audit } = productAudit('<button class="btn icon" style="border:0;background:gray"><svg class="i"></svg></button>');

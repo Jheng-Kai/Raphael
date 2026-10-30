@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === 'appearance-focus') {
+    const focused = document.activeElement, style = getComputedStyle(focused);
+    require(focused?.matches('.menu [data-value]') && document.documentElement.hasAttribute('data-keys'), 'theme menu supports actual keyboard focus');
+    require((parseFloat(style.outlineWidth) >= 2 && style.outlineStyle !== 'none') || (style.boxShadow.includes('inset') && style.boxShadow.includes('2px')), 'keyboard focus has a visible ring');
+    return {check:name, color:style.outlineColor, shadow:style.boxShadow, value:focused.dataset.value};
+  }
+  if (name === "appearance-settings") {
+    const card = document.querySelector('.appearance-settings .slist');
+    require(visible(card) && card.getBoundingClientRect().width <= 640, "appearance keeps a narrow reading measure");
+    require(card.querySelectorAll('.row').length === 2 && card.querySelectorAll('.sel').length === 2, "theme and language share the row/dropdown component");
+    for(const row of card.querySelectorAll('.row')){
+      const box=row.getBoundingClientRect(), label=row.querySelector('.lbl').getBoundingClientRect(), picker=row.querySelector('.sel').getBoundingClientRect();
+      require(label.left-box.left>=12&&box.right-picker.right>=12,"settings rows keep shared inner padding");
+    }
+    require(!document.querySelector('.skin-preview, [data-skin-choice]'), "preview gallery is retired");
+    const choices=[...document.querySelectorAll('.menu [data-value]')];
+    if(choices.length)require(choices.map(item=>item.dataset.value).join(',')==='system,light,dark','theme menu has exactly three appearance choices');
+    return { check:name, width:card.getBoundingClientRect().width };
+  }
+  if (name === "theme-clarity") {
+    const elements = [document.documentElement, document.body, document.querySelector('#main'), document.querySelector('.page-agent'), document.querySelector('.mb-chat')].filter(Boolean);
+    const surfaces = elements.map(el => { const style = getComputedStyle(el); return { element:el.id || el.className || el.tagName, opacity:style.opacity, filter:style.filter, backdrop:style.backdropFilter, background:style.backgroundImage }; });
+    require(surfaces.every(s => s.opacity === '1' && s.filter === 'none' && s.backdrop === 'none'), "root and conversation have no opacity or blur veil");
+    require(getComputedStyle(document.querySelector('.mb-chat')).backgroundImage === 'none', "conversation has no tinted gradient");
+    const root = getComputedStyle(document.documentElement), tokens = Object.fromEntries(['content', 'panel', 'text-2', 'text-3', 'accent', 'focus', 'selected'].map(key=>[key, root.getPropertyValue(`--${key}`).trim()]));
+    require(Object.values(tokens).every(value=>/^#([0-9a-f]{2})\1\1$/i.test(value)), "both themes are neutral greys including text, accent, focus and selection");
+    return {check:name, surfaces, tokens};
+  }
+  if(name==='home-hero'){
+    const hero=document.querySelector('.page-home .ho-hero'), emblem=hero.querySelector(':scope > .av'), heading=hero.querySelector('h1'), date=hero.querySelector('.ho-date');
+    const expected=innerWidth<=760?96:128, root=getComputedStyle(document.documentElement);
+    require(Math.abs(emblem.getBoundingClientRect().width-expected)<1,'Home enlarges only the emblem at each viewport');
+    require(getComputedStyle(heading).fontSize===root.getPropertyValue('--fs-h1').trim(),'Home report uses the original heading token');
+    require(getComputedStyle(date).fontSize===root.getPropertyValue('--fs-md').trim(),'Home date keeps its existing type size');
+    return {check:name,emblem:expected,heading:getComputedStyle(heading).fontSize};
+  }
   const selection = () => {
     const rows = [...document.querySelectorAll('#nav .nav[aria-current="true"], #nav .nav[aria-current="page"]')];
     const home = !document.querySelector('.page-home').hidden;
@@ -28,9 +64,13 @@ export function checkRendered(name, context = {}) {
     const compact = matchMedia("(max-width: 859px)").matches, open = document.documentElement.hasAttribute("data-sidebar-open");
     require(document.querySelectorAll(".mb-col").length === 1 && column, "one global conversation list");
     require(!document.querySelector('[data-go="team"], .team-page, [data-col="collapse"], .nav-apps, [data-go="automations"]'), "retired navigation and icon rails are absent");
-    require(nav.querySelector(".brand") && nav.querySelector('.mb-find-input') && nav.querySelector('[data-col="add"]'), "brand, search and plus are permanent");
-    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join() === "dictation,settings", "footer contains only dictation and account");
-    require(nav.querySelector('.sidebar-account .owner-face') && nav.querySelector('.sidebar-account-name').textContent.trim(), "account has its own face and name");
+    const header=nav.querySelector('.mb-top');
+    require(header.querySelector('.brand')&&header.querySelector('[data-col="search"]')&&header.querySelector('[data-col="add"]'),'brand, search and plus share the top row');
+    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,dictation','footer has owner on the left and dictation on the right');
+    require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
+    require(!nav.querySelector('.sidebar-account svg.i:not(.owner-face svg.i), .sidebar-account-name'),'account has no separate gear or visible name');
+    require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
+    require(getComputedStyle(nav.querySelector('.side-foot')).borderTopWidth==='0px','footer has no separator');
     if (compact) {
       require(visible(document.querySelector('.sidebar-toggle')) && main.getBoundingClientRect().left < 1 && Math.abs(main.getBoundingClientRect().width - innerWidth) < 1, "compact content uses the whole window behind a menu button");
       require(nav.inert === !open && main.inert === open, "drawer owns focus and closes access to covered content");
@@ -40,8 +80,25 @@ export function checkRendered(name, context = {}) {
     }
     const chief = column.querySelector('.mb-chief');
     if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('.mb-row-main') && chief.querySelector('.av'), "chief uses the same conversation row");
-    if (chief && (!compact || open)) require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width - 40) < 1, "chief and colleagues share 40px faces");
+    if(chief)require(chief.querySelector('.mb-star')&&chief.querySelector('.mb-row-t i'),'chief retains its role and one star badge');
+    if(chief&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1,'chief and colleagues share 40px faces');
+    for(const row of column.querySelectorAll('.mb-row')){
+      const time=row.querySelector('time');
+      if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');
+    }
     return { check:name, compact, open, folders:column.querySelectorAll('.mb-sec').length };
+  }
+  if(name==='sidebar-search-before'||name==='sidebar-search-open'){
+    const header=document.querySelector('#nav .mb-top'), buttons=[...header.querySelectorAll('[data-col]')];
+    const positions=buttons.map(button=>button.getBoundingClientRect().toJSON());
+    if(name==='sidebar-search-before'){
+      require(header.querySelector('.mb-find').hidden,'search starts behind its icon');
+      window.__sidebarSearchPositions=positions;
+    }else{
+      require(!header.querySelector('.mb-find').hidden&&document.activeElement===header.querySelector('input'),'search opens in place and receives focus');
+      require(positions.every((box,index)=>Math.abs(box.x-window.__sidebarSearchPositions[index].x)<1&&Math.abs(box.y-window.__sidebarSearchPositions[index].y)<1),'opening search never moves its icon or plus');
+    }
+    return {check:name,positions};
   }
   if (name === "sidebar-folded") {
     const folder = document.querySelector('.mb-sec[data-group="1"]');
@@ -51,26 +108,21 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "sidebar-room-avatar") {
     const avatar = document.querySelector('.au-room-heading > .room-avatar');
-    require(visible(avatar) && avatar.querySelectorAll('.av').length >= 2, "header uses overlapping member faces");
+    require(visible(avatar) && avatar.querySelectorAll('.av').length >= 2, "header uses the members' face grid");
     require(!document.querySelector('.au-room-heading > svg.i'), "group identity is its members");
-    const painted = element => {
-      for (let el = element; el; el = el.parentElement) {
-        const color = getComputedStyle(el).backgroundColor;
-        if (color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') return color;
-      }
-      return 'rgba(0, 0, 0, 0)';
-    };
     for (const composite of document.querySelectorAll('.room-avatar')) {
-      const box = composite.getBoundingClientRect(), background = painted(composite.parentElement);
-      require(Math.abs(box.width - 40) < 1 && Math.abs(box.height - 40) < 1, "sidebar and header composites share 40px bounds");
-      require(getComputedStyle(composite).overflow === 'visible', "the composite never clips a face");
+      const box = composite.getBoundingClientRect();
+      const expected=40;
+      require(Math.abs(box.width-expected)<1&&Math.abs(box.height-expected)<1,'sidebar and header use their shared avatar bounds');
+      require(getComputedStyle(composite).display==='grid'&&getComputedStyle(composite).borderRadius==='0px'&&getComputedStyle(composite).backgroundColor==='rgba(0, 0, 0, 0)','composite is a square grid without an outer disc');
       for (const face of composite.children) {
         const style = getComputedStyle(face), rect = face.getBoundingClientRect();
-        require(rect.width >= 26 && Math.abs(rect.width - rect.height) < 1 && parseFloat(style.borderRadius) >= rect.width / 2, "every face is a complete readable circle");
-        require(style.backgroundColor !== 'rgba(0, 0, 0, 0)', "each face has its own avatar background");
-        require(style.borderTopWidth === '2px' && style.borderTopColor === background, `2px face rings match their row or header background: ${style.borderTopColor} vs ${background}`);
+        require(rect.width>=18&&rect.height>=18,'every member face remains readable');
+        require(style.borderTopWidth==='0px','grid faces have no separating ring');
         require(rect.left >= box.left - 1 && rect.right <= box.right + 1 && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1, "whole faces fit inside the composite bounds");
       }
+      const faces=[...composite.children].map(face=>face.getBoundingClientRect());
+      require(faces.every((face,index)=>faces.slice(index+1).every(other=>Math.min(face.right,other.right)-Math.max(face.left,other.left)<=1||Math.min(face.bottom,other.bottom)-Math.max(face.top,other.top)<=1)),'grid faces never overlap');
     }
     return {check:name, faces:avatar.dataset.faces};
   }
@@ -102,22 +154,37 @@ export function checkRendered(name, context = {}) {
     require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
     return {check:name, faces:faces.length};
   }
-  if (name.startsWith("computer-")) {
-    const cards = document.querySelectorAll('[data-desktop-work]'), card = cards[0];
-    require(cards.length === 1 && visible(card), "one computer card per task");
-    require(card.closest('.tn')?.dataset.id === "2", "the card belongs to its own private turn");
-    require(!card.querySelector('input, textarea'), "owner secrets have no chat input");
-    if (name === "computer-inline") {
-      require(visible(card.querySelector('iframe')), "the preview streams the desktop");
-      require(getComputedStyle(card.querySelector('iframe')).pointerEvents === "none", "inline preview cannot input");
+  if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
+    const panel=document.querySelector('.desktop-panel'), frame=panel?.querySelector('iframe'), calls=window.__look.calls;
+    if(name==='desktop-absent'){require(!visible(panel),'absent Docker has no computer section');return {check:name};}
+    require(visible(panel)&&panel.closest('.mb-det')&&![...document.querySelectorAll('.desktop-viewer, [role="dialog"]')].some(visible),'computer uses the existing side panel without a dialog');
+    require(!document.querySelector('.thread iframe, .desktop-card, [data-desktop-card-open]'),'timeline has no screen card or control buttons');
+    const screenHit=panel.querySelector('[data-desktop="take"]');
+    if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
+    const events=document.querySelectorAll('[data-desktop-work]');
+    if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-event-line')&&events[0].closest('.tn')?.dataset.id==='2','one centered metadata-only event belongs to the private turn');
+    if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
+    if(name==='computer-takeover-owner')require(panel.querySelector('[data-desktop="return"]').textContent==='我完成了','one explicit done action');
+    if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
+    if(name==='computer-takeover-owner'||name==='desktop-owner'){
+      require(panel.dataset.interactive==='true'&&getComputedStyle(frame).pointerEvents==='auto','click enables input in place');
+        require(calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'takeover keeps the same member session');
+      require(frame.contentDocument.defaultView.__desktopConnections===1,'takeover keeps the same noVNC connection');
+      const latency=Number(panel.dataset.controlLatencyMs);require(Number.isFinite(latency)&&latency<300,`local click-to-interactive ${latency}ms < 300ms`);
+      const accepted=Number(panel.dataset.acceptedInputLatencyMs);require(Number.isFinite(accepted)&&accepted<300,`local click-to-accepted-input ${accepted}ms < 300ms`);
+      return {check:name,clickToInteractiveMs:latency,clickToAcceptedInputMs:accepted,connections:1};
     }
-    if (name === "computer-takeover") {
-      require(card.dataset.workState === "waiting_control" && card.textContent.includes("登入"), "typed sign-in need is stated plainly");
-      require(!card.querySelector('iframe'), "owner entry never streams into the inline card");
-    }
-    if (name === "computer-takeover-owner") require(document.querySelector('[data-dlg="control"]').textContent === "我完成了", "explicit done action");
-    if (name === "computer-takeover-done") require(window.__look.calls.filter(call => call.method === "computer.viewer_control" && !call.params.held && call.params.takeover === "private-takeover-request").length === 1, "one explicit handback for this request");
-    return { check: name };
+    if(name==='desktop-handback')require(panel.dataset.interactive==='false'&&frame.contentDocument.defaultView.__desktopConnections===1,'handback keeps the stream view-only');
+      if(name==='desktop-viewer'){
+        require(panel.hasAttribute('data-expanded')&&calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'expansion uses the same member frame/session');
+        require(frame.getBoundingClientRect().width>innerWidth*0.9,'expanded screen uses the window width');
+      }
+    if(name==='desktop-offline'){
+      require(!frame,'offline screen has no blank frame');
+      if(['starting','building','preparing'].includes(panel.dataset.desktopState))require(panel.querySelectorAll('.desktop-preparation li').length===3&&visible(panel.querySelector('progress')),'preparation has all steps and progress');
+      else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
+    }else require(visible(frame),'side panel streams the live screen');
+    return {check:name};
   }
   if (name === "desktop-install") {
     const buttons = document.querySelectorAll('[data-act="docker-download"]');
@@ -125,7 +192,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "desktop-frame") {
-    const doc = document.querySelector('.desktop-viewer iframe')?.contentDocument ?? document;
+    const doc = document.querySelector('.desktop-panel iframe')?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
@@ -140,37 +207,6 @@ export function checkRendered(name, context = {}) {
     }
     for (const x of [box.left + 2, box.right - 2]) for (const y of [box.top + 2, box.bottom - 2]) require(doc.elementFromPoint(x, y) === canvas, "every desktop corner is unobscured");
     return { check: name, canvas: box.toJSON(), framebuffer: { width: canvas.width, height: canvas.height }, viewport: { width, height }, visibleControls: controls.length };
-  }
-  if (name.startsWith("desktop-")) {
-    const entry = document.querySelector('[data-desktop="open"]');
-    if (name === "desktop-absent") {
-      require(!visible(entry), "Docker absent has no desktop entry");
-      return { check: name };
-    }
-    require(visible(entry) && entry.getAttribute("aria-label") && entry.classList.contains("icon"), "the single desktop entry uses the accessible shared icon button");
-    require(document.querySelectorAll('[data-desktop="open"]').length === 1, "one entry per conversation");
-    if (name === "desktop-entry") return { check: name };
-    const viewer = document.querySelector('.desktop-viewer'), frame = viewer?.querySelector('iframe');
-    require(visible(viewer), "the existing dialog contains the desktop");
-    const calls = window.__look.calls;
-    require(calls.some(call => call.method === "computer.viewer_open" && call.params.member_id === 1), "the selected member opens its own desktop");
-    require(!frame.src.includes("password") && !viewer.outerHTML.includes("password="), "no VNC password in the DOM or URL");
-    if (name === "desktop-offline") {
-      require(!visible(frame) && !frame.hasAttribute("src"), "offline desktops have no blank frame");
-      const action = viewer.querySelector('[data-dlg="control"]');
-      const preparing = ["starting", "building", "preparing"].includes(viewer.dataset.desktopState);
-      require(preparing ? action.hidden : !action.disabled, "preparation hides control; a failed desktop can retry");
-      if (viewer.dataset.desktopState === "building") require(viewer.querySelector('.desktop-placeholder').textContent.includes("[2/4]"), "real build progress remains visible");
-      if (preparing) {
-        require(viewer.querySelectorAll('.desktop-preparation li').length === 3, "all preparation steps are visible");
-        require(visible(viewer.querySelector('progress')), "unknown progress has an indeterminate indicator");
-      }
-    } else {
-      require(visible(frame), "the connected desktop is visible");
-      if (name === "desktop-owner" || name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === true), "take control acquires the core lease");
-      if (name === "desktop-handback") require(calls.some(call => call.method === "computer.viewer_control" && call.params.held === false), "handback releases the lease");
-    }
-    return { check: name };
   }
   if (name === "skill-learned-notice") {
     const notice = document.querySelector('.conversation-event-line'), reply = notice?.closest('.tn')?.querySelector('.ra');
@@ -345,7 +381,7 @@ export function checkRendered(name, context = {}) {
     const pane = document.querySelector('.modal-scrim [data-pane][aria-current="page"]')?.dataset.pane;
     const labels = pane === 'general' ? ['[data-k="subtitles"]'] : pane === 'dictation' ? ['[data-k="languages"]'] : [];
     for (const selector of labels) require(!host.querySelector(selector)?.closest('.row')?.querySelector('.d'), "self-explanatory settings have no helper paragraph");
-    require(!host.querySelector('.skin-card small, .models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
+    require(!host.querySelector('.models-purpose-note, .run-retained, [data-price="note"]'), "skin, model and usage helpers are absent");
     if (pane === 'data') require(!host.querySelector('.foot'), "data has no helper footer");
     if (pane === 'messaging') require(!host.querySelector('.msg > .foot'), "Telegram keeps its controls without a setup paragraph");
     return { check: name, pane };
@@ -427,7 +463,7 @@ export function checkRendered(name, context = {}) {
     require(page.querySelector('.ho-calendar').getBoundingClientRect().top >= cards[3].bottom, "the mini calendar stays below the four blocks");
     require(page.querySelectorAll('.ho-weekday').length === 7, "the month has a weekday header");
     require(page.querySelector('.ho-calendar').getBoundingClientRect().height >= 280, "the month fills a balanced area below the summaries");
-    require(emblem.width >= 110 && parseFloat(getComputedStyle(lead.querySelector('h1')).fontSize) >= 30, "the emblem and report read as the page hero");
+    require(Math.abs(emblem.width-(innerWidth<=760?96:128))<1 && getComputedStyle(lead.querySelector('h1')).fontSize === getComputedStyle(document.documentElement).getPropertyValue('--fs-h1').trim(), "only the emblem grows; the report retains its heading token");
     require(!page.querySelector('.ho-week'), "the former week strip is removed");
     const blocks = [...page.querySelectorAll('.ho-card, .ho-calendar')];
     for (const block of blocks) {
@@ -473,7 +509,7 @@ export function checkRendered(name, context = {}) {
   }
   if(name === "settings-alignment") {
     const host=document.querySelector('.modal-body'), style=getComputedStyle(host), right=host.getBoundingClientRect().left+parseFloat(style.paddingLeft)+Math.min(640,host.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight));
-    const rows=[...host.querySelectorAll('.cs, .cs-list, .skin-grid, .slist, .cs-toolbar, .cs-head')].filter(el=>visible(el)&&!el.closest('[hidden]'));
+    const rows=[...host.querySelectorAll('.cs, .cs-list, .slist, .cs-toolbar, .cs-head')].filter(el=>visible(el)&&!el.closest('[hidden]'));
     require(rows.length>0,"settings has measurable content");
     for(const row of rows) require(Math.abs(row.getBoundingClientRect().right-right)<2,`settings content shares one right edge: ${row.className}`);
     const close=document.querySelector('.modal-x')?.getBoundingClientRect();
@@ -1622,7 +1658,7 @@ export function checkRendered(name, context = {}) {
       require(first.dataset.member === "0", "Raphael is first");
       if (!column.classList.contains("is-collapsed")) {
         require(Math.abs(first.querySelector(".av").getBoundingClientRect().width - 40) < 1, "the chief shares the conversation avatar size");
-        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 40) < 1, "other members retain 40px faces");
+        for (const row of rows.slice(1)) require(Math.abs(row.querySelector(".av").getBoundingClientRect().width - 40) < 1, "other members share 40px faces");
       }
     }
     return { check: name, sidebarVisible: visible(column), fontSize: getComputedStyle(bubble).fontSize };
@@ -1638,14 +1674,14 @@ export function checkRendered(name, context = {}) {
     const box = menu.getBoundingClientRect();
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the menu is inside the viewport");
     require(window.__look.calls.every(call => call.method !== "members.set_primary"), "opening the menu sets nothing");
-    require(!document.querySelector('.mb-star'), "primary faces have no star badges");
+    require(document.querySelector('#nav .mb-chief .mb-star')&&!document.querySelector('.mb-det .mb-star'),'only the sidebar chief carries a star');
     return { check: name, items: picks.length };
   }
   if (name.startsWith("primary-")) {
     const data = window.__look.data, calls = window.__look.calls;
     const sets = calls.filter(call => call.method === "members.set_primary");
     const column = document.querySelector('.mb-col');
-    require(!document.querySelector('.mb-star'), "no primary star remains anywhere");
+    require(document.querySelector('#nav .mb-chief .mb-star')&&!document.querySelector('.mb-det .mb-star'),'only the sidebar chief carries a star');
     const order = nodes => [...nodes].map(node => Number(node.dataset.member ?? node.dataset.id ?? node.dataset.value ?? node.dataset.dragMember));
     const swapped = ids => {
       const result = [...ids], chief = result.indexOf(0), primary = result.indexOf(data.primaryId);

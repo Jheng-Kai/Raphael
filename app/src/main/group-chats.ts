@@ -105,9 +105,9 @@ export async function openEveryoneChat(): Promise<void> {
   } catch (error) { toaster.info(describeError(error)); }
 }
 
-/** Two or three actual member faces share the same circular avatar everywhere. */
+/** Up to four actual member faces share a square grid everywhere. */
 export function roomAvatarHTML(room: Pick<Room, "member_ids">, list: MembersList, size = 40): string {
-  const members = room.member_ids.map(id => list.members.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).slice(0, 3);
+  const members = room.member_ids.map(id => list.members.find(m => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m).slice(0, 4);
   return `<span class="room-avatar" data-faces="${members.length}" style="--av:${size}px" aria-hidden="true">${members.map(member => faceHTML(member, size)).join("")}</span>`;
 }
 
@@ -331,11 +331,11 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
   const draw = (): void => {
     const team = rooms.find(room => room.is_team);
     const items = [...(team ? [] : [{ id: 0, name: t("rooms.team"), is_team: 1, member_ids: list.members.map(m => m.id) } as Room]), ...rooms];
-    el.innerHTML = `<div class="mb-ghead"><span class="mb-gname">${esc(t("rooms.title"))}</span>${iconButton("plus", t("rooms.new"), ' data-room-new')}</div>` + items
+    el.innerHTML = items
       .filter(room => (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row"${room.is_team ? " data-room-everyone" : ""} ${room.id ? `data-room="${room.id}"` : 'data-room-team'} aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(replyBody(room.preview ?? "").replace(/\s+/g, " "))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row"${room.is_team ? " data-room-everyone" : ""} ${room.id ? `data-room="${room.id}"` : 'data-room-team'} aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(replyBody(room.preview ?? "").replace(/\s+/g, " "))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
       }).join("");
   };
   const load = async (): Promise<void> => {

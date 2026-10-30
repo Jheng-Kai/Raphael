@@ -1,10 +1,9 @@
-/** A member's optional desktop inside the existing conversation dialog. */
+/** One persistent noVNC stream in the existing member details panel. */
 import * as api from "./api";
 import { onLocaleChange, t } from "./i18n";
-import { openDialog, type Dialog } from "./member-dialogs";
-import { esc, iconButton } from "./ui";
+import { esc, iconButton, btn, ico } from "./ui";
 import "./desktop-viewer.css";
-import { mountDesktopTimeline, type DesktopWork } from "./desktop-timeline";
+import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 
 export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
@@ -31,197 +30,144 @@ export function preparationHTML(state: DesktopState): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options?: { timeline: HTMLElement; conversation: () => number | undefined }): { show(): void; hide(): void; refresh(): void; sync(): void; carry(from: Element, to: HTMLElement): void } {
-  host.insertAdjacentHTML("afterbegin", iconButton("monitor", t("desktop.open"), ' data-desktop="open" hidden', "ra-tool"));
-  const entry = host.querySelector<HTMLButtonElement>('[data-desktop="open"]')!;
-  onLocaleChange(() => { entry.setAttribute("aria-label", t("desktop.open")); entry.title = t("desktop.open"); });
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean }): { show(): void; hide(): void; refresh(): void; sync(): void } {
+  const panel = document.createElement("section");
+  panel.className = "desktop-panel"; panel.hidden = true;
+  panel.innerHTML = `<div class="desktop-heading"><h2></h2>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}</div>` +
+    `<p class="desktop-request" role="status" hidden></p><div class="desktop-screen"><div class="desktop-placeholder"></div>` +
+    `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
+    `<button type="button" class="btn desktop-hit" data-desktop="take" hidden></button><span class="desktop-owner" role="status" hidden></span></div>` +
+    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
+  const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
+  frame.remove();
+  (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
+  const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
+  const action = panel.querySelector<HTMLButtonElement>('[data-desktop="return"]')!;
+  const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
+  const error = panel.querySelector<HTMLElement>('.desktop-error')!;
+  const timeline = mountDesktopTimeline(options.timeline, options.name);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
-  let dialog: Dialog | undefined, session: DesktopSession | undefined;
-  let state: DesktopState | undefined, frame: HTMLIFrameElement | undefined;
-  let connected = false, loading = false, changing = false;
-  let connectingSince = 0;
-  let closePending: Promise<unknown> = Promise.resolve();
-  let takeover: string | undefined, taking = false;
-  const timeline = options ? mountDesktopTimeline(options.timeline, member, options.conversation, work => {
-    takeover = work.state === "waiting_control" ? work.request_id : undefined;
-    taking = !!takeover; void open();
-  }) : undefined;
+  let state: DesktopState | undefined, session: DesktopSession | undefined;
+  let connected = false, interactive = false, changing = false, loading = false, opening = false;
+  let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
+  const revealed = new Set<string>();
+  const pending = (): DesktopWork | undefined => state?.works?.find(work => work.state === "waiting_control");
+  const active = (): boolean => visible && options.panelVisible();
+  const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
 
   function draw(): void {
-    if (!dialog) return;
-    const running = state?.state === "running";
-    const preparing = state?.state === "starting" || state?.state === "building" || state?.state === "preparing";
-    const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? (state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable")
-      : !connected ? "connecting" : state?.control === "owner" ? "owner" : "member";
-    dialog.el.dataset.desktopState = label;
-    const status = dialog.el.querySelector<HTMLElement>(".desktop-status")!;
-    status.textContent = t(STATUS_KEY[label]);
-    status.hidden = !running;
-    const action = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="control"]')!;
-    const pending = state?.works?.find(work => work.state === "waiting_control");
-    action.textContent = t(state?.control === "owner" ? (takeover || pending ? "desktop.done" : "desktop.release") : !running ? "desktop.retry" : "desktop.take");
-    action.hidden = state?.control !== "owner" && (preparing || running && !connected);
-    action.disabled = changing || state?.control !== "owner" && running && !connected;
-    frame!.hidden = !running || !connected;
-    const placeholder = dialog.el.querySelector<HTMLElement>(".desktop-placeholder")!;
+    panel.hidden = !visible || !state || state.state === "absent";
+    panel.querySelector('h2')!.innerHTML = ico("monitor") + esc(t("card.pcTitle"));
+    frame.title = t("desktop.open"); hit.setAttribute('aria-label', t("desktop.take"));
+    const expand = panel.querySelector<HTMLButtonElement>('[data-desktop="expand"]')!;
+    expand.title = t(panel.hasAttribute('data-expanded') ? "members.close" : "desktop.expand"); expand.setAttribute('aria-label', expand.title);
+    const request = panel.querySelector<HTMLElement>('.desktop-request')!;
+    request.hidden = !pending(); request.textContent = pending() ? desktopWorkText(pending()!) : "";
+    panel.toggleAttribute("data-request", !!pending());
+    const running = state?.state === "running", owner = state?.control === "owner";
+    const preparing = state && ["starting", "building", "preparing"].includes(state.state);
+    const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected ? "connecting" : owner ? "owner" : "member";
+    panel.dataset.desktopState = label;
+    panel.dataset.interactive = String(interactive);
+    hit.hidden = !running || !connected || owner; hit.disabled = changing;
+    frame.hidden = !running || !connected;
+    frame.style.pointerEvents = interactive ? "auto" : "none";
+    const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
+    status.textContent = t("desktop.operating"); status.hidden = !owner || !connected;
+    action.textContent = t(pending() ? "desktop.done" : "desktop.release"); action.hidden = !owner; action.disabled = changing;
+    retry.textContent = t("desktop.retry"); retry.hidden = !!running || !!preparing; retry.disabled = opening;
+    const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
     placeholder.hidden = !!running && connected;
-    const failure = state?.error === "build_failed" || state?.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed";
-    if (preparing) placeholder.innerHTML = preparationHTML(state!);
-    else placeholder.textContent = t(!running && state?.error ? failure : STATUS_KEY[label]);
-    if (!running && frame!.hasAttribute("src")) {
-      frame!.removeAttribute("src");
-      connected = false;
-    }
-    // Retry failed initial HTML/module loads too, before the RFB reconnect loop exists.
-    if (running && !connected && frame!.hasAttribute("src") && Date.now() - connectingSince >= 30000) frame!.removeAttribute("src");
-    if (running && session && !frame!.hasAttribute("src")) {
-      connectingSince = Date.now();
-      frame!.src = session.url;
-    }
+    placeholder.innerHTML = preparing ? preparationHTML(state!) : esc(t(!running && state?.error ? state.error === "build_failed" || state.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed" : STATUS_KEY[label]));
+    if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
+    if (running && session && !frame.hasAttribute('src') && active()) { frame.src = session.url; panel.querySelector('.desktop-screen')!.prepend(frame); }
   }
-
-  function close(): void {
-    generation++;
-    window.removeEventListener("message", message);
-    frame?.contentWindow?.postMessage({ type: "raphael-desktop-disable" }, session ? new URL(session.url).origin : "*");
-    frame?.removeAttribute("src");
-    const previous = session;
-    session = undefined;
-    dialog = undefined;
-    frame = undefined;
-    connected = false;
-    takeover = undefined; taking = false;
-    if (previous) closePending = api.desktopClose(previous.session).catch(() => {});
+  function closeStream(): void {
+    generation++; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
+    const previous = session; session = undefined;
+    if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
+    panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
   }
-
   function message(event: MessageEvent): void {
-    if (!session || !frame || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin
-      || event.data?.type !== "raphael-desktop") return;
-    connected = event.data.state === "connected";
+    if (!session || event.source !== frame.contentWindow || event.origin !== new URL(session.url).origin || event.data?.type !== 'raphael-desktop') return;
+    if (event.data.state === 'interactive') {
+      interactive = event.data.held === true && state?.control === 'owner';
+      if (interactive && clickedAt) panel.dataset.controlLatencyMs = String(performance.now() - clickedAt);
+    } else if (event.data.state === 'input-accepted' && interactive && clickedAt) {
+      panel.dataset.acceptedInputLatencyMs = String(performance.now() - clickedAt); clickedAt = 0;
+    } else if (event.data.state === 'input' && interactive) {
+      panel.dataset.inputLatencyMs = String(event.data.latencyMs);
+    } else {
+      connected = event.data.state === 'connected';
+      if (!connected) { interactive = false; closeStream(); if (state) state = { ...state, control:'member' }; }
+      // Reconnecting is always view-only. Only a fresh click may reacquire input.
+    }
     draw();
-    if (connected && taking && !changing) { taking = false; void control(); }
   }
-
+  window.addEventListener('message', message);
+  async function openStream(): Promise<void> {
+    if (session || opening || !active()) return;
+    opening = true;
+    const current = generation, id = member();
+    try {
+      await closePending;
+      const opened = await api.desktopOpen(id, { conversation_id: options.conversation() });
+      if (current !== generation || id !== member() || !active()) { await api.desktopClose(opened.session); return; }
+      session = opened;
+    } catch { error.textContent = t('desktop.unavailable'); error.hidden = false; }
+    finally { opening = false; if (current === generation) draw(); }
+  }
+  function update(next: DesktopState): void {
+    state = next; timeline.update(next);
+    for (const work of next.works ?? []) {
+      const key = `${work.id}:${work.request_id ?? ''}:${work.state === 'waiting_control' ? 'help' : 'work'}`;
+      if (["running", "waiting_control"].includes(work.state) && !revealed.has(key)) { revealed.add(key); options.openPanel(); }
+    }
+    if (active() && next.state !== 'absent') void openStream();
+    draw();
+  }
   async function poll(): Promise<void> {
     if (!visible || loading) return;
     loading = true;
     const current = generation, id = member();
     try {
-      const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id, options?.conversation());
-      if (!visible || current !== generation || id !== member()) return;
-      state = next;
-      timeline?.update(next);
-      entry.hidden = next.state === "absent";
-      draw();
+      const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id, options.conversation());
+      if (visible && current === generation && id === member()) update(next);
     } catch {
-      if (current === generation) {
-        state = { state: "unavailable", ready: false, control: "member" };
-        draw();
-        if (session && dialog) {
-          const expired = session;
-          session = undefined;
-          await api.desktopClose(expired.session).catch(() => {});
-          const reopened = await api.desktopOpen(id, options ? { conversation_id: options.conversation() } : undefined).catch(() => undefined);
-          if (reopened) {
-            if (visible && current === generation) session = reopened;
-            else await api.desktopClose(reopened.session).catch(() => {});
-          }
-        }
-      }
-    } finally {
-      loading = false;
-      if (visible) timer = setTimeout(() => void poll(), 2000);
-    }
+      if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
+    } finally { loading = false; if (visible) { clearTimeout(timer); timer = setTimeout(() => void poll(), 2000); } }
   }
-
-  entry.addEventListener("click", () => { void open(); });
-  async function open(): Promise<void> {
-    if (dialog || changing) return;
-    changing = true;
-    const current = generation, id = member();
+  async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
+    if (!session || changing || held && !connected) return;
+    changing = true; error.hidden = true;
+    // A renewal started before this click must not overwrite the new lease state.
+    const current = ++generation, opened = session, request = pending()?.request_id;
+    if (held) { clickedAt = performance.now(); delete panel.dataset.controlLatencyMs; delete panel.dataset.acceptedInputLatencyMs; }
+    interactive = false; send(false); draw();
     try {
-      await closePending;
-      const opened = await api.desktopOpen(id, options ? { conversation_id: options.conversation() } : undefined);
-      if (!visible || current !== generation || id !== member()) {
-        await api.desktopClose(opened.session);
-        return;
-      }
-      session = opened;
-      if (state?.works?.length) state = await api.desktopRenew(opened.session);
-      if (taking) {
-        takeover = state?.works?.find(work => work.state === "waiting_control")?.request_id;
-        taking = !!takeover;
-      }
-      if (!visible || current !== generation || id !== member()) {
-        await api.desktopClose(opened.session); if (session === opened) session = undefined; return;
-      }
-      if (state) timeline?.update(state);
-      dialog = openDialog({
-        title: t("desktop.open"), cls: "desktop-viewer",
-        body: `<p class="desktop-status" role="status"></p><div class="desktop-screen"><div class="desktop-placeholder">${esc(t("desktop.connecting"))}</div><iframe title="${esc(t("desktop.open"))}" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe></div><p class="desktop-error" role="alert" hidden></p>`,
-        actions: { primary: { label: t("desktop.take"), attrs: ' data-dlg="control" disabled' } },
-        onAct: action => { if (action === "control") void control(); }, onClose: close,
-      });
-      frame = dialog.el.querySelector("iframe")!;
-      window.addEventListener("message", message);
-      draw();
-    } catch {
-      if (session && !dialog) {
-        const failed = session; session = undefined;
-        await api.desktopClose(failed.session).catch(() => {});
-      }
-      entry.setAttribute("aria-label", t("desktop.unavailable"));
-    } finally { changing = false; if (current === generation) draw(); }
-  }
-
-  async function control(): Promise<void> {
-    if (!session || changing || !dialog) return;
-    changing = true;
-    const current = generation, opened = session;
-    const held = state?.control !== "owner";
-    frame?.contentWindow?.postMessage({ type: "raphael-desktop-disable" }, new URL(opened.url).origin);
-    draw();
-    try {
-      if (state?.state !== "running" && state?.control !== "owner") {
-        await api.desktopClose(opened.session);
-        const next = await api.desktopOpen(member(), options ? { conversation_id: options.conversation() } : undefined);
-        if (current !== generation) { await api.desktopClose(next.session); return; }
-        session = next;
-        state = { state: "preparing", ready: false, control: "member" };
-        return;
-      }
-      const pending = state?.works?.find(work => work.state === "waiting_control");
-      const request = takeover ?? pending?.request_id;
       const next = request ? await api.desktopControl(opened.session, held, request) : await api.desktopControl(opened.session, held);
-      if (current !== generation) return;
-      state = next;
-      if (!held) takeover = undefined;
-      timeline?.update(next);
-      connected = false;
-      frame!.removeAttribute("src");
-      dialog.el.querySelector<HTMLElement>(".desktop-error")!.hidden = true;
+      if (current !== generation || session !== opened) return;
+      update(next); send(held, pointer);
+      if (held) frame.focus({ preventScroll:true });
     } catch {
-      if (current === generation && dialog) {
-        const error = dialog.el.querySelector<HTMLElement>(".desktop-error")!;
-        error.textContent = t("desktop.busy");
-        error.hidden = false;
-      }
+      if (current === generation) { error.textContent = t('desktop.busy'); error.hidden = false; }
     } finally { changing = false; if (current === generation) draw(); }
   }
-
+  hit.addEventListener('click', event => {
+    const box = hit.getBoundingClientRect();
+    void control(true, { x:box.width ? Math.max(0, Math.min(1, (event.clientX-box.left)/box.width)) : 0.5, y:box.height ? Math.max(0, Math.min(1, (event.clientY-box.top)/box.height)) : 0.5 });
+  });
+  action.addEventListener('click', () => void control(false));
+  retry.addEventListener('click', () => { closeStream(); void openStream(); });
+  panel.querySelector('[data-desktop="expand"]')!.addEventListener('click', () => {
+    const expanded = panel.toggleAttribute('data-expanded');
+    document.documentElement.toggleAttribute('data-desktop-expanded', expanded); draw();
+  });
+  onLocaleChange(draw);
   return {
-    show() { visible = true; clearTimeout(timer); entry.setAttribute("aria-label", t("desktop.open")); void poll(); },
-    hide() { visible = false; generation++; clearTimeout(timer); dialog?.close(); timeline?.clear(); entry.hidden = true; },
-    refresh() { generation++; dialog?.close(); timeline?.clear(); clearTimeout(timer); entry.hidden = true; if (visible && !loading) void poll(); },
-    sync() { timeline?.sync(); },
-    carry(from, to) {
-      for (const card of from.querySelectorAll<HTMLElement>('[data-desktop-slot] > .desktop-card')) {
-        const slot = to.querySelector<HTMLElement>(`[data-desktop-slot="${card.parentElement!.dataset.desktopSlot}"]`);
-        if (slot) {
-          if (typeof slot.moveBefore === "function") slot.moveBefore(card, null);
-          else slot.append(card);
-        }
-      }
-    },
+    show() { visible = true; clearTimeout(timer); void poll(); },
+    hide() { visible = false; clearTimeout(timer); closeStream(); timeline.clear(); panel.hidden = true; },
+    refresh() { closeStream(); state = undefined; revealed.clear(); timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll(); },
+    sync() { timeline.sync(); if (!active() && session) closeStream(); else if (active() && state && state.state !== 'absent') void openStream(); draw(); },
   };
 }

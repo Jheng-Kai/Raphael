@@ -33,7 +33,7 @@ export interface ColumnView {
 }
 
 /** A member's row: its picture, name, role, preview and dot; then its protected member actions. */
-export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
+export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }, primary = false): string {
   const chief = member.id === 0;
   const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
@@ -45,7 +45,7 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
   return (
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
-    faceHTML(member, 40) +
+    faceHTML(member, 40) + (primary ? `<span class="mb-star" aria-hidden="true">${ico("star")}</span>` : "") +
     `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>${member.pinned ? `<span class="mb-pin" aria-label="${esc(t("members.sidePinned"))}">${ico("pin")}</span>` : ""}${memberRole(member) ? `<i>${esc(memberRole(member))}</i>` : ""}` +
     (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
@@ -63,12 +63,12 @@ function sectionHTML(section: MemberSection, v: ColumnView): string {
   const open = !(group && v.folded.has(group.id)) || v.query.trim() !== "";
   return (
     `<section class="mb-sec"${group ? ' draggable="true"' : ""} data-group="${id}" data-open="${open}">` +
-    `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
+    (group ? `<div class="mb-ghead"><span class="mb-gname">${esc(name)}</span>` +
     (group
       ? iconButton("more", t("members.more", { p0: name }), ` data-group-more="${id}" aria-haspopup="menu" aria-expanded="false" data-k="group-more:${id}"`, "mb-more")
       : "") +
     iconButton("down", t("members.toggleGroup", { p0: name }), ` data-group-fold="${id}" aria-expanded="${open}" data-k="group-fold:${id}"`, "mb-fold") +
-    `</div>` +
+    `</div>` : "") +
     `<div class="mb-gbody"${open ? "" : " inert"}><div class="mb-gclip">${section.members.map((member) => memberRowHTML(member, v)).join("")}</div></div>` +
     `</section>`
   );
@@ -80,7 +80,7 @@ export function columnHTML(v: ColumnView): string {
   const pinned = all.members.filter(m => m.id !== top.id && m.pinned && !m.hidden && memberMatches(m, v.query));
   const sections = memberSections({ ...all, members: all.members.filter(m => !m.pinned) }, v.query, top.id);
   const searching = v.query.trim() !== "";
-  const chief = memberRowHTML(top, v).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
+  const chief = memberRowHTML(top, v, true).replace('class="nav mb-row"', 'class="nav mb-row mb-chief"');
   const showChief = !searching || memberMatches(top, v.query);
   return (showChief ? chief : "") + (pinned.length ? `<div class="mb-pinned">${pinned.map(m => memberRowHTML(m, v)).join("")}</div>` : "") + sections.map((section) => sectionHTML(section, v)).join("") + (searching && !showChief && sections.length === 0 && pinned.length === 0 ? `<p class="mb-none">${esc(t("members.noMatch"))}</p>` : "");
 }
@@ -166,13 +166,16 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
   const el = document.createElement("aside");
   el.className = "mb-col";
   el.innerHTML =
-    `<div class="mb-top"><label class="mb-find">${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+    `<div class="mb-top"><label class="mb-find" hidden>${ico("search")}<input type="search" class="mb-find-input" autocomplete="off" spellcheck="false" maxlength="40"></label>` +
+    iconButton("search", t("chat.searchAll"), ' data-col="search" aria-expanded="false"', "mb-tool") +
     iconButton("plus", t("members.add"), ' data-col="add" aria-haspopup="menu" aria-expanded="false"', "mb-tool") + `</div>` +
     `<nav class="mb-scroll"><div class="mb-list"></div></nav>`;
   const rooms = createRoomsSection(() => host.view().active !== false);
   el.querySelector(".mb-scroll")!.append(rooms);
   const findInput = el.querySelector<HTMLInputElement>(".mb-find-input")!;
   const addButton = el.querySelector<HTMLElement>('[data-col="add"]')!;
+  const searchButton = el.querySelector<HTMLButtonElement>('[data-col="search"]')!;
+  const find = el.querySelector<HTMLElement>('.mb-find')!;
   const list = el.querySelector<HTMLElement>(".mb-list")!;
   const nav = el.querySelector<HTMLElement>(".mb-scroll")!;
   let query = "";
@@ -194,6 +197,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     addButton.title = t("members.add");
     findInput.placeholder = t("chat.searchAll");
     findInput.setAttribute("aria-label", t("chat.searchAll"));
+    searchButton.title = t("chat.searchAll"); searchButton.setAttribute("aria-label", t("chat.searchAll"));
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
     search.draw(query, columnHTML({ ...host.view(), query, folded }));
@@ -217,11 +221,14 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     );
   }
 
-  el.addEventListener("click", (e) => {
-    const target = e.target as Element;
-    const col = target.closest<HTMLElement>("[data-col]")?.dataset.col;
-    if (col === "add") {
-      return openActions(
+  // Header controls retain their listeners when the sidebar places them beside the brand.
+  searchButton.addEventListener('click', () => {
+    find.hidden = !find.hidden; searchButton.setAttribute('aria-expanded', String(!find.hidden));
+    if (!find.hidden) findInput.focus();
+    else { query = ''; findInput.value = ''; draw(); }
+  });
+  addButton.addEventListener('click', () => {
+      openActions(
         addButton,
         [
           { id: "conversation", label: t("members.sideNewConversation"), icon: "chat" },
@@ -237,7 +244,9 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
           else void openNewGroupChat();
         },
       );
-    }
+  });
+  el.addEventListener("click", (e) => {
+    const target = e.target as Element;
     const more = target.closest<HTMLElement>("[data-member-more]");
     if (more) return memberMenu(Number(more.dataset.memberMore), more, host);
     const groupMore = target.closest<HTMLElement>("[data-group-more]");

@@ -113,7 +113,7 @@ export function homeHTML(data: HomeOverview, month?: Date, selected?: string): s
   // His emblem turns while the window allows motion (avatar.ts keeps it still otherwise); nothing sits right of his report but its fix.
   const date = new Date(data.generated_at_ms).toLocaleDateString(getLocale(), { month: "numeric", day: "numeric", weekday: "short" });
   const headline = report.text.split(/(?<=[。！？])(?=[^》])/u).map(phrase => `<span class="ho-phrase">${esc(phrase)}</span>`).join("");
-  const hero = `<section class="ho-hero">${avatarHTML({ size: 112, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${headline}</h1></div>` +
+  const hero = `<section class="ho-hero">${avatarHTML({ size: 128, avatar: null, loop: true })}<div class="ho-lead-copy"><p class="ho-date">${esc(date)}</p><h1 class="ho-said">${headline}</h1></div>` +
     (report.action ? iconButton(report.action.target === "retry" ? "refresh" : "info", report.action.label, ' data-home-go="report"') : "") + `</section>`;
   const pending = data.today.filter(item => item.kind !== "routine");
   const inbox = [...pending, ...data.reports].slice(0, 3);
@@ -239,7 +239,7 @@ export function createHome(app: AppContext): Page {
     }
     const target = (event.target as Element).closest<HTMLElement>("[data-home-item], [data-home-go], [data-home-event]");
     if (!target) {
-      if ((event.target as Element).closest(".ho-calendar") && data) app.go("automations", (selected ?? dateKey(new Date(data.generated_at_ms))) as CalendarDate);
+      if ((event.target as Element).closest(".ho-calendar") && data) app.go("automations", (selected ?? undefined) as CalendarDate | undefined);
       return;
     }
     if (target.dataset.homeEvent) {
@@ -255,7 +255,7 @@ export function createHome(app: AppContext): Page {
       case "reload": void load(); break;
       case "usage": app.go("settings", "usage"); break;
       case "dictation": app.go("dictation"); break;
-      case "calendar": app.go("automations", (target.dataset.homeDate ?? selected ?? dateKey(month ?? new Date(data!.generated_at_ms))) as CalendarDate); break;
+      case "calendar": app.go("automations", (target.dataset.homeDate ?? selected ?? undefined) as CalendarDate | undefined); break;
       case "report":
         if (data && buildReport(data.report, data.generated_at_ms).action?.target === "retry") {
           void api.statusCheckOpenrouter().then(load, load);

@@ -1,6 +1,6 @@
 import { scene, click, hover, type, wait, page, key, scroll, room, newRoom, check, rightClick } from "./steps.mjs";
 
-const auto = [page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait(".au-toolbar")];
+const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
 const dialog = [...auto, click('[data-au="new"]'), wait(".mb-dialog")];
 const more = [...dialog, click('[data-dlg="more"]')];

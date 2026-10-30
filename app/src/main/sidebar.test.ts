@@ -22,13 +22,13 @@ test("the shell has one permanent conversation sidebar and no Team route or apps
   expect(types.match(/export type PageId = ([^;]+)/)?.[1]).not.toContain('"team"');
 });
 
-test("room identity overlaps the participants' own faces and caps the composite at three", () => {
+test("room identity uses the participants' own faces and caps the grid at four", () => {
   const urls = [1, 2, 3, 4].map(id => `data:image/png;base64,${btoa(String(id))}`);
   const list = { members: [1, 2, 3, 4].map(id => ({ id, name: `Person ${id}`, avatar_url: urls[id - 1] } as Member)), groups: [] };
   const el = document.createElement("div");
   el.innerHTML = roomAvatarHTML({ member_ids: [2, 1, 3, 4] }, list);
-  expect(el.querySelector(".room-avatar")?.getAttribute("data-faces")).toBe("3");
-  expect([...el.querySelectorAll("img")].map(img => img.getAttribute("src"))).toEqual([urls[1], urls[0], urls[2]]);
+  expect(el.querySelector(".room-avatar")?.getAttribute("data-faces")).toBe("4");
+  expect([...el.querySelectorAll("img")].map(img => img.getAttribute("src"))).toEqual([urls[1], urls[0], urls[2], urls[3]]);
 });
 
 test("owner profile updates the existing outgoing face as well as the footer identity", () => {

@@ -341,10 +341,7 @@ export function createSettings(app: AppContext): SettingsPage {
         return {
           choices: APPEARANCES,
           current: d.appearance,
-          pick: (value) => {
-            const appearance = value as DeviceSettings["appearance"];
-            if (APPEARANCES.some((c) => c.value === appearance) && appearance !== app.device().appearance) void changeDevice({ appearance });
-          },
+          pick: (value) => { if (APPEARANCES.some(c => c.value === value)) void changeAppearance(value); },
         };
       case "retention":
         return {
@@ -935,6 +932,13 @@ export function createSettings(app: AppContext): SettingsPage {
   function chooseModel(role: ModelRole, id: string): Promise<void> {
     if (role === "stt") return changeStt(id);
     return changeBrain(role === "cleanup" ? "cleanup_model" : "agent_model", id);
+  }
+
+  async function changeAppearance(value: string): Promise<void> {
+    try {
+      await app.setDevice({ appearance: value as DeviceSettings["appearance"] });
+    } catch (error) { toaster.info(describeError(error)); }
+    render();
   }
 
   async function changeDevice(patch: Partial<DeviceSettings>): Promise<void> {

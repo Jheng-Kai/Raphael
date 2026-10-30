@@ -47,7 +47,6 @@ DEFAULTS: dict[str, Any] = {
     "owner_name": "",
     "owner_about": "",
     "owner_photo": "",
-    "skin": "default",
     "monthly_limit_usd": 10.0,
     # Chosen from the cleanup eval of 2026-10-18 for its cost and its speed (~1.25 s on average).
     # The cases and the prompt have changed since, so no pass rate is claimed for it: compare the
@@ -164,7 +163,6 @@ URL_MAX_CHARS = 300
 WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
     "computer_vm_mode": ("shared", "per-bot"),
-    "skin": ("default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"),
     "action_mode": ("ask", "direct"),
     "worker_cost_cap_usd": WORKER_COST_CAPS,
     "stt_engine": STT_ENGINES,

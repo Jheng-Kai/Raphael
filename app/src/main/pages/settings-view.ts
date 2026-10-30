@@ -13,7 +13,7 @@
 // it (`SEARCH_INDEX`, `searchSettings`).
 
 import { catalogs, t } from "../i18n";
-import { ownerProfileHTML, skinsHTML } from "../owner-settings";
+import { ownerProfileHTML } from "../owner-settings";
 import type { MessageKey } from "../i18n/zh-TW";
 
 import { brandIcon } from "../brand";
@@ -39,11 +39,11 @@ import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBt
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
-/** In this order: light, dark, or as Windows is. */
+/** One shared dropdown for the complete appearance preference. */
 export const APPEARANCES: Choice[] = [
+  { value: "system", get label() { return t("settings.013"); } },
   { value: "light", get label() { return t("settings.015"); } },
   { value: "dark", get label() { return t("settings.016"); } },
-  { value: "system", get label() { return t("settings.013"); } },
 ];
 /** What one background task may spend (brain/settings.py, WORKER_COST_CAPS). */
 export const WORKER_COST_CAPS: Choice[] = [
@@ -136,9 +136,8 @@ export interface SearchEntry {
  */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "general", label: "owner.profile" },
-  { pane: "appearance", label: "skin.styles" },
   ...PANES.map((p) => ({ pane: p.id })),
-  { pane: "general", label: "settings.059" },
+  { pane: "appearance", label: "settings.059" },
   { pane: "appearance", label: "settings.067", words: ["dark", "light"] },
   { pane: "general", label: "settings.069" },
   { pane: "general", label: "settings.071" },
@@ -579,7 +578,6 @@ function generalHTML(v: SettingsView): string {
     headingHTML(v) +
     coreNote(v) + ownerProfileHTML(v.brain) +
     section(t("settings.groupAppearance"), [
-      row(t("settings.059"), "", sel(UI_LANGUAGES, d.ui_language, t("settings.059"), ' data-k="ui-language"')),
       row(t("settings.069"), "", sel(SIZES, String(d.emblem_size), t("settings.069"), ' data-k="size"')),
       row(t("settings.071"), "", tg(d.subtitles !== "off", t("settings.071"), ' data-k="subtitles"')),
     ]) +
@@ -756,7 +754,10 @@ function aboutHTML(v: SettingsView): string {
 export function paneHTML(v: SettingsView): string {
   switch (v.pane) {
     case "appearance":
-      return headingHTML(v) + coreNote(v) + section("", [row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"'))]) + skinsHTML(v.brain);
+      return headingHTML(v) + coreNote(v) + `<div class="appearance-settings">` + section("", [
+        row(t("settings.067"), "", sel(APPEARANCES, v.device.appearance, t("settings.067"), ' data-k="appearance"')),
+        row(t("settings.059"), "", sel(UI_LANGUAGES, v.device.ui_language, t("settings.059"), ' data-k="ui-language"')),
+      ]) + `</div>`;
     case "general":
       return generalHTML(v);
     case "dictation":

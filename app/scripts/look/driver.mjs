@@ -407,10 +407,12 @@ export async function perform(page, step) {
     }
     case "member": await click(`.mb-col [data-member="${step.id}"]`); break;
     case "room": await click(`[data-room="${step.id}"]`); break;
-    case "new-room": await click("[data-room-new]"); break;
+    case "new-room": await click('[data-col="add"]'); await click('#app-popover [data-pick="group-chat"]'); break;
     case "room-row-menu": { const more = await visible(`[data-room-more="${step.id}"]`); try { await more.hover(); await more.click(); } finally { await more.dispose(); } break; }
     case "rooms-menu": await visible(".mb-col [data-room]"); break;
-    case "search": await fill(".mb-find-input", step.text); break;
+    case "search":
+      if(await page.$eval('.mb-find',element=>element.hidden))await click('[data-col="search"]');
+      await fill(".mb-find-input", step.text); break;
     case "drop": case "drag-start": case "drag-over":
       { const element = await visible(step.selector);
       await element.evaluate((element, options) => {

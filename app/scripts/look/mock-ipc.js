@@ -15,7 +15,6 @@ export function installMock(fixture, config = {}, target = window) {
     data.pluginCatalog.push(data.pluginCatalog[6]);
   }
   Object.assign(data.device, { appearance: config.theme ?? "light", ui_language: config.locale ?? "zh-TW", onboarded: !variant.onboarding });
-  data.settings.skin = config.skin ?? "default";
   if (variant.ownerVoice) data.conversations.push(structuredClone(data.ownerRound.memberConversation));
   if (variant.ownerEmptyRecords) data.turns.push(...structuredClone(data.ownerRound.emptyRecords));
   if (variant.liveScenarioOwnerView) data.turns = structuredClone(data.liveScenarioOwnerTurns);
