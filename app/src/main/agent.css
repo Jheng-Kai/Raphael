@@ -508,8 +508,8 @@
   .media-card { padding: var(--sp-1) var(--sp-2); gap: var(--sp-1); }
 }
 
-/* A skin-specific wash under the conversation. */
-.mb-chat { background: radial-gradient(ellipse 85% 45% at 50% 100%, var(--conversation-glow), transparent); }
+/* Keep the conversation surface flat and opaque through its parent. */
+.mb-chat { background: none; }
 .ra-body > .ans, .chat-message > .ans { max-width: min(60ch, 100%); border: 0; border-radius: var(--r-lg); }
 
 .bubble .message-quote, .bubble .quote-author, .bubble .message-link { color: var(--on-accent); border-color: currentColor; }

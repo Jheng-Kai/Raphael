@@ -60,9 +60,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
+    // The owner's Grok-style sidebar explicitly uses two round, framed controls.
+    const sidebarTool = element.matches('#nav .mb-top > button.mb-tool[data-col="search"], #nav .mb-top > button.mb-tool[data-col="add"]');
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
     if (element.matches('button.btn.icon')) {
-      if (!['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!sidebarTool && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();
@@ -96,13 +98,6 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       const controls = [...element.children].filter(child => visible(child) && child.matches('.sel, .mb-fin, .btn'));
       if (controls.length > 1 && controls.some(child => Math.abs(child.getBoundingClientRect().width - controls[0].getBoundingClientRect().width) > 1))
         violation('R-UI-17', 'Schedule controls in one column have different widths');
-    }
-    if (element.matches('.skin-grid')) {
-      const cards = [...element.children].filter(visible);
-      if (cards.length > 1) {
-        const row = cards.filter(card => Math.abs(card.getBoundingClientRect().top - cards[0].getBoundingClientRect().top) <= 1);
-        if (row.length !== 2) violation('R-UI-30', 'Long choices must form two card columns');
-      }
     }
     if (element.matches('.page-overview .kc-row')) {
       const label = element.querySelector('.kc-name'), keys = element.querySelector('.kc-keys');
@@ -147,7 +142,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       // Keep this inventory explicit: ordinary action buttons never opt out by an attribute.
       const navigation = element.matches('.brand, .conversation-trigger, .conversation-open, .mb-panel-row, .mb-panel-back, .mb-chat-choice, .mc-source, .cs-open, .cs-main, .au-room-row > .btn:first-child, .event-open, .ho-spend, .ho-row, .ho-agenda-row, .ho-agenda-more, .ho-event-chip, .ho-more, .ho-allowance, .ho-dictation, .au-edit, .steps-sum, .task-sum') || element.closest('.mb-col, .au-month-grid, .ho-month, .au-drag-members, .au-segment, .mc-segments') || element.hasAttribute('aria-expanded');
       const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some(side => parseFloat(style[`border${side}Width`]) > 0 && !['transparent', 'rgba(0, 0, 0, 0)'].includes(style[`border${side}Color`]) && !['none', 'hidden'].includes(style[`border${side}Style`]));
-      if (element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
+      if (!sidebarTool && element.classList.contains('icon') && hasBorder) violation('R-UI-18', 'Icon button has a visible border');
       if (!navigation && !element.classList.contains('icon') && element.textContent.trim() && !hasBorder) violation('R-UI-18', 'Text action button has no frame');
     }
     if (element.matches('.action-row')) {

@@ -8,7 +8,7 @@ const panes = ["general", "appearance", "connections", "models", "dictation", "a
 
 export default [
   ...["en", "ja", "zh-TW"].map(locale => scene(`settings-language-${locale}`, `Switch to ${locale} in Settings and walk every page and section`, [
-    ...settings("general"), ...language(locale === "zh-TW" ? "en" : locale),
+    ...settings("appearance"), ...language(locale === "zh-TW" ? "en" : locale),
     ...(locale === "zh-TW" ? language(locale) : []),
     ...panes.flatMap(pane => [click(`.modal-scrim [data-pane="${pane}"]`), wait(`.modal-scrim [data-pane="${pane}"][aria-current="page"]`), check(`locale-${locale}`)]),
     click('.modal-scrim [data-act="close"]'),

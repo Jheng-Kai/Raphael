@@ -1,21 +1,19 @@
 import { scene, click, wait, member, settings, scroll, check } from "./steps.mjs";
-
-const entry = [member(1), wait('[data-desktop="open"]:not([hidden])')];
-const open = [...entry, click('[data-desktop="open"]'), wait('.desktop-viewer[data-desktop-state="member"]')];
-const computer = (state = "running") => ({ running: "fresh", runningMember: 1, desktop: { state: "running", ready: true, control: state === "waiting_control" ? "owner" : "member", works: [
-  { id: "private-computer-task", request_id: "private-takeover-request", turn_id: 2, state, tool: "get_desktop_state", reason: state === "waiting_control" ? "sign_in" : "" },
-] } });
-const inline = [...entry, wait('[data-desktop-work]')];
+const computer = (state = "running") => ({ running:"fresh", runningMember:1, desktop:{ state:"running", ready:true, control:"member", works:[
+  {id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
+]} });
+const entry = [member(1), wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
+const take = [...entry, click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-accepted-input-latency-ms]')];
 export default [
-  scene("desktop-inline", "One live read-only computer card in the task's private conversation", [...inline, wait('.desktop-preview iframe'), check("computer-inline")], computer()),
-  scene("desktop-takeover", "A private typed sign-in request with one owner action and no secret field", [...inline, check("computer-takeover")], computer("waiting_control")),
-  scene("desktop-takeover-owner", "The takeover card opens the existing viewer with owner control", [...inline, click('[data-desktop-card-open]'), wait('.desktop-viewer[data-desktop-state="owner"]'), check("computer-takeover-owner"), check("desktop-frame")], computer("waiting_control")),
-  scene("desktop-takeover-done", "An explicit done returns control to the same task and updates its single card", [...inline, click('[data-desktop-card-open]'), wait('.desktop-viewer[data-desktop-state="owner"]'), click('[data-dlg="control"]'), wait('.desktop-viewer[data-desktop-state="member"]'), check("computer-takeover-done")], computer("waiting_control")),
-  scene("desktop-entry", "One accessible desktop icon in the member conversation", [...entry, check("desktop-entry")], { desktop: { state: "running", ready: true, control: "member" } }),
-  scene("desktop-viewer", "The container viewer opens inside the conversation's shared dialog", [...open, check("desktop-viewer"), check("desktop-frame")], { desktop: { state: "running", ready: true, control: "member" } }),
-  scene("desktop-owner", "Taking control acquires the lease and handing back releases it", [...open, click('[data-dlg="control"]'), wait('.desktop-viewer[data-desktop-state="owner"]'), check("desktop-owner"), check("desktop-frame")], { desktop: { state: "running", ready: true, control: "member" } }),
-  scene("desktop-handback", "The member controls the same desktop after the owner hands it back", [...open, click('[data-dlg="control"]'), wait('.desktop-viewer[data-desktop-state="owner"]'), click('[data-dlg="control"]'), wait('.desktop-viewer[data-desktop-state="member"]'), check("desktop-handback"), check("desktop-frame")], { desktop: { state: "running", ready: true, control: "member" } }),
-  ...["stopped", "unavailable", "starting", "building", "preparing"].map(state => scene(`desktop-${state}`, "Desktop preparation has progress and failures have an enabled retry", [...entry, click('[data-desktop="open"]'), wait(`.desktop-viewer[data-desktop-state="${state}"]`), check("desktop-offline")], { desktop: { state, ready: false, control: "member", ...(state === "building" ? { progress: "#3 [2/4] Installing desktop tools" } : {}), ...(state === "unavailable" ? { error: "docker_start_timeout" } : {}) } })),
-  scene("desktop-absent", "No computer entry when Docker is absent", [member(1), check("desktop-absent")]),
-  scene("desktop-install", "Absent Docker has one download action in the existing computer settings", [...settings("agent"), scroll('[data-act="docker-download"]'), wait('[data-act="docker-download"]'), check("desktop-install")]),
+  scene("desktop-panel", "One live computer in the existing member side panel with only a system event in chat", [...entry,check("computer-panel"),check("desktop-frame")],computer()),
+  scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [...entry,check("computer-takeover")],computer("waiting_control")),
+  scene("desktop-takeover-owner", "Clicking the screen enables input in place with the same frame and stream", [...take,check("computer-takeover-owner"),check("desktop-frame")],computer("waiting_control")),
+  scene("desktop-takeover-done", "One explicit done returns the current request once", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-desktop-state="member"]'),check("computer-takeover-done")],computer("waiting_control")),
+  scene("desktop-entry", "Computer section opens automatically in a working member conversation", [...entry,check("computer-panel")],computer()),
+  scene("desktop-viewer", "Expand the existing stream without a new dialog or session", [...entry,click('[data-desktop="expand"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
+  scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
+  scene("desktop-handback", "Hand back preserves the stream and clears interactive input", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-interactive="false"]'),check("desktop-handback")],computer()),
+  ...["stopped","unavailable","starting","building","preparing"].map(state=>scene(`desktop-${state}`, "Desktop preparation and contextual retry in the existing side panel", [member(1),{action:"open-details"},wait(`.desktop-panel[data-desktop-state="${state}"]`),check("desktop-offline")], {desktop:{state,ready:false,control:"member",...(state === "building" ? {progress:"#3 [2/4] Installing desktop tools"} : {}),...(state === "unavailable" ? {error:"docker_start_timeout"} : {})}})),
+  scene("desktop-absent", "Docker absent has no computer section", [member(1),check("desktop-absent")]),
+  scene("desktop-install", "Absent Docker keeps the existing download action", [...settings("agent"),scroll('[data-act="docker-download"]'),check("desktop-install")]),
 ];

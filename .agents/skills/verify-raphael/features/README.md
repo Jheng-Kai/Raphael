@@ -2,8 +2,12 @@
 
 ## Sidebar redesign (2026-10-30)
 
-One fixed 296px sidebar contains Home brand, permanent conversation search, plus,
-chief, collapsible member folders, group chats, dictation and owner/account settings.
+One fixed 296px sidebar has Home brand and round search/plus controls. Search opens
+in place without moving either control. The chief, with role and star, leads one
+continuous list of 48px member rows and unframed group face grids (up to four faces).
+Only owner-created folders have headings; their chevrons appear on hover. Times
+appear on hover, and current-page selection remains unique. The footer has the
+owner avatar and a wide dictation pill, without a gear or separator.
 Below 860px the same list opens in a menu drawer, with Escape/scrim dismissal and
 focus containment. Team route/canvas are removed. Settings > Connections owns apps;
 Home mini calendar owns full calendar navigation. Owner avatar upload reuses the
@@ -11,8 +15,8 @@ existing picker/crop component and presets; footer and owner messages share iden
 
 Selected acceptance: sidebar, sidebar-folders, sidebar-folded, sidebar-many,
 sidebar-unread, sidebar-drawer, sidebar-search, sidebar-plus, sidebar-group-avatar,
-sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, sidebar-everyone, chat, details, profile, plugins-installed,
-all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800.
+sidebar-group-avatar-pair, sidebar-group-avatar-four, sidebar-owner, sidebar-owner-preset, sidebar-owner-upload, sidebar-everyone, chat, details, profile, plugins-installed,
+all home-* scenes (including full/sparse/empty, edge-only hover and month gestures), both themes at 1120,720,1920x1080,1280x800. Home's emblem is 128px (96px compact), its report is --fs-h1 and its date is unchanged. Check these scenes in black at 1120,720,1920x1080 too.
 Run `npm run verify -- --core`, then the selected look matrix and inspect every
 contact sheet/relevant full-size image. Native readable-layout, locale-sweep and
 delete-conversation cover navigation in an isolated fake-brain app. No judge,
@@ -86,12 +90,12 @@ behavior the fixture cannot prove.
 | --- | --- |
 | [Home](home.md) | Startup overview, pending work, reports, calendar, usage and dictation totals |
 | [Conversation](conversation.md) | Threads, details panel, replies, progress status, search, composer and the cards a task pauses on (an app, a key, the owner's turn at the computer, the owner's yes) and an email draft they edit and send |
-| [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, in-conversation live desktop and native fake-brain journey |
+| [Member computer](member-computer.md) | Optional Docker sandbox, curated tools pinned outside the plugin cap, shared/per-bot tools without per-action approval, outward-action approval contract, owner-control lease, side-panel live desktop and native fake-brain journey |
 | [Members](members.md) | Identity, resources, voice, the primary contact's star and its chooser, Raphael's approved sidebar administration, and the right click that opens the ⋯ menu of any row (R-UI-44) |
 | [Automations](automations.md) | Home-owned day/week calendar, schedules, advanced options and deletion |
 | [Group chats and folders](team-and-rooms.md) | Sidebar folders, Everyone room, group identity and mentions |
 | [Dictation](dictation.md) | Overview, history, dictionary, shortcuts, microphone and paste |
-| [Settings and appearance](settings-appearance.md) | Profile/preferences, skins, languages, models and app information |
+| [Settings and appearance](settings-appearance.md) | Profile/preferences, default and black themes, languages, models and app information |
 | [Connections and MCP](connections-mcp.md) | Connected apps and their count, Settings-only connected-app entry, an app's accounts and tools, members' private skills, managed store, MCP setup/discovery and Home's private Google calendar read |
 | [Usage](usage.md) | Spend overview, grouping, CSV and CLI allowances |
 | [Onboarding](onboarding.md) | Welcome, optional setup and immediate conversation |
@@ -154,7 +158,7 @@ pages are excluded. A 1px tolerance covers fractional layout rounding. Limits ar
 calculated from the spacing tokens, not copied from a potentially stretched element.
 Home requires its hero to precede and span the grid and both block rows to fill
 two equal columns. The lead is a page-level element, not a short card.
-The existing long-choice two-column audit applies to skins, not dictionary entries.
+Appearance uses the shared theme/language dropdown rows; dictionary entries retain their own grid contract.
 
 Representative main-page acceptance (all consumers of the shared layout):
 
@@ -207,7 +211,7 @@ both themes. 1280x800 leaves 64 logical pixels for a taskbar on a 1536x864 deskt
 840/860 heights leave only 24/4px. Long Settings catalogs intentionally scroll.
 
 ```powershell
-npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store skins usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
+npm run look -- home home-empty home-many home-motion chat details details-closed member-text room-text no-naming sidebar dictation-overview dictation-history dictation-dictionary profile appearance models dictation agent messaging data about plugins-installed plugins-store appearance-menu appearance-black theme-clarity usage automations-calendar onboarding --theme both --width 1120,720,1920x1080,1180x780,1280x800
 ```
 
 Home, dictation, thread-measure, settings-alignment, sidebar-shell and welcome
@@ -278,3 +282,15 @@ The additional OpenRouter owner report uses the existing settings/quick/member
 chooser scenes and the explicit native `model-picker` journey. See
 settings-appearance.md for model identity, effort, price and fake-provider boundaries.
 Only a public model-list read is authorized; no paid OpenRouter request is accepted.
+
+## Theme and computer side panel (2026-10-30)
+
+See settings-appearance.md for the single system/light/dark/black selector, retired-skin
+fallback, neutral black and clarity evidence. See member-computer.md for the persistent
+side-panel noVNC stream, click-to-input timing, nonce handback and Docker journey.
+This global-token change authorizes one final --all two-theme/three-size look matrix,
+plus black Home/sidebar/chat/settings/calendar/dictionary representatives. Use
+RAPHAEL_CORE_PYTHON=D:/Documentation/github_repos/Raphael/core/.venv/Scripts/python.exe.
+One heavy process at a time; check other worktrees with Get-CimInstance Win32_Process
+before every heavy step. Vitest uses --maxWorkers=2, native CARGO_BUILD_JOBS=2 and the
+shared .worktrees/.target. Judge/OpenRouter are explicitly SKIP by owner instruction.

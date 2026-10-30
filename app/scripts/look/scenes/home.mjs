@@ -1,6 +1,6 @@
 import { scene, click, wait, check, scroll, page, key, hover } from "./steps.mjs";
 
-const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-overview"), check("home-redesign"), check("home-month")];
+const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-hero"), check("home-overview"), check("home-redesign"), check("home-month")];
 export default [
   scene("home", "Home briefing with reports, pending items, calendar and usage", ready),
   scene("home-empty", "Home without pending work, reports, events or usage", ready, { homeEmpty: true }),

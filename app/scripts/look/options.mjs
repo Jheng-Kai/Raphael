@@ -24,7 +24,7 @@ export function parseOptions(args, scenes) {
       if (!["zh-TW", "en", "ja"].includes(value)) throw new Error(`Invalid locale: ${value}`);
       options.locale = value;
     } else if (flag === "--skin") {
-      if (!["default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"].includes(value)) throw new Error(`Invalid skin: ${value}`);
+      if (!["default", "black"].includes(value)) throw new Error(`Invalid skin: ${value}`);
       options.skin = value;
     } else options.out = resolve(value);
   }

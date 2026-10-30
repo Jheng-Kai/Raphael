@@ -2,11 +2,13 @@
 import { onLocaleChange, t } from "./i18n";
 import { navHomeHTML, navItemHTML } from "./nav-items";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
-import { ico, iconButton } from "./ui";
+import { ico } from "./ui";
 
 export function createSidebar(nav: HTMLElement, column: HTMLElement): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-brand">${navHomeHTML()}${iconButton("x", t("common.close"), ' data-sidebar="close"', "sidebar-close")}</div><div class="sidebar-conversations"></div><div class="side-foot">${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}<button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button></div>`;
+  nav.innerHTML = `<div class="sidebar-brand">${navHomeHTML()}</div><div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}</div>`;
+  const header = column.querySelector('.mb-top');
+  if (header) header.prepend(nav.querySelector('.sidebar-brand')!);
   nav.querySelector(".sidebar-conversations")!.append(column);
   const toggle = document.createElement("button");
   toggle.type = "button"; toggle.className = "btn icon sidebar-toggle";
@@ -29,9 +31,9 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     brand.setAttribute("aria-label", t("nav.home")); brand.title = t("nav.home");
     nav.querySelector('[data-go="dictation"] .nav-t')!.textContent = t("nav.dictation");
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
-    account.innerHTML = ownerFaceHTML(32) + `<span class="sidebar-account-name"></span>` + ico("gear");
-    account.querySelector(".sidebar-account-name")!.textContent = ownerName();
+    account.innerHTML = ownerFaceHTML(40);
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);
+    account.title = account.getAttribute('aria-label')!;
     toggle.innerHTML = ico("menu"); toggle.setAttribute("aria-label", t("nav.pages"));
     nav.querySelector('[data-sidebar="close"]')?.setAttribute("aria-label", t("common.close"));
   };

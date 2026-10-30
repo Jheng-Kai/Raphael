@@ -5,7 +5,7 @@
 .ho-hero:has(> button) { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ho-hero > .av { flex-shrink: 0; }
 .ho-date { margin: 0 0 var(--sp-2); font-size: var(--fs-md); color: var(--text-3); }
-.page-home .ho-said { margin: 0; font: 600 calc(var(--fs-lg) + var(--fs-sm))/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: break-word; }
+.page-home .ho-said { margin: 0; font: 600 var(--fs-h1)/1.35 var(--voice, var(--ui)); text-wrap: pretty; overflow-wrap: break-word; }
 .ho-phrase { display: inline-block; max-width: 100%; word-break: keep-all; }
 .ho-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: stretch; }
 .ho-card, .ho-calendar { position: relative; border-radius: var(--r-lg); }
@@ -120,7 +120,7 @@
 }
 @media (max-width: 859px) { .ho-calendar-frame { min-height: 540px; } }
 @media (max-width: 960px) { .page.page-home { padding: 24px; } }
-@media (max-width: 760px) { .ho-hero { gap: var(--sp-3); } .ho-big small { display: block; margin: 0; font-size: var(--fs-xs); } .ho-card { height: 224px; } }
+@media (max-width: 760px) { .ho-hero { gap: var(--sp-3); } .ho-hero > .av { --av: 96px !important; } .ho-big small { display: block; margin: 0; font-size: var(--fs-xs); } .ho-card { height: 224px; } }
 
 .page-home .ho-calendar .ho-event-chip.btn:is(:hover, :active) { border-left-color: var(--accent-icon); }
 .page-home .ho-calendar .ho-event-chip.is-routine:is(:hover, :active) { border-left-color: var(--ok); }

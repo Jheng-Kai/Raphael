@@ -4,7 +4,7 @@
 
 ### Product contract (owner refinement, 2026-10-30)
 
-The borderless hero has a 112px emblem, 32px report and date on one horizontal row,
+The borderless hero has a 128px emblem (96px at 720px), the original --fs-h1 report and unchanged date on one horizontal row,
 including at 720. Home retains its 1080px maximum. The emblem loops when allowed,
 follows reduced motion and retains its DOM node during refreshes. Only a repair
 report has a fixing icon; Raphael is asked in his conversation.
@@ -99,3 +99,5 @@ Offline pytest covers projection and HTTP doubles. Browser fixtures prove UI;
 isolated fake-brain native journeys prove the desktop path. Neither proves live
 calendar/OAuth/provider scheduling. Judge is excluded by this task's explicit brief.
 Follow the shared [content-width contract](README.md#content-width).
+
+Native `sidebar-home` checks the emblem/report/date and in-place sidebar search at 1120,720,1920x1080, using the real WebView and isolated data.

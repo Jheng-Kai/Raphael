@@ -164,7 +164,7 @@ URL_MAX_CHARS = 300
 WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
     "computer_vm_mode": ("shared", "per-bot"),
-    "skin": ("default", "paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"),
+    "skin": ("default", "black"),
     "action_mode": ("ask", "direct"),
     "worker_cost_cap_usd": WORKER_COST_CAPS,
     "stt_engine": STT_ENGINES,
@@ -424,6 +424,8 @@ class SettingsStore:
         if key == "languages":
             return self._languages()
         saved = self._saved(key)
+        if key == "skin":
+            return saved if saved in _CHOICES["skin"] else default
         if key == "model_favorites":
             return _read_favorites(saved)
         if key == "disconnected_clis":
@@ -467,6 +469,7 @@ class SettingsStore:
         values["model_favorites"] = _read_favorites(values["model_favorites"])
         values["disconnected_clis"] = _read_disconnected_clis(values["disconnected_clis"])
         values["languages"] = self._languages()
+        values["skin"] = self.get("skin")
         values["tts_service"] = self.get("tts_service")
         values["tts_enabled"] = self.get("tts_enabled")
         return values

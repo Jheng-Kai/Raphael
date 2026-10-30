@@ -26,7 +26,7 @@ npm run look -- quick-model-menu quick-effort-menu quick-model-selection --theme
 
 ## Sub-features
 
-Owner profile/preferences, themes/skins, models/providers, dictation, assistant,
+Owner profile/preferences, themes, models/providers, dictation, assistant,
 messaging, data management and About. Usage and MCP have separate maps.
 Subscription accounts share the room row-action menu: disconnect disables a CLI only
 inside Raphael, removes its models, and leaves a framed Connect action. Reconnect reuses
@@ -45,22 +45,21 @@ theme borders and visible keyboard focus, with metadata wrapping inside narrow p
 
 ## How to get to it (user POV)
 
-Open the sidebar account footer, then a settings pane. Appearance has skin previews/theme
-controls; General has owner name/about and the shared avatar picker. Use presets or
+Open the sidebar account footer, then a settings pane. Appearance has one theme dropdown and one language dropdown in a narrow card; General has owner name/about and the shared avatar picker. Use presets or
 upload and crop an image; the resulting face appears on the footer and outgoing messages.
 
 ## Driving it with look
 
 ```powershell
-npm run look -- profile appearance models dictation agent messaging data about skins --theme both --width 1120,720
-npm run look -- skin-default skin-paper skin-graphite skin-lagoon skin-dusk skin-midnight skin-meadow skin-ink skin-catppuccin --theme both --width 1120,720
-npm run look -- appearance --theme both --width 1120,720 --skin lagoon --locale ja
+npm run look -- profile appearance appearance-menu appearance-keyboard appearance-black models dictation agent messaging data about theme-clarity --theme both --width 1120,720
+npm run look -- home sidebar sidebar-search sidebar-group-avatar-pair sidebar-group-avatar-four chat appearance appearance-menu appearance-keyboard desktop-takeover-owner home-calendar dictation-dictionary theme-clarity --theme dark --skin black --width 1120,720,1920x1080
+npm run look -- appearance --theme dark --width 1120,720,1920x1080 --skin black --locale ja
 npm run look -- cli-account-menu cli-account-disconnected cli-account-reconnected window-hover-minimize window-hover-maximize window-hover-restore window-hover-close window-hover-modal --theme both --width 1120,720,1920x1080
 npm run look -- model-choices-answer model-choices-cleanup model-choices-stt model-choices-local model-choices-local-selected --theme both --width 1120,720,1920x1080
 ```
 
-Keep pane/skin PNGs; inspect wrapping, focus, scroll access, active selections and
-preview/popover contrast. Use `--locale en` and `--locale ja` for translation work;
+Keep pane/theme PNGs; inspect wrapping, focus, scroll access, active selections and
+dropdown/popover contrast. Use `--locale en` and `--locale ja` for translation work;
 raw-key checks do not prove translation quality. Extend scenes through change/reopen
 for persistence. Native provider/model, messaging, import/export, autostart and data
 deletion need isolated real journeys and observable side effects.
@@ -81,7 +80,7 @@ menu (R-UI-11). Memory rows use the same policy and retain Undo.
 
 ## Gotchas
 
-Both theme and skin matter; a preview is not the whole app in that skin. Contrast
+Default resolves system/light/dark; black always resolves dark. Retired saved skins silently read as default in core and frontend. Contrast
 tests cannot prove every rendered combination. Native settings/provider responses
 are fixtures. Profile is reached through Settings, not a retired owner menu. Keep
 destructive native steps within task authorization and disposable test data.
@@ -122,7 +121,7 @@ Follow the [content-width contract](README.md#content-width), including its toke
 
 Every settings pane caps its direct content, header, toolbar, lists and grids at
 the same 640px measure. Settings list padding is removed at the pane boundary,
-so theme controls and the skin grid share their edges. The rendered alignment
+so each pane retains aligned controls. Appearance alone uses its narrow row card. The rendered alignment
 check also covers connected-app headers, search tools and rows.
 
 Header actions themselves share that right edge, without the old 32px inset.
@@ -132,7 +131,7 @@ and rejects overlap with Close.
 
 ## Owner round 6 contracts
 
-Owner round 6: profile, dictation, appearance, skins, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
+Owner round 6: profile, dictation, appearance, models, data and messaging use settings-concise to reject the specifically retired helper paragraphs. Model row labels and prices remain, while narrow rows stack their picker below the label/price. Telegram retains BotFather and the token field. Appearance/skin subtitles are removed; other app copy is unchanged.
 
 ## Owner round 7 contracts
 
@@ -163,3 +162,20 @@ a real public catalog response (`RAPHAEL_NATIVE_MODEL_CATALOG`) and exercises
 save/reopen/next-turn routing for answer, quick questions and a member. Its provider
 is fake; HTTP-body tests separately assert the exact model/reasoning payload.
 Neither check is paid OpenRouter acceptance. See the shared look README for launch.
+
+## Theme and clarity (owner, 2026-10-30)
+
+Appearance uses the shared sel/openMenu component, with system/light/dark/black and
+language as two rows inside a <=640px card. Language moved from General to this pane;
+search and locale journeys follow that entry. There is no preview gallery or skin grid.
+Black uses neutral near-black surfaces, white accent/primary controls, neutral selection,
+focus and chart tokens; only semantic status and external service art retain colour.
+Default keeps its blue surfaces/accent, with neutral readable secondary text. The actual
+conversation radial gradient is removed. theme-clarity records computed root/conversation
+opacity, filter, backdrop and background; appearance-settings checks the shared row card.
+check-palette covers default/light, default/dark and black/dark, including chart marks.
+
+Run the full two-theme, three-size look matrix once after both briefs, plus the black
+representatives above. Judge and OpenRouter are explicitly prohibited for this work.
+
+Native `appearance` drives all three theme choices at 1120,720,1920x1080, checks the real shared dropdown and confirms black in the production settings store.

@@ -15,7 +15,7 @@ import { saveReport } from "./report.mjs";
 
 /** Product, model, unit, key names and external menu paths that stay in Latin letters in every language. */
 // Docker is an installed product name, including its unavailable-engine state.
-export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "Catppuccin", "Latte", "Mocha", "KEY=value", "Settings → Project Settings → API Keys"];
+export const LATIN_NAMES = ["Raphael", "Docker", "Docker Desktop", "Rimuru", "Google", "Gmail", "Calendar", "Composio", "OpenRouter", "OpenAI", "Anthropic", "Claude", "Codex", "Gemini", "GPT", "Grok", "Telegram", "Slack", "Discord", "Notion", "GitHub", "MCP", "API", "URL", "CLI", "STT", "PDF", "CSV", "JSON", "US", "KB", "MB", "GB", "GMT", "AM", "PM", "Alt", "AltGr", "Ctrl", "Shift", "Space", "Esc", "Enter", "Tab", "Win", "Windows", "Fn", "Edge", "Chrome", "macOS", "Whisper", "Typeless", "Webhook", "Hermes", "Simple", "Icons", "Bearer", "mcpServers", "Ollama", "Linear", "BotFather", "newbot", "English", "MIT", "JPG", "WebP", "GIF", "UTF", "Big", "txt", "px", "token", "Claude Code", "Antigravity", "KEY=value", "Settings → Project Settings → API Keys"];
 
 // Agents run inside their own sandbox, where the browser cannot start a second one; the page is our
 // own app on loopback only.
@@ -59,7 +59,7 @@ export async function run(options) {
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
     let desktopResponses = {};
-    if (options.selected.some(scene => scene.name.startsWith("desktop-"))) {
+    if (options.selected.some(scene => scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover")) {
       // Render the production bridge shell/bootstrap, replacing only remote RFB.
       const python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe");
       const source = join(import.meta.dirname, "fixtures/desktop-upstream.html.txt");
@@ -68,6 +68,7 @@ export async function run(options) {
       desktopResponses = {
         [base + "desktop.html"]: { contentType: "text/html", body: bridge.page },
         [base + "bridge.js"]: { contentType: "text/javascript", body: bridge.bootstrap },
+        [base + "control"]: { contentType: "application/json", body: JSON.stringify({ held: true }) },
         [base + "connection"]: { contentType: "application/json", body: JSON.stringify({ held: false, path: "/synthetic-rfb" }) },
         [base + "core/rfb.js"]: { contentType: "text/javascript", body: await readFile(join(import.meta.dirname, "fixtures/desktop-rfb.js"), "utf8") },
       };
@@ -110,7 +111,9 @@ export async function run(options) {
           const url = request.url();
           const disposition = requestDisposition(url, origin);
           const desktopResponse = url.startsWith(origin + "/") && desktopResponses[new URL(url).pathname];
-          if (desktopResponse) void request.respond({ status: 200, ...desktopResponse }).catch(() => {});
+          if (desktopResponse && new URL(url).pathname.endsWith('/control')) {
+            void request.frame().evaluate(() => window.__desktopAcceptedInputs ?? 0).then(input_sequence => request.respond({ status:200, contentType:'application/json', body:JSON.stringify({held:true,input_sequence}) })).catch(() => {});
+          } else if (desktopResponse) void request.respond({ status: 200, ...desktopResponse }).catch(() => {});
           else if (imageResponses[url] && request.resourceType() === "image") void request.respond({ status: 200, contentType: "image/svg+xml", body: imageResponses[url] }).catch(() => {});
           else if (disposition === "empty") void request.respond({ status: 204 }).catch(() => {});
           else if (disposition === "continue") void request.continue().catch(() => {});

@@ -15,6 +15,9 @@ const readMap = file => {
 const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding"];
 
 describe("maintained verification feature map", () => {
+  it("uses explicit modifier fields instead of unsupported Puppeteer key chords", () => {
+    expect(scenes.flatMap(scene => scene.steps.filter(step => step.action === 'key' && /(?:Shift|Control|Alt|Meta)\+/.test(step.key)).map(step => `${scene.name}: ${step.key}`))).toEqual([]);
+  });
   it("documents every requested feature with executable, current scene commands", () => {
     const index = readMap("features/README.md");
     for (const name of names) {
@@ -26,7 +29,7 @@ describe("maintained verification feature map", () => {
       expect(commands.length, name).toBeGreaterThan(0);
       for (const [, command] of commands) {
         const options = parseOptions(command.trim().split(/\s+/), scenes);
-        expect(options.themes, `${name}: ${command}`).toEqual(["light", "dark"]);
+        expect(options.themes, `${name}: ${command}`).toEqual(options.skin === "black" ? ["dark"] : ["light", "dark"]);
         const wide = ["home", "automations", "dictation", "members", "conversation", "team-and-rooms", "connections-mcp", "usage"].includes(name) || options.selected.some(scene => scene.name.startsWith("quick-") || scene.name.startsWith("cli-account-") || scene.name.startsWith("window-hover-") );
         const allowedWidths = wide ? [[1120, 720, 1920]] : [[1120, 720], [1120, 720, 1920]];
         allowedWidths.push([1120,720,1920,1180,1280]);

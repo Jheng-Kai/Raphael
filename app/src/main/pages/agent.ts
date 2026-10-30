@@ -260,9 +260,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
-  const desktop = mountDesktopViewer(el.querySelector<HTMLElement>(".ra-tools")!, () => members.current(), {
-    timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
-  });
   const find = el.querySelector<HTMLElement>(".ra-find")!;
   const findInput = el.querySelector<HTMLInputElement>(".ra-find-input")!;
   const findCount = el.querySelector<HTMLElement>(".ra-find-count")!;
@@ -291,7 +288,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
     visible: () => visible,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
-    onDetailsChange: open => conversationButton.setAttribute("aria-expanded", String(open)),
+    onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => desktop.sync()); },
     onSelect: () => { app.go("agent"); switchThread(); },
     onUpdate: () => {
       drawComposer();
@@ -305,6 +302,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   el.prepend(members.column);
   el.append(members.details);
+  const desktop = mountDesktopViewer(members.details, () => members.current(), {
+    timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
+    name: () => members.nameOf(members.current()),
+    openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
+  });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
   detailsScrim.setAttribute("aria-hidden", "true");
@@ -813,7 +815,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           const restore = carryTyped(node, made);
           const restoreMail = carryMail(node, made);
           node.before(made);
-          desktop.carry(node, made);
           node.remove();
           restore();
           restoreMail();

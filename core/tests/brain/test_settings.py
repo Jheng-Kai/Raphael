@@ -16,10 +16,18 @@ def test_defaults_and_set(conn):
     assert s.get("monthly_limit_usd") == 20.0
 
 
-def test_catppuccin_skin_is_saved_and_read_back(conn):
+def test_black_skin_is_saved_and_read_back(conn):
     store = SettingsStore(conn)
-    store.set("skin", "catppuccin")
-    assert SettingsStore(conn).get("skin") == "catppuccin"
+    store.set("skin", "black")
+    assert SettingsStore(conn).get("skin") == "black"
+
+
+@pytest.mark.parametrize("skin", ["paper", "graphite", "lagoon", "dusk", "midnight", "meadow", "ink", "catppuccin"])
+def test_retired_saved_skins_silently_read_as_default(conn, skin):
+    conn.execute("INSERT INTO settings (key, value) VALUES ('skin', ?)", (json.dumps(skin),))
+    store = SettingsStore(conn)
+    assert store.get("skin") == "default"
+    assert store.all()["skin"] == "default"
 
 
 def test_rejects_unknown_key_and_wrong_type(conn):

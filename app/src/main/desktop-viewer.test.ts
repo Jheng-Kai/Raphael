@@ -1,162 +1,84 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-
-const api = vi.hoisted(() => ({ desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopControl: vi.fn(), desktopClose: vi.fn() }));
+const api = vi.hoisted(() => ({ desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, type DesktopState } from "./desktop-viewer";
 import { setLocale } from "./i18n";
-
-let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1;
-const running: DesktopState = { state: "running", ready: true, control: "member" };
-const flush = async (): Promise<void> => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
-const entry = (): HTMLButtonElement => host.querySelector('[data-desktop="open"]')!;
-const frame = (): HTMLIFrameElement => document.querySelector(".desktop-viewer iframe")!;
-const control = (): HTMLButtonElement => document.querySelector('[data-dlg="control"]')!;
-function connected(): void {
-  window.dispatchEvent(new MessageEvent("message", { source: frame().contentWindow, origin: "http://127.0.0.1:5000", data: { type: "raphael-desktop", state: "connected" } }));
-}
-async function open(): Promise<void> { mounted.show(); await flush(); entry().click(); await flush(); }
-
+const running: DesktopState = { state:"running", ready:true, control:"member" };
+const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
+let host: HTMLElement, mounted: ReturnType<typeof mountDesktopViewer>, member = 1, panelOpen = false;
+const flush = async (): Promise<void> => { for (let i=0; i<30; i++) await Promise.resolve(); };
+const panel = (): HTMLElement => host.querySelector('.desktop-panel')!;
+const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
+const take = (): HTMLButtonElement => host.querySelector('[data-desktop="take"]')!;
+const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
+function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
-  vi.useFakeTimers();
-  vi.resetAllMocks();
-  setLocale("zh-TW");
-  member = 1;
-  api.desktopStatus.mockResolvedValue({ ...running });
-  api.desktopRenew.mockResolvedValue({ ...running });
-  api.desktopOpen.mockResolvedValue({ session: "session-one", url: "http://127.0.0.1:5000/session-one/vnc.html" });
-  api.desktopClose.mockResolvedValue({});
-  host = document.createElement("div"); document.body.append(host);
-  mounted = mountDesktopViewer(host, () => member);
+  vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false;
+  api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
+  api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
+  host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
+  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",openPanel:()=>{panelOpen=true;},panelVisible:()=>panelOpen});
 });
-afterEach(async () => {
-  mounted.hide(); await flush(); document.body.replaceChildren(); vi.useRealTimers();
+afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
+test('working conversations reveal the existing panel and open one persistent stream',async()=>{
+  api.desktopStatus.mockResolvedValue({...running,works:[{...work,state:'running',reason:''}]});
+  mounted.show();await flush();message('connected');
+  expect(panelOpen).toBe(true);expect(frame().hidden).toBe(false);
+  expect(api.desktopOpen).toHaveBeenCalledWith(1,{conversation_id:11});
+  expect(host.querySelector('ol iframe')).toBeNull();expect(host.querySelector('ol')!.textContent).toContain('小晴');
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
-
-test("Docker absent has no entry; a running computer has one accessible icon and native tooltip", async () => {
-  api.desktopStatus.mockResolvedValue({ ...running, state: "absent" });
-  mounted.show(); await flush(); expect(entry().hidden).toBe(true);
-  api.desktopStatus.mockResolvedValue(running);
+test('a screen click changes input in place without replacing the frame, URL or session',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');const same=frame(),url=same.src;
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});take().click();await flush();message('interactive',{held:true});
+  expect(api.desktopControl).toHaveBeenCalledWith('one',true);expect(frame()).toBe(same);expect(frame().src).toBe(url);
+  expect(frame().style.pointerEvents).toBe('auto');expect(panel().dataset.interactive).toBe('true');expect(handback().textContent).toBe('交還');
+  api.desktopControl.mockResolvedValue(running);handback().click();handback().click();await flush();
+  expect(api.desktopControl.mock.calls.filter(call=>call[1]===false)).toHaveLength(1);expect(frame()).toBe(same);expect(frame().src).toBe(url);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+test('explicit done includes the current nonce once; close never sends handback',async()=>{
+  api.desktopStatus.mockResolvedValue({...running,works:[work]});mounted.show();await flush();message('connected');
+  expect(host.querySelector('.desktop-request')!.textContent).toContain('登入');
+  api.desktopControl.mockResolvedValue({...running,control:'owner',works:[work]});take().click();await flush();
+  expect(api.desktopControl).toHaveBeenLastCalledWith('one',true,'nonce');expect(handback().textContent).toBe('我完成了');
+  api.desktopControl.mockResolvedValue({...running,works:[{...work,state:'returning'}]});handback().click();handback().click();await flush();
+  expect(api.desktopControl.mock.calls.filter(call=>call[1]===false&&call[2]==='nonce')).toHaveLength(1);
+  mounted.hide();await flush();expect(api.desktopClose).toHaveBeenCalledWith('one');expect(api.desktopControl).toHaveBeenCalledTimes(2);
+});
+test('expansion retains the same iframe and lease',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');const same=frame();
+  host.querySelector<HTMLButtonElement>('[data-desktop="expand"]')!.click();expect(panel().hasAttribute('data-expanded')).toBe(true);
+  host.querySelector<HTMLButtonElement>('[data-desktop="expand"]')!.click();expect(frame()).toBe(same);expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+});
+test('a renewal started before a screen click cannot overwrite the acquired lease',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  let finish!:(value:DesktopState)=>void;api.desktopRenew.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
   await vi.advanceTimersByTimeAsync(2000);
-  expect(entry().hidden).toBe(false);
-  expect(entry().getAttribute("aria-label")).toBe("即時桌面");
-  expect(entry().title).toBe("即時桌面");
-  expect(host.querySelectorAll('[data-desktop="open"]')).toHaveLength(1);
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});take().click();await flush();message('interactive',{held:true});
+  finish(running);await flush();
+  expect(panel().dataset.interactive).toBe('true');expect(take().hidden).toBe(true);expect(handback().hidden).toBe(false);
+  expect(api.desktopOpen).toHaveBeenCalledTimes(1);
 });
-
-test.each(["pull_failed", "docker_start_timeout"])("%s explains the failed preparation and offers retry", async error => {
-  api.desktopStatus.mockResolvedValue({ ...running, state: "unavailable", error });
-  await open();
-  expect(document.querySelector(".desktop-placeholder")!.textContent).toContain(error === "pull_failed" ? "映像尚未建立完成" : "尚未啟動完成");
-  expect(control().disabled).toBe(false);
-  expect(control().textContent).toBe("重試");
+test('navigation closes a late session without showing another member screen',async()=>{
+  let finish!:(value:{session:string;url:string})=>void;api.desktopOpen.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+  panelOpen=true;mounted.show();await flush();member=2;mounted.hide();finish({session:'late',url:'http://127.0.0.1:5000/late'});await flush();
+  expect(api.desktopClose).toHaveBeenCalledWith('late');expect(host.querySelector('iframe')).toBeNull();
 });
-
-test("the selected member opens in the shared dialog and only a trusted frame can announce a connection", async () => {
-  await open();
-  expect(api.desktopOpen).toHaveBeenCalledWith(1, undefined);
-  expect(frame().src).toBe("http://127.0.0.1:5000/session-one/vnc.html");
-  expect(control().disabled).toBe(true);
-  window.dispatchEvent(new MessageEvent("message", { origin: "http://foreign.test", data: { type: "raphael-desktop", state: "connected" } }));
-  expect(control().disabled).toBe(true);
-  connected();
-  expect(frame().hidden).toBe(false);
-  expect(document.querySelector(".desktop-status")!.textContent).toBe("成員正在控制電腦");
-  expect(document.body.innerHTML).not.toContain("password=");
+test('foreign messages and failed acquisition never enable input',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');api.desktopControl.mockRejectedValue(new Error('busy'));take().click();await flush();
+  window.dispatchEvent(new MessageEvent('message',{origin:'http://foreign.test',data:{type:'raphael-desktop',state:'interactive',held:true}}));
+  expect(frame().style.pointerEvents).toBe('none');expect(host.querySelector('.desktop-error')!.textContent).toContain('請稍後再試');
 });
-
-test("taking and handing back control uses the core lease and closing releases its session", async () => {
-  await open(); connected();
-  api.desktopControl.mockResolvedValue({ ...running, control: "owner" });
-  control().click(); await flush(); connected();
-  expect(api.desktopControl).toHaveBeenLastCalledWith("session-one", true);
-  expect(control().textContent).toBe("交還控制");
-  api.desktopControl.mockResolvedValue(running);
-  control().click(); await flush(); connected();
-  expect(api.desktopControl).toHaveBeenLastCalledWith("session-one", false);
-  document.querySelector<HTMLButtonElement>('.desktop-viewer [data-dlg="close"]')!.click(); await flush();
-  expect(api.desktopClose).toHaveBeenCalledWith("session-one");
-  expect(document.querySelector(".desktop-viewer")).toBeNull();
+test('disconnection closes the lease without completing the pending request',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');message('disconnected');await flush();
+  expect(api.desktopClose).toHaveBeenCalledWith('one');expect(api.desktopControl).not.toHaveBeenCalled();
 });
-
-test.each(["stopped", "missing", "unavailable"] as const)("%s has a clear state and no blank frame; restarting reconnects", async state => {
-  api.desktopStatus.mockResolvedValue({ ...running, state });
-  await open();
-  expect(frame().hasAttribute("src")).toBe(false);
-  expect(frame().hidden).toBe(true);
-  expect(document.querySelector(".desktop-placeholder")!.textContent).toMatch(/已停止|無法使用/);
-  expect(control().disabled).toBe(false);
-  expect(control().textContent).toBe("重試");
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(frame().hasAttribute("src")).toBe(true);
-  connected();
-  expect(frame().hidden).toBe(false);
+test.each(['starting','building','preparing'] as const)('%s shows preparation without a blank stream',async state=>{
+  panelOpen=true;api.desktopStatus.mockResolvedValue({state,ready:false,control:'member',progress:'#3 [2/4] Installing tools'});mounted.show();await flush();
+  expect(host.querySelector('iframe')).toBeNull();expect(host.querySelectorAll('.desktop-preparation li')).toHaveLength(3);expect(take().hidden).toBe(true);
 });
-
-test("preparation shows real build progress and hides the control action until ready", async () => {
-  api.desktopStatus.mockResolvedValue({ state: "building", ready: false, control: "member", progress: "#3 [2/4] Installing tools" });
-  await open();
-  expect(document.querySelector(".desktop-placeholder")!.textContent).toContain("[2/4]");
-  expect(control().hidden).toBe(true);
-  expect(frame().hasAttribute("src")).toBe(false);
-});
-
-test("a failed desktop can retry preparation through the same viewer", async () => {
-  api.desktopStatus.mockResolvedValue({ state: "unavailable", ready: false, control: "member" });
-  await open();
-  control().click(); await flush();
-  expect(api.desktopOpen).toHaveBeenCalledTimes(2);
-  expect(api.desktopClose).toHaveBeenCalledWith("session-one");
-});
-
-test("changing member or leaving while open is pending closes the late session", async () => {
-  let finish!: (session: { session: string; url: string }) => void;
-  api.desktopOpen.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-  await open();
-  member = 2; mounted.refresh();
-  finish({ session: "late", url: "http://127.0.0.1:5000/late/vnc.html" }); await flush();
-  expect(document.querySelector(".desktop-viewer")).toBeNull();
-  expect(api.desktopClose).toHaveBeenCalledWith("late");
-});
-
-test("a stopped lease request stays contextual and never claims ownership", async () => {
-  await open(); connected(); api.desktopControl.mockRejectedValue(new Error("desktop busy"));
-  control().click(); await flush();
-  expect(document.querySelector(".desktop-error")!.textContent).toContain("請稍後再試");
-  expect(control().textContent).toBe("接手控制");
-});
-
-test("an expired session is replaced after waking up and the new desktop reconnects", async () => {
-  await open(); connected();
-  api.desktopRenew.mockRejectedValueOnce(new Error("desktop viewer expired"));
-  api.desktopOpen.mockResolvedValue({ session: "session-two", url: "http://127.0.0.1:5000/session-two/vnc.html" });
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(api.desktopClose).toHaveBeenCalledWith("session-one");
-  expect(frame().hidden).toBe(true);
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(api.desktopRenew).toHaveBeenLastCalledWith("session-two");
-  expect(frame().src).toContain("session-two");
-  connected(); expect(frame().hidden).toBe(false);
-});
-
-test.each(["unavailable", "running"] as const)("the owner can hand back with a disconnected frame while Docker is %s", async state => {
-  api.desktopStatus.mockResolvedValue({ ...running, control: "owner" });
-  await open(); connected();
-  api.desktopRenew.mockResolvedValue({ ...running, state, control: "owner" });
-  window.dispatchEvent(new MessageEvent("message", { source: frame().contentWindow, origin: "http://127.0.0.1:5000", data: { type: "raphael-desktop", state: "disconnected" } }));
-  await vi.advanceTimersByTimeAsync(2000);
-  expect(frame().hasAttribute("src")).toBe(state === "running");
-  expect(control().disabled).toBe(false);
-  api.desktopControl.mockResolvedValue({ ...running, state: "unavailable" });
-  control().click(); await flush();
-  expect(api.desktopControl).toHaveBeenLastCalledWith("session-one", false);
-});
-
-test.each([false, true])("initial load retry preserves an established connection (%s)", async established => {
-  await open();
-  if (established) connected();
-  const remove = vi.spyOn(frame(), "removeAttribute");
-  await vi.advanceTimersByTimeAsync(30000);
-  expect(remove.mock.calls.some(([name]) => name === "src")).toBe(!established);
-  expect(frame().src).toContain("session-one");
+test('absent Docker has no computer section',async()=>{
+  api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(true);expect(api.desktopOpen).not.toHaveBeenCalled();
 });

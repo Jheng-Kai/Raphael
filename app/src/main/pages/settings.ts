@@ -8,7 +8,7 @@
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
 import { isUiLocale, onLocaleChange, t } from "../i18n";
-import { createOwnerControls } from "../owner-settings";
+import { createOwnerControls, skinOf } from "../owner-settings";
 
 import { getVersion } from "@tauri-apps/api/app";
 import * as api from "../api";
@@ -340,11 +340,8 @@ export function createSettings(app: AppContext): SettingsPage {
       case "appearance":
         return {
           choices: APPEARANCES,
-          current: d.appearance,
-          pick: (value) => {
-            const appearance = value as DeviceSettings["appearance"];
-            if (APPEARANCES.some((c) => c.value === appearance) && appearance !== app.device().appearance) void changeDevice({ appearance });
-          },
+          current: skinOf(brain?.skin) === "black" ? "black" : d.appearance,
+          pick: (value) => { if (APPEARANCES.some(c => c.value === value)) void changeAppearance(value); },
         };
       case "retention":
         return {
@@ -935,6 +932,15 @@ export function createSettings(app: AppContext): SettingsPage {
   function chooseModel(role: ModelRole, id: string): Promise<void> {
     if (role === "stt") return changeStt(id);
     return changeBrain(role === "cleanup" ? "cleanup_model" : "agent_model", id);
+  }
+
+  async function changeAppearance(value: string): Promise<void> {
+    try {
+      // Save the device mode first so leaving black never flashes the old mode.
+      if (value !== "black") await app.setDevice({ appearance: value as DeviceSettings["appearance"] });
+      brain = (await api.settingsSet("skin", value === "black" ? "black" : "default")).settings;
+    } catch (error) { toaster.info(describeError(error)); }
+    render();
   }
 
   async function changeDevice(patch: Partial<DeviceSettings>): Promise<void> {

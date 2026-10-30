@@ -15,10 +15,11 @@ import httpx
 
 from ..protocol import invalid_params
 from .vm import VmError
+from .rfb_input import RfbInputGate
 
 LEASE_SECONDS = 15
 BOOTSTRAP = b'''import RFB from './core/rfb.js';
-let rfb, connecting = false, closed = false;
+let rfb, connecting = false, closed = false, controlAt = 0, revision = 0;
 const screen = document.getElementById('noVNC_container');
 const tell = state => parent.postMessage({type:'raphael-desktop', state}, '*');
 async function connect() {
@@ -42,9 +43,40 @@ async function connect() {
   finally { connecting = false; }
 }
 addEventListener('message', event => {
-  if (event.source !== parent || event.data?.type !== 'raphael-desktop-disable') return;
-  if (rfb) { rfb.viewOnly = true; rfb.disconnect(); rfb = null; }
+  if (event.source !== parent) return;
+  if (event.data?.type === 'raphael-desktop-disable') {
+    if (rfb) { rfb.viewOnly = true; rfb.disconnect(); rfb = null; }
+    return;
+  }
+  if (event.data?.type !== 'raphael-desktop-control' || !rfb) return;
+  const current = ++revision;
+  rfb.viewOnly = true;
+  if (!event.data.held) return;
+  void fetch('./control', {cache:'no-store'}).then(response => response.ok ? response.json() : null).then(config => {
+    if (current !== revision || !rfb || !config?.held) return;
+    rfb.viewOnly = false; rfb.focus(); controlAt = performance.now();
+    parent.postMessage({type:'raphael-desktop', state:'interactive', held:true}, '*');
+    const point = event.data.pointer;
+    if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+      const canvas = screen.querySelector('canvas'), box = canvas?.getBoundingClientRect();
+      if (box) canvas.dispatchEvent(new MouseEvent('mousemove', {bubbles:true,clientX:box.left+box.width*point.x,clientY:box.top+box.height*point.y,buttons:0}));
+      const accepted = async () => {
+        if (current !== revision || !rfb || rfb.viewOnly) return;
+        const response = await fetch('./control', {cache:'no-store'});
+        const next = response.ok ? await response.json() : null;
+        if (next?.held && next.input_sequence > config.input_sequence) parent.postMessage({type:'raphael-desktop',state:'input-accepted'}, '*');
+        else if (performance.now()-controlAt < 1000) setTimeout(() => void accepted().catch(() => {}), 16);
+      };
+      void accepted().catch(() => {});
+    }
+  }).catch(() => {});
 });
+screen.addEventListener('mousedown', () => {
+  if (rfb && !rfb.viewOnly && controlAt) {
+    parent.postMessage({type:'raphael-desktop', state:'input', latencyMs:performance.now()-controlAt}, '*');
+    controlAt = 0;
+  }
+}, true);
 addEventListener('pagehide', () => {closed = true; rfb?.disconnect();});
 document.documentElement.classList.remove('noVNC_loading');
 connect();
@@ -78,6 +110,8 @@ class Session:
     member_id: int = 0
     conversation_id: int | None = None
     preview: bool = False
+    input_sequence: int = 0
+    inputs: dict = field(default_factory=dict)
 
 
 class DesktopViewer:
@@ -186,7 +220,7 @@ class DesktopViewer:
                 raise invalid_params("desktop already held")
             if self.vm.active.get(target.key):
                 raise invalid_params("desktop busy")
-            if (await self.status_for(target))["state"] != "running":
+            if not session.sockets and (await self.status_for(target))["state"] != "running":
                 raise invalid_params("desktop unavailable")
             # Check again after the asynchronous probe. New tools see the phase A hold.
             if self.vm.active.get(target.key) or self.owners.get(target.key) not in (None, token):
@@ -194,25 +228,36 @@ class DesktopViewer:
             self.session(params)
             self.owners[target.key] = token
             self.vm.hold(target, True)
-            await self.disconnect_target(target)
+            await self.disconnect_target(target, keep=session)
         elif owner == token:
             if pending and params.get("takeover") != pending.request_id:
                 raise invalid_params("explicit takeover handback required")
-            # End every input connection before the tool gate is released.
-            await self.disconnect_target(target)
+            # The socket's RFB gate rejects input as soon as ownership is removed.
             self.owners.pop(target.key, None)
+            for socket, gate in list(session.inputs.items()):
+                released = gate.release()
+                if released:
+                    try:
+                        socket.write(released)
+                        await socket.drain()
+                    except OSError:
+                        socket.close()
+            await self.disconnect_target(target, keep=session)
             self.vm.hold(target, False)
             if pending:
                 self.vm.work.complete(target, params["takeover"])
         session.expires = self.vm.clock() + LEASE_SECONDS
+        if session.sockets:
+            return {"state": "running", "ready": True, "control": "owner" if self.owners.get(target.key) == token else "member",
+                    "works": self.vm.work.views(session.member_id, session.conversation_id)}
         return await self.session_state(session)
 
-    async def disconnect_target(self, target):
+    async def disconnect_target(self, target, *, keep=None):
         # Invalidate handshakes that fetched their connection before this switch.
         for session in self.sessions.values():
-            if session.target == target:
+            if session.target == target and (session is not keep or not session.sockets):
                 session.revision += 1
-        sockets = [socket for session in self.sessions.values() if session.target == target for socket in session.sockets]
+        sockets = [socket for session in self.sessions.values() if session.target == target and session is not keep for socket in session.sockets]
         for socket in sockets:
             socket.close()
         await asyncio.gather(*(socket.wait_closed() for socket in sockets), return_exceptions=True)
@@ -281,6 +326,10 @@ class DesktopViewer:
                 if asset == "bridge.js":
                     await self._respond(writer, 200, BOOTSTRAP, "text/javascript")
                     return
+                if asset == "control":
+                    held = not session.preview and self.owners.get(session.target.key) == token
+                    await self._respond(writer, 200, json.dumps({"held": held, "input_sequence": session.input_sequence}).encode(), "application/json")
+                    return
                 port, password = await self.vm.viewer_connection(session.target)
                 if asset == "connection":
                     config = {"password": password, "held": not session.preview and self.owners.get(session.target.key) == token,
@@ -315,7 +364,24 @@ class DesktopViewer:
                     destination.write(data)
                     await destination.drain()
 
-            streams = [asyncio.create_task(pipe(reader, upstream)), asyncio.create_task(pipe(remote, writer))]
+            def input_allowed():
+                allowed = (not session.preview and self.sessions.get(token) is session
+                    and session.expires > self.vm.clock() and self.owners.get(session.target.key) == token)
+                if allowed:
+                    session.input_sequence += 1
+                return allowed
+
+            gate = RfbInputGate(input_allowed)
+            session.inputs[upstream] = gate
+
+            async def input_pipe():
+                while data := await reader.read(65536):
+                    accepted = gate.feed(data)
+                    if accepted:
+                        upstream.write(accepted)
+                        await upstream.drain()
+
+            streams = [asyncio.create_task(input_pipe()), asyncio.create_task(pipe(remote, writer))]
             try:
                 await asyncio.wait(streams, return_when=asyncio.FIRST_COMPLETED)
             finally:
@@ -334,6 +400,7 @@ class DesktopViewer:
                     socket.close()
                     if session:
                         session.sockets.discard(socket)
+                        session.inputs.pop(socket, None)
             self.tasks.discard(task)
 
     async def aclose(self):

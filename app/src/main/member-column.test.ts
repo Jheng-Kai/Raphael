@@ -63,7 +63,7 @@ describe("the column, drawn", () => {
     expect(chief.querySelector(".mb-pin, time")).toBeNull();
     expect(chief.dataset.member).toBe("0");
     expect(chief.querySelector("b")?.textContent).toBe("拉斐爾");
-    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:40px");
+    expect(chief.querySelector(".av")!.getAttribute("style")).toBe("--av:48px");
     expect(chief.innerHTML).not.toMatch(/管理員|mb-av|badge/);
     expect(chief.getAttribute("aria-current")).toBe("true");
   });
@@ -78,9 +78,9 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[data-group="20"] [data-member="0"] .mb-av')).toBeNull();
     expect(el.querySelector('[data-member-more="0"]')).toBeNull();
     expect(el.querySelector('.mb-chief')?.getAttribute('data-member')).toBe('3');
-    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:40px');
+    expect(el.querySelector('.mb-chief .av')?.getAttribute('style')).toBe('--av:48px');
     expect(el.querySelector('[data-member-more="3"]')).not.toBeNull();
-    expect(el.querySelector('.mb-star')).toBeNull();
+    expect(el.querySelectorAll('.mb-star')).toHaveLength(1);
     expect(LIST.members[3].group_id).toBe(20);
   });
 
@@ -95,9 +95,9 @@ describe("the column, drawn", () => {
     expect(search.querySelector('[data-member="0"] .mb-av')).toBeNull();
   });
 
-  test("the groups under their headers in their order, then 未分組", () => {
+  test("only owner-created groups have headers, followed by ungrouped rows", () => {
     const el = dom(columnHTML(view()));
-    expect([...el.querySelectorAll(".mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習", "未分組"]);
+    expect([...el.querySelectorAll(".mb-gname")].map((n) => n.textContent)).toEqual(["專案", "學習"]);
     const ids = (group: string) => [...el.querySelectorAll(`[data-group="${group}"] .mb-row`)].map((n) => (n as HTMLElement).dataset.member);
     expect(ids("10")).toEqual(["1", "2"]);
     expect(ids("20")).toEqual(["3"]);
@@ -189,6 +189,8 @@ describe("the column, used", () => {
   test("the search narrows the rows as it is typed, and Escape closes it", () => {
     const column = mount();
     const input = column.el.querySelector<HTMLInputElement>(".mb-find-input")!;
+    expect(column.el.querySelector<HTMLElement>(".mb-find")!.hidden).toBe(true);
+    column.el.querySelector<HTMLButtonElement>('[data-col="search"]')!.click();
     expect(column.el.querySelector<HTMLElement>(".mb-find")!.hidden).toBe(false);
     input.value = "信箱";
     input.dispatchEvent(new Event("input"));

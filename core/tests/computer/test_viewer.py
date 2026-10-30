@@ -177,7 +177,7 @@ async def test_private_connection_uses_the_current_validated_container_after_res
         await bridge.vm.viewer_connection(target)
 
 
-async def test_websocket_forwarding_is_closed_before_handback_reopens_the_tool_gate(viewer):
+async def test_persistent_websocket_gates_input_before_and_after_handback(viewer):
     bridge, _, _ = viewer
     requests = []
 
@@ -208,12 +208,29 @@ async def test_websocket_forwarding_is_closed_before_handback_reopens_the_tool_g
         writer.write(request.encode())
         await writer.drain()
         assert (await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 2)).startswith(b"HTTP/1.1 101")
-        writer.write(b"desktop-frame"); await writer.drain()
-        assert await asyncio.wait_for(reader.readexactly(13), 2) == b"desktop-frame"
+        from raphael_core.computer.rfb_input import frame
+        from .test_rfb_input import payload
+
+        async def exchange(message):
+            writer.write(frame(message)); await writer.drain()
+            response = await asyncio.wait_for(reader.read(1024), 2)
+            return payload(response)
+
+        handshake = b"RFB 003.008\n\x02" + bytes(16) + b"\x01"
+        assert await exchange(handshake) == handshake
+        pointer = b"\x05" + bytes(5)
+        assert await exchange(pointer) == pointer
         assert requests[0].startswith(b"GET /websockify HTTP/1.1")
         assert b"never-in-websocket-url" not in requests[0]
         await bridge.control({**opened, "held": False})
-        assert await asyncio.wait_for(reader.read(), 2) == b""
+        assert bridge.sessions[opened["session"]].sockets
+        # The same connection still carries framebuffer updates, but drops input.
+        display = b"\x03" + bytes(9)
+        writer.write(frame(pointer) + frame(display)); await writer.drain()
+        assert payload(await asyncio.wait_for(reader.read(1024), 2)) == display
+        await bridge.control({**opened, "held": True})
+        assert await exchange(pointer) == pointer
+        await bridge.control({**opened, "held": False})
         assert not bridge.vm.held
     finally:
         writer.close()

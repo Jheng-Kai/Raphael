@@ -3,10 +3,12 @@
 export default class RFB extends EventTarget {
   constructor(target) {
     super();
+    window.__desktopConnections = (window.__desktopConnections ?? 0) + 1;
     this.target = target;
     target.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;overflow:hidden;background:rgb(40,40,40)';
     this.canvas = document.createElement('canvas');
     this.canvas.width = 1024; this.canvas.height = 768;
+    this.canvas.addEventListener('mousemove', () => { if (!this.viewOnly) window.__desktopAcceptedInputs = (window.__desktopAcceptedInputs ?? 0) + 1; });
     target.append(this.canvas);
     this.observer = new ResizeObserver(() => this.draw());
     this.observer.observe(target);
@@ -15,6 +17,7 @@ export default class RFB extends EventTarget {
   set background(value) { this.target.style.background = value; }
   set scaleViewport(value) { this.scale = value; this.draw(); }
   set resizeSession(value) { this.resize = value; this.draw(); }
+  focus() { this.canvas.focus(); }
   draw() {
     const { width, height } = this.target.getBoundingClientRect();
     if (this.resize && width && height) { this.canvas.width = Math.round(width); this.canvas.height = Math.round(height); }
