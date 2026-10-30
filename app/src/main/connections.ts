@@ -22,7 +22,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyText, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, tabs, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyText, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, swapHTML, tabs, tg, toaster } from "./ui";
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;
@@ -498,25 +498,28 @@ function dialogHTML(g: ConnectionGroup, v: ConnectionsView): string {
 // ---------- 商店: the services that can be added ----------
 
 /** The button that adds a store entry, or what takes its place: the wait for the login, or that it is added. */
-function joinControl(s: StoreService, v: ConnectionsView): string {
+function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): string {
   const here = v.login?.target === s.id;
   if (s.server_id) return `<span class="cs-state">${st("ok", t("conn.installed"))}</span>`;
   // Managed sign-in has no cancellation RPC; keep the shared action disabled until it completes.
   if (here) return btn(esc(t("conn.cancel")), "sm", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`);
-  return btn(`${ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${s.can_connect === false ? ` title="${esc(t("plugins.unavailable"))}"` : ""}${v.login || s.can_connect === false ? " disabled" : ""}`);
+  return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${s.can_connect === false ? ` title="${esc(t("plugins.unavailable"))}"` : ""}${v.login || s.can_connect === false ? " disabled" : ""}`);
 }
 
-function cardHTML(s: StoreService, v: ConnectionsView): string {
+const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
+
+function cardHTML(s: StoreService, v: ConnectionsView, deferDetails = false): string {
   const here = v.login?.target === s.id;
   const line = here ? t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(s.summary);
+  const mark = deferDetails ? "" : storeMark(s);
   return (
-    `<div class="cs-card">` +
+    `<div class="cs-card"${deferDetails ? ` data-cs-pending="${esc(s.id)}"` : ""}>` +
     btn(
-      `<span class="ic">${entryIcon(s, "md")}</span><span class="tx"><span class="nm">${esc(s.name)}</span><span class="sub${here ? " wait" : ""}">${esc(line)}</span></span>`,
+      `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(s.name)}</span><span class="sub${here ? " wait" : ""}">${deferDetails ? "&nbsp;" : esc(line)}</span></span>`,
       "cs-main",
       ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}" title="${esc(`${s.name}: ${words(s.summary)}`)}"`,
     ) +
-    `${joinControl(s, v)}</div>`
+    `${joinControl(s, v, deferDetails)}</div>`
   );
 }
 
@@ -572,9 +575,18 @@ function keyDialogHTML(v: ConnectionsView): string {
     actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;
 }
 
-function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v)): string {
+function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), pending?: StoreService[]): string {
+  let drawn = 0;
+  const card = (s: StoreService): string => {
+    if (pending) {
+      pending.push(s);
+      // Six rows cover the results viewport; keep the remaining row tracks stable.
+      if (drawn++ >= 12) return `<div class="cs-card" data-cs-pending="${esc(s.id)}" aria-hidden="true"></div>`;
+    }
+    return cardHTML(s, v, !!pending);
+  };
   const section = (key: string, title: string, list: StoreService[]): string =>
-    list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(s => cardHTML(s, v)).join("")}</div></section>` : "";
+    list.length ? `<section class="cs-sec"><h2>${esc(title)}</h2><div class="cs-grid" data-stagger="store:${key}">${list.map(card).join("")}</div></section>` : "";
   const retry = (action: string): string => `<div class="alert core-note" role="alert">${st("err", t("conn.loadFailed"))}${btn(esc(t("plugins.retry")), "sm", ` data-conn="${action}"`)}</div>`;
   const loading = `<p class="settings-loading" role="status">${esc(t("conn.loading"))}</p>`;
   const browsing = !v.search.trim() && !v.category;
@@ -684,8 +696,8 @@ function deviceHTML(v: ConnectionsView): string {
 // ---------- the tab ----------
 
 /** What is under the bar: the list, or the store. */
-export function bodyHTML(v: ConnectionsView, entries?: StoreEntries): string {
-  return v.tab === "installed" ? installedHTML(v) : storeHTML(v, entries);
+export function bodyHTML(v: ConnectionsView, entries?: StoreEntries, pending?: StoreService[]): string {
+  return v.tab === "installed" ? installedHTML(v) : storeHTML(v, entries, pending);
 }
 
 /** The connected service whose dialog is open, if it is still there. */
@@ -750,6 +762,8 @@ export interface Connections {
   load(): Promise<void>;
   /** A click on one of this tab's buttons or switches; false for anything else. */
   click(target: Element): boolean;
+  /** Keep a focused category fully visible, including before it is selected. */
+  focus(target: Element): void;
   /** Something typed in one of this tab's fields; false for any other input. */
   input(input: HTMLInputElement): boolean;
   /** Enter in one of the form's fields, or Esc with a service's dialog open; false for any other key. */
@@ -797,6 +811,8 @@ export function createConnections(host: ConnectionsHost): Connections {
   let form: ConnectionForm | null = null;
   let loads = 0;
   let firstLoad = true;
+  let storePaint = 0;
+  let storePreview: { catalog: ConnectionsView["catalog"]; managed: ConnectionsView["composioCatalog"]; configured: boolean | null; locale: string; entries: StoreEntries; html: string; pending: StoreService[] } | null = null;
   /** The dialog is on its way out (140 ms): a second close waits for the first. */
   let closing = false;
   let stopOutside: (() => void) | null = null;
@@ -805,6 +821,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   const dialogOpen = (): boolean => keyOpen || open?.tab === "installed" || skill !== null;
 
   const redraw = (): void => {
+    storePaint++;
     // The page is drawn again whole: the document that is being edited keeps its caret, its selection and its scroll.
     const area = typeof document !== "undefined" ? document.querySelector<HTMLTextAreaElement>("#skill-text") : null;
     const kept = area && document.activeElement === area ? { start: area.selectionStart, end: area.selectionEnd, top: area.scrollTop } : null;
@@ -830,8 +847,17 @@ export function createConnections(host: ConnectionsHost): Connections {
     groups, catalog, composioCatalog, inventory, skills, skill, audit, tab, search, storePage, open, toolsOpen, auditOpen, confirmingDisconnect: confirming, busy, login, device, loginError, dialogNotice, form, now: Date.now(),
   });
 
+  /** Prepare the default first screen while the installed catalog is being read. */
+  function prepareStore(): void {
+    storePreview = null;
+    if (tab !== "installed" || category || search || storePage || login || !Array.isArray(catalog) || (configured && !Array.isArray(composioCatalog))) return;
+    const current = view(), entries = storeEntries(current), pending: StoreService[] = [];
+    storePreview = { catalog, managed: composioCatalog, configured, locale: getLocale(), entries, pending, html: storeHTML(current, entries, pending) };
+  }
+
   /** Draws only what is under the bar (the search box keeps its focus and its input method). */
   function repaintBody(): void {
+    storePaint++;
     const body = typeof document !== "undefined" ? document.querySelector<HTMLElement>("[data-cs-body]") : null;
     const current = view();
     const entries = storeEntries(current);
@@ -843,17 +869,25 @@ export function createConnections(host: ConnectionsHost): Connections {
       const groups = body.querySelector<HTMLElement>(".cs-store-groups");
       if (groups) {
         groups.scrollLeft = offset;
-        const focused = focusedGroup === undefined ? undefined : [...groups.querySelectorAll<HTMLButtonElement>("button")].find(button => button.dataset.id === focusedGroup);
-        if (focused) {
-          focused.focus({ preventScroll: true });
-          const frame = groups.getBoundingClientRect(), box = focused.getBoundingClientRect();
-          if (box.right > frame.right) groups.scrollLeft += box.right - frame.right;
-          else if (box.left < frame.left) groups.scrollLeft += box.left - frame.left;
+        const revealed = [...groups.querySelectorAll<HTMLButtonElement>("button")].find(button => button.dataset.id === (focusedGroup ?? current.category));
+        if (revealed) {
+          if (focusedGroup !== undefined) revealed.focus({ preventScroll: true });
+          focus(revealed);
         }
       }
     } else redraw();
     const count = typeof document !== "undefined" ? (host.root ?? document).querySelector('[data-k="conn-tab:store"] .n') : null;
     if (count) count.textContent = String(entries.count);
+  }
+
+  function focus(target: Element): void {
+    const chip = target.closest<HTMLElement>('[data-conn="store-group"]');
+    const groups = chip?.closest<HTMLElement>('.cs-store-groups');
+    if (!chip || !groups) return;
+    const frame = groups.getBoundingClientRect(), box = chip.getBoundingClientRect();
+    const fade = parseFloat(groups.ownerDocument.defaultView?.getComputedStyle(groups).paddingRight ?? "0") || 0;
+    if (box.right > frame.right - fade) groups.scrollLeft += box.right - frame.right + fade;
+    else if (box.left < frame.left) groups.scrollLeft += box.left - frame.left;
   }
 
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
@@ -886,6 +920,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       firstLoad = false;
       if (!groups.length) tab = "store";
     }
+    prepareStore();
     redraw();
     if (withSkills) void loadSkills();
     if (configured && status.status === "fulfilled" && !Array.isArray(composioCatalog)) await loadCatalog();
@@ -922,12 +957,13 @@ export function createConnections(host: ConnectionsHost): Connections {
       const unchanged = before && JSON.stringify(before) === JSON.stringify(next) && JSON.stringify(categories) === JSON.stringify(nextCategories);
       composioCatalog = next;
       categories = nextCategories;
-      if (unchanged) return;
+      if (unchanged) { prepareStore(); return; }
     } catch (error) {
       if (mine !== catalogLoads) return;
       if (error instanceof Error && error.message === "missing_key") { configured = false; composioCatalog = []; }
       else composioCatalog = before ?? "failed";
     }
+    prepareStore();
     redraw();
   }
 
@@ -1255,6 +1291,7 @@ export function createConnections(host: ConnectionsHost): Connections {
 
   /** Shows another view; what was typed in the form is dropped with it. */
   function show(next: Tab): void {
+    const paint = ++storePaint;
     clearTimeout(confirmTimer);
     confirming = null;
     open = null;
@@ -1262,8 +1299,53 @@ export function createConnections(host: ConnectionsHost): Connections {
     tab = next;
     dialogNotice = null;
     loginError = null;
-    redraw();
-    if (tab === "store" && configured) void loadCatalog();
+    const root = typeof document !== "undefined" ? host.root ?? document : null;
+    const shell = root?.querySelector<HTMLElement>(".cs:has(> [data-cs-body])");
+    if (shell && host.visible() && !root?.querySelector(".cs-scrim")) {
+      // Keep the clicked tab alive: replacing it and restoring focus forces synchronous layout.
+      const keepFocus = shell.contains(document.activeElement);
+      const current = view();
+      const cached = tab === "store" && !category && !storePage && !login && typeof requestAnimationFrame !== "undefined"
+        && storePreview?.catalog === catalog && storePreview.managed === composioCatalog && storePreview.configured === configured && storePreview.locale === getLocale() ? storePreview : null;
+      const entries = cached?.entries ?? storeEntries(current);
+      shell.classList.toggle("cs-store", tab === "store");
+      shell.querySelectorAll<HTMLElement>('[data-conn="tab"]').forEach(button => {
+        button.setAttribute("aria-selected", String(button.dataset.id === tab));
+      });
+      const input = shell.querySelector<HTMLInputElement>("#conn-search");
+      if (input) input.value = search;
+      const count = shell.querySelector('[data-k="conn-tab:store"] .n');
+      if (count) count.textContent = String(entries.count);
+      const body = shell.querySelector<HTMLElement>("[data-cs-body]")!;
+      const pending: StoreService[] = cached?.pending.slice() ?? [];
+      swapHTML(body, cached?.html ?? bodyHTML(current, entries, typeof requestAnimationFrame !== "undefined" ? pending : undefined));
+      const fill = (): void => {
+        if (paint !== storePaint || !host.visible() || !body.isConnected) return;
+        // Names and actions are ready; fill two rows per task after the first paint.
+        for (const entry of pending.splice(0, 2)) {
+          const placeholder = [...body.querySelectorAll<HTMLElement>("[data-cs-pending]")].find(node => node.dataset.csPending === entry.id);
+          if (placeholder) {
+            if (!placeholder.querySelector(".ic")) { placeholder.outerHTML = cardHTML(entry, current); continue; }
+            placeholder.querySelector<HTMLElement>(".ic")!.innerHTML = storeMark(entry);
+            placeholder.querySelector<HTMLElement>(".sub")!.textContent = current.login?.target === entry.id
+              ? t(entry.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(entry.summary);
+            const addIcon = placeholder.querySelector<HTMLElement>('[data-conn="join"] > span.i');
+            if (addIcon) addIcon.outerHTML = ico("plus");
+            placeholder.removeAttribute("data-cs-pending");
+          }
+        }
+        if (pending.length) requestAnimationFrame(() => setTimeout(fill, 0));
+      };
+      if (pending.length && typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => setTimeout(fill, 0));
+      if (keepFocus && !shell.contains(document.activeElement)) shell.querySelector<HTMLElement>(`[data-conn="tab"][data-id="${tab}"]`)?.focus({ preventScroll: true });
+    } else redraw();
+    if (tab === "installed") setTimeout(() => { if (paint === storePaint) prepareStore(); }, 0);
+    if (tab === "store" && configured) {
+      if (Array.isArray(composioCatalog) && typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => setTimeout(() => {
+        if (paint === storePaint && tab === "store" && host.visible()) void loadCatalog();
+      }, 0));
+      else void loadCatalog();
+    }
   }
 
   function click(target: Element): boolean {
@@ -1429,7 +1511,9 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "retry-skills": void loadSkills(); break;
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(false); break;
-      case "store-group": category = id; storePage = 0; repaintBody(); break;
+      case "store-group":
+        if (id === category && storePage === 0) { focus(button); break; }
+        category = id; storePage = 0; repaintBody(); break;
       case "store-page": storePage = Math.max(0, Number(id) || 0); repaintBody(); break;
       case "retry-store": void (configured ? loadCatalog() : load()); break;
       default:
@@ -1531,6 +1615,7 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   function reset(): void {
+    storePaint++;
     catalogLoads++;
     category = ""; storePage = 0; clearTimeout(searchTimer);
     keyError = ""; keyOpen = false; keySaves++; keyBusy = false;
@@ -1551,5 +1636,5 @@ export function createConnections(host: ConnectionsHost): Connections {
     loads++;
   }
 
-  return { view, load, click, input, key, menuFor, followEvent, reset };
+  return { view, load, click, focus, input, key, menuFor, followEvent, reset };
 }

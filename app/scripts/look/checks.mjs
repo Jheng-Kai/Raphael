@@ -777,7 +777,9 @@ export function checkRendered(name) {
     const row = document.querySelector('[data-row="quick-model"]');
     const picker = row?.querySelector('.mp-trigger');
     require(visible(picker) && !!picker.querySelector('.mp-tname')?.textContent && !!picker.querySelector('.mp-source')?.textContent, "quick model uses the shared named provider card");
-    require(row.querySelector('.models-purpose-note')?.textContent.includes("Alt+Space"), "quick questions describe the shortcut's purpose");
+    const purpose = { 'zh-TW': '快速提問', en: 'Quick questions', ja: 'クイック質問' }[document.documentElement.lang];
+    require(!!purpose && row.querySelector('.t')?.textContent.trim() === purpose, "quick questions' row label states their purpose in the window language");
+    require(!row.querySelector('.models-purpose-note'), "quick questions need no helper paragraph (R-UI-02)");
     require(!!row.querySelector('[data-price="quick-model"]')?.textContent, "quick questions show the effective model price");
     require(!row.querySelector('[data-k="quick-effort"]') && !row.querySelector('.sel:not(.mp-trigger)'), "quick questions' effort is chosen inside the model list, as the answer model's is, not beside it");
     return { check: name };
@@ -1757,6 +1759,13 @@ export function checkRendered(name) {
     if (name === "plugins-store-category") require(document.querySelector('[data-conn="store-group"][data-id="productivity"]').getAttribute('aria-pressed') === 'true', "the chosen broad group stays pressed");
     return { check: name, rows: rows.length, ids };
   }
+  if (name === "store-group-focus") {
+    const groups = document.querySelector('.cs-store-groups'), chip = document.activeElement;
+    require(groups?.contains(chip) && chip.matches('[data-conn="store-group"]'), "keyboard focus reaches a category chip");
+    const frame = groups.getBoundingClientRect(), box = chip.getBoundingClientRect();
+    require(box.left >= frame.left - 1 && box.right <= frame.right + 1 && chip.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)), "the focused category is fully visible and clickable");
+    return { check: name, category: chip.dataset.id, scrollLeft: groups.scrollLeft };
+  }
   if (name === "store-group-end") {
     const groups = document.querySelector('.cs-store-groups'), frame = groups.getBoundingClientRect();
     const last = groups.querySelector('[data-id="other"]'), box = last.getBoundingClientRect();
@@ -1788,6 +1797,11 @@ export function checkRendered(name) {
       require(action.matches('button.btn.sm[data-conn="join"], button.btn.sm[data-conn="cancel-login"], span.cs-state'), "every state stays in the shared inline action slot");
       const style = window.getComputedStyle(row);
       require(style.display === 'grid' && style.gridTemplateColumns.trim().split(/\s+/).length === 2 && style.borderRadius === '0px' && parseFloat(style.borderBottomWidth) === 1 && parseFloat(style.borderLeftWidth) === 0, "every source keeps the same compact row and divider");
+      const frame = row.getBoundingClientRect();
+      require([main, action, title, summary].every(node => {
+        const box = node.getBoundingClientRect();
+        return box.top >= frame.top - 1 && box.bottom <= frame.bottom + 1;
+      }), "store names, summaries and actions fit inside their row");
     }
     return { check: name, rows: rows.length, addClass: add[0].className };
   }

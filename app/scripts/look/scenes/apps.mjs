@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scene, click, wait, waitGone, type, check } from "./steps.mjs";
+import { scene, click, wait, waitGone, type, check, key } from "./steps.mjs";
 
 // The owner's apps and private skills (P15a): the sidebar's 連結應用程式 opens the settings at the one connections tab, where the apps
 // that can be called now, the ones that cannot and the members' private skills are one connected view. Every scene enters through the
@@ -42,8 +42,12 @@ const skills = [
 ];
 
 export default [
-  scene("connect-apps-categories", "連結應用程式 opens the store: search, categories as a dropdown and the recommended apps with their add button", [
-    ...open, click('[data-conn="tab"][data-id="store"]'), wait(".cs-card"), click('[data-k="conn-category"]'), wait('#app-popover [data-value="productivity"]'),
+  scene("connect-apps-categories", "The sidebar opens the store and every category can be focused, revealed and selected", [
+    ...open, click('[data-conn="tab"][data-id="store"]'), wait(".cs-card"),
+    { action: "focus", selector: '[data-conn="store-group"][data-id=""]' }, check("store-group-focus"),
+    ...Array.from({ length: 9 }, () => [key("Tab"), check("store-group-focus")]).flat(),
+    key("Enter"), check("store-group-end"),
+    click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ]),
   scene("connected-apps-skills", "The connected view: apps that can be called now, those that cannot with the reason, and the members' private skills; one count", [
     ...open, wait('[data-k="cs-open:composio:notion"]'), wait('[data-k="cs-skill:1:7"]'), wait('[data-stagger="installed-not"] .cs-item'), check("apps-count"),

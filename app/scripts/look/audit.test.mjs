@@ -6,6 +6,18 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("quick model purpose comes from its localized row label without a helper paragraph", () => {
+    const win = new Window();
+    win.document.documentElement.lang = "zh-TW";
+    win.document.body.innerHTML = '<div data-row="quick-model"><div class="t">快速提問</div><button class="mp-trigger"><span class="mp-tname">GPT</span><span class="mp-source">Codex</span></button><span data-price="quick-model">Subscription</span></div>';
+    win.document.querySelector('.mp-trigger').getBoundingClientRect = () => ({ width: 200, height: 60 });
+    vi.stubGlobal('document', win.document);
+    try {
+      expect(() => checkRendered('quick-model-row')).not.toThrow();
+      win.document.querySelector('.t').textContent = 'Model';
+      expect(() => checkRendered('quick-model-row')).toThrow('row label');
+    } finally { vi.unstubAllGlobals(); win.happyDOM.abort(); }
+  });
   it("allows the Docker brand in localized unavailable states and still rejects untranslated actions", () => {
     const win = new Window();
     win.document.body.innerHTML = '<p class="desktop-status">Docker 目前無法使用</p><button>Take control</button>';
@@ -446,5 +458,9 @@ it("rejects divergent store add classes, row markup and card styling", () => {
     expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
     second.style.display = 'grid'; second.style.gridTemplateColumns = '304px';
     expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
+    second.style.gridTemplateColumns = '240px 64px';
+    add.getBoundingClientRect = () => new browser.DOMRect(0, 0, 64, 80);
+    second.getBoundingClientRect = () => new browser.DOMRect(0, 0, 320, 64);
+    expect(() => checkRendered("plugins-store-rows")).toThrow("actions fit inside their row");
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
 });
