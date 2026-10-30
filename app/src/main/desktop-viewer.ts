@@ -63,6 +63,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     expand.title = t(panel.hasAttribute('data-expanded') ? "members.close" : "desktop.expand"); expand.setAttribute('aria-label', expand.title);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
     request.hidden = !pending(); request.textContent = pending() ? desktopWorkText(pending()!) : "";
+    panel.toggleAttribute("data-request", !!pending());
     const running = state?.state === "running", owner = state?.control === "owner";
     const preparing = state && ["starting", "building", "preparing"].includes(state.state);
     const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected ? "connecting" : owner ? "owner" : "member";

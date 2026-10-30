@@ -239,7 +239,7 @@ export function createHome(app: AppContext): Page {
     }
     const target = (event.target as Element).closest<HTMLElement>("[data-home-item], [data-home-go], [data-home-event]");
     if (!target) {
-      if ((event.target as Element).closest(".ho-calendar") && data) app.go("automations", (selected ?? dateKey(new Date(data.generated_at_ms))) as CalendarDate);
+      if ((event.target as Element).closest(".ho-calendar") && data) app.go("automations", (selected ?? undefined) as CalendarDate | undefined);
       return;
     }
     if (target.dataset.homeEvent) {
@@ -255,7 +255,7 @@ export function createHome(app: AppContext): Page {
       case "reload": void load(); break;
       case "usage": app.go("settings", "usage"); break;
       case "dictation": app.go("dictation"); break;
-      case "calendar": app.go("automations", (target.dataset.homeDate ?? selected ?? dateKey(month ?? new Date(data!.generated_at_ms))) as CalendarDate); break;
+      case "calendar": app.go("automations", (target.dataset.homeDate ?? selected ?? undefined) as CalendarDate | undefined); break;
       case "report":
         if (data && buildReport(data.report, data.generated_at_ms).action?.target === "retry") {
           void api.statusCheckOpenrouter().then(load, load);

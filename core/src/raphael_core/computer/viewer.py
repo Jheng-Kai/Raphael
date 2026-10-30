@@ -31,7 +31,8 @@ async function connect() {
     let config = await response.json();
     rfb = new RFB(screen, `ws://${location.host}${config.path}`, {credentials:{password:config.password}});
     rfb.viewOnly = !config.held;
-    rfb.resizeSession = !config.preview;
+    // The desktop keeps its own size; a small panel shows it scaled, never reflowed.
+    rfb.resizeSession = false;
     config = null;
     rfb.scaleViewport = true;
     rfb.clipViewport = false;

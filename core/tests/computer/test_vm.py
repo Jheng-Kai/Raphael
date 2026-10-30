@@ -492,6 +492,19 @@ async def test_computer_set_survives_plugin_shortlists_and_refine(desktop, tmp_p
     assert {d["function"]["name"] for d in snapshot.definitions} == snapshot.refs.keys()
 
 
+async def test_a_tool_call_on_a_running_desktop_does_not_report_preparation(desktop, monkeypatch):
+    vm, target, runtime = desktop
+    await vm.start(target)
+    seen = []
+    real = vm._start
+    async def watching(checked):
+        seen.append(vm.preparation.get(checked.key))
+        return await real(checked)
+    monkeypatch.setattr(vm, "_start", watching)
+    await vm.start(target)
+    assert seen == [None]
+
+
 @pytest.mark.parametrize("action_mode", ["direct", "ask"])
 async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tmp_path, action_mode):
     vm, target, runtime = desktop

@@ -1,9 +1,14 @@
-/* The computer is a section of the existing details drawer at every width. */
+/* The computer is a section of the existing details drawer at every width. The drawer widens
+   with it, and again when the member asks for help, before the owner has to click anything. */
+.page.page-agent:has(.desktop-panel:not([hidden])) { --pa-det: clamp(360px, 32vw, 560px); }
+.page.page-agent:has(.desktop-panel[data-request]:not([hidden])) { --pa-det: clamp(480px, 46vw, 760px); }
+.mb-det-scroll:has(> .desktop-panel:not([hidden])) { max-width: none; }
+.mb-det-scroll:has(> .desktop-panel:not([hidden])) > :not(.desktop-panel) { width: 100%; max-width: var(--layout-card-max); align-self: center; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin-bottom: var(--sp-5); }
 .desktop-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .desktop-heading h2 { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-md); }
 .desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.desktop-screen { position: relative; width: 100%; aspect-ratio: 4 / 3; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .desktop-screen iframe { display: block; width: 100%; height: 100%; border: 0; }
 .btn.desktop-hit { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
 .btn.desktop-hit:is(:hover, :active):not(:disabled) { background: transparent; box-shadow: inset 0 0 0 1px var(--hover-edge); }
