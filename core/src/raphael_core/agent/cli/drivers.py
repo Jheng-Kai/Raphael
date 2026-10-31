@@ -78,8 +78,7 @@ class Driver:
             if self.exhausted and failure.kind not in ("credits", "auth_expired", "refused"):
                 failure = classify({"kind": "usage_limit", "message": failure.reason})
             if failure.kind == "usage_limit" and self.reset_at_ms:
-                reset = datetime.fromtimestamp(self.reset_at_ms / 1000, timezone.utc).isoformat()
-                failure = classify({"kind": failure.kind, "message": f"{failure.reason}; reset: {reset}"})
+                failure = classify({"kind": failure.kind, "message": failure.reason, "resets_at": self.reset_at_ms / 1000})
             return Event(kind, failure.kind, failure.wire())
         elif kind == "final" and self.quota and not self.exhausted:
             self.quota(self.name, {"exhausted": False})

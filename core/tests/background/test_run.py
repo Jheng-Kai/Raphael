@@ -222,18 +222,11 @@ async def test_a_model_that_fails_ends_the_task_with_the_kind_of_failure(rig, er
     assert rig.steps()[0].reason == {"offline": "network", "tools": "error"}.get(detail, detail)
 
 
-async def test_a_model_that_takes_too_long_is_a_timeout(rig, monkeypatch):
-    import raphael_core.background.run as module
-
-    monkeypatch.setattr(module, "CHAT_TIMEOUT_S", 0.05)
+async def test_a_model_whose_connection_stays_silent_is_a_timeout(rig, monkeypatch):
     monkeypatch.setattr("raphael_core.failures.RETRY_WAITS", (0, 0, 0))
-
-    async def slow(**kwargs):
-        await asyncio.sleep(30)
-
-    rig.client.replies = [slow] * 4
+    rig.client.replies = [OpenRouterError(0, "timeout", "no answer")] * 4
     assert await stop_of(rig.chat()) == ("failed", "timeout")
-    assert rig.steps()[0].outcome == "timeout"
+    assert rig.steps()[0].outcome == "error"
     assert rig.steps()[0].reason == "timeout"
 
 

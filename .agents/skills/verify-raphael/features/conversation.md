@@ -530,9 +530,19 @@ substituted; fake brain remains enabled and no provider request is needed.
 
 ## Failure diagnosis and continuation (2026-10-29)
 
-API and subscription CLI brains share the failure taxonomy in `failures.py`.
-Interactive transient failures retry at 1/3/8 seconds only before any tool has acted;
-room/background CLI turns retain their 30/60/120/240-second waits. Failed
+API and subscription CLI brains share the failure taxonomy in `failures.py`, which also
+tells a context that does not fit (`context_overflow`, `is_context_overflow`), a request too
+big to send (`payload_too_large`) and a filtered prompt (`content_policy`) from a refusal,
+and a spent quota (`credits`, `usage_limit`: never asked again) from a throttle.
+A failed API model call is made again at 1/3/8 seconds before any tool has acted; after
+that, in an interactive turn or a background task, it is made again at 30/60/120/300
+seconds (20% jitter, a provider's `Retry-After` or "retry in N s" when longer, up to 10
+minutes) until the owner stops it or the task's time is up, with one progress line per
+outage that says when it tries again. A usage limit says when it resets when the provider
+does. API replies stream (OpenRouter and the OpenAI-protocol providers in
+`STREAMING_KINDS`; ChatGPT as before): connecting may take 30 s, the model may think in
+silence for 30 minutes, and once its answer flows a 10-minute gap is a dead connection.
+Room/background CLI turns retain their 30/60/120/240-second waits. Failed
 connection and secret cards return a redacted diagnostic to the original member
 and conversation, preserving completed-action receipts. No card is automatically
 reopened and an owner denial never triggers a corrective round. The API harness

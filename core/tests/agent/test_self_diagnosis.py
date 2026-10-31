@@ -371,10 +371,11 @@ async def test_transient_api_retry_is_three_times_and_after_work_it_goes_on_with
     rig = make_rig()
     client.chats = [OpenRouterError(503, "server", "Temporarily unavailable")] * 3 + [chat('{"text":"Recovered."}')]
     assert (await typed(rig))["text"] == "Recovered."
-    assert sleeps == [1, 3, 8]
+    # Each wait is its step and a little jitter on top, so that sessions that meet one throttle do not retry in step.
+    assert len(sleeps) == 3 and all(step <= wait <= step * 1.2 for step, wait in zip((1, 3, 8), sleeps))
     sleeps.clear()
     client.chat_calls.clear()
     client.chats = [chat("Checking.", ("local_time", {})), *[OpenRouterError(503, "server", "Temporarily unavailable")] * 5, chat('{"text":"Recovered."}')]
     assert (await typed(rig))["text"] == "Recovered."
-    assert sleeps == [1, 3, 8, 30, 60]
+    assert len(sleeps) == 5 and all(step <= wait <= step * 1.2 for step, wait in zip((1, 3, 8, 30, 60), sleeps))
     assert client.chat_calls[1]["messages"] == client.chat_calls[-1]["messages"]

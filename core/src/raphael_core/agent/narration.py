@@ -10,6 +10,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable, Sequence
 
+from ..brain.model_ref import short_name
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
@@ -19,14 +20,8 @@ from .answers import Reply, loose_reply, parse_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
-from ..failures import RepeatFailures, RETRY_WAITS, classify, tool_failure
-
-# How long a model may say nothing before its connection counts as dead. No limit on how long it may think or a turn
-# may work: a stream that keeps sending never reaches this, and a call that does is made again.
-MODEL_SILENCE_S = 1800.0
-# Once a turn has done something it rides out a failed call for as long as that lasts, at this pace, until the owner
-# stops it. Asking again repeats nothing: the tools run only after a reply. Before that the owner is told in seconds.
-PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
+from ..failures import PATIENT_WAITS, RepeatFailures, RETRY_WAITS, classify, tool_failure
+from ..retry_utils import MODEL_SILENCE_S, Outage
 
 PUBLIC_PROGRESS_RULES = """
 This is a live conversation: your owner sees your messages while you work.
@@ -95,15 +90,6 @@ def _reply_text(value: object) -> str:
     return _content(value)[1] if isinstance(value, str) else ""
 
 
-def _retrying(model: str, language: str) -> str:
-    name = model.split("?", 1)[0].rsplit(":", 1)[-1].rsplit("/", 1)[-1]
-    if language.startswith("ja"):
-        return f"{name} から応答がありません。作業はそのままで、再試行を続けます。"
-    if language == "zh-TW":
-        return f"{name} 暫時沒有回應。工作沒有中斷，我會持續重試。"
-    return f"{name} is not answering. The work is intact, and I keep trying."
-
-
 def _public_text(value: object, limit: int, *, sentences: int | None = None) -> str:
     """Bound public narration, preserving a complete sentence whenever one fits."""
     text = " ".join(_reply_text(value).split())
@@ -146,8 +132,9 @@ class NarratedLoop:
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
         began = time.perf_counter()
         try:
-            waits, patience = iter(RETRY_WAITS), iter(PATIENT_WAITS)
-            told = False
+            # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
+            # it: asking again repeats nothing, since the tools run only after a reply. Before that he learns in seconds.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted)
             while True:
                 try:
                     answer = await self.client.chat_tools(
@@ -161,14 +148,11 @@ class NarratedLoop:
                     raise
                 except Exception as error:
                     self.last_failure = classify(error)
-                    wait = next(waits, None)
-                    if not self.last_failure.transient or (wait is None and not self.acted):
-                        raise
+                    wait = outage.wait(self.last_failure.retry_after) if self.last_failure.transient else None
                     if wait is None:
-                        wait = next(patience, PATIENT_WAITS[-1])
-                        if not told:
-                            told = True
-                            self.progress(_retrying(self.model, self.language))
+                        raise
+                    if outage.announce(wait):
+                        self.progress(self.last_failure.waiting(short_name(self.model), self.language, wait))
                     await asyncio.sleep(wait)
         except Stop:
             raise

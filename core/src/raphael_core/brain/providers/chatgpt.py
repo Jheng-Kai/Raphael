@@ -6,8 +6,17 @@ import time
 import httpx
 
 from ..model_ref import EFFORTS
-from ..openrouter import ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan
+from ..openrouter import (
+    ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan, request_timeout, retry_after_of,
+)
+from ..streams import Packets
 from .chatgpt_auth import RESOURCE, failure
+
+
+def _answering(packet):
+    """The answer has begun: words or a call are arriving. The model's reasoning and the bookkeeping events are not."""
+    kind = packet.get("type")
+    return isinstance(kind, str) and kind.endswith(".delta") and "reasoning" not in kind
 
 
 def _input(messages):
@@ -89,23 +98,16 @@ class ChatGPTProvider:
         completed, streamed = None, []
         try:
             async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
-                    headers={"Authorization": "Bearer " + token}, timeout=httpx.Timeout(timeout_s, connect=30.0), follow_redirects=False) as response:
+                    headers={"Authorization": "Bearer " + token}, timeout=request_timeout(timeout_s), follow_redirects=False) as response:
                 if not response.is_success:
                     await response.aread()
                     try:
                         error_body = response.json()
                     except ValueError:
                         error_body = {}
-                    raise failure(response.status_code, error_body, response.headers.get("x-request-id"))
-                data_lines = []
-
-                def event(data):
-                    nonlocal completed
-                    if not data or data == "[DONE]":
-                        return
-                    packet = json.loads(data)
-                    if not isinstance(packet, dict):
-                        raise ValueError
+                    raise failure(response.status_code, error_body, response.headers.get("x-request-id"),
+                                  retry_after_of(response, error_body))
+                async for packet in Packets(response, timeout_s, _answering):
                     kind = packet.get("type")
                     if kind in ("response.failed", "response.incomplete", "error"):
                         raise failure(200, packet.get("response", packet), response.headers.get("x-request-id"))
@@ -115,14 +117,6 @@ class ChatGPTProvider:
                         completed = packet["response"]
                         if not isinstance(completed, dict):
                             raise ValueError
-
-                async for line in response.aiter_lines():
-                    if not line:
-                        event("\n".join(data_lines))
-                        data_lines = []
-                    elif line.startswith("data:"):
-                        data_lines.append(line[5:].lstrip())
-                event("\n".join(data_lines))
         except httpx.TimeoutException:
             raise OpenRouterError(0, "timeout", "ChatGPT response timed out") from None
         except httpx.TransportError:

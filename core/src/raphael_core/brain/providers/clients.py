@@ -12,8 +12,16 @@ from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
-from ..openrouter import OpenRouterClient, OpenRouterError, Transcription, _Reply
+from ..openrouter import OpenRouterClient, OpenRouterError, Transcription, _Reply, exchange, retry_after_of
+from ..streams import MalformedStream
 from .presets import OPTIONAL_KEY_KINDS
+
+# The kinds whose chat completions stream the OpenAI way and take `stream_options`, so that a streamed reply still says
+# what it used. The others are asked for the whole reply: a field a server does not know is refused by some (Mistral's
+# is a 422), and none of them has been tried streaming.
+STREAMING_KINDS = frozenset((
+    "openai", "azure_openai", "groq", "deepseek", "xai", "ollama", "lmstudio", "vllm", "sglang", "llamacpp",
+    "openai_compatible", "litellm", "bifrost"))
 
 
 def validate_base_url(value: str) -> str:
@@ -155,53 +163,53 @@ class CompatibleProvider(OpenRouterClient):
             headers = {"x-goog-api-key": key}
         return headers
 
-    async def _send(self, method, path, timeout_s, *, body=None, data=None, files=None, params=None):
+    async def _send(self, method, path, timeout_s, *, body=None, data=None, files=None, params=None, stream=False):
         headers = self._headers()
         started = time.perf_counter()
         try:
-            response = await self._client().request(method, self.base_url + path,
+            response, decoded = await exchange(self._client(), method, self.base_url + path, timeout_s, stream,
                 headers=headers, json=body, data=data, files=files,
                 params={**(params or {}), **({"api-version": self.api_version} if self.api_version else {})},
-                timeout=timeout_s, follow_redirects=False)
+                follow_redirects=False)
         except httpx.TimeoutException:
             raise OpenRouterError(0, "timeout", "Provider request timed out") from None
         except httpx.TransportError:
             raise OpenRouterError(0, "offline", "Provider is offline") from None
-        except (httpx.DecodingError, httpx.InvalidURL):
+        except (httpx.DecodingError, httpx.InvalidURL, MalformedStream):
             raise OpenRouterError(0, "error", "Invalid provider response or URL") from None
         except (ValueError, TypeError):
             raise OpenRouterError(0, "error", "Invalid provider request") from None
         status = response.status_code
         if not response.is_success:
-            try:
-                refused = _refused_error(response.json())
-            except ValueError:
-                refused = False
-            if refused:
+            if _refused_error(decoded):
                 raise OpenRouterError(status, "refusal", "Provider declined the request")
             from ...failures import classify
-            try:
-                body_error = response.json()
-            except ValueError:
-                body_error = {"message": f"Provider request failed ({status})"}
-            failure = classify({"status": status, "error": body_error.get("error", body_error) if isinstance(body_error, dict) else
+            wait = retry_after_of(response, decoded)
+            body_error = decoded if decoded is not None else {"message": f"Provider request failed ({status})"}
+            failure = classify({"status": status, "retry_after": wait, "error": body_error.get("error", body_error) if isinstance(body_error, dict) else
                                 f"Provider request failed ({status})"},
                                secrets=[value.removeprefix("Bearer ") for value in headers.values()])
             kind = {"auth_expired": "auth", "permission_denied": "permission_denied"}.get(failure.kind, failure.kind)
             error = OpenRouterError(status, kind, failure.reason)
             error.diagnostic = failure
+            error.retry_after = wait
             raise error
         try:
-            decoded = response.json()
             if _refused_error(decoded):
                 raise OpenRouterError(status, "refusal", "Provider declined the request")
+            if stream and isinstance(decoded, dict) and decoded.get("error"):
+                # It failed while it was answering: a try later may not.
+                from ...failures import classify
+                error = OpenRouterError(status, "server", "Provider failed while answering")
+                error.diagnostic = classify({"kind": "server", "message": error.message})
+                raise error
             if not isinstance(decoded, dict) or decoded.get("error"):
                 raise ValueError
         except ValueError:
             raise OpenRouterError(status, "error", "Invalid provider response") from None
         return _Reply(status, decoded, round((time.perf_counter() - started) * 1000))
 
-    async def _request(self, method, path, key, timeout_s, body=None, **kwargs):
+    async def _request(self, method, path, key, timeout_s, body=None, *, stream=False, **kwargs):
         if body is not None:
             effort = body.get("reasoning", {}).get("effort", "none")
             body = {k: v for k, v in body.items() if k not in ("provider", "models", "reasoning")}
@@ -230,7 +238,11 @@ class CompatibleProvider(OpenRouterClient):
             if self.kind == "azure_openai" and urlsplit(self.base_url).path in ("", "/openai"):
                 prefix = "/openai" if not urlsplit(self.base_url).path else ""
                 path = f"{prefix}/deployments/{quote(model, safe='')}{path}"
-        reply = await self._send(method, path, timeout_s, body=body)
+            stream = stream and self.kind in STREAMING_KINDS
+            if stream:
+                # The usage of a streamed reply comes only to a client that asks for it.
+                body = {**body, "stream": True, "stream_options": {"include_usage": True}}
+        reply = await self._send(method, path, timeout_s, body=body, stream=stream)
         for choice in reply.body.get("choices", []):
             if isinstance(choice, dict) and (choice.get("finish_reason") == "content_filter" or
                     isinstance(choice.get("message"), dict) and choice["message"].get("refusal")):
