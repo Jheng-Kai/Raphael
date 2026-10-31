@@ -45,7 +45,7 @@ VM_CONTRACT = (
     "or expired, stop. Sandbox success is not approval."
 )
 
-EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host.",
+EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
         "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 300}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace into Raphael's attachment store and return its attachment ID. Paths outside this workspace are refused.",
@@ -142,6 +142,9 @@ class VmTools:
 
     def offered(self):
         return self.offered_for(0)
+
+    def has_own_computer(self, member_id):
+        return self.vm.grants.allowed(member_id)
 
     def is_computer_tool(self, key):
         return key in self.tools or key in self.requests

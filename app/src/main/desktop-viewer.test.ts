@@ -11,6 +11,7 @@ const flush = async (): Promise<void> => { for (let i=0; i<30; i++) await Promis
 const panel = (): HTMLElement => host.querySelector('.desktop-panel')!;
 const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
 const take = (): HTMLButtonElement => host.querySelector('[data-desktop="take"]')!;
+const peek = (): HTMLButtonElement => host.querySelector('[data-desktop="peek"]')!;
 const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
 function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
@@ -99,4 +100,14 @@ test.each(['starting','building','preparing'] as const)('%s shows preparation wi
 });
 test('absent Docker has no computer section',async()=>{
   api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(true);expect(api.desktopOpen).not.toHaveBeenCalled();
+});
+
+test('a press on the picture only enlarges it, and only the named button takes the computer',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  expect(peek().hidden).toBe(false);expect(take().hidden).toBe(false);
+  peek().click();await flush();
+  expect(panel().hasAttribute('data-expanded')).toBe(true);expect(peek().hidden).toBe(true);
+  expect(api.desktopControl).not.toHaveBeenCalled();
+  api.desktopControl.mockResolvedValue({...running,control:'owner'});take().click();await flush();
+  expect(api.desktopControl).toHaveBeenCalledTimes(1);expect(take().hidden).toBe(true);
 });

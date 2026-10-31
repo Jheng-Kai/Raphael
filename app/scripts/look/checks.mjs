@@ -246,7 +246,7 @@ export function checkRendered(name, context = {}) {
     if(name==='desktop-absent'){require(!visible(panel),'absent Docker has no computer section');return {check:name};}
     require(visible(panel)&&panel.closest('.mb-det')&&![...document.querySelectorAll('.desktop-viewer, [role="dialog"]')].some(visible),'computer uses the existing side panel without a dialog');
     require(!document.querySelector('.thread iframe, .desktop-card, [data-desktop-card-open]'),'timeline has no screen card or control buttons');
-    const screenHit=panel.querySelector('[data-desktop="take"]');
+    const screenHit=panel.querySelector('[data-desktop="peek"]');
     if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
     const events=document.querySelectorAll('[data-desktop-work]');
     if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-event-line')&&events[0].closest('.tn')?.dataset.id==='2','one centered metadata-only event belongs to the private turn');
@@ -258,8 +258,8 @@ export function checkRendered(name, context = {}) {
         require(calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'takeover keeps the same member session');
       require(frame.contentDocument.defaultView.__desktopConnections===1,'takeover keeps the same noVNC connection');
       const latency=Number(panel.dataset.controlLatencyMs);require(Number.isFinite(latency)&&latency<300,`local click-to-interactive ${latency}ms < 300ms`);
-      const accepted=Number(panel.dataset.acceptedInputLatencyMs);require(Number.isFinite(accepted)&&accepted<300,`local click-to-accepted-input ${accepted}ms < 300ms`);
-      return {check:name,clickToInteractiveMs:latency,clickToAcceptedInputMs:accepted,connections:1};
+      require(!panel.dataset.acceptedInputLatencyMs,'the press on the button is not replayed into the computer');
+      return {check:name,clickToInteractiveMs:latency,connections:1};
     }
     if(name==='desktop-handback')require(panel.dataset.interactive==='false'&&frame.contentDocument.defaultView.__desktopConnections===1,'handback keeps the stream view-only');
       if(name==='desktop-viewer'){

@@ -279,6 +279,10 @@ def take_snapshot(
         for name, item in definitions_for(speaker):
             if name in ("self_check", "raphael_help"):
                 continue
+            # This tool drives the owner's own desktop. A member has its own computer, and two tools
+            # called the computer leave the choice of machine to the model.
+            if name == "computer" and (speaker.id != 0 or getattr(plugins, "has_own_computer", lambda member: False)(speaker.id)):
+                continue
             native = harness_tool(name)
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, native.tier)
             definitions.append({"type": "function", "function": {"name": name, **item}})

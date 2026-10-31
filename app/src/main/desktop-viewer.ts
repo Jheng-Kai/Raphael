@@ -38,12 +38,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   panel.innerHTML = `<div class="desktop-heading"><h2></h2>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}</div>` +
     `<p class="desktop-request" role="status" hidden></p><div class="desktop-screen"><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-hit" data-desktop="take" hidden></button><span class="desktop-owner" role="status" hidden></span></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
+    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div>` +
+    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
   frame.remove();
   (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
-  const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
+  const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="peek"]')!;
+  const take = panel.querySelector<HTMLButtonElement>('[data-desktop="take"]')!;
   const action = panel.querySelector<HTMLButtonElement>('[data-desktop="return"]')!;
   const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
   const revoke = panel.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;
@@ -72,7 +73,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const absent = !state || state.state === "absent";
     options.available?.(visible && !absent);
     if (absent && viewing === "computer") setView("details");
-    frame.title = t("desktop.open"); hit.setAttribute('aria-label', t("desktop.take"));
+    frame.title = t("desktop.open"); hit.setAttribute('aria-label', t("desktop.expand"));
     const expand = panel.querySelector<HTMLButtonElement>('[data-desktop="expand"]')!;
     expand.title = t(panel.hasAttribute('data-expanded') ? "members.close" : "desktop.expand"); expand.setAttribute('aria-label', expand.title);
     const request = panel.querySelector<HTMLElement>('.desktop-request')!;
@@ -83,7 +84,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected ? "connecting" : owner ? "owner" : "member";
     panel.dataset.desktopState = label;
     panel.dataset.interactive = String(interactive);
-    hit.hidden = !running || !connected || owner; hit.disabled = changing;
+    // Watching must never take the computer from the member: only the named button does.
+    hit.hidden = !running || !connected || owner || panel.hasAttribute('data-expanded');
+    take.textContent = t("desktop.take"); take.hidden = !running || !connected || owner; take.disabled = changing;
     frame.hidden = !running || !connected;
     frame.style.pointerEvents = interactive ? "auto" : "none";
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
@@ -188,13 +191,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const expand = (on: boolean): void => {
     panel.toggleAttribute('data-expanded', on);
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
+    draw();
   };
-  hit.addEventListener('click', event => {
-    const box = hit.getBoundingClientRect();
-    // A small picture is no place to work: the same stream fills the window, under the owner's hands.
-    expand(true);
-    void control(true, { x:box.width ? Math.max(0, Math.min(1, (event.clientX-box.left)/box.width)) : 0.5, y:box.height ? Math.max(0, Math.min(1, (event.clientY-box.top)/box.height)) : 0.5 });
-  });
+  hit.addEventListener('click', () => expand(true));
+  // A small picture is no place to work: the same stream fills the window, under the owner's hands.
+  take.addEventListener('click', () => { expand(true); void control(true); });
   action.addEventListener('click', () => { expand(false); void control(false); });
   retry.addEventListener('click', () => { closeStream(); void openStream(); });
   revoke.addEventListener('click', () => {
