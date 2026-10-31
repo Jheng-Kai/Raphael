@@ -42,6 +42,11 @@ def _input(messages):
     return items, "\n\n".join(instructions)
 
 
+def _cut_by_output_limit(response):
+    details = response.get("incomplete_details") if isinstance(response, dict) else None
+    return isinstance(details, dict) and details.get("reason") == "max_output_tokens"
+
+
 class ChatGPTProvider:
     def __init__(self, auth):
         self.auth = auth
@@ -86,7 +91,7 @@ class ChatGPTProvider:
                      "description": tool["function"].get("description", ""),
                      "parameters": tool["function"]["parameters"], "strict": False} for tool in tools]}]
         started = time.perf_counter()
-        completed, streamed = None, []
+        completed, streamed, cut = None, [], False
         try:
             async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
                     headers={"Authorization": "Bearer " + token}, timeout=httpx.Timeout(timeout_s, connect=30.0), follow_redirects=False) as response:
@@ -100,14 +105,16 @@ class ChatGPTProvider:
                 data_lines = []
 
                 def event(data):
-                    nonlocal completed
+                    nonlocal completed, cut
                     if not data or data == "[DONE]":
                         return
                     packet = json.loads(data)
                     if not isinstance(packet, dict):
                         raise ValueError
                     kind = packet.get("type")
-                    if kind in ("response.failed", "response.incomplete", "error"):
+                    if kind == "response.incomplete" and _cut_by_output_limit(packet.get("response")):
+                        completed, cut = packet["response"], True  # what it wrote is still a reply, cut short
+                    elif kind in ("response.failed", "response.incomplete", "error"):
                         raise failure(200, packet.get("response", packet), response.headers.get("x-request-id"))
                     if kind == "response.output_item.done":
                         streamed.append(packet["item"])
@@ -129,7 +136,7 @@ class ChatGPTProvider:
             raise OpenRouterError(0, "network", "ChatGPT response was interrupted") from None
         except (ValueError, TypeError, KeyError):
             raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT response stream") from None
-        if completed is None or completed.get("status") != "completed" or not isinstance(completed.get("output"), list):
+        if completed is None or completed.get("status") != ("incomplete" if cut else "completed") or not isinstance(completed.get("output"), list):
             raise OpenRouterError(200, "tool_broken", "ChatGPT stream ended without completed inference")
         self.auth.check_session(session)
         # The plan endpoint streams its items and closes with an empty `output`.
@@ -168,7 +175,8 @@ class ChatGPTProvider:
         # Subscription usage is not a dollar price or an invented remaining-quota meter.
         return ChatTurn("".join(text), calls, completed.get("model", model), 0.0,
             int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)),
-            int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output)
+            int((time.perf_counter() - started) * 1000), usage_known=True, responses_output=output,
+            finish_reason="length" if cut else "")
 
     async def chat_text(self, *, model, system, user, timeout_s, max_tokens, fallbacks=(), plugins=(), reasoning_effort="none"):
         if plugins:

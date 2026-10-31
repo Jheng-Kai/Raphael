@@ -329,7 +329,7 @@ async def test_api_corrective_round_is_bounded_and_never_follows_an_owner_denial
         assert outcome.status == "done" and len(calls) == expected
 
 
-async def test_repeated_kind_blocks_the_tool_even_with_different_arguments():
+async def test_repeated_failures_of_a_tool_tell_the_model_to_diagnose_and_never_block_the_tool():
     from raphael_core.worker.loop import Call, Turn, ToolOutcome, run_task
     tools = [{"type": "function", "function": {"name": "read", "parameters": {"type": "object"}}}]
     attempts, messages_seen = [], []
@@ -343,22 +343,24 @@ async def test_repeated_kind_blocks_the_tool_even_with_different_arguments():
         attempts.append(arguments)
         return ToolOutcome(False, "network")
     await run_task(SimpleNamespace(chat=model, tool=tool), system="", user="", tools=tools)
-    assert len(attempts) == 2
-    assert "different approach" in messages_seen[-1][-1]["content"]
+    assert len(attempts) == 3
+    assert "diagnose" in messages_seen[-1][-1]["content"]
 
 
-def test_confirmed_failures_count_across_api_pauses():
+def test_a_failure_answered_after_a_pause_counts_with_the_ones_before_it():
     from raphael_core.agent.narration import NarratedLoop
-    from raphael_core.failures import RepeatFailures
     from raphael_core.worker.loop import ToolOutcome
+    from raphael_core.worker.tool_guardrails import ToolGuardrails
     loop = object.__new__(NarratedLoop)
-    loop.failure_guard = RepeatFailures()
-    for number in range(2):
+    loop.guardrails = ToolGuardrails()
+    noted = []
+    for number in range(3):
         loop.waiting_call = str(number)
         loop.messages = [{"role": "assistant", "tool_calls": [{"id": str(number),
                          "function": {"name": "read", "arguments": json.dumps({"query": number})}}]}]
         loop.continue_with(ToolOutcome(False, "network", "Connection reset"))
-        assert loop.failure_guard.blocked("read") is (number == 1)
+        noted.append("diagnose" in loop.messages[-1]["content"])
+    assert noted == [False, False, True]
 
 
 async def test_transient_api_retry_is_three_times_and_after_work_it_goes_on_without_running_a_tool_again(make_rig, client, monkeypatch):

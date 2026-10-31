@@ -10,7 +10,8 @@ from contextlib import aclosing
 
 from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
 from ...members.activity import StreamSteps, current, tool_step
-from ...worker.guards import RepeatGuard, wrap_untrusted
+from ...worker.guards import wrap_untrusted
+from ...worker.tool_guardrails import ToolGuardrails
 from ..answers import MEMORY_ITEM, MESSAGE_BREAK, parse_reply
 from ..conversations import Conversations
 from ..mcp_server import RaphaelMcp
@@ -21,7 +22,7 @@ from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
-from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, RepeatFailures, REPEAT_NOTE, classify, tool_failure
+from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, classify, tool_failure
 
 logger = logging.getLogger(__name__)
 
@@ -133,8 +134,7 @@ class CliLoop:
         self._calls = 0
         self._acted = False
         self._usage = {}
-        self._repeats = RepeatGuard()
-        self._failures = RepeatFailures()
+        self._guardrails = ToolGuardrails()
         self.failure_reason = None
         self.catalog_changed = False
         self.on_done = None
@@ -164,10 +164,6 @@ class CliLoop:
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
             self._calls += 1
-            if not self._repeats.allows(name, args):
-                return ToolOutcome(False, "repeated")
-            if self._failures.blocked(name):
-                return ToolOutcome(False, "repeated", REPEAT_NOTE)
             self._progress()
             if name == "approve":
                 decision = await self._permission(args)
@@ -180,16 +176,13 @@ class CliLoop:
                                                         "behavior": "allow", "destination": "session"}]
                 return ToolOutcome(True, content=json.dumps(answer))
             result = await self._execute(identifier, name, args)
-            if result.ok:
-                self._failures.succeeded()
-            else:
-                failure = tool_failure(result.kind, result.content)
-                result.content = json.dumps(failure.wire(), ensure_ascii=False)
-                if self._failures.record(name, failure.kind):
-                    result.instruction = (result.instruction or result.content or failure.reason) + "\n" + REPEAT_NOTE
+            if not result.ok:
+                result.content = json.dumps(tool_failure(result.kind, result.content).wire(), ensure_ascii=False)
+            note = self._guardrails.after_call(name, args, result).note
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
-            return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok), blocks=result.blocks)
+            shown = wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok)
+            return ToolOutcome(result.ok, result.kind, shown + ("\n\n" + note if note else ""), blocks=result.blocks)
 
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]

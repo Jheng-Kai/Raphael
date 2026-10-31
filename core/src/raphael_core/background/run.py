@@ -73,7 +73,7 @@ from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
-from ..worker.loop import WAITING, ToolOutcome, result_text
+from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
 from .tasks import TaskStore
@@ -84,7 +84,7 @@ T = TypeVar("T")
 
 # One model reply may take this long, and may be this long.
 CHAT_TIMEOUT_S = 60.0
-CHAT_MAX_TOKENS = 2000
+CHAT_MAX_TOKENS = REPLY_TOKENS
 # The conversation the worker sends is bounded: a worker that sent more is not doing a task.
 MAX_MESSAGES = 200
 MAX_CHAT_CHARS = 600_000
@@ -392,6 +392,9 @@ class TaskRun:
             raise invalid_params("messages must be a list of messages")
         if not messages:
             raise invalid_params("messages is empty")
+        room = params.get("room", 1)
+        if type(room) is not int or not 1 <= room <= MORE_ROOM:
+            raise invalid_params("room must be a small whole number")
         # Desktop images have a separate byte budget; they must not consume the
         # text cap or be estimated as millions of text tokens.
         request_chars = 0
@@ -411,9 +414,9 @@ class TaskRun:
             # A conversation grown past what is sent is a task that has used what it was given.
             if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS or image_chars > 14_000_000:
                 raise stopped("limit_model")
-            return await self._chat(messages, request_chars)
+            return await self._chat(messages, request_chars, room)
 
-    async def _chat(self, messages: list[dict], request_chars: int) -> dict:
+    async def _chat(self, messages: list[dict], request_chars: int, room: int = 1) -> dict:
         self._check(model=True, paid=True)
         self.model_calls += 1
         began = time.perf_counter()
@@ -435,7 +438,7 @@ class TaskRun:
                         # The snapshot's tools, whatever the worker sent.
                         tools=self.snapshot.definitions,
                         timeout_s=timeout,
-                        max_tokens=CHAT_MAX_TOKENS,
+                        max_tokens=CHAT_MAX_TOKENS * room,
                         reasoning_effort="none",
                     ), timeout))
                     break
@@ -492,6 +495,8 @@ class TaskRun:
         return {
             "content": turn.content,
             **({"responses_output": turn.responses_output} if getattr(turn, "responses_output", None) else {}),
+            # Only a reply the output limit cut off is reported as such.
+            **({"finish_reason": "length"} if getattr(turn, "finish_reason", "") == "length" else {}),
             "calls": [
                 {"id": c.id, "name": c.name, "arguments": c.arguments, "raw": c.raw_arguments}
                 for c in turn.calls

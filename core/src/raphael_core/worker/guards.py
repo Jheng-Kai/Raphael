@@ -1,5 +1,4 @@
-"""What stands between a tool's result and the model: marking it as data, cutting it down, and
-refusing a call that only repeats one.
+"""What stands between a tool's result and the model: marking it as data and cutting it down.
 
 A tool's result is text that nobody vetted: a web page, a note, a mail. Whatever it says, it is data
 for the task and never an instruction, and the model is told so twice: in the system prompt, and by
@@ -29,10 +28,11 @@ CUT_MARK = "\n[... {skipped} characters left out ...]\n"
 KEEP_ROUNDS = 3
 OMITTED = "[result left out: it is from an earlier step]"
 # The most the arguments of one call may come to, as JSON, in characters. (The core refuses more
-# too: `raphael_core.agent.plugins.MAX_ARGUMENT_CHARS`, which a test keeps the same.)
+# too: `raphael_core.agent.plugins.MAX_ARGUMENT_CHARS`, which a test keeps the same.) Not higher:
+# `vm_exec` takes a command of 16,000 characters at most (`computer.vm.LocalVm.execute`), which is also about
+# half of the 32,767 a Windows command line holds for the `docker exec` that carries it, the other half
+# being room for quoting. A larger file is written in parts.
 MAX_ARGUMENT_CHARS = 16000
-# The same call, with the same arguments, is refused the third time in a row.
-REPEAT_LIMIT = 3
 
 # The tags the prompts are built from. A text that holds one is changed so that it does not close,
 # or open, what it is inside of.
@@ -94,55 +94,3 @@ def elide_old(messages: MutableSequence[dict[str, Any]], keep: int = KEEP_ROUNDS
 def canonical(arguments: Mapping[str, Any]) -> str:
     """The arguments of a call as one text, the same for the same arguments."""
     return json.dumps(arguments, sort_keys=True, ensure_ascii=False, default=str)
-
-
-# Calls that fail one after another: after STEER_AT the model is told to change its approach, and
-# after STOP_AT the task stops instead of spending its limits on the same wall.
-STEER_AT = 5
-STOP_AT = 8
-STEER_NOTE = (
-    "<harness_note>Several tool calls in a row have failed. Do not retry the same approach: use a "
-    "different tool or source, or stop and report plainly what could not be done.</harness_note>"
-)
-
-
-class FailureGuard:
-    """Counts the calls that failed one after another (any tool); a call that works starts the count
-    again. `failed()` says what to do after a failure: "steer" once when the count reaches
-    `steer_at`, "stop" when it reaches `stop_at`, otherwise None."""
-
-    def __init__(self, steer_at: int = STEER_AT, stop_at: int = STOP_AT) -> None:
-        self._steer_at, self._stop_at = steer_at, stop_at
-        self._row = 0
-        self._steered = False
-
-    def succeeded(self) -> None:
-        self._row = 0
-        self._steered = False
-
-    def failed(self) -> str | None:
-        self._row += 1
-        if self._row >= self._stop_at:
-            return "stop"
-        if self._row >= self._steer_at and not self._steered:
-            self._steered = True
-            return "steer"
-        return None
-
-
-class RepeatGuard:
-    """Refuses a call that is the same as the two right before it: nothing happened in between, so
-    it cannot tell the model anything it does not know. The same call after other work is new: the
-    tests again after an edit."""
-
-    def __init__(self, limit: int = REPEAT_LIMIT) -> None:
-        self._limit = limit
-        self._last: tuple[str, str] | None = None
-        self._row = 0
-
-    def allows(self, name: str, arguments: Mapping[str, Any]) -> bool:
-        """Count the call, and say whether it may be made."""
-        key = (name, canonical(arguments))
-        self._row = self._row + 1 if key == self._last else 1
-        self._last = key
-        return self._row < self._limit

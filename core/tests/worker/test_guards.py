@@ -6,7 +6,6 @@ from raphael_core.worker.guards import (
     MAX_ARGUMENT_CHARS,
     MAX_RESULT_CHARS,
     OMITTED,
-    RepeatGuard,
     elide_old,
     head_tail_split,
     neutralize,
@@ -98,18 +97,6 @@ def test_nothing_is_dropped_while_the_rounds_fit():
     assert messages == before
 
 
-def test_the_third_identical_call_is_refused_and_a_different_one_is_not():
-    guard = RepeatGuard()
-    assert guard.allows("look", {"topic": "tea"})
-    assert guard.allows("look", {"topic": "tea"})
-    assert not guard.allows("look", {"topic": "tea"})
-    assert not guard.allows("look", {"topic": "tea"})
-    assert guard.allows("look", {"topic": "coffee"})
-    assert guard.allows("note", {"topic": "tea"})
-
-
 def test_the_order_of_the_arguments_does_not_make_a_call_different():
-    guard = RepeatGuard()
-    assert guard.allows("look", {"a": 1, "b": [2, 3]})
-    assert guard.allows("look", {"b": [2, 3], "a": 1})
-    assert not guard.allows("look", {"a": 1, "b": [2, 3]})
+    assert guards.canonical({"a": 1, "b": [2, 3]}) == guards.canonical({"b": [2, 3], "a": 1})
+    assert guards.canonical({"a": 1}) != guards.canonical({"a": 2})

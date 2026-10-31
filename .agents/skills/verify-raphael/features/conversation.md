@@ -560,7 +560,10 @@ npm run native -- self-diagnosis
 ```
 
 `core/tests/agent/test_self_diagnosis.py` covers taxonomy, redaction, credits,
-corrective/denial bounds, repeat failures, reference names and T0 availability.
+corrective/denial bounds, the tool-loop notes (a failing tool is told to diagnose and is never blocked), reference
+names and T0 availability. `core/tests/worker/test_tool_guardrails.py`, `test_stalls.py` and `test_loop.py` cover the
+notes for repeated calls (a note after the result, the call still made; a hard stop only for a background task), the
+`Continue now` nudge, a reply cut off by the output limit and a reply that loops.
 The native fake-brain journey exercises the production connection card, failed
 sign-in, self-check and continuation in the original member conversation. Its
 screenshots and SQLite assertions are separate from provider/OAuth acceptance.
