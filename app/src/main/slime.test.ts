@@ -163,7 +163,7 @@ test("a long list does not move in step, and a redraw keeps its place in the mot
   vi.restoreAllMocks();
 });
 
-test("only whole-frame idle strips use composited transforms; deforming poses are repainted (R-UI-63)", () => {
+test("only whole-frame idle strips use composited transforms, deforming poses are repainted (R-UI-63)", () => {
   expect(keyframes.length).toBeGreaterThan(20);
   const composited = keyframes.filter(({ body }) => /(^|[{;\s])transform:/.test(body));
   expect(composited.map(({ name }) => name).sort()).toEqual(["slime-idle-body", "slime-idle-eyes"]);

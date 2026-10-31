@@ -1,6 +1,7 @@
 import { scene, click, check, member, wait } from "./steps.mjs";
 import { readFileSync } from "node:fs";
-const fixture = JSON.parse(readFileSync(new URL("../fixture.json", import.meta.url), "utf8"));
+import { resolve } from "node:path";
+const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
 
 const doing = (member_id, state) => ({ action: "main-event", event: { type: "MemberActivity", member_id, state } });
 const board = (rows, columns) => ({ action: "slime-board", rows, columns });
