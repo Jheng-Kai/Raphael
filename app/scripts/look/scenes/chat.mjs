@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, waitScrollEnd } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, scroll, waitScrollEnd } from "./steps.mjs";
 
 const learnedSkill = member_id => ({ id: 31, member_id, name: "research-summary", description: "整理研究摘要並核對來源", enabled: true, source: "learned", provenance: "learned", learned_at: "2026-10-29T10:00:00", updated_at: "2026-10-29T10:00:00", text: "---\nname: research-summary\ndescription: 整理研究摘要並核對來源\n---\n## When to use\nUse for a research summary.\n## Procedure\nCheck and compare sources.\n## Pitfalls\nCheck publication dates.\n## Verification\nReopen each cited source." });
 const details = [member(1), { action: "open-details" }, check("member-details")];
@@ -128,6 +128,16 @@ export default [
     [member(1), wait(pcCard), click(`${pcCard} [data-act="card-done"]`), wait('[data-resumed="141"]'), check("pc-handback")], { computerCard: "signin", signedIn: true }),
   scene("local-permission-card", "A step that needs the owner's yes shows a permission card in the chat: the exact action, 拒絕, 一律允許 and 允許一次, and the gold card stays away",
     [wait(permCard("perm-gmail")), check("local-permission-card")], { permissionCard: "tool" }),
+  scene("local-command-consent", "All-member consent names the member and keeps the exact command only in the shared card",
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "first" }),
+  scene("local-command-later", "Later command approval has Allow, Skip and settings in the same card",
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "later" }),
+  scene("local-command-background", "Background local approval uses the same member card and a thirty-minute expiry",
+    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "background" }),
+  ...["once", "always", "never", "deny"].map(choice => scene(`local-command-${choice}`, `The real ${choice} button settles the local command card`,
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="perm-${choice}"]`), wait(`${permCard("perm-local")}:not([data-card-state="pending"])`), check("local-command-settled")], { localCommand: "first" })),
+  scene("local-command-manage", "The local card opens the shared command permission setting",
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="local-settings"]`), wait('[data-k="local-commands"]'), scroll('[data-k="local-commands"]'), check("local-command-setting")], { localCommand: "later" }),
   scene("draft-preference-ask-first", "A member set to send mail itself still asks when the owner's rule says to ask first: the card names the rule and has no 一律允許",
     [member(1), { action: "open-details" }, click('[data-det="edit"]'), wait(".mb-dialog"), click("#mp-tab-permissions"), wait('.mb-dialog [data-dlg="draft"]'), check("member-draft-switch"),
       click('.mb-dialog [data-dlg="cancel"]'), click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'),

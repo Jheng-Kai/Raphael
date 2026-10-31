@@ -147,6 +147,7 @@ class CliLoop:
         self.activity_turn = None
         self.expire = expire
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
+        self.approval_wait_s = None
 
     @property
     def answered_by(self):
@@ -193,6 +194,7 @@ class CliLoop:
 
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]
+        self.approval_wait_s = None
         try:
             return await self.execute(identifier, name, args)
         except Stop as stop:
@@ -202,7 +204,8 @@ class CliLoop:
             self._resume = asyncio.get_running_loop().create_future()
             self._queue.put_nowait(Outcome("stopped", kind=WAITING))
             try:
-                return await asyncio.wait_for(self._resume, self.wait_timeout_s + .1)
+                wait_s = self.wait_timeout_s if self.approval_wait_s is None else self.approval_wait_s
+                return await asyncio.wait_for(self._resume, wait_s + .1)
             except TimeoutError:
                 if self.expire:
                     self.expire()

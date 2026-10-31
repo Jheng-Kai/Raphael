@@ -76,7 +76,8 @@ class PermissionCard:
 
     def view(self) -> dict:
         """The card as the window draws it."""
-        return {"id": self.id, "source": self.source, "kind": self.kind, "service": self.service, "tool": self.tool,
+        kind = ("local_access" if self.kind == "app" else "local_command") if self.tool == "local_exec" and self.kind in ("app", "step") else self.kind
+        return {"id": self.id, "source": self.source, "kind": kind, "service": self.service, "tool": self.tool,
                 "summary": self.summary, "reason": self.reason or None, "digest": self.digest, "always": self.always,
                 "state": self.state, "expires_at_ms": self.expires_at_ms}
 
@@ -106,7 +107,7 @@ class PermissionCardStore:
                 " tool, summary, reason, digest, always, language, state, created_at_ms, updated_at_ms, expires_at_ms)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)",
                 (card_id, turn_id, member_id, conversation_id, source, kind, service, tool, summary, reason, digest,
-                 int(always), language, now, now, now + wait_ms))
+                 int(always), language, now, now, now + wait_ms if wait_ms else 0))
         return self.get(card_id)  # type: ignore[return-value]
 
     def expire_due(self) -> None:
@@ -115,7 +116,7 @@ class PermissionCardStore:
         now = self._now_ms()
         with self._conn:
             self._conn.execute(
-                "UPDATE permission_cards SET state='expired', updated_at_ms=? WHERE state='pending' AND (expires_at_ms<=?"
+                "UPDATE permission_cards SET state='expired', updated_at_ms=? WHERE state='pending' AND (expires_at_ms>0 AND expires_at_ms<=?"
                 " OR turn_id NOT IN (SELECT id FROM agent_turns WHERE status='confirm') AND source='ask')", (now, now))
 
     def get(self, card_id: str) -> PermissionCard | None:

@@ -47,6 +47,7 @@ Nothing here logs an argument, a result or what the task is about.
 """
 
 import asyncio
+from ..computer.local_tools import command_context, run_context, is_local
 import json
 import logging
 import sqlite3
@@ -613,6 +614,7 @@ class TaskRun:
     # --- host.tool ------------------------------------------------------------------------------
 
     @tool_step(lambda self, params: params.get("name", ""), scope=lambda self, params: self.activity)
+    @command_context(lambda self, *args, **kwargs: run_context(self))
     async def tool(self, params: dict) -> dict:
         """The result of a call of a tool of the snapshot."""
         name, arguments = params.get("name"), params.get("arguments")
@@ -677,7 +679,7 @@ class TaskRun:
         """What the owner's safety rules say of a call: PASS for a tool its server says only reads,
         and for Raphael's own except `create_member` and calendar writes. The judge is paid, so the
         limits on money are read first."""
-        if self._gate.is_vm_tool(ref.key):
+        if self._gate.is_vm_tool(ref.key) or is_local(ref.key):
             return PASS
         if ref.name == ASK_MEMBER and self.ask_before_members:
             return Screening(ASK)
@@ -789,6 +791,7 @@ class TaskRun:
 
     @tool_step(lambda self, waiting, approval, action: waiting.alias,
                scope=lambda self, *args, **kwargs: self.activity)
+    @command_context(lambda self, *args, **kwargs: run_context(self))
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
         for `action`, the very action the question was asked about), or not made after a no

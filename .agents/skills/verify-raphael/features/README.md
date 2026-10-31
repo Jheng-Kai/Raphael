@@ -1,5 +1,17 @@
 # Raphael feature map
 
+## Owner-PC commands (2026-11-01)
+
+See [member-computer.md](member-computer.md#owner-pc-commands-2026-11-01) for the
+shared command setting, first consent, subsequent approvals and background job gate.
+Selected scenes: local-command-consent, local-command-later,
+local-command-background, local-command-once, local-command-always,
+local-command-never, local-command-deny, local-command-manage,
+local-command-settings, local-command-setting-always, local-command-setting-never
+and the existing local-permission-card consumer. Run both themes at
+1120,720,1920x1080. Judge, Docker, cargo, network and native/live journeys are
+explicitly prohibited by this implementation brief; report them as unverified.
+
 ## Mascots and the composer (2026-10-31)
 
 Members are slimes drawn in code (`app/src/main/slime.ts`), not pictures: one body plus colour, costume and a

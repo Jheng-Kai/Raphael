@@ -52,3 +52,20 @@ READS = frozenset({
     "get_guide", "get_desktop_state", "get_window_state", "get_cursor_position",
     "list_apps", "list_windows", "clipboard_read", "verify_state", "get_browser_state",
 })
+
+
+def without_session(schema):
+    """Driver sessions belong to Raphael; a model cannot select an ended session."""
+    if not isinstance(schema, dict):
+        return schema
+    result = {}
+    for key, value in schema.items():
+        if key == "properties":
+            result[key] = {name: item for name, item in value.items() if name != "session"}
+        elif key == "required":
+            result[key] = [name for name in value if name != "session"]
+        elif key in ("allOf", "anyOf", "oneOf"):
+            result[key] = [without_session(branch) for branch in value]
+        else:
+            result[key] = value
+    return result

@@ -1,5 +1,49 @@
 # Member computer (Phases A and B)
 
+## Owner-PC commands (2026-11-01)
+
+Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux
+sandbox or guarded real-desktop mouse/keyboard tool. Every member sees the same
+pinned local_exec/local_job definitions on API, CLI MCP and background paths.
+Settings > Raphael places Local commands beside Computer use, with Ask every time
+(default), Always allow and Never. First consent names the requesting member and
+asks for all members, with four real answers. Later command cards show Allow/Skip
+and a settings action. Exact multiline commands and cwd appear on the shared
+permission card; no command arguments or results appear in public steps. The
+background renderer uses the same card. Chat has no timer (also in CLI/shell);
+background questions expire after 30 minutes. Esc denies once. Phone/Telegram
+answers never approve. Always still asks after outside content or for dangerous,
+opaque and subscription CLI commands; the secret-store deny list always refuses.
+
+`local_host.py` uses PowerShell -NoProfile -NonInteractive, UTF-8, hidden windows,
+closed stdin, home cwd, worker secret filtering, bounded head/tail stdout/stderr,
+model-selected timeout, nonzero exit results and the existing Child tree cleanup.
+Background IDs expose output/stop only to the same member conversation or task.
+Stop/app close cancels the tree. These regexes are a best effort, not a sandbox;
+the owner card remains the permission boundary. cua-driver session is removed
+from both schema variants and rejected if injected at execution.
+
+```powershell
+npm run look -- local-command-consent local-command-later local-command-background local-command-once local-command-always local-command-never local-command-deny local-command-manage local-command-settings local-command-setting-always local-command-setting-never local-permission-card --theme both --width 1120,720,1920x1080
+```
+
+Inspect every contact sheet, all pending/settled/background cards and settings at
+both themes and all widths. Compare the existing Gmail permission card with local
+cards and the shared dropdown with its settings neighbors. Checks verify exact
+command wrapping, four/two functional buttons, no gold duplicate, no timeline echo,
+saved modes and card containment. Core tests: agent/test_local_commands.py,
+computer/test_local_commands.py and background/test_local_commands.py. Frontend:
+permission-card.test.ts, pages/settings-view.test.ts, pages/agent-cards.test.ts,
+background-questions.test.ts. Full handoff core scope:
+tests/agent tests/background tests/members tests/computer tests/worker.
+
+Acceptance still requires the owner's real CPU question to member 13 on both API
+and installed CLI brains, harmless process inspection, explicit approval/dismissal,
+tree cleanup on Stop/app close, and the granted Docker path after schema discovery.
+This brief prohibits Docker, cargo, native journeys, network, judge and real
+subscription commands. Offline fakes and rendered fixture success do not prove
+those boundaries. Rule IDs: R-PC-01/02/03 and R-AG-13.
+
 The optional Docker desktop is shared by default. `computer_vm_mode=per-bot`
 selects a durable workspace per member (and its own container, 4 GB and 2 CPUs each; members
 then no longer share files, which a team building one program needs). Host paths use pathlib and Docker CSV bind

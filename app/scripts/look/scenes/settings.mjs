@@ -19,6 +19,8 @@ const downloaded = [
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
   scene("settings-memory", "Raphael's tab of Settings shows the same two documents", [...settings("agent"), wait('[data-mem-space="own"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
+  scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("agent"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
+  ...["always", "never"].map(mode => scene(`local-command-setting-${mode}`, `Save the shared ${mode} command permission`, [...settings("agent"), scroll('[data-k="local-commands"]'), click('[data-k="local-commands"]'), click(`.menu [data-value="${mode}"]`), check("local-command-setting-saved") ])),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("model-sync", "A model chosen at the composer shows in Settings, and one chosen in Settings shows at the composer", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),

@@ -32,6 +32,13 @@ import {
 
 afterEach(() => setLocale("zh-TW"));
 
+test("local commands use the shared three-choice dropdown beside computer operations", () => {
+  const html = tab("agent");
+  expect(html).toContain('data-k="local-commands"');
+  expect(html).toContain("本機指令");
+  expect(html).toContain("每次詢問");
+});
+
 test("Models has its own settings navigation entry and searchable provider page", () => {
   expect(paneListHTML()).toContain('data-pane="models"');
   expect(searchSettings("OpenAI").some((hit) => hit.pane === "models")).toBe(true);

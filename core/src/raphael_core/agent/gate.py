@@ -176,7 +176,7 @@ class ToolGate:
         undone: its questions of the tier T2 and of the global 先詢問 switch are waived. The rules that ask
         and forbid are the screening's (`screen`), which every path asks before it makes a call that
         changes something."""
-        if action.tool.startswith("mcp:computer-access-"):
+        if action.tool.startswith(("mcp:computer-access-", "mcp:local/")):
             return False
         tier = self.tier_now(action.tool, action.args)
         if self._safety is None or tier is None or tier >= Tier.T3:

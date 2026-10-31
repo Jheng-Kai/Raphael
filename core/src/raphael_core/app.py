@@ -867,6 +867,9 @@ class App(Router):
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
         self.desktop_viewer.register(self)
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
+        from .computer.local_tools import LocalTools
+        self.vm_tools = self.tool_hub
+        self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm)
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
             self.tool_hub,
@@ -967,7 +970,7 @@ class App(Router):
             if scope[0] == "turn":
                 return self.agent.computer_scope_busy(*scope[1:])
             return scope[0] == "async" and not scope[1].done()
-        self.tool_hub.scope_busy = computer_scope_busy
+        self.vm_tools.scope_busy = computer_scope_busy
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
@@ -1184,6 +1187,7 @@ class App(Router):
             ("end the secret cards' resumes", self.secret_cards.aclose),
             ("end the computer cards' runs", self.handbacks.aclose),
             ("end the assistant's requests", self.agent.aclose),
+            ("end local command jobs", self.tool_hub.aclose),
             ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
             ("end Raphael's voice", self.speaker.aclose),

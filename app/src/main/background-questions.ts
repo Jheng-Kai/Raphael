@@ -17,7 +17,8 @@ import { core } from "./api";
 import { avatarHTML, onAvatarChange } from "./avatar";
 import { describeError } from "./format";
 import { onLocaleChange, t } from "./i18n";
-import type { MainEvent } from "./types";
+import type { MainEvent, PermissionCard } from "./types";
+import { permissionCardHTML } from "./permission-card";
 import { esc, toaster } from "./ui";
 
 /** A question that waits, as `background.questions.list` gives it. */
@@ -30,6 +31,7 @@ export interface BackgroundQuestion {
   tier: string | null;
   created_at_ms: number;
   expires_at_ms: number;
+  permission?: PermissionCard;
 }
 
 /** What `background.answer` says became of an answer. */
@@ -58,6 +60,7 @@ const RAPHAEL: Asker = {
  * as they are.
  */
 export function backgroundQuestionHTML(q: BackgroundQuestion, busy = false, asker: Asker = RAPHAEL): string {
+  if (q.permission) return `<div data-bgq-card="${esc(q.id)}" data-task="${q.task_id}">${permissionCardHTML(q.permission, !busy)}</div>`;
   const off = busy ? " disabled" : "";
   const ids = ` data-task="${q.task_id}" data-id="${esc(q.id)}"`;
   const head = asker.name === null ? "" : `<span class="bgq-name">${esc(asker.name)}</span>`;
@@ -78,6 +81,7 @@ export interface BackgroundQuestionsHost {
   asker?(): Asker;
   /** The cards changed (one came or went): the page may keep its thread at the bottom. */
   changed?(): void;
+  manageLocal?(): void;
 }
 
 export interface BackgroundQuestions {
@@ -148,12 +152,14 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
     draw();
   }
 
-  async function answer(taskId: number, id: string, approved: boolean): Promise<void> {
+  async function answer(taskId: number, id: string, approved: boolean, choice?: string): Promise<void> {
     if (answering.has(id)) return;
     answering.add(id);
     draw();
     try {
-      const reply = await core<{ status: AnswerStatus }>("background.answer", { task_id: taskId, question_id: id, approved });
+      const permission = shown.find(q => q.id === id)?.permission;
+      const reply = await core<{ status: AnswerStatus }>("background.answer", { task_id: taskId, question_id: id, approved,
+        ...(permission ? { digest: permission.digest, always: choice === "perm-always", never: choice === "perm-never" } : {}) });
       if (reply.status !== "approved" && reply.status !== "denied") toaster.info(t("bgq.gone"));
     } catch (err) {
       toaster.info(describeError(err));
@@ -163,6 +169,15 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
   }
 
   element.addEventListener("click", (e) => {
+    const local = (e.target as Element | null)?.closest<HTMLButtonElement>('.permission-card [data-act]');
+    if (local) {
+      e.stopPropagation();
+      if (local.disabled) return;
+      if (local.dataset.act === "local-settings") { host.manageLocal?.(); return; }
+      const task = Number(local.closest<HTMLElement>("[data-task]")?.dataset.task);
+      if (Number.isInteger(task)) void answer(task, local.dataset.card ?? "", ["perm-always", "perm-once"].includes(local.dataset.act ?? ""), local.dataset.act);
+      return;
+    }
     const button = (e.target as Element | null)?.closest<HTMLButtonElement>("[data-bgq]");
     if (!button || button.disabled) return;
     const taskId = Number(button.dataset.task);

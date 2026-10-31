@@ -1453,6 +1453,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawBackgroundQuestions(): void {
     waiting = mountBackgroundQuestions(backgroundSlot, {
       memberId: memberId(),
+      manageLocal: () => openRaphaelSettings(app),
       asker: () => {
         const member = members.member();
         return inRaphael() ? { face: avatarHTML({ size: 22, cls: "bgq-face" }), name: null } : { face: faceHTML(member, 22, { cls: "bgq-face" }), name: member.name };
@@ -1912,6 +1913,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * given back) has its own door in the core, and gives the digest of the action it shows.
    */
   async function permissionAnswer(act: HTMLElement): Promise<void> {
+    if (act.dataset.source === "background") return;
     const id = act.dataset.card ?? "";
     const choice = act.dataset.act === "perm-deny" ? "deny" : act.dataset.act === "perm-always" ? "always" : "allow";
     if (act.dataset.source === "run") {
@@ -1927,7 +1929,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       return;
     }
     if (question?.id !== id) return;
-    await answer(choice !== "deny", choice === "always");
+    if (act.dataset.act === "perm-never") {
+      try { await api.settingsSet("local_commands_mode", "never"); }
+      catch (err) { toaster.info(describeError(err)); return; }
+      await answer(false);
+    } else await answer(choice !== "deny", choice === "always");
   }
 
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
@@ -1957,6 +1963,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     switch (act.dataset.act) {
+      case "local-settings":
+        openRaphaelSettings(app);
+        break;
       case "settings":
         openRaphaelSettings(app);
         break;
@@ -2075,6 +2084,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void taskCardAction(act);
         break;
       case "perm-deny":
+      case "perm-never":
       case "perm-always":
       case "perm-once":
         void permissionAnswer(act);

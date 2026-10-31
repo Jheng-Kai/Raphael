@@ -101,6 +101,7 @@ from ..agent.persona import (
     worker_system_prompt,
 )
 from ..agent.plugins import preview
+from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, Speaker
@@ -1420,16 +1421,20 @@ class BackgroundService:
         remaining = run.remaining_s()
         ref = waiting.ref
         action = Action(ref.key, dict(waiting.arguments))
-        pending = self._questions.open(task.session_id, task.turn_id or 0, action, waiting.tier, language)
+        local = is_local(ref.key)
+        pending = self._questions.open(task.session_id, task.turn_id or 0, action, waiting.tier, language,
+                                       wait_s=BACKGROUND_WAIT_S if local else None)
         member_id = task.member_id
         prefix = PREFIXES[language].question
         what = parenthesized(language, preview(waiting.arguments))
         asked = phrase(language, "confirm_plugin", server=ref.server, tool=ref.name, what=what)
         text = asked_with(language, waiting.screening, asked)
+        if local:
+            text = {"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}[language]
         now = self._now_ms()
         question = Question(
             id=pending.id, task_id=task.id, member_id=member_id, prefix=prefix, text=text,
-            tier=waiting.tier.name, created_at_ms=now, expires_at_ms=now + QUESTION_WAIT_MS,
+            tier=waiting.tier.name, created_at_ms=now, expires_at_ms=now + round(pending.wait_s * 1000),
             remaining_s=remaining, state="waiting",
         )  # fmt: skip
         try:
@@ -1514,7 +1519,22 @@ class BackgroundService:
             logger.warning("Could not read the questions: %s", type(exc).__name__)
             return []
         live = {paused.pending.id for paused in self._paused.values() if paused.answer is None}
-        return [self._question_view(q) for q in rows if q.id in live]
+        views = []
+        for q in rows:
+            if q.id not in live:
+                continue
+            view = self._question_view(q)
+            paused = self._paused[q.task_id]
+            if is_local(paused.waiting.ref.key):
+                from pathlib import Path
+                first = not self._settings.get("local_commands_seen")
+                view["permission"] = {"id": q.id, "source": "background", "kind": "local_access" if first else "local_command",
+                    "service": (self._member_name(q.member_id) if self._member_name else None) or "Raphael", "tool": "local_exec",
+                    "summary": paused.waiting.arguments.get("command", ""), "reason": str(paused.waiting.arguments.get("cwd") or Path.home()),
+                    "digest": paused.pending.digest, "always": first and not paused.run._memory_untrusted,
+                    "state": "pending", "expires_at_ms": q.expires_at_ms}
+            views.append(view)
+        return views
 
     def waiting_members(self) -> set[int]:
         """The members a question waits in the thread of (0 is Raphael)."""
@@ -1535,9 +1555,11 @@ class BackgroundService:
             raise invalid_params("question_id must be a non-empty string")
         if type(approved) is not bool:
             raise invalid_params("approved must be true or false")
-        return {"status": self.answer(task_id, question_id, approved, source=source)}
+        return {"status": self.answer(task_id, question_id, approved, source=source,
+                                       always=params.get("always", False), never=params.get("never", False), digest=params.get("digest"))}
 
-    def answer(self, task_id: int, question_id: str, approved: bool, *, source: Any = AT_THIS_COMPUTER) -> str:
+    def answer(self, task_id: int, question_id: str, approved: bool, *, source: Any = AT_THIS_COMPUTER,
+               always=False, never=False, digest=None) -> str:
         """The owner's answer to a question of the background, from the app: "approved" or
         "denied", or what became of a question that is no longer open. RpcError for an answer that
         says it comes from anywhere but the app at this computer (a chat app): it is never taken."""
@@ -1556,13 +1578,24 @@ class BackgroundService:
             except sqlite3.Error:
                 row = None
             return "unknown" if row is None or row.task_id != task_id else row.state
-        resolution = self._questions.resolve(question_id, approved)
+        if type(always) is not bool or type(never) is not bool:
+            raise invalid_params("always and never must be booleans")
+        resolution = self._questions.resolve(question_id, approved, digest)
+        if resolution.outcome is Outcome.CHANGED:
+            return "changed"
         if resolution.outcome is Outcome.EXPIRED:
             self._expire(paused)
             return "expired"
         if resolution.outcome is Outcome.UNKNOWN:
             return "unknown"
         state = "approved" if resolution.outcome is Outcome.APPROVED else "denied"
+        if is_local(paused.waiting.ref.key):
+            first = not self._settings.get("local_commands_seen")
+            if state == "approved" and always and first and not paused.run._memory_untrusted:
+                self._settings.set("local_commands_mode", "always")
+            if state == "denied" and never:
+                self._settings.set("local_commands_mode", "never")
+            self._settings.set("local_commands_seen", True)
         paused.answer = (state == "approved", resolution.approval)
         try:
             self._store.close_question(question_id, state)
@@ -1585,7 +1618,7 @@ class BackgroundService:
         self._questions.sweep()
         now = self._clock()
         for paused in list(self._paused.values()):
-            if paused.answer is None and now - paused.pending.created_at >= QUESTION_WAIT_S:
+            if paused.answer is None and now - paused.pending.created_at >= paused.pending.wait_s:
                 self._expire(paused)
         self._arm_expiry()
 
@@ -1635,7 +1668,7 @@ class BackgroundService:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        due = min(p.pending.created_at for p in waiting) + QUESTION_WAIT_S - self._clock()
+        due = min(p.pending.created_at + p.pending.wait_s for p in waiting) - self._clock()
         self._expiry = loop.call_later(max(due, 0.0) + 1.0, self.sweep_questions)
 
     def _disarm_expiry(self) -> None:
@@ -2031,6 +2064,8 @@ class BackgroundService:
             for child_id in reversed(tree):
                 stopped_tree = bool((await self._cancel({'task_id':child_id,'_tree':True}))['cancelled']) or stopped_tree
             return {'cancelled':stopped_tree}
+        if task_id is not None and hasattr(self._gate.plugins, "stop_task"):
+            await self._gate.plugins.stop_task(task_id)
         if task_id in self._handoff_runs or (task_id is not None and (waiting_task:=self._store.get(task_id)) is not None and waiting_task.state=='waiting' and waiting_task.continuation):
             suspended=self._handoff_runs.pop(task_id,None)
             task=self._store.get(task_id)

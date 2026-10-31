@@ -21,7 +21,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, NOTICES, READS
+from .vm_catalog import DRIVER_TOOLS, NOTICES, READS, without_session
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -63,7 +63,7 @@ EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspa
         "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace into Raphael's attachment store and return its attachment ID. Paths outside this workspace are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
-REQUEST = {"description": "Ask the owner to grant you persistent computer access. Use only when the owner asks for computer work or the task truly needs it. No computer starts before yes. On denial or expiry, say plainly that you cannot use the computer. Routines cannot grant access; ask the owner in a private chat first.",
+REQUEST = {"description": "Ask for a sandbox desktop when a task must be seen or clicked. Questions about the owner's own PC use local__local_exec first; service work uses its connected app. No sandbox starts before yes. On denial or expiry, say sandbox access was not granted. Routines cannot grant it; ask in private chat.",
            "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
 SCREEN = {"description": VM_CONTRACT + " Inspect screen and discover control tools.",
           "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
@@ -149,10 +149,11 @@ class VmTools:
                         raise VmError("invalid_tool")
                     if name in ("vm_exec", "attach_file") or not isinstance(schema, dict):
                         raise VmError("invalid_tool")
+                    schema = without_session(schema)
                     Draft202012Validator.check_schema(schema)
                     # Keep the contract first and within Offer's description cap.
                     definitions[name] = {"description": VM_CONTRACT + " " + item.get("description", ""), "parameters": schema,
-                        "validation": item.get("originalInputSchema", schema)}
+                        "validation": without_session(item.get("originalInputSchema", schema))}
                 self._catalog(target, definitions)
                 self.listed.add(target.key)
                 self.problem = None
@@ -260,7 +261,7 @@ class VmTools:
             if target.key in self.vm.held:
                 result = PluginResult(False, "owner_holds_control")
                 return result
-            if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
+            if "session" in arguments or not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                 result = PluginResult(False, "bad_arguments")
                 return result
             owner = _SCOPE.get() or ("async", asyncio.current_task())

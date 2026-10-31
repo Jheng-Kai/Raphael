@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   openLink: vi.fn(),
   openExternalUrl: vi.fn(),
   permissionAnswer: vi.fn(),
+  settingsSet: vi.fn(),
   mailSave: vi.fn(),
   mailSend: vi.fn(),
   mailDiscard: vi.fn(),
@@ -152,6 +153,20 @@ describe("the permission card in the page", () => {
     expect(api.permissionAnswer).toHaveBeenCalledExactlyOnceWith("allow", "r1", "d".repeat(64));
     expect(api.agentQuestionAnswer).not.toHaveBeenCalled();
   });
+});
+
+test("Never on a local consent card saves the shared setting before declining once", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { status: "confirm", text: "", permissions: [permission({ kind: "local_access", service: "Alex", tool: "local_exec", summary: "Get-Process" })] })] });
+  api.settingsSet.mockResolvedValue({ settings: { local_commands_mode: "never" } });
+  mount();
+  await flush();
+  send(asked);
+  await flush();
+  document.querySelector<HTMLButtonElement>('[data-act="perm-never"]')!.click();
+  await flush();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("local_commands_mode", "never");
+  expect(api.agentQuestionAnswer).toHaveBeenCalledExactlyOnceWith("q1", false);
+  expect(api.settingsSet.mock.invocationCallOrder[0]).toBeLessThan(api.agentQuestionAnswer.mock.invocationCallOrder[0]);
 });
 
 describe("the email card in the page", () => {

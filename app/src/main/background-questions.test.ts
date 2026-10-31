@@ -11,6 +11,18 @@ import { toaster } from "./ui";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("a background local command uses the shared card and submits its digest and global choice", async () => {
+  const question: BackgroundQuestion = { ...QUESTION, permission: { id: "q-1", source: "background", kind: "local_access", service: "Alex", tool: "local_exec", summary: "Get-Process", reason: null, digest: "local-digest", always: true, state: "pending", expires_at_ms: 0 } };
+  api.core.mockImplementation(async (method: string) => method === "background.questions.list" ? { questions: [question] } : { status: "approved" });
+  const questions = createBackgroundQuestions({ memberId: () => 0 });
+  document.body.append(questions.element);
+  await questions.load();
+  expect(questions.element.querySelector(".permission-card")).not.toBeNull();
+  questions.element.querySelector<HTMLButtonElement>('[data-act="perm-always"]')!.click();
+  await Promise.resolve();
+  expect(api.core).toHaveBeenCalledWith("background.answer", { task_id: 7, question_id: "q-1", approved: true, digest: "local-digest", always: true, never: false });
+});
+
 const QUESTION: BackgroundQuestion = {
   id: "q-1",
   task_id: 7,

@@ -176,6 +176,56 @@
     }
   },
   "permissionTurns": {
+    "local": {
+      "turn": {
+        "id": 152,
+        "session_id": "look-local-command",
+        "member_id": 1,
+        "conversation_id": 11,
+        "created_at_ms": 1792807185000,
+        "question": "幫我看一下為甚麼我電腦 CPU 使用率這麼高",
+        "route": "answer",
+        "source": "app",
+        "prefix": "問",
+        "text": "",
+        "detail": null,
+        "status": "confirm",
+        "cost_usd": 0.0009,
+        "model": "openai/gpt-6-sol",
+        "steps": [],
+        "attachments": [],
+        "messages": [],
+        "permissions": [
+          {
+            "id": "perm-local",
+            "source": "ask",
+            "kind": "local_access",
+            "service": "拉斐爾",
+            "tool": "local_exec",
+            "summary": "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,Id,CPU\nGet-CimInstance Win32_Processor | Select-Object LoadPercentage",
+            "reason": "C:\\Users\\Owner",
+            "digest": "707be4e520c562ddb64611ff1b2ce598e78fe99840b94896cd7cecf97adb6332",
+            "always": true,
+            "state": "pending",
+            "expires_at_ms": 0
+          }
+        ]
+      },
+      "question": {
+        "id": "perm-local",
+        "member_id": 1,
+        "conversation_id": 11,
+        "prefix": "問",
+        "text": "本機指令",
+        "tier": "T2",
+        "timeout_ms": 0,
+        "yes": "允許一次",
+        "no": "拒絕一次",
+        "always": "一律允許"
+      },
+      "done": "《答。已讀取處理程序與 CPU 的狀態。》",
+      "denied": "《了。已略過這次指令。》"
+    },
     "tool": {
       "turn": {
         "id": 150,

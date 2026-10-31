@@ -141,6 +141,19 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
+  let localQuestion = null;
+  if (variant.localCommand) {
+    const made = structuredClone(data.permissionTurns.local), card = made.turn.permissions[0];
+    card.service = data.members.find(member => member.id === 1).name;
+    if (variant.localCommand === "later") { card.kind = "local_command"; card.always = false; }
+    if (variant.localCommand === "background") {
+      card.source = "background"; card.expires_at_ms = data.now + 1800000;
+      localQuestion = { id: card.id, task_id: 920, member_id: 1, prefix: "問", text: card.summary, tier: "T2", created_at_ms: data.now, expires_at_ms: card.expires_at_ms, permission: card };
+    } else {
+      data.turns.push(made.turn);
+      permission = { ...made, card };
+    }
+  }
   if (variant.memberDraftFirst !== undefined) data.members.find(member => member.id === 1).draft_first = variant.memberDraftFirst;
   // A member's email draft is a card in its chat. The fixture keeps the states and the digests only: what the owner types
   // is received by `integrations.draft_save` as a new version, and nothing is ever sent (`sent` lists what 傳送 would send).
@@ -539,7 +552,15 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;
-      case "background.questions.list": return { questions: [] };
+      case "background.questions.list": return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
+      case "background.answer": {
+        if (!localQuestion || p.question_id !== localQuestion.id || p.digest !== localQuestion.permission.digest) throw new Error("Unknown local question");
+        if (p.always) data.settings.local_commands_mode = "always";
+        if (p.never) data.settings.local_commands_mode = "never";
+        localQuestion = null;
+        notify("WorkerChanged", {});
+        return { status: p.approved ? "approved" : "denied" };
+      }
       case "quota.list": return { quotas: data.allowances.quotas };
       case "memory.get": return memoryDocument(p);
       case "memory.update": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: p.text }; return memoryDocument(p);
@@ -898,6 +919,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (args.id !== permission.question.id) throw new Error("Unknown permission question");
         // The core settles the card once, and the turn with what Raphael says of it.
         const { turn, card } = permission;
+        if (card.kind === "local_access" && args.approved && args.always) data.settings.local_commands_mode = "always";
         card.state = !args.approved ? "denied" : args.always ? "always" : "allowed";
         const text = args.approved ? permission.done : permission.denied;
         Object.assign(turn, { status: args.approved ? "done" : "denied", prefix: args.approved ? "答" : "了", text, messages: [{ seq: 1, kind: "reply", text, at_ms: data.now }] });
