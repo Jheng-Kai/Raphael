@@ -3072,7 +3072,7 @@ class AgentService:
                 return handoff_refused("worker_disabled")
             result = self._background.handoff(speaker, dict(arguments), source_turn_id=source_turn_id,
                                               language=language)
-            if result.ok and arguments.get("mode") == "consult" and source_turn_id:
+            if result.ok and source_turn_id:
                 self._consulting.add(source_turn_id)
             return result
         if name == "room_meeting":

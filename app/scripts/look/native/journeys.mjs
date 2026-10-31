@@ -535,6 +535,7 @@ export async function drive(name, context) {
     walk(join(result.data, "vm-shared")); walk(join(result.data, "vm-homes"));
     mission.files = found.slice(0, 40);
     if (!done) throw new Error("The mission did not finish in 90 minutes");
+    if (!mission.tasks.some(task => task.member === 0 && task.state === "done")) throw new Error("Raphael never went on from what came back");
     if (!found.some(file => /\.html$/i.test(file.path) && file.bytes > 500)) throw new Error("No page came of the mission");
     return;
   }
