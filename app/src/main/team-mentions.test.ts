@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi, type Mock } from "vitest";
+import { RECALL } from "./composer-history";
 import { mentionRanges } from "./mention-text";
 import { bindComposerMentions, bindTeamMentions, mentionTargets } from "./team-mentions";
 import type { MembersList } from "./types";
@@ -55,6 +56,15 @@ test("without an input method the menu follows every keystroke as before", () =>
   expect(menu()).not.toBeNull();
   input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true }));
   expect(menu()).toBeNull();
+});
+
+test("a recalled message ending in an @ is not typing: it opens no menu", () => {
+  bindTeamMentions(input, () => ({ list }));
+  input.value = "ask @小"; input.setSelectionRange(5, 5);
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: RECALL }));
+  expect(menu()).toBeNull();
+  input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  expect(menu()).not.toBeNull();
 });
 
 test("the team is addressed by the names the menu writes and the names the core takes in every language", () => {

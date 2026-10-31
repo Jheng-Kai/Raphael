@@ -1,6 +1,7 @@
 // Only command discovery belongs in the composer. The core expands a command when sending,
 // preserving the owner's original /name text in the conversation.
 import { membersCommandsList } from "./api";
+import { RECALL } from "./composer-history";
 import { t } from "./i18n";
 import type { MemberCommand } from "./types";
 import { textPositionRect } from "./text-position";
@@ -67,9 +68,10 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
       draw();
     } catch { if (mine === generation) { loadedFor = null; close(); } }
   }
-  const onInput = (): void => {
+  const onInput = (event?: Event): void => {
     selected = 0;
-    if (!/^\/[\w-]*$/.test(input.value)) { close(); return; }
+    // A recalled message (composer-history.ts) is not typing: the arrow keys stay the history's.
+    if ((event as InputEvent | undefined)?.inputType === RECALL || !/^\/[\w-]*$/.test(input.value)) { close(); return; }
     if (loadedFor === options.memberId()) draw(); else void refresh();
   };
   const onBlur = (): void => { generation++; close(); };

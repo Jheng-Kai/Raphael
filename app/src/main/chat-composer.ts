@@ -4,6 +4,7 @@ import * as api from "./api";
 import { cancelGesture } from "../shared/cancel-gesture";
 import "../shared/cancel-gesture.css";
 import "../shared/task-action.css";
+import { bindComposerHistory } from "./composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "./composer-learning";
 import { avatarHTML } from "./avatar";
 import { describeError } from "./format";
@@ -82,7 +83,7 @@ const base64 = (bytes: Uint8Array): string => { let value="";for(let i=0;i<bytes
 export function createChatComposer(options: { placeholder(): string; transcriptTarget?(): (text: string) => void; send(text: string, files: WireAttachment[]): Promise<void>; stopTask?(): Promise<void> }) {
   const el=document.createElement("form");el.className="composer";el.noValidate=true;el.innerHTML=composerHTML();
   const input=el.querySelector<HTMLTextAreaElement>("textarea")!,send=el.querySelector<HTMLButtonElement>(".cmp-send")!,voice=el.querySelector<HTMLButtonElement>(".cmp-voice")!,picker=el.querySelector<HTMLInputElement>(".cmp-picker")!;
-  const learning=bindComposerLearning(input);
+  const learning=bindComposerLearning(input);bindComposerHistory(input,()=>api.agentSent());
   let taskRun=0, discardVoice=false, transcribing=false;
   let revision=0, taskState: ComposerTaskState = "idle", stoppingTask = false;
   el.addEventListener("click",e=>e.stopPropagation());

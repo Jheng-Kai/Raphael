@@ -277,6 +277,9 @@ HISTORY_MAX_LIMIT = 200
 HISTORY_SEARCH_DEFAULT_LIMIT = 50
 HISTORY_SEARCH_MAX_LIMIT = 100
 HISTORY_QUERY_MAX_CHARS = 200
+# The words the owner typed that the arrow keys of a composer walk back through: how many, by default and at most.
+HISTORY_SENT_DEFAULT_LIMIT = 50
+HISTORY_SENT_MAX_LIMIT = 200
 # Where a request may come from: a short lower-case word ("voice", "app", "telegram").
 _SOURCE = re.compile(r"[a-z]{1,20}")
 # A question typed in the app's conversation page: asked at this computer, like a spoken one.
@@ -824,6 +827,7 @@ class AgentService:
             "agent.cancel": self._cancel,
             "agent.history.list": self._history_list,
             "agent.history.search": self._history_search,
+            "agent.history.sent": self._history_sent,
             "agent.history.clear": self._history_clear,
             "agent.history.retract": self._history_retract,
             "agent.history.stop": self._history_stop,
@@ -4126,6 +4130,16 @@ class AgentService:
             conversation_id=self.conversations.resolve(member_id, _opt_int(params, "conversation_id")),
         )
         return {"turns": self._turn_views(turns)}
+
+    async def _history_sent(self, params: dict) -> dict:
+        """What the owner typed into a composer, newest first, for its arrow keys: the private conversations of every
+        member and every room alike, so that a conversation just made still has the last thing typed. Their own words
+        only, never an answer or another member's; what was spoken, said by a routine or a colleague, resumed after a
+        connector card, written for a draft or sent from a phone is not typed. Words sent twice in a row are one entry.
+        `limit` is clamped into 1..200 (50 by default)."""
+        limit = _opt_int(params, "limit")
+        limit = HISTORY_SENT_DEFAULT_LIMIT if limit is None else min(max(limit, 1), HISTORY_SENT_MAX_LIMIT)
+        return {"texts": self._history.sent(limit)}
 
     def _turn_views(self, turns: list[Turn]) -> list[dict]:
         """The turns as the app reads them: each with its steps and, for a turn that handed a task

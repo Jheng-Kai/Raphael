@@ -118,6 +118,20 @@ async def test_mentions_are_read_from_the_words_exactly_as_the_composer_draws_it
         assert rooms._targets(room, words) == [ids[name] for name in named], words
 
 
+async def test_what_the_owner_typed_in_a_room_joins_what_they_typed_for_the_arrow_keys(rig, rooms):
+    room = await create(rig, [0])
+    history = AgentHistory(rig.conn, rig.wall)
+    history.add(session_id="private", question="typed in a private chat", route="answer", prefix="", text="the answer", status="done", source="app")
+    rig.wall.now += 1000
+    await rig.call("rooms.send", {"room_id": room["id"], "text": "  typed in the room  ", "request_id": "arrow-keys"})
+    rig.wall.now += 1000
+    rig.conn.execute("INSERT INTO room_messages (room_id, member_id, text, created) VALUES (?, 0, 'a member says', ?)", (room["id"], rig.wall()))
+    rig.conn.commit()
+    # Only the owner's own words, newest first, from the room and the private chat alike; a member's are never among them.
+    assert history.sent(50) == ["typed in the room", "typed in a private chat"]
+    assert history.sent(1) == ["typed in the room"]
+
+
 async def test_hidden_passes_do_not_truncate_visible_history_pages(rig, rooms):
     room = await create(rig, [0])
     for i in range(101):

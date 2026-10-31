@@ -1455,7 +1455,59 @@ export function checkRendered(name, context = {}) {
       return { check: name, chips };
     }
     throw new Error(`${name}: unknown mention check`);
-  }  if (name === "context-menu" || name === "context-menu-key") {
+  }  if (name.startsWith("composer-history-")) {
+    // The up arrow brings back what was typed (read once, from the core, when the walk begins), the down arrow walks forward to the
+    // draft, and nothing is sent by either; a recalled address is a chip.
+    const typedHistory = ["請 @小森 看一下這份報告", "整理這週的研究重點", "明天早上要帶傘嗎？"], draft = "還沒寫完的草稿";
+    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    require(input, "the composer field is on screen");
+    const reads = window.__look.calls.filter(call => call.method === "agent.history.sent").length;
+    const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
+    const field = input.closest('.cmp-field');
+    const atEnd = () => input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+    const holds = (value, message) => require(input.value === value, `${message}: the field holds ${JSON.stringify(input.value)}, not ${JSON.stringify(value)}`);
+    if (name === "composer-history-recall") {
+      holds(typedHistory[0], "the up arrow brought back the last thing typed");
+      require(atEnd() && document.activeElement === input, "the caret is at the end of the recalled words and the field keeps the focus");
+      require(reads === 1 && !sent.length, `the history was read once and nothing was sent: ${reads} reads, ${sent.length} sent`);
+      const chips = [...field.querySelectorAll('.cmp-mirror .mention-chip')].map(chip => chip.textContent);
+      require(field.classList.contains('has-mentions') && chips.length === 1 && chips[0] === "@小森", `a recalled address is a chip, not raw text: ${JSON.stringify(chips)}`);
+      require(!document.querySelector('#app-popover'), "a recalled message opens no menu");
+      return { check: name, value: input.value, reads };
+    }
+    if (name === "composer-history-second") { holds(typedHistory[1], "the up arrow again brought back the one before"); return { check: name, value: input.value }; }
+    if (name === "composer-history-oldest") { holds(typedHistory[2], "the oldest line stays where the walk ends"); require(reads === 1, "walking on reads nothing more"); return { check: name, value: input.value, reads }; }
+    if (name === "composer-history-draft") {
+      holds(draft, "the down arrow ended on the draft that was there before");
+      require(atEnd() && !field.classList.contains('has-mentions') && !sent.length, "the draft is whole, its caret at the end, and nothing was sent");
+      return { check: name, value: input.value };
+    }
+    if (name === "composer-history-sent") {
+      require(sent.length === 1 && sent[0].text === `${typedHistory[1]}，並附上來源`, `the edited line went out as edited: ${JSON.stringify(sent.map(call => call.text))}`);
+      require(input.value === "", "sending emptied the field");
+      return { check: name, text: sent[0].text };
+    }
+    if (name === "composer-history-original") {
+      holds(typedHistory[1], "the original line is still in the history, unedited");
+      require(reads === 2 && sent.length === 1, `a new walk read the history again and sent nothing more: ${reads} reads, ${sent.length} sent`);
+      return { check: name, value: input.value, reads };
+    }
+    if (name === "composer-history-menu") {
+      holds("@", "an open mention menu keeps the arrow keys");
+      require(reads === 0, "the history was not read");
+      require(visible(document.querySelector('#app-popover[data-team-mentions]')) && document.querySelector('#app-popover').contains(document.activeElement), "the arrow moved the menu's own focus");
+      return { check: name };
+    }
+    if (name === "composer-history-room") {
+      const room = [...document.querySelectorAll('#room-message')].find(visible);
+      require(room && room === input, "the room's composer is the field");
+      holds(typedHistory[0], "the room's composer walks the same history");
+      require(reads === 1 && field.classList.contains('has-mentions'), "read once, and the recalled address is a chip there too");
+      return { check: name, value: input.value };
+    }
+    throw new Error(`${name}: unknown history check`);
+  }
+  if (name === "context-menu" || name === "context-menu-key") {
     // R-UI-44: a right click anywhere on a row, or the menu key on it, opens the menu of its ⋯: the same menu a click on the ⋯ opens.
     const labels = () => [...document.querySelectorAll('#app-popover button')].map(button => button.textContent.trim().replace(/\s+/g, ' '));
     const popover = document.querySelector('#app-popover'), opener = document.querySelector('[data-overflow][aria-expanded="true"]');

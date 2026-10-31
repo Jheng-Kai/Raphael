@@ -43,6 +43,7 @@ METHODS = [
     "agent.history.list",
     "agent.history.retract",
     "agent.history.search",
+    "agent.history.sent",
     "agent.history.stop",
     "agent.speak",
     "agent.speech.status",

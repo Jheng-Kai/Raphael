@@ -1,4 +1,5 @@
 import { iconHTML } from "./connections";
+import { RECALL } from "./composer-history";
 import { catalogs, t } from "./i18n";
 import { faceHTML, primaryFirst, primaryIdOf, RAPHAEL_ID } from "./members";
 import { bindMentionField, type MentionField } from "./mention-field";
@@ -69,6 +70,7 @@ export function bindComposerMentions(input: HTMLTextAreaElement, source: () => T
  */
 export function bindTeamMentions(input: HTMLTextAreaElement, source: () => TeamMentionsSource): void {
   const follow = (composing: boolean): void => { const { list, allowed } = source(); if (list) teamMentions(input, list, allowed, composing); };
-  input.addEventListener("input", event => follow((event as InputEvent).isComposing));
+  // A recalled message (composer-history.ts) is not typing: it opens no menu.
+  input.addEventListener("input", event => { if ((event as InputEvent).inputType !== RECALL) follow((event as InputEvent).isComposing); });
   input.addEventListener("compositionend", () => follow(false));
 }

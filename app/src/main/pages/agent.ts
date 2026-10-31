@@ -91,6 +91,7 @@ import { copyText, esc, ico, iconButton, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
+import { bindComposerHistory } from "../composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "../composer-learning";
 import type { DictationBaseline } from "../composer-learning";
 import { createProblemNotice } from "../problem-notice";
@@ -2085,6 +2086,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   input.addEventListener("input", fit);
   members.bindMentions(input);
+  bindComposerHistory(input, () => api.agentSent());
   picker.addEventListener("change", () => {
     const chosen = Array.from(picker.files ?? []);
     if (chosen.length > 0) void attachAll(chosen);

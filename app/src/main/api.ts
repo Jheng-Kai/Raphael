@@ -147,6 +147,8 @@ export interface AgentHistoryQuery {
 
 /** The turns of the conversations, newest first. */
 export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[] }> => core("agent.history.list", q);
+/** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
+export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
 /** Forgets every turn; says how many there were. */
 export const agentHistoryClear = (): Promise<{ deleted: number }> => core("agent.history.clear");
 /** Stops the background task `taskId` (the one that runs, or one that waits); says whether there was one to stop. */

@@ -479,6 +479,11 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.history.list": {
         return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).slice().reverse() };
       }
+      // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.
+      case "agent.history.sent": {
+        const typed = variant.typedHistory ?? data.turns.filter(turn => (turn.scope ?? "private") === "private" && turn.source === "app" && turn.route !== "draft" && turn.question.trim()).slice().reverse().map(turn => turn.question);
+        return { texts: typed.filter((text, index) => text !== typed[index - 1]).slice(0, p.limit ?? 50) };
+      }
       case "agent.history.search": case "messages.search": return { turns: byMember(data.turns, p).filter(turn => `${turn.question} ${turn.text} ${turn.messages.map(message => message.text).join(" ")}`.includes(p.query)).map(turn => ({ ...turn, conversation_title: data.conversations.find(c => c.id === turn.conversation_id)?.title })) };
       case "agent.history.delete": data.turns = data.turns.filter(item => item.id !== p.id); notify("AgentTurn", { turn_id: p.id, member_id: p.member_id ?? 0 }); return { deleted: true };
       case "agent.history.stop": {

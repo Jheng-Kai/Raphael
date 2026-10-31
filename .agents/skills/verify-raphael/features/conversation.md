@@ -697,6 +697,28 @@ method: the Bopomofo editor itself, its candidate window and TSF are not driven,
 check. The consumers of the shared composer are covered by `composer-learn`, `slash-commands`, `member-mentions-bots-apps`,
 `mentions-bots-apps`, `room-mentions` and `chat`.
 
+## Up and down arrows bring back what was typed (2026-10-31)
+
+In a composer (a private chat's and a room's) the up arrow brings back what the owner typed, newest first, and the down arrow
+walks forward and ends on the draft that was in the field before the first up arrow, so nothing typed is lost. The history
+is what the core keeps (`agent.history.sent`: the typed turns, source `app`, of every private conversation and of every
+room's owner messages, repeats in a row once), across conversations, so a conversation just made still has the last thing
+typed, and it survives a restart. It is read when the first up arrow is pressed, never when a conversation opens, and it is
+not a setting. The arrows are the field's own where they would move the caret (the up arrow acts only on the first line of
+the words, the down arrow only on the last, and only while a walk is under way), they belong to a mention or slash menu that
+is open, and they do nothing while an input method composes or with a modifier or a selection. A recalled line is edited and
+sent as edited; the original stays in the history, and a line edited and walked past keeps its edit until the walk ends. A
+write of the words by anything else (a send, another conversation, a dictation) ends the walk. A recalled address is a chip.
+Unit tests: `composer-history.test.ts` (the walk, the draft, the guards), the core `agent.history.sent` tests in
+`core/tests/agent/test_conversations.py` and `core/tests/members/test_rooms.py`.
+
+```powershell
+npm run look -- composer-history-recall composer-history-send composer-history-menu composer-history-room --theme both --width 1120,720,1920x1080
+```
+
+The fixture states the history (`typedHistory`) or derives it from its typed turns as the core does. These scenes do not prove
+a restart or a real database; the core tests do.
+
 ## Rich replies
 
 See the feature map. Selected acceptance:

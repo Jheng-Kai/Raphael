@@ -12,6 +12,18 @@ describe("shared look IPC boundary", () => {
     expect(preview).toEqual({ url, site: 'example.com', title: '', description: '', thumbnail: null });
     expect(state.errors).toEqual([]);
   });
+  it("lists what the owner typed as the core does: typed private turns, newest first, a repeat in a row once, or what a scene states", async () => {
+    const target = {}, data = structuredClone(fixture);
+    data.turns.push(...[["one", "app"], ["said aloud", "voice"], ["two", "app"], ["two", "app"]].map(([question, source], index) => ({ ...data.turns[0], id: 900 + index, question, source })));
+    installMock(data, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const { texts } = await call("agent.history.sent");
+    expect(texts.slice(0, 2)).toEqual(["two", "one"]);
+    expect(texts).not.toContain("said aloud");
+    expect((await call("agent.history.sent", { limit: 1 })).texts).toEqual(["two"]);
+    const stated = {}; installMock(fixture, { fixture: { typedHistory: ["b", "a"] } }, stated);
+    expect((await stated.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.sent", params: {} })).texts).toEqual(["b", "a"]);
+  });
   it("accepts only the declared native correction snapshot without duplicating acceptance rules", async () => {
     const target = {}, edit = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
     const state = installMock(fixture, { fixture: { dictationText: edit } }, target);

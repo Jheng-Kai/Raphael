@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 import { membersCommandsList } from "./api";
+import { RECALL } from "./composer-history";
 import { matchingCommands, mountSlashMenu } from "./slash-menu";
 import { closeMenu } from "./ui";
 import { teamMentions } from "./team-mentions";
@@ -41,6 +42,14 @@ test.each([undefined, 0, 2])('primary %s swaps mention order without changing ro
   teamMentions(input, list, [0, 2]);
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-value]')].slice(1).map(row => row.dataset.value)).toEqual(primary_id === 2 ? ['Bob', 'Raphael'] : ['Raphael', 'Bob']);
   document.querySelector<HTMLElement>('[data-value="Raphael"]')!.click(); expect(input.value).toBe('@Raphael ');
+  menu.destroy();
+});
+
+test('a recalled command is not typing: the slash menu stays shut and the arrow keys stay the history\'s', async () => {
+  const { input, menu } = setup(); type(input, '/'); await flush();
+  expect(document.querySelector('.slash-menu')).not.toBeNull();
+  input.value = '/review'; input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: RECALL }));
+  expect(document.querySelector('.slash-menu')).toBeNull();
   menu.destroy();
 });
 

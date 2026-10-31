@@ -442,6 +442,23 @@ class AgentHistory:
         )
         return [_to_turn(row) for row in rows]
 
+    def sent(self, limit: int) -> list[str]:
+        """What the owner typed into a composer, newest first, whichever private conversation or room it went to (only
+        their own words; typed means `source` "app", so not spoken, routine, colleague, resumed, draft or phone ones). Words
+        sent twice in a row are one entry. Up to `limit` of them."""
+        # A few more rows than asked for: a run of repeats collapses into one.
+        rows = self._conn.execute(
+            "SELECT text FROM ("
+            " SELECT created_at_ms AS at, question AS text FROM agent_turns"
+            "  WHERE scope = 'private' AND source = 'app' AND route <> 'draft' AND trim(question) <> ''"
+            " UNION ALL SELECT created AS at, text FROM room_messages WHERE member_id IS NULL AND trim(text) <> ''"
+            ") ORDER BY at DESC LIMIT ?", (limit * 4,)).fetchall()
+        texts: list[str] = []
+        for (text,) in rows:
+            if not texts or texts[-1] != text:
+                texts.append(text)
+        return texts[:limit]
+
     def asked_from(self, turn_ids: Iterable[int]) -> dict[int, list[Turn]]:
         """What each of `turn_ids` asked or handed colleagues while it ran, by that turn: the
         exchanges written in the colleagues' own threads, oldest first."""

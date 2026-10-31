@@ -25,6 +25,31 @@ async def test_new_conversation_starts_clean_and_switching_restores_context(make
     assert next(c for c in listed if c["id"] == first["id"])["title"] == "Remember the cobalt elephant"
 
 
+async def test_the_words_typed_are_listed_newest_first_across_conversations_and_never_the_rest(make_rig):
+    rig = make_rig()
+    named = (await rig.call("conversations.create", {"member_id": 0}))["conversation"]
+
+    def say(question, *, route="answer", **more):
+        rig.wall.now += 1000
+        return rig.history.add(session_id=f"s{rig.wall.now}", question=question, route=route, prefix="", text="the answer", status="done", **more)
+
+    say("first", source="app")
+    say("said aloud", source="voice")
+    say("second", source="app", conversation_id=named["id"])
+    say("second", source="app")  # the same words twice in a row are one entry
+    say("from a phone", source="telegram")
+    say("for a draft", source="app", route="draft")
+    say("   ", source="app")
+    say("a routine", source="routine")
+    assert (await rig.call("agent.history.sent", {}))["texts"] == ["second", "first"]
+    assert (await rig.call("agent.history.sent", {"limit": 1}))["texts"] == ["second"]
+    assert (await rig.call("agent.history.sent", {"limit": 0}))["texts"] == ["second"]
+    say("first", source="app", conversation_id=named["id"])
+    assert (await rig.call("agent.history.sent", {}))["texts"] == ["first", "second", "first"]
+    with pytest.raises(RpcError):
+        await rig.call("agent.history.sent", {"limit": "many"})
+
+
 async def test_rename_search_delete_and_default_entry(make_rig):
     rig = make_rig()
     default = (await rig.call("conversations.list", {"member_id": 0}))["conversations"][0]
