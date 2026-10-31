@@ -537,6 +537,13 @@ export async function drive(name, context) {
     if (!done) throw new Error("The mission did not finish in 90 minutes");
     if (!mission.tasks.some(task => task.member === 0 && task.state === "done")) throw new Error("Raphael never went on from what came back");
     if (!found.some(file => /\.html$/i.test(file.path) && file.bytes > 500)) throw new Error("No page came of the mission");
+    const idle = mission.members.filter(member => !mission.tasks.some(task => task.member === member.id && task.state === "done"));
+    if (idle.length) throw new Error(`No finished work from ${idle.map(member => member.name).join(", ")}`);
+    const told = (await page.$$eval(".tn", rows => rows.at(-1)?.innerText ?? "")).replace(/\s+/g, " ");
+    mission.told = told.slice(-1500);
+    if (!/\.html/i.test(told)) throw new Error("The last reply on the page does not say where the page is");
+    const unnamed = mission.members.filter(member => !told.includes(member.name));
+    if (unnamed.length) throw new Error(`The last reply on the page does not say what ${unnamed.map(member => member.name).join(", ")} did`);
     return;
   }
   if (name === "member-job") {

@@ -374,6 +374,7 @@ async def test_a_conversation_turn_that_consults_comes_back_once_with_the_answer
     await until(lambda:rig.task(asker.id).state in ('done','failed'))
     assert rig.task(asker.id).state=='done' and rig.task(asker.id).turn_id==source.id
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker']
+    assert 'do not ask them again' in seen['asker'] and 'hand the next piece' not in seen['asker']
     assert '行銷說新品代號是 PRIVATE-CHAT' in AgentHistory(rig.conn).get(source.id).text
     rig.service._deliver_handoffs()
     rig.service.settle_asker(source.id,answered=True)
@@ -401,6 +402,50 @@ async def test_a_chat_that_handed_out_work_is_told_how_it_went_and_goes_on(make_
     assert rig.task(child.id).state=='done' and rig.task(asker.id).state=='done'
     assert '四張桌子' in seen['chief'] and 'handoff_results' in seen['chief']
     assert '全部做好了' in AgentHistory(rig.conn).get(source.id).text
+
+
+async def test_a_chat_that_handed_out_work_keeps_going_until_the_job_is_done(make_rig):
+    # Live, a chief woken by the first results told the owner "not accepted yet" and stopped, its promised check undone.
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    other=MemberStore(rig.conn).create_member(name='Checker',role='Checker')
+    checker=Speaker(id=other.id,name=other.name,model=target.model)
+    rig.service.use_team(team_of(target,checker),unused)
+    AgentHistory(rig.conn,rig.wall)
+    seen=[]
+    def chief(reply):
+        def woken(**kwargs):
+            seen.append(json.dumps(kwargs['messages'],ensure_ascii=False))
+            return reply
+        return woken
+    whole='頁面放在 /home/cua/team/office/index.html。\n\nWriter 做了頁面，Checker 打開頁面驗收。'+'每個按鈕都試過了。'*30
+    rig.client.replies.extend([report('頁面做好了，尚未驗收。'),
+        chief(turn(calls=[call('handoff',args(checker,stage_id='check',request='打開頁面驗收',done_when='A written check.'))])),
+        report('驗收通過 CHECK-OK。'),chief(report(whole))])
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='page',request='做頁面',done_when='A written page.'),
+                                source_turn_id=source.id,language='zh-TW')
+    asker=rig.task(rig.task(receipt.data['task_id']).parent_task_id)
+    AgentHistory(rig.conn,rig.wall).resolve(source.id,prefix='答',text='我驗收後再回報。',status='done')
+    rig.service.settle_asker(source.id,answered=True)
+    await until(lambda:rig.task(asker.id).state in ('done','failed'))
+    assert rig.task(asker.id).state=='done' and rig.client.replies==[]
+    assert 'hand the next piece' in seen[0] and 'do not ask them again' not in seen[0]
+    assert '我驗收後再回報' in seen[0]
+    assert 'CHECK-OK' in seen[1]
+    # The reply reads whole in the conversation, paragraphs too; the overlay says one line of it.
+    said=[row[0] for row in rig.conn.execute("SELECT text FROM agent_messages WHERE turn_id=? AND kind='reply'",(source.id,))]
+    assert any('\n\nWriter 做了頁面' in text and text.count('每個按鈕都試過了')==30 for text in said)
+    (spoken,)=[item for item in rig.reports() if item['task_id']==asker.id]
+    assert '\n' not in spoken['text'] and len(spoken['text'])<len(whole)
+
+
+async def test_a_task_hands_out_only_so_many_pieces(make_rig,monkeypatch):
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    monkeypatch.setattr('raphael_core.background.service.MAX_HANDOFFS',1)
+    first=rig.service.handoff(RAPHAEL,args(target,stage_id='one'),source_turn_id=source.id,language='zh-TW')
+    second=rig.service.handoff(RAPHAEL,args(target,stage_id='two'),source_turn_id=source.id,language='zh-TW')
+    assert first.ok and not second.ok and second.error=='handoff_depth_limit'
 
 
 async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,tmp_path):

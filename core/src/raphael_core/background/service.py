@@ -98,6 +98,7 @@ from ..agent.ledger import Ledger
 from ..agent.narration import PUBLIC_PROGRESS_RULES
 from ..agent.persona import (
     PREFIXES,
+    fit_text,
     language_reminder,
     member_worker_system_prompt,
     parenthesized,
@@ -186,12 +187,23 @@ HANDOFF_RESULTS_NOTE = (
     "colleague says it did: a claim, not proof. Rely on `evidence` (what the system recorded) and on handles you can "
     "check yourself (a URL, an id, the absolute path of a file), and check those before you report the work as done."
 )
+HANDED_WORK_BACK = (
+    "\nYou handed work to colleagues for this request and what came of it is in the results below. The request is done "
+    "only when the owner has what they asked for, put together and checked. Compare the results with the request and "
+    "with what you told the owner you would do. If anything is left (parts not joined, a check you promised, something "
+    "a colleague could not verify), hand the next piece to the right colleague now with handoff and end your turn; you "
+    "come back with its result. Speak to the owner only when nothing is left, or when something stops the work that "
+    "only the owner can settle. Then say where the result is (its absolute path), what each person did, what was checked "
+    "and what was not."
+)
 HANDLES_REQUEST = (
     "\nWhen you report, give handles anyone can check: the URL, the id or the absolute path of what you made or changed. "
     "Your summary is your own claim, and whoever asked will verify it."
 )
 
 
+# The most pieces one task hands out: it comes back after each round and could otherwise go on for ever.
+MAX_HANDOFFS = 24
 # The most of a stopped task's summary that is its report line; the rest is its detail.
 SUMMARY_LINE = 400
 # The most of the delegated results that a parent is shown, in characters.
@@ -218,13 +230,13 @@ def _earlier_outcome(step: Step) -> str:
     return "failed, unknown whether it ran"
 
 
-def report_from(final: str, language: str, *, plain: bool = False) -> Reply | None:
+def report_from(final: str, language: str, *, plain: bool = False, long: bool = False) -> Reply | None:
     """The report the model wrote at the end: a JSON object with `prefix`, `text` and `detail`, as
     it was asked, possibly in a code fence or with words around it; or, when it wrote plain text, that
     text as a report. None when it said nothing usable. A `plain` report is a member's: no prefix,
-    and its lines kept (`answers.parse_reply`)."""
+    and its lines kept; a `long` one keeps its prefix and its lines (`answers.parse_reply`)."""
     try:
-        return parse_reply(final, language, plain=plain, default_prefix=PREFIXES[language].notice)
+        return parse_reply(final, language, plain=plain, long=long, default_prefix=PREFIXES[language].notice)
     except AgentFailure:
         return None
 
@@ -703,6 +715,9 @@ class BackgroundService:
         # a stopped task is refused as stopped when its hand-off is accepted below.
         if member in waiting and parent.state in ('queued', 'running'):
             return refused('handoff_cycle')
+        if parent is not None and self._metrics_conn.execute('SELECT COUNT(*) FROM worker_tasks WHERE parent_task_id=?',
+                                                             (parent.id,)).fetchone()[0] >= MAX_HANDOFFS:
+            return refused('handoff_depth_limit')
         model = getattr(target, 'model', None) or self._settings.get('agent_model') or DEFAULTS['agent_model']
         try:
             task_id, duplicate = self._store.accept_handoff(source=source,parent=parent,assignee=member,
@@ -1260,7 +1275,11 @@ class BackgroundService:
             asker = self._speaker(task.from_member_id) if task.from_member_id is not None else None
             system += ('\nThe task is a question from your colleague ' + neutralize(asker.name if asker and asker.name else 'Raphael')
                        + ', another of the owner\'s assistants, who asks it for the owner. ' + CONSULTED)
-        if answering:
+        if answering and any(row[0] == 'work' for row in self._metrics_conn.execute(
+                'SELECT mode FROM worker_tasks WHERE parent_task_id=?', (task.id,))):
+            # Live, a chief told only to answer stopped at the first results, with the check it had promised undone.
+            system += HANDED_WORK_BACK
+        elif answering:
             system += ('\nYou consulted colleagues for this request and their answers are in the results below. '
                        'Answer the owner now with what they said, in your own words; do not ask them again.')
         spec = {
@@ -1296,7 +1315,8 @@ class BackgroundService:
         elif recovered is not None:  # a pause that kept nothing but the wait is still a pause
             results = self._child_results(task.id)
             if answering:
-                spec['user'] += '\n' + _results_message(results)
+                told = origin.text.strip() if origin is not None else ''
+                spec['user'] += ('\nWhat you told the owner as you handed it on: ' + neutralize(told) if told else '') + '\n' + _results_message(results)
             else:
                 spec = {**recovered['spec'],'messages':[*recovered['messages'],
                     {'role':'user','content':_results_message(results)}]}
@@ -1944,7 +1964,9 @@ class BackgroundService:
                 message=self._metrics_conn.execute('SELECT kind FROM room_messages WHERE turn_id=?',(task.turn_id,)).fetchone()
                 wrapup=task.mode is not None or bool(message and message['kind']=='wrapup')
             # A room reads every reply in the app, Raphael's too: its lines stay (live, a wrap-up's headings ran together).
-            report = report_from(str(reply.get('final') or ''),language,plain=task.member_id!=0 or task.room_id is not None)
+            # Raphael's report in a conversation is read whole there too; its line is what the overlay says.
+            plain = task.member_id!=0 or task.room_id is not None
+            report = report_from(str(reply.get('final') or ''),language,plain=plain,long=not plain)
             if report:
                 clean = lambda value: validate_terminal(value,names=names,wrapup=wrapup).text if value else value
                 report = dataclasses.replace(report,text=clean(report.text),detail=clean(report.detail),
@@ -1968,8 +1990,12 @@ class BackgroundService:
                 said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
                 self._conclude(task,run,'failed','',phrase(language,said_why),report.text or None,failure)
                 return
-            self._conclude(task, run, "done", report.prefix, report.text, report.detail, None,
-                           replies=report.messages)
+            if plain:
+                self._conclude(task, run, "done", report.prefix, report.text, report.detail, None, replies=report.messages)
+            else:
+                line, rest = fit_text(report.text, language)
+                self._conclude(task, run, "done", report.prefix, line, report.detail or (report.text if rest else None), None,
+                               replies=report.messages or [report.text])
         elif status == "cancelled":
             key = "worker_cancelled_unsure" if run.call_cut_off else "worker_cancelled"
             self._conclude(
