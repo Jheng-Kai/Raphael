@@ -25,6 +25,7 @@ import { messageExpandHTML } from "./message-preview";
 import { TYPED, VOICE, hasDetail, highlightHTML, sourceOf } from "./conversation";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { messageHTML, replyContentHTML } from "./message-content";
+import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { previewCardsHTML } from "./link-previews";
 import { formatClock, formatUsd } from "./format";
@@ -512,6 +513,8 @@ export interface TurnLook {
   memberFace?: (id: number, size?: number) => string;
   /** Whether the window can answer the question of permission card `id` now (it holds that question and is not answering it). */
   answerable?: (cardId: string) => boolean;
+  /** Whom the owner's words may address: each `@Name` among them is drawn as a chip. */
+  mentions?: readonly MentionTarget[];
 }
 
 /**
@@ -817,7 +820,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (asked
       ? `<div class="me">${ownerFaceHTML()}` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
-        bubbleHTML(said ? messageHTML(turn.question.trim(), query) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
+        bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
@@ -851,7 +854,7 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
 export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false): string {
   const start = request?.time ?? nowMs;
   const words =
-    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim());
+    question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
   return (
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +

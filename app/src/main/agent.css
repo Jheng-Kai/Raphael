@@ -399,6 +399,22 @@
 .cmp-input.is-tall { overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
+/* The words live in the textarea. While they address someone, its text is not painted and the same words are drawn over it
+   (mention-field.ts) with each address as a chip; the caret, selection and input method stay the textarea's own. */
+.cmp-field { position: relative; min-width: 0; }
+.cmp-field > .cmp-input { display: block; width: 100%; }
+.cmp-mirror { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; white-space: pre-wrap; overflow-wrap: break-word; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) calc(4px + var(--cmp-bar, 0px)) var(--pa-cmp-py) 4px; }
+.cmp-field.has-mentions > .cmp-mirror { display: block; }
+.cmp-field.has-mentions > .cmp-input { color: transparent; caret-color: var(--text); }
+.cmp-field.has-mentions > .cmp-input::selection { color: transparent; }
+.cmp-composing { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+/* A mention, in the field and in the owner's bubble: its mark stands where the @ is (the @ keeps its width, unseen), then the
+   name, in a quiet pill. In the field the pill's padding is cancelled by its margin, so a line wraps exactly as plain words do. */
+.mention-chip { padding: 1px 2px; margin: 0 1px; border-radius: var(--r-sm); background: color-mix(in srgb, currentColor 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
+.cmp-mirror .mention-chip { margin: 0 -2px; }
+.mention-at { position: relative; -webkit-text-fill-color: transparent; }
+.mention-ico { position: absolute; inset: 0; display: grid; place-items: center; -webkit-text-fill-color: currentColor; }
+.mention-ico .i, .mention-ico .mono { width: 16px; height: 16px; margin: 0; }
 /* One slot: 拉斐爾大師 (voice) while the draft is empty; once there is something to send he turns
    into a bare send icon (a level paper plane, no background), as Telegram does. */
 .composer .cmp-pair:has(.cmp-send:disabled) .cmp-send, .composer .cmp-pair:has(.cmp-send:not(:disabled)) .cmp-voice { display: none; }

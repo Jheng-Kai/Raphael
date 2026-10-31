@@ -12,7 +12,7 @@ import { mountRichContent, preserveRichScroll } from "./message-rich";
 import { mountConversationScroll } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
-import { teamMentions } from "./team-mentions";
+import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { roomWrapupHTML } from "./room-wrapup";
 import { filesHTML, messageActionsHTML } from "./timeline";
 import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
@@ -215,7 +215,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   messageResize?.observe(thread);
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
   const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??"";drafts.set(id,draft+(draft?" ":"")+text);}};},async send(text,files){if(!roomId)return;const id=roomId,key=JSON.stringify([text,files,replyTo?.id]);if(key!==retry)requestId=undefined;retry=key;requestId??=crypto.randomUUID();sendingRooms.add(id);try{await api.roomSend(id,text,requestId,getLocale(),files,replyTo?.id);if(pendingStops.delete(id))await api.roomStop(id);}finally{sendingRooms.delete(id);pendingStops.delete(id);}requestId=undefined;if(roomId===id){replyTo=undefined;await refresh();}changed();}});
-  composer.input.addEventListener("input", () => teamMentions(composer.input, list, room?.member_ids));
+  const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids }));
   composer.input.id="room-message";el.querySelector('.ra-dock')!.append(composer.el);
   composer.el.querySelector('.cmp-quote')!.addEventListener('click',e=>{if((e.target as Element).closest('[data-room-act="cancel-reply"]')){replyTo=undefined;draw();composer.input.focus();}});
   const status=document.createElement('div');status.className="au-room-controls";el.querySelector('.ra-dock')!.prepend(status);
@@ -240,6 +240,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     });
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
+    const addressable=mentionTargets(list);
     preserveRichScroll(scroll, () => { thread.innerHTML=entries.length?entries.map(entry=>{
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
@@ -260,10 +261,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
     measureMessagePreviews(thread);
-    composer.draw(); });
+    composer.draw(); mentions.refresh(); });
     if(follow)scroll.scrollTop=scroll.scrollHeight;onRender();
   }
   async function refresh():Promise<void>{

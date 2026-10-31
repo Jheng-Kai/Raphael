@@ -1347,7 +1347,115 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, menuLeft: box.left, characterX: expected, delta: Math.abs(box.left - expected) };
   }
-  if (name === "context-menu" || name === "context-menu-key") {
+  if (name.startsWith("mention-")) {
+    // A mention is a chip: its mark where the @ is, then its name, in a quiet pill apart from the words around it, and the words
+    // themselves (what the core receives, copies and quotes) are the plain `@Name` they always were. The input method, when one
+    // typed them, typed each character once and never lost the focus to the menu while it composed.
+    const input = [...document.querySelectorAll('.composer textarea')].find(visible), log = window.__imeLog ?? [];
+    require(input, "the composer field is on screen");
+    const field = input.closest('.cmp-field'), mirror = field?.querySelector('.cmp-mirror');
+    const chipsIn = root => [...root.querySelectorAll('.mention-chip')];
+    const chipText = chip => chip.textContent;
+    const chipLooks = chip => {
+      const box = chip.getBoundingClientRect(), style = getComputedStyle(chip), at = chip.querySelector('.mention-at'), mark = chip.querySelector('.mention-ico > *');
+      require(box.width > 0 && box.height >= 14, `${chipText(chip)} is drawn`);
+      require(mark && visible(mark), `${chipText(chip)} shows its mark`);
+      const markBox = mark.getBoundingClientRect(), nameRange = document.createRange();
+      nameRange.selectNodeContents(chip.lastChild);
+      require(markBox.left >= box.left - 1 && markBox.right <= nameRange.getBoundingClientRect().left + 1, `${chipText(chip)}: the mark stands before its name inside the chip`);
+      require(markBox.width >= 10 && markBox.width <= 18 && Math.abs(markBox.height - markBox.width) <= 2, `${chipText(chip)}: the mark is a small square (${markBox.width} x ${markBox.height})`);
+      require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.boxShadow !== 'none', `${chipText(chip)} stands apart from the words as a pill`);
+      require(!chip.closest('a, button') && getComputedStyle(at).webkitTextFillColor === 'rgba(0, 0, 0, 0)', `${chipText(chip)} is not a control and does not show its @`);
+      return { text: chipText(chip), kind: chip.dataset.mention, width: box.width, height: box.height, mark: markBox.width };
+    };
+    const overField = () => {
+      const a = input.getBoundingClientRect(), b = mirror.getBoundingClientRect();
+      require(field.classList.contains('has-mentions') && visible(mirror), "the field draws its chips");
+      require(Math.abs(a.left - b.left) < .5 && Math.abs(a.top - b.top) < .5 && Math.abs(a.width - b.width) < .5 && Math.abs(a.height - b.height) < .5, "the drawn words sit exactly over the field");
+      require(getComputedStyle(input).color === 'rgba(0, 0, 0, 0)' && getComputedStyle(mirror).pointerEvents === 'none' && mirror.getAttribute('aria-hidden') === 'true', "the field paints no text of its own, and the drawn copy takes no click and says nothing to a screen reader");
+      const plain = mirror.textContent.replace(/\u200b/g, ''), expected = input.value;
+      require(plain === expected, `the drawn words are the field's words: ${JSON.stringify(plain)} versus ${JSON.stringify(expected)}`);
+    };
+    // Where the field's own text starts: the first chip's @ stands exactly there, whatever the font draws.
+    const startsWhereTheTextDoes = chip => {
+      const style = getComputedStyle(input), context = document.createElement('canvas').getContext('2d');
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const before = input.value.slice(0, input.value.indexOf('@')), expected = input.getBoundingClientRect().left + parseFloat(style.paddingLeft) + context.measureText(before).width;
+      const at = chip.querySelector('.mention-at').getBoundingClientRect().left;
+      require(Math.abs(at - expected) <= 1.5, `the first chip starts where its text does: ${at} versus ${expected}`);
+    };
+    if (name === "mention-ime-open") {
+      // The @ is still being composed: the menu is already there, and the focus has not moved.
+      require(input.value === "@" && log.some(event => event.type === "compositionstart") && !log.some(event => event.type === "compositionend"), "the @ is being composed, not committed");
+      require(visible(document.querySelector('#app-popover[data-team-mentions]')), "the mention menu is drawn while the @ is composed");
+      require(!log.some(event => event.type === "blur") && document.activeElement === input, "the field kept the focus while it composed");
+      return { check: name, events: log.map(event => event.type).join(' ') };
+    }
+    if (name === "mention-ime-at" || name === "mention-ime-filter") {
+      const expected = { "mention-ime-at": "@", "mention-ime-filter": "@小" }[name];
+      const order = log.map(event => event.type === "input" ? `input(${event.composing ? "composing" : "settled"}:${event.value})` : event.type).join(" ");
+      require(input.value === expected, `the field holds ${JSON.stringify(input.value)}, not ${JSON.stringify(expected)}; the events came in the order ${order}`);
+      require(log.some(event => event.type === "compositionstart") && log.some(event => event.type === "compositionend"), "the input method composed and committed");
+      require(!log.slice(0, log.findIndex(event => event.type === "compositionend")).some(event => event.type === "blur"), "the field kept the focus until the input method had committed");
+      require(document.activeElement === input, "the field still has the focus");
+      require(visible(document.querySelector('#app-popover[data-team-mentions]')), "the mention menu follows the finished text");
+      return { check: name, value: input.value, events: log.map(event => event.type).join(' ') };
+    }
+    if (name === "mention-ime-compose" || name === "mention-ime-commit") {
+      const composing = name === "mention-ime-compose", expected = composing ? "@Notion ㄅ" : "@Notion 吧";
+      require(input.value === expected, `the field holds ${JSON.stringify(input.value)}, not ${JSON.stringify(expected)}`);
+      overField();
+      const chips = chipsIn(mirror).map(chipLooks), underlined = mirror.querySelector('.cmp-composing');
+      require(chips.length === 1 && chips[0].text === "@Notion", "the chip stays beside the words");
+      require(composing ? underlined?.textContent === "ㄅ" && getComputedStyle(underlined).textDecorationLine === 'underline' : !underlined, composing ? "the syllable being composed is underlined" : "a committed word is plain");
+      require(!log.some(event => event.type === "blur") && document.activeElement === input, "the field kept the focus");
+      startsWhereTheTextDoes(chipsIn(mirror)[0]);
+      return { check: name, chips, events: log.map(event => event.type).join(' ') };
+    }
+    if (name === "mention-chip-composer") {
+      require(input.value === "請用 @Notion 整理這份報告，再問 @小森 ", `the words are the plain text, not ${JSON.stringify(input.value)}`);
+      overField();
+      const chips = chipsIn(mirror).map(chipLooks);
+      require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小森", "member"]]), "each address is a chip of its kind");
+      startsWhereTheTextDoes(chipsIn(mirror)[0]);
+      require(!document.querySelector('#app-popover'), "the menu closed once the name was chosen");
+      return { check: name, chips };
+    }
+    if (name === "mention-chip-sent") {
+      const sent = window.__look.calls.filter(call => call.command === "agent_ask_text");
+      require(sent.length === 1 && sent[0].text === "請用 @Notion 整理這份報告，再問 @小森", `the core receives the words unchanged: ${JSON.stringify(sent.map(call => call.text))}`);
+      const bubble = [...document.querySelectorAll('.tn.is-pending .owner-message .bubble')].find(visible);
+      require(bubble, "the sent words are in a bubble");
+      const chips = chipsIn(bubble).map(chipLooks);
+      require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小森", "member"]]), `the bubble draws the same chips: ${JSON.stringify(chips.map(chip => [chip.text, chip.kind]))}`);
+      require(bubble.querySelector('.message-text').textContent === "請用 @Notion 整理這份報告，再問 @小森", "the bubble's words are the plain text, so copying and quoting read as typed");
+      require(input.value === "" && !field.classList.contains('has-mentions') && mirror.textContent === "", "sending empties the field and its chips");
+      return { check: name, chips, sent: sent[0].text };
+    }
+    if (name === "mention-chip-delete") {
+      require(input.value === "請問 " && input.selectionStart === 3 && input.selectionEnd === 3, `one Backspace removed the whole chip: ${JSON.stringify(input.value)}`);
+      require(!field.classList.contains('has-mentions') && mirror.textContent === "", "no chip is left");
+      return { check: name, value: input.value };
+    }
+    if (name === "mention-chip-arrow-before") {
+      require(input.selectionStart === 2 && input.selectionEnd === 2, `the caret crossed the chip in one step: ${input.selectionStart}`);
+      overField();
+      return { check: name, caret: input.selectionStart };
+    }
+    if (name === "mention-chip-arrow-selected") {
+      require(input.selectionStart === 2 && input.selectionEnd === 5, `Shift took the whole chip: ${input.selectionStart}-${input.selectionEnd}`);
+      return { check: name, selection: [input.selectionStart, input.selectionEnd] };
+    }
+    if (name === "mention-chip-room") {
+      const room = [...document.querySelectorAll('#room-message')].find(visible);
+      require(room && room === input, "the room's composer is the field");
+      overField();
+      const chips = chipsIn(mirror).map(chipLooks);
+      require(JSON.stringify(chips.map(chip => [chip.text, chip.kind])) === JSON.stringify([["@Notion", "app"], ["@小晴", "member"]]), `a room draws its members and the apps, not a group it does not offer: ${JSON.stringify(chips.map(chip => chip.text))}`);
+      return { check: name, chips };
+    }
+    throw new Error(`${name}: unknown mention check`);
+  }  if (name === "context-menu" || name === "context-menu-key") {
     // R-UI-44: a right click anywhere on a row, or the menu key on it, opens the menu of its ⋯: the same menu a click on the ⋯ opens.
     const labels = () => [...document.querySelectorAll('#app-popover button')].map(button => button.textContent.trim().replace(/\s+/g, ' '));
     const popover = document.querySelector('#app-popover'), opener = document.querySelector('[data-overflow][aria-expanded="true"]');

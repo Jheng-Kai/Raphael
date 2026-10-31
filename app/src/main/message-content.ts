@@ -1,6 +1,7 @@
 // One typed reply parser for history, streaming, search and copy. Only generated tags enter HTML.
 import { highlightHTML } from "./conversation";
 import { t } from "./i18n";
+import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, iconBtn } from "./ui";
 
 export function messageUrl(raw: unknown): string | null {
@@ -26,9 +27,9 @@ function bareUrl(text: string): string {
   return raw;
 }
 
-function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0): string {
+function inline(text: string, query: string, markdown: boolean, urls: Set<string>, depth = 0, mentions: readonly MentionTarget[] = []): string {
   let out = "", at = 0, plain = "";
-  const flush = (): void => { out += highlightHTML(plain, query); plain = ""; };
+  const flush = (): void => { out += mentions.length ? mentionsHTML(plain, mentions, words => highlightHTML(words, query)) : highlightHTML(plain, query); plain = ""; };
   const link = (raw: string, label?: string): string | null => {
     const url = messageUrl(raw);
     if (!url) return null;
@@ -73,7 +74,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
       const end = text.indexOf(marker, at + marker.length);
       if (end > at + marker.length) {
         flush(); const tag = marker === "~~" ? "del" : marker.length === 2 ? "strong" : "em";
-        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1)}</${tag}>`;
+        out += `<${tag}>${inline(text.slice(at + marker.length, end), query, true, urls, depth + 1, mentions)}</${tag}>`;
         at = end + marker.length; continue;
       }
     }
@@ -197,8 +198,9 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>): strin
   return `<section class="rich-block message-code${diagram ? " message-diagram" : ""}" data-source="${esc(block.source)}" data-language="${esc(block.language)}" data-complete="${block.complete}" data-query="${esc(query)}"><header class="rich-head"><span class="rich-language">${esc(diagram ? t("chat.diagram") : block.language || t("chat.code"))}</span><div>${iconBtn("copy", t(diagram ? "chat.copySource" : "chat.copyCode"), ' data-rich-act="copy-source" data-act="copy-code"')}${diagram ? iconBtn("steps", t("chat.viewSource"), ` data-rich-act="view-source" aria-expanded="${showSource}"`) + iconBtn("external", t("chat.expandBlock"), ' data-rich-act="expand" hidden') : ""}</div></header><div class="diagram-view"${diagram ? "" : " hidden"}></div><pre><code>${highlightHTML(block.source, query)}</code></pre>${diagram ? `<p class="rich-note">${esc(t(block.complete ? "chat.diagramFallback" : "chat.diagramStreaming"))}</p>` : ""}</section>`;
 }
 
-export const messageHTML = (text: string, query = "", markdown = false): string => markdown
-  ? parseMessageBlocks(text).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set());
+/** `mentions` are the addresses of the owner's words, drawn as chips (a reply's `@` is just text). */
+export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = []): string => markdown
+  ? parseMessageBlocks(text).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set(), 0, mentions);
 
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
 export function replyContentHTML(text: string, query = "", streaming = false, renderText = (source: string) => textHTML(source, query, new Set())): string {

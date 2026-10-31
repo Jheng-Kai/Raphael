@@ -97,6 +97,27 @@ async def test_mentions_use_whole_names_text_order_and_ignore_email_addresses(ri
     assert rig.background.submitted[-1]["member_id"] == ids[1]
 
 
+async def test_mentions_are_read_from_the_words_exactly_as_the_composer_draws_its_chips(rig, rooms):
+    # The composer shows an address as a chip by the rule below (app/src/main/mention-text.ts, the same table in
+    # mention-text.test.ts): the name whole after an @ that no letter or digit precedes, the longest name at each @,
+    # nothing inside code or a quotation. The words are sent unchanged; the core alone decides who is addressed.
+    ids = {name: (await rig.call("members.create", {"name":name}))["member"]["id"] for name in ("Ops", "Ops Lead", "小森", "小晴")}
+    room = await create(rig, [0, *ids.values()])
+    cases = [
+        ("@Ops Lead ", ["Ops Lead"]),               # what the menu writes: @Name and a space
+        ("請 @小森 看一下", ["小森"]),
+        ("@小森，@小晴。", ["小森", "小晴"]),
+        ("@小森請看一下", []),                       # a letter right after the name: not an address
+        ("請@小森 看", []),                          # a letter right before the @: not an address
+        ("@ops lead", ["Ops Lead"]),                # case is not part of a name
+        ("@Ops Lead and @Ops", ["Ops Lead", "Ops"]),
+        ("`@小森` 「@小晴」 \"@Ops\"", []),           # code and quotations are not addresses
+        ("\n> @小森\n@小晴 ", ["小晴"]),
+    ]
+    for words, named in cases:
+        assert rooms._targets(room, words) == [ids[name] for name in named], words
+
+
 async def test_hidden_passes_do_not_truncate_visible_history_pages(rig, rooms):
     room = await create(rig, [0])
     for i in range(101):

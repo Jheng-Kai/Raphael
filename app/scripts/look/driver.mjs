@@ -439,6 +439,26 @@ export async function perform(page, step) {
       break;
     }
     case "focus": await page.focus(step.selector); break;
+    case "ime": {
+      // The browser's own input-method path (the one WebView2 uses): it makes compositionstart/update and the composing `input`
+      // events from a composition, and `insertText` commits it. A commit that arrives after the field lost its composition (a focus
+      // change finishes one) inserts its text again, which is how an input method that is not waited for types a character twice.
+      const element = await visible(step.selector), client = await page.createCDPSession();
+      try {
+        await element.focus();
+        await element.evaluate(field => {
+          const log = window.__imeLog = [];
+          for (const type of ["compositionstart", "compositionupdate", "compositionend", "input", "focus", "blur"])
+            field.addEventListener(type, event => log.push({ type, data: event.data ?? null, composing: event.isComposing ?? null, value: field.value }), true);
+        });
+        for (const part of step.sequence) {
+          if (part.compose !== undefined) await client.send("Input.imeSetComposition", { text: part.compose, selectionStart: part.compose.length, selectionEnd: part.compose.length });
+          else await client.send("Input.insertText", { text: part.commit });
+          await new Promise(resolve => setTimeout(resolve, 60));
+        }
+      } finally { await client.detach(); await element.dispose(); }
+      break;
+    }
     case "conversation-position": {
       const element = await visible('.ra-scroll');
       await element.evaluate((node, position) => node.scrollTo({ top: position === "up" ? Math.max(1, (node.scrollHeight - node.clientHeight) / 2) : node.scrollHeight, behavior: "instant" }), step.position);

@@ -273,7 +273,7 @@ journeys then click the real Raphael rail destination before driving their steps
 Home scenes cover rich/empty data, reports, routines and calendar navigation.
 
 Add a `scene(name, description, steps, fixtureOverrides)` to a module in `scenes/` and
-export it from `scenes/index.mjs`. Steps include click, type, hover, key (`shift: true` holds Shift), right-click, pointer-drag, wait, scroll,
+export it from `scenes/index.mjs`. Steps include click, type, hover, key (`shift: true` holds Shift), ime (a composition and what commits it, through the browser's own input-method path, with the events it made recorded in `window.__imeLog`), right-click, pointer-drag, wait, scroll,
 member/room selection and drag/drop. Use real UI selectors and wait for the resulting
 state; do not replace app modules or inject a separate preview page. Fixture overrides
 can replace collections; `running`, `problem`, `onlyRaphael`, `usageEmpty`

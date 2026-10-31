@@ -17,7 +17,9 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
-import { teamMentions } from "./team-mentions";
+import type { MentionField } from "./mention-field";
+import type { MentionTarget } from "./mention-text";
+import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createMemberActions } from "./member-actions";
 import { createMemberColumn } from "./member-column";
 import { createDetails } from "./member-details";
@@ -72,7 +74,10 @@ export interface MembersShell {
   member(): Member;
   /** Existing groups sorted by position. */
   groups(): readonly MemberGroup[];
-  mention(input: HTMLTextAreaElement): void;
+  /** The mention menu and chips of a composer's field, following the team as the list has it. */
+  bindMentions(input: HTMLTextAreaElement): void;
+  /** What the words of a message may address, for the chips of the owner's bubbles. */
+  mentionTargets(): readonly MentionTarget[];
   /** Opens the thread of member `id`. */
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
@@ -90,6 +95,7 @@ export interface MembersShell {
 
 export function createMembers(host: MembersHost): MembersShell {
   let list: MembersList | null = null;
+  const fields = new Set<MentionField>();
   let current = RAPHAEL_ID;
   const previews = new Map<number, string>();
   let known: Set<number> | null = null;
@@ -204,6 +210,7 @@ export function createMembers(host: MembersHost): MembersShell {
     for (const id of fresh) setSlimeState(id, "arriving");
     known = ids;
     list = read;
+    for (const field of fields) field.refresh();
     if (current !== RAPHAEL_ID && !ids.has(current)) {
       current = RAPHAEL_ID;
       host.onSelect(current);
@@ -421,7 +428,8 @@ export function createMembers(host: MembersHost): MembersShell {
     current: () => current,
     nameOf: (id) => memberOf(list, id)?.name ?? "",
     groups: () => [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
-    mention: input => { if (list) teamMentions(input, list); },
+    bindMentions: input => { fields.add(bindComposerMentions(input, () => ({ list }))); },
+    mentionTargets: () => (list ? mentionTargets(list) : []),
     faceOf(id, size) {
       const found = memberOf(list, id);
       return found ? faceHTML(found, size, { cls: "sys-face" }) : "";

@@ -667,6 +667,36 @@ Composer learning retains bounded consecutive input snapshots, replayed through 
 same Rust Tracker as external editors. Two corrections separated by unchanged
 words remain two terms in one batch; the final core acceptance stays authoritative.
 
+## Mentions as chips, and the input method (2026-10-31)
+
+An address in the owner's words (`@Raphael`, a member, `@everyone`, a group in a private chat, a connected app) is drawn as a
+chip: the mark where the @ is (the member's slime, the service's own logo, the team grid), then the name, in a quiet pill, apart
+from the words. It is drawn in the composer's field and in the owner's sent bubble (private chat, pending and sent, and rooms).
+The words stay the plain text `@Name` everywhere else: what the core receives, what is copied or quoted, the draft, voice input,
+composer learning, the slash menu and the length limit all read the textarea's `value`. A chip is derived from the words by the
+core's own rule (`members/rooms.py::_targets`: the whole name after an @ that no letter or digit precedes, the longest name at
+each @, nothing inside code or a quotation), so a name that matches nothing, or a letter typed against a chip, is plain text
+again. Backspace or Delete beside a chip removes it whole, an arrow key crosses it in one step, Shift takes it into the
+selection whole, and a caret or selection edge dropped inside one goes to its nearer edge. While the words hold a chip the
+textarea paints no text and an aria-hidden copy (`.cmp-mirror`, no click) is drawn over it; the caret, selection and input
+method stay the textarea's own.
+
+The mention menu never takes the focus while an input method composes: it is drawn as the words are composed and takes the
+focus, as before, once they are committed (`bindTeamMentions`). The old behaviour typed an @ twice with a Chinese input method:
+the composing `input` opened the menu, the menu took the focus, the focus change ended the composition (events:
+compositionstart, compositionupdate, input(composing), compositionend, blur, focus), and the commit that arrived next found
+nothing to replace and inserted its text again.
+
+```powershell
+npm run look -- mention-ime-open mention-ime-at mention-ime-filter mention-ime-compose mention-ime-commit mention-chip-composer mention-chip-sent mention-chip-delete mention-chip-arrow mention-chip-room --theme both --width 1120,720,1920x1080
+```
+
+The `ime` step drives the browser's own input-method path (CDP `Input.imeSetComposition` and `Input.insertText`) with the
+events a WebView2 input method sends, and `mention-ime-at` fails on the old code with `@@`. It cannot be a Windows input
+method: the Bopomofo editor itself, its candidate window and TSF are not driven, so a real Zhuyin session stays a manual
+check. The consumers of the shared composer are covered by `composer-learn`, `slash-commands`, `member-mentions-bots-apps`,
+`mentions-bots-apps`, `room-mentions` and `chat`.
+
 ## Rich replies
 
 See the feature map. Selected acceptance:

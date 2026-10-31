@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
+import type { MentionTarget } from "./mention-text";
 import { ico } from "./ui";
 import {
   type TurnLook,
@@ -442,6 +443,18 @@ describe("a turn", () => {
     expect(new Set(["voice", "telegram", "app"].map(sourceIcon)).size).toBe(3);
     setLocale("en");
     expect(sourceName("app")).toBe("Typed");
+  });
+
+  test("an address in the owner's words is a chip with its mark, in the sent and the pending bubble, and not in Raphael's reply", () => {
+    const mentions: MentionTarget[] = [{ name: "Notion", kind: "app", mark: () => "<svg></svg>" }, { name: "小森", kind: "member", mark: () => "<i></i>" }];
+    const look: TurnLook = { ...LOOK, mentions };
+    const asked = turn(5, { question: "請 @Notion 整理，再問 @小森。 @Nobody 不算", text: "好的 @Notion 已整理" });
+    const html = turnHTML(asked, emptyTimelineState(), false, look), bubble = html.slice(html.indexOf('<div class="bubble">'), html.indexOf('class="ra"'));
+    expect(bubble.match(/class="mention-chip" data-mention="(app|member)"/g)).toEqual(['class="mention-chip" data-mention="app"', 'class="mention-chip" data-mention="member"']);
+    expect(bubble.replace(/<[^>]+>/g, "")).toContain("請 @Notion 整理，再問 @小森。 @Nobody 不算");
+    expect(html.slice(html.indexOf('class="ra"'))).not.toContain("mention-chip");
+    expect(pendingTurnHTML("問 @小森", "app", look).match(/class="mention-chip"/g)).toHaveLength(1);
+    expect(turnHTML(asked, emptyTimelineState(), false, LOOK)).not.toContain("mention-chip");
   });
 
   test("while its task runs Raphael's face moves; a turn not asked aloud has no bubble", () => {
