@@ -1250,6 +1250,13 @@ class RpcDriver:
             confirmations._clock = clock
         if receipts() or [c["state"] for c in await cards(asked)] != ["expired"] or late.get("status") != "done":
             reasons.append("expiry")
+        # The turn goes on without its answer, told that it ran out: the next question waits for it to end.
+        for _ in range(1000):
+            if not self.app.agent._inflight:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            reasons.append("expiry")
         # A no: nothing is sent, and the other tool that sends the same mail does not get round it.
         asked = await self.ask(prompt, session="no")
         shown = await cards(asked)

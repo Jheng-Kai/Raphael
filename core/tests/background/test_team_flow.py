@@ -129,7 +129,7 @@ async def test_a_chief_makes_a_team_and_they_work_at_once_and_wait_for_the_compu
         app.gate._safety = None  # no rule of the owner's is in play here
         Desktop.release, Desktop.log = asyncio.Event(), []
         # The shared computer, on a container engine that is a fake.
-        hub = app.tool_hub
+        hub = app.vm_tools
         runtime = Docker()
         vm = LocalVm(tmp_path / "vm", settings=SettingsStore(app._conn), runner=runtime, clock=time.monotonic)
         workspace = runtime.workspace = vm.target(0).workspace

@@ -165,7 +165,7 @@ class NarratedLoop:
                         self.max_tokens, room = smaller, 1
                         continue
                     if is_context_overflow(error):  # the loop shrinks the conversation and sends it again
-                        self.last_failure = None
+                        self.last_failure = classify(error, record=False)  # said to the owner if it cannot be shrunk
                         raise Stop("failed", CONTEXT_OVERFLOW, window=provider_window(error)) from None
                     self.last_failure = classify(error)
                     wait = outage.wait(self.last_failure.retry_after) if self.last_failure.transient else None

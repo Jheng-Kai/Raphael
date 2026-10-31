@@ -986,7 +986,7 @@ class App(Router):
         # shared computer says who holds it by the member's name.
         self.background.use_workspaces(
             lambda member: self.vm.target(member).workspace if self.vm.grants.allowed(member) else None)
-        self.tool_hub.names = self.members.name_of
+        self.vm_tools.names = self.members.name_of
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),
