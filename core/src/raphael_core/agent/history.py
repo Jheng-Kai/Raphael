@@ -3,7 +3,9 @@
 A turn is written when the assistant has its answer, or when it has asked for a yes or a no
 (`status` "confirm"), and the row is completed when that is answered (`resolve`). The app's page of
 conversations shows them, and they are the one continuous conversation the model reads: the
-latest turns as they were said, the earlier ones through a summary (`memory.conversation`).
+latest turns as they were said, the earlier ones through a summary (`memory.conversation`). A request
+that failed, was refused or stopped, or was never answered is in that conversation too (`is_unfinished`),
+told as one that did not finish, with what its steps already did (`Turn.work`).
 
 A turn keeps file metadata and opaque IDs for locally stored copies. The bytes live in
 its data folder, outside the database; legacy turns with names and types remain readable.
@@ -48,12 +50,16 @@ from dataclasses import dataclass, field
 from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
-from .steps import Step
+from .steps import Step, work_summary
 from .quotes import quote_from_wire
 from .conversations import Conversations
 
 # Where a turn came from when nobody says: the hotkey and the overlay.
 VOICE = "voice"
+# The statuses of a turn that ended without the answer asked for: it failed, the owner said no or
+# stopped it, or nobody answered it. It is part of the conversation all the same: the owner said it. A turn
+# still "running" or waiting for a yes ("confirm") is not over, and says nothing yet.
+UNFINISHED = ("error", "denied", "expired")
 
 
 @dataclass
@@ -82,6 +88,25 @@ class Turn:
     room_id: int | None = None
     thread_id: int | None = None
     source_turn_id: int | None = None
+    # For a turn that did not finish, what it already did (`steps.work_summary`); set where the model
+    # reads the turn (`AgentHistory.with_work`), empty otherwise.
+    work: str = ""
+
+
+def is_unfinished(turn: Turn) -> bool:
+    """Whether the owner asked for `turn` and it ended without an answer (UNFINISHED). What a routine
+    or a colleague asked is not the owner's, and a failed routine is no part of their conversation."""
+    return (
+        turn.status in UNFINISHED
+        and turn.source not in ("routine", "member")
+        and turn.route not in ("routine", "exchange")
+    )
+
+
+def is_readable(turn: Turn) -> bool:
+    """Whether the model reads `turn` as part of the conversation: it was answered, or it is a request
+    of the owner's that did not finish. Not a turn that is running or waits for a yes."""
+    return turn.status == "done" or is_unfinished(turn)
 
 
 _COLUMNS = (
@@ -128,6 +153,15 @@ def _to_turn(row: sqlite3.Row) -> Turn:
 # A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it
 # (`handoff`), written in its thread outside its private conversations. Room work stays in rooms.
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
+# The turns the model reads as the conversation (`is_readable`), as SQL.
+_READABLE = (
+    f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
+    " AND source NOT IN ('routine', 'member') AND route NOT IN ('routine', 'exchange')))"
+)
+
+
+def _anything(step: Step) -> bool:
+    return True
 
 
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
@@ -423,19 +457,37 @@ class AgentHistory:
                 found.setdefault(turn.source_turn_id, []).append(turn)
         return found
 
-    def recent(self, count: int, *, member_id: int = 0, conversation_id: int | None = None) -> list[Turn]:
+    def recent(
+        self, count: int, *, member_id: int = 0, conversation_id: int | None = None,
+        unfinished: bool = False, changes: Callable[[Step], bool] | None = None,
+    ) -> list[Turn]:
         """The last `count` turns of the thread of `member_id` that were answered, oldest first:
         the context of what is asked next. A turn that is waiting for a yes or a no, was refused
-        or failed says nothing."""
+        or failed says nothing. With `unfinished`, the owner's requests that did not finish are among
+        them, in their place (`is_unfinished`), each told what it already did (`with_work`)."""
         if count <= 0:
             return []
         condition = "" if conversation_id is None else " AND conversation_id = ?"
+        said = _READABLE if unfinished else "status = 'done'"
         rows = self._conn.execute(
-            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope = 'private' AND status = 'done' AND member_id = ?"
+            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope = 'private' AND {said} AND member_id = ?"
             + condition + " ORDER BY id DESC LIMIT ?",
             [member_id, *([] if conversation_id is None else [conversation_id]), count],
         )
-        return self._with_messages([_to_turn(row) for row in reversed(rows.fetchall())])
+        turns = self._with_messages([_to_turn(row) for row in reversed(rows.fetchall())])
+        return self.with_work(turns, changes) if unfinished else turns
+
+    def with_work(self, turns: list[Turn], changes: Callable[[Step], bool] | None = None) -> list[Turn]:
+        """`turns`, with `Turn.work` set for each one that did not finish: what its steps already did
+        (`steps.work_summary`). `changes` says which step changed something (`ToolGate.step_changes`);
+        without it every step counts as a change, since a step not known to only read may have changed
+        something."""
+        waiting = [turn for turn in turns if turn.id is not None and is_unfinished(turn)]
+        if waiting:
+            steps = self.steps(turn.id for turn in waiting)
+            for turn in waiting:
+                turn.work = work_summary(steps.get(turn.id, []), changes or _anything)
+        return turns
 
     def after(
         self, turn_id: int, *, limit: int | None = None, member_id: int = 0,

@@ -31,7 +31,7 @@ OMITTED = "[result left out: it is from an earlier step]"
 # The most the arguments of one call may come to, as JSON, in characters. (The core refuses more
 # too: `raphael_core.agent.plugins.MAX_ARGUMENT_CHARS`, which a test keeps the same.)
 MAX_ARGUMENT_CHARS = 16000
-# The same call, with the same arguments, is refused the third time.
+# The same call, with the same arguments, is refused the third time in a row.
 REPEAT_LIMIT = 3
 
 # The tags the prompts are built from. A text that holds one is changed so that it does not close,
@@ -131,17 +131,18 @@ class FailureGuard:
 
 
 class RepeatGuard:
-    """Refuses a call that is the same as two before it: the same tool with the same arguments for
-    the third time. Such a call cannot tell the model anything it does not know, and a model that
-    keeps asking it is going round in a circle."""
+    """Refuses a call that is the same as the two right before it: nothing happened in between, so
+    it cannot tell the model anything it does not know. The same call after other work is new: the
+    tests again after an edit."""
 
     def __init__(self, limit: int = REPEAT_LIMIT) -> None:
         self._limit = limit
-        self._seen: dict[tuple[str, str], int] = {}
+        self._last: tuple[str, str] | None = None
+        self._row = 0
 
     def allows(self, name: str, arguments: Mapping[str, Any]) -> bool:
         """Count the call, and say whether it may be made."""
         key = (name, canonical(arguments))
-        count = self._seen.get(key, 0) + 1
-        self._seen[key] = count
-        return count < self._limit
+        self._row = self._row + 1 if key == self._last else 1
+        self._last = key
+        return self._row < self._limit

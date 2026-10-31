@@ -21,6 +21,7 @@ export const journeys = [
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
+  { name: "long-think", description: "The real core: a model that thinks past the old 60 second deadline finishes its turn, and the answer reaches the window" },
   { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
   { name: "openrouter-turn", description: "One real turn through the owner's OpenRouter key on a free model: no other paid request" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
@@ -250,6 +251,25 @@ export async function drive(name, context) {
     await heard("dictation: cancelled", mark, "One Esc did not end a dictation started with the app in front");
     return;
   }
+  if (name === "long-think") {
+    await keepFocus(page);
+    const conversation = await newConversation(context);
+    const text = "Think about this for as long as it takes.";
+    const began = Date.now();
+    await type(page, ".composer .cmp-input", text);
+    await click(page, ".cmp-send");
+    let turn;
+    for (let i = 0; i < 1500 && !turn; i++) {
+      turn = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation && row.question === text && row.status !== "running");
+      if (!turn) await pause(200);
+    }
+    result.seconds = Math.round((Date.now() - began) / 1000);
+    result.turn = turn && { status: turn.status, text: turn.text.slice(0, 80) };
+    await capture("after-long-think");
+    if (turn?.status !== "done") throw new Error(`The long think did not finish: ${JSON.stringify(result.turn)}`);
+    if (result.seconds < 75) throw new Error(`The model did not think as long as asked: ${result.seconds} s`);
+    return;
+  }
   if (name === "every-source" || name === "openrouter-turn") {
     await keepFocus(page);
     const outcomes = result.sources = [];
@@ -372,6 +392,23 @@ export async function drive(name, context) {
     await capture("turn-on-codex");
     result.turn = { model: turn.model, status: turn.status, text: turn.text.slice(0, 80) };
     if (turn.status !== "done" || !turn.model.startsWith("cli:codex") || !turn.text.trim()) throw new Error(`The turn did not answer on Codex: ${JSON.stringify(result.turn)}`);
+    // One model answers for everyone: a member still holding its own gives it up when the owner chooses in its conversation.
+    const { member: colleague } = await context.rpc("members.create", { name: "NativeSync", role: "Model sync" });
+    await context.rpc("members.update", { id: colleague.id, model: "cli:claude:haiku" });
+    await perform(page, { action: "member", id: colleague.id });
+    await until(async () => (await composerName()).includes("Haiku"), "the member's own model did not show while it held one");
+    await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:sonnet" });
+    await click(page, ".composer .cmp-model .mp-trigger");
+    await wait(page, ".cb-menu");
+    await click(page, ".cb-pick");
+    await click(page, '.cb-menu [data-cb-source="cli:codex"]');
+    await click(page, `.cb-menu [data-model="${id}"]`);
+    await until(async () => (await savedModel()).startsWith(id), "a member's composer did not choose the one model");
+    const kept = (await context.rpc("members.list", {})).members.find(row => row.id === colleague.id).model;
+    if (kept) throw new Error(`The member kept a model of its own: ${kept}`);
+    await capture("member-chose-for-everyone");
+    await click(page, ".composer .cmp-model .mp-trigger");
+    await page.waitForSelector(".cb-menu", { hidden: true });
     await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:haiku" });
     await until(async () => (await composerName()).includes("Haiku"), "a change of the setting did not reach the composer");
     await capture("change-reaches-composer");

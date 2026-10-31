@@ -119,6 +119,12 @@ describe("prices", () => {
     expect(priceDescription(ROUTER, "cleanup")).toBe("價格不固定");
   });
 
+  test("a model on the ChatGPT plan is priced as the subscription, not as unknown", () => {
+    const plan = llm("@chatgpt:gpt-5", { name: "GPT-5", provider: "OpenAI", input_per_mtok: null, output_per_mtok: null });
+    expect(priceText(plan, "answer")).toBe("訂閱");
+    expect(priceDescription(plan, "answer")).toBe("訂閱");
+  });
+
   test("a speech model is priced per minute, or per million tokens when it is priced by the token", () => {
     expect(priceText(SCRIBE, "stt")).toBe("每分鐘 $0.0037");
     expect(priceText(WHISPER, "stt")).toBe("每分鐘 $0.00020");

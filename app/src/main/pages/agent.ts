@@ -351,6 +351,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawConversation(): void {
     const selected = conversationCache.get(memberId())?.find(c => c.id === conversationId());
     const title = conversationTitle(selected);
+    composerBrain?.draw();
     caption.textContent = title;
     conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
   }
@@ -456,7 +457,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
-  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler) });
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
@@ -1467,7 +1468,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function switchThread(): void {
     desktop.refresh();
-    composerBrain?.draw();
     drawConversation();
     if (roomPane.active) roomPane.close();
     void slashMenu.refresh();

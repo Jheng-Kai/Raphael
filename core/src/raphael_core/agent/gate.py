@@ -53,6 +53,7 @@ from .ledger import Ledger
 from .policy import Action, Approval, NotApproved, Tier, ToolRegistry, UnknownTool, action_digest
 from .team import TEAM_TIER, TEAM_TOOLS
 from .safety import ALLOW, PASS, Proposed, SafetyGuard, Screening, narrow_scope
+from .steps import Step
 
 if TYPE_CHECKING:
     from ..integrations.pool import McpPool
@@ -247,6 +248,19 @@ class ToolGate:
                     else kind_of(server, tool)) == "read"
         except Exception:
             return False
+
+    def step_changes(self, step: Step) -> bool:
+        """Whether a step kept in the history did something that changes the owner's world, by the
+        rule a live call is told by (`reads_only` for a plugin's tool, the tier T0 for the rest). A hub
+        that cannot say, or a command or action nobody knows any more, changes things; a lookup of
+        Raphael's own that has no tier cannot have, since nothing that changes anything passes the door
+        without one."""
+        if step.kind == "tool" and step.server != BUILTIN_SERVER:
+            return not self.reads_only(step.server or "", step.tool)
+        tier = self.tier_now(step.tool)
+        if tier is None:
+            return step.kind != "tool"
+        return tier > Tier.T0
 
     def is_vm_tool(self, key: str) -> bool:
         """Sandbox steps use their own control lease, not per-click safety classification."""

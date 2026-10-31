@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from raphael_core.agent.narration import MODEL_SILENCE_S
 from raphael_core.brain.openrouter import ChatTurn, Completion, OpenRouterError
 from raphael_core.brain.providers.registry import ProviderRegistry, ProviderRouter
 from raphael_core.brain.secrets import MemoryKeyStore
@@ -42,6 +43,7 @@ def routed(conn, monkeypatch, provider):
 @pytest.mark.parametrize("language", ["en", "zh-TW", "ja"])
 async def test_timed_out_turn_stays_on_the_chosen_model_and_reports_it(conn, actions, monkeypatch, language, saved):
     provider = Provider("timeout")
+    monkeypatch.setattr("raphael_core.agent.narration.RETRY_WAITS", (0.0, 0.0, 0.0))
     registry, router = routed(conn, monkeypatch, provider)
     chosen = "openai/owner-chosen-model"
     registry.settings.set("agent_model", chosen)
@@ -53,9 +55,8 @@ async def test_timed_out_turn_stays_on_the_chosen_model_and_reports_it(conn, act
         result = await rig.call("agent.ask", {"session_id": "chosen", "text": "Hello", "ui_language": language, "source": "app"})
         assert result["status"] == "done" and chosen in result["text"]  # RPC completion; persisted status is error.
         assert {"en": "Try again", "zh-TW": "再試", "ja": "試"}[language] in result["text"]
-        assert len(provider.calls) == 1
-        assert provider.calls[0]["model"] == chosen
-        assert provider.calls[0]["fallbacks"] == [] and provider.calls[0]["timeout_s"] == 60
+        assert len(provider.calls) == 4
+        assert all(call["model"] == chosen and call["fallbacks"] == [] and call["timeout_s"] == MODEL_SILENCE_S for call in provider.calls)
         [turn] = await rig.turns()
         assert turn["status"] == "error" and turn["text"] == result["text"]
         assert all("unasked/" not in call["model"] for call in provider.calls)

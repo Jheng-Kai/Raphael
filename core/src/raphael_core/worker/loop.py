@@ -28,6 +28,7 @@ result.
 """
 
 import asyncio
+import math
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -59,9 +60,13 @@ WAITING_FOR_WORK = "Not made: waiting for delegated work."
 class Limits:
     """What one task may use. The core enforces these; the loop counts them too."""
 
-    model_calls: int = 80
-    tool_calls: int = 200
+    model_calls: float = 80
+    tool_calls: float = 200
     seconds: float = 1800.0
+
+
+# A turn in a conversation works until the job is done or the owner stops it.
+UNLIMITED = Limits(math.inf, math.inf, math.inf)
 
 
 # The kind of `Stop` of a call that waits for the owner's yes: the task pauses there.
@@ -148,7 +153,7 @@ async def _until(
     watch = asyncio.ensure_future(cancelled.wait())
     try:
         done, _ = await asyncio.wait(
-            {work, watch}, timeout=max(deadline - clock(), 0.0), return_when=asyncio.FIRST_COMPLETED
+            {work, watch}, timeout=None if math.isinf(deadline) else max(deadline - clock(), 0.0), return_when=asyncio.FIRST_COMPLETED
         )
         if work in done:
             return work.result()
@@ -269,6 +274,7 @@ async def run_task(
                     images.extend(image_parts(outcome))
                     if outcome.ok:
                         failures.succeeded()
+                        failure_guard.succeeded()
                     else:
                         last_failed = True
                         owner_denied = owner_denied or outcome.kind in (

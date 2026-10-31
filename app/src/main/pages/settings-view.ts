@@ -27,7 +27,7 @@ import { type MemoryView, memoryHTML } from "../memory-view";
 import { type RulesView, rulesHTML } from "../safety-rules";
 import { AUTO_MICROPHONE, microphoneChoices } from "../microphone";
 import type { LocalView } from "../local-models";
-import { type ModelPickerLook, modelPickerHTML, modelsFor, priceDescription, splitEffort } from "../model-picker";
+import { type ModelPickerLook, modelPickerHTML, modelsFor, planRef, priceDescription, splitEffort } from "../model-picker";
 import { type ServicesView, servicesHTML } from "../services";
 import { type ProvidersView, providersHTML, providersAddHTML, emptyProvidersView } from "../providers";
 import { type CliBrainsView, cliBrainsHTML, cliModels, emptyCliBrainsView } from "../cli-brains";
@@ -365,6 +365,7 @@ const MIC_METER_SEGMENTS = 46;
 function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string {
   const models = modelsFor(catalog, role);
   const base = splitEffort(id, models).model;
+  if (planRef(base)) return t("brains.subscription");
   const model = models.find((m) => m.id === base);
   return model ? priceDescription(model, role) : t("pricing.001");
 }
@@ -373,9 +374,9 @@ function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string
 export function priceTexts(v: SettingsView): Record<string, string> {
   const catalog = catalogOf(v);
   const local = sttIsLocal(v) ? t("settings.sttLocalPrice") : null;
-  const subscription = agentModel(v).startsWith("cli:") ? t("brains.subscription") : null;
+  const subscription = planRef(agentModel(v)) ? t("brains.subscription") : null;
   const quick = v.brain?.quick_model || agentModel(v);
-  const quickSubscription = quick.startsWith("cli:") ? t("brains.subscription") : null;
+  const quickSubscription = planRef(quick) ? t("brains.subscription") : null;
   if (v.catalog === "loading") return { model: PRICES_LOADING(), "agent-model": subscription ?? PRICES_LOADING(), "quick-model": quickSubscription ?? PRICES_LOADING(), "stt-model": local ?? PRICES_LOADING(), note: "" };
   if (!catalog) return { model: "", "agent-model": subscription ?? "", "quick-model": quickSubscription ?? "", "stt-model": local ?? "", note: t("settings.030") };
   return {

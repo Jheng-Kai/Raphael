@@ -144,3 +144,5 @@
 .mc-stops { display: flex; grid-column: 2; justify-content: space-between; }
 .mc-stop { padding: 0 2px; color: var(--text-3); font-size: var(--fs-xs); }
 .mc-stop[data-on="true"] { color: var(--text); font-weight: 600; }
+.mc-stop[data-effort=""] { opacity: 0.45; }
+.mc-range:disabled { cursor: default; }

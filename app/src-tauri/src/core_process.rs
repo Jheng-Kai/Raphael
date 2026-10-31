@@ -49,6 +49,9 @@ type ExitHook = Box<dyn Fn() + Send + Sync>;
 /// The protocol version this app speaks (`PROTOCOL_VERSION` in the core's `protocol.py`).
 const PROTOCOL_VERSION: u64 = 1;
 
+/// Thirty days: long enough that no turn ever meets it, while the wait stays a plain deadline like every other call's.
+const TURN_TIMEOUT_S: u64 = 30 * 24 * 3600;
+
 /// How long a call to `method` may take before it fails with `TIMEOUT`.
 pub fn timeout_for(method: &str) -> Duration {
     let seconds = match method {
@@ -59,7 +62,8 @@ pub fn timeout_for(method: &str) -> Duration {
         "dictation.stop" => 150,
         // A narrated conversation may work for thirty minutes before its final reply or next
         // permission question. Leave time for routing and transport; Esc still stops it earlier.
-        "agent.ask" | "agent.confirm" => 1830,
+        // A turn works until the job is done or the owner stops it.
+        "agent.ask" | "agent.confirm" => TURN_TIMEOUT_S,
         // Starts the plugin (a program that may first have to be fetched), reads its tools.
         "integrations.refresh" => 40,
         // Waits for the user to log in in the browser: up to five minutes (the core ends it at
@@ -872,8 +876,8 @@ mod tests {
         assert_eq!(timeout_for("dictation.stop"), Duration::from_secs(150));
         assert_eq!(timeout_for("models.ensure"), Duration::from_secs(3600));
         assert_eq!(timeout_for("models.local_use"), Duration::from_secs(3600));
-        assert_eq!(timeout_for("agent.ask"), Duration::from_secs(1830));
-        assert_eq!(timeout_for("agent.confirm"), Duration::from_secs(1830));
+        assert_eq!(timeout_for("agent.ask"), Duration::from_secs(TURN_TIMEOUT_S));
+        assert_eq!(timeout_for("agent.confirm"), Duration::from_secs(TURN_TIMEOUT_S));
         assert_eq!(timeout_for("integrations.refresh"), Duration::from_secs(40));
         assert_eq!(
             timeout_for("integrations.connect"),

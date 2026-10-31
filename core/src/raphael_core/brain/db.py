@@ -1116,6 +1116,14 @@ END;
 PRAGMA user_version = 46;
 COMMIT;
 """
+# One model answers for every member, chosen in one place: what the composer used to save per member goes.
+_MIGRATIONS[47] = """
+BEGIN;
+UPDATE members SET model = '';
+PRAGMA user_version = 47;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

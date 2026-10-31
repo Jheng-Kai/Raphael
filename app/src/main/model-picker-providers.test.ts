@@ -41,6 +41,11 @@ test("price fallback requires exact maker plus model identity, otherwise it is b
   expect(chooserPrice({ ...direct, provider: "Other" }, [router], "answer")).toBe("");
   expect(chooserPrice(direct, [], "answer")).toBe("");
 });
+test("a model on the owner's plan never borrows a router's price", () => {
+  const router = { ...model("openai/gpt-5"), input_per_mtok: 1.25, output_per_mtok: 10 };
+  expect(chooserPrice(model("@chatgpt:gpt-5", "chatgpt"), [router], "answer")).toBe("");
+  expect(chooserPrice(model("cli:codex:gpt-5", "cli:codex"), [router], "answer")).toBe("");
+});
 test("API rows show maker logos and escaped names; a saved recent model leads without duplication", () => {
   localStorage.setItem("raphael.chooser.recent.answer", JSON.stringify(["openai/recent"]));
   mount([model("openai/other"), { ...model("openai/recent"), name: "<img src=x>" }]);

@@ -64,7 +64,7 @@ test("快速提問 picks its effort inside the model list, as the answer model d
   // 與回答相同: the list shows the answer model's effort row, from the saved effort
   click('[data-k="quick-model"]');
   expect(document.querySelector('.model-chooser .mc-inherit')!.getAttribute("aria-pressed")).toBe("true");
-  expect([...document.querySelectorAll<HTMLElement>('.model-chooser [data-effort]')].map(b => b.dataset.effort)).toEqual(["low", "medium"]);
+  expect([...document.querySelectorAll<HTMLElement>('.model-chooser [data-effort]')].map(b => b.dataset.effort)).toEqual(["low", "medium", "", "", ""]);
   expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("data-on")).toBe("true");
   slideTo("medium"); click('.model-chooser [data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "");

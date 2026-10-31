@@ -322,6 +322,16 @@ async def test_a_task_goes_on_from_the_conversation_it_is_given():
     assert outcome.messages is None
 
 
+async def test_a_tool_that_failed_twice_is_usable_again_once_other_work_has_succeeded():
+    answers = iter((False, False, True, True))
+    answer = lambda name, arguments: ToolOutcome(next(answers), "tool_error", "r")  # noqa: E731
+    calls = [("Notes__look", {"topic": "a"}), ("Notes__look", {"topic": "b"}), ("local_time", {}), ("Notes__look", {"topic": "d"})]
+    host = FakeHost([*[Turn("", [ask(name, arguments, str(n))]) for n, (name, arguments) in enumerate(calls)], report()], answer=answer)
+    outcome = await run(host)
+    assert outcome.status == "done"
+    assert [call[1] for call in host.tool_calls] == [name for name, _ in calls]
+
+
 async def test_calls_that_keep_failing_steer_the_model_once_and_then_stop_the_task():
     # Distinct failure kinds exercise the global guard without hitting the per-tool pair guard.
     kinds = iter(("network", "timeout", "auth_expired", "not_found", "rate_limit", "server", "tool_broken", "unknown"))

@@ -89,7 +89,7 @@ class ChatGPTProvider:
         completed, streamed = None, []
         try:
             async with self.auth.http().stream("POST", RESOURCE + "/responses", json=body,
-                    headers={"Authorization": "Bearer " + token}, timeout=timeout_s, follow_redirects=False) as response:
+                    headers={"Authorization": "Bearer " + token}, timeout=httpx.Timeout(timeout_s, connect=30.0), follow_redirects=False) as response:
                 if not response.is_success:
                     await response.aread()
                     try:

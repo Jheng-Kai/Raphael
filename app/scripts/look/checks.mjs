@@ -443,13 +443,12 @@ export function checkRendered(name, context = {}) {
     return { check: name, toasts: toasts.length, targets: targets.length };
   }
   if (name === "member-brain-saved") {
-    const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
-    require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
+    const saved = window.__look.calls.filter(call => call.method === "settings.set" && call.params.key === "agent_model");
+    require(saved.length === 1 && saved[0].params.value.startsWith("cli:codex"), "a member's composer chooses the one model everyone answers on");
+    require(!window.__look.calls.some(call => call.method === "members.update" && call.params.model), "no member keeps a model of its own");
     require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick b')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
-    require(window.__look.data.members.find(member => member.id === 1).model === saved[0].params.model, "the member retains its own brain");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
-    if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
-    return { check: name, model: saved[0].params.model };
+    return { check: name, model: saved[0].params.value };
   }
   if (name === "details-sheet") {
     const panel = document.querySelector('.mb-det:not([hidden])');
@@ -1102,7 +1101,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "model-effort-order") {
-    const buttons = [...document.querySelectorAll('.model-chooser .mc-effort [data-effort]')];
+    const buttons = [...document.querySelectorAll('.model-chooser .mc-effort [data-effort]:not([data-effort=""])')];
     const order = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
     require(buttons.length > 1, "the fixture exercises several effort choices");
     const values = buttons.map(button => button.dataset.effort);
@@ -1631,15 +1630,65 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "composer-favorites") {
-    const group = document.querySelector(".cb-menu .cb-group"), rows = [...group.querySelectorAll("[data-model]")].map(row => row.dataset.model);
-    require(group.querySelector("h4")?.textContent.trim() && rows.join() === "openai/gpt-6-luna,cli:codex:gpt-6.1", `the starred models first, in order: ${rows}`);
-    require(document.querySelectorAll(".cb-menu .cb-source").length >= 3, "and the sources under them");
+    const rows = [...document.querySelectorAll(".cb-menu .cb-list [data-model]")];
+    require(rows.map(row => row.dataset.model).join() === "openai/gpt-6-luna,cli:codex:gpt-6.1", `what is starred, in order: ${rows.map(row => row.dataset.model)}`);
+    require(rows.every(row => row.querySelector("small")?.textContent.trim()), "each says its source");
+    require(document.querySelector(".cb-rail .cb-source")?.dataset.cbSource === "favorites", "first on the rail");
+    require(document.querySelectorAll(".cb-menu .cb-source").length >= 3, "with the sources under it");
+    return { check: name };
+  }
+  if (name === "composer-card-same") {
+    const now = document.querySelector(".cb-now"), pick = now.querySelector(".cb-pick"), range = now.querySelector(".mc-range");
+    require(visible(pick.querySelector("small")) && pick.querySelector("small").textContent.trim() && pick.querySelector("b").textContent.trim(), "the source above the model");
+    require(pick.querySelector("small").getBoundingClientRect().bottom <= pick.querySelector("b").getBoundingClientRect().top + 1, "in that order");
+    require(!/訂閱|方案|用量/.test(now.textContent) && !now.querySelector(".btn"), "no plan or usage on the card");
+    require(range.max === "4" && now.querySelectorAll(".mc-dot").length === 5, "the same ruler of five stops");
+    const offered = range.dataset.levels.split(",").filter(Boolean).length;
+    require(offered ? now.querySelector('.mc-stop[data-on="true"]')?.dataset.effort : range.disabled && /不分思考程度/.test(now.textContent), "the stop it is on is named, or it says there is nothing to choose");
+    const card = now.getBoundingClientRect(), track = range.getBoundingClientRect();
+    const shape = [card.width, card.height, track.top - card.top, track.width].map(Math.round).join();
+    window.__cbShape ??= shape;
+    require(shape === window.__cbShape, `the same card whatever the source: ${shape} / ${window.__cbShape}`);
+    return { check: name, source: pick.querySelector("small").textContent, model: pick.querySelector("b").textContent, offered, shape };
+  }
+  if (name === "composer-model-fold") {
+    const all = document.querySelector(".cb-all");
+    require(document.querySelectorAll(".cb-list [data-model]").length === 5, "five to begin with");
+    require(/43/.test(all.textContent) && all.getAttribute("aria-expanded") === "false", "and says how many there are");
+    require(document.querySelector('.cb-list [data-model="openai/gpt-6-luna"]') && document.querySelector('.cb-list [data-model="openai/gpt-6-sol"]'), "what is starred and what is chosen are among them");
+    require(!document.querySelector(".cb-search"), "no search until the list is opened");
+    return { check: name };
+  }
+  if (name === "composer-model-unfolded") {
+    const list = document.querySelector(".cb-list");
+    require(list.querySelectorAll("[data-model]").length === 43 && list.scrollHeight > list.clientHeight, "all of them, scrolling inside the card");
+    require(visible(document.querySelector(".cb-search")) && document.querySelector(".cb-all").getAttribute("aria-expanded") === "true", "with a search and the way to fold them");
+    return { check: name };
+  }
+  if (name === "composer-quick-read") {
+    const composer = document.querySelector(".composer .cmp-model .mp-tname").textContent;
+    require(composer === "GPT-6 Luna", `a quick conversation shows 快速提問's model: ${composer}`);
+    require(document.querySelector('.cb-now .mc-stop[data-on="true"]')?.dataset.effort === window.__look.data.settings.quick_effort, "at 快速提問's depth");
+    return { check: name };
+  }
+  if (name === "composer-quick-saved") {
+    const saved = window.__look.data.settings;
+    require(saved.quick_model === "cli:codex:gpt-6.1", `the choice is 快速提問's: ${saved.quick_model}`);
+    require(saved.agent_model === "openai/gpt-6-sol", `the answer model is untouched: ${saved.agent_model}`);
+    return { check: name };
+  }
+  if (name === "settings-chatgpt-row") {
+    const row = document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-trigger');
+    require(row.querySelector(".mp-tname").textContent === "GPT-6-Sol", "the plan's model");
+    require(document.querySelector('.modal-scrim [data-price="agent-model"]').textContent === "訂閱", `on the plan, not 價格未知: ${document.querySelector('.modal-scrim [data-price="agent-model"]').textContent}`);
+    require(row.querySelector(".logo, .mono svg") && !row.querySelector(".mono .i"), "with its maker's mark, not the plain one");
     return { check: name };
   }
   if (name === "permission-menu") {
     const rows = [...document.querySelectorAll("#app-popover [data-value]")];
     require(rows.map(row => row.dataset.value).join() === "direct,ask,plan", "three modes");
     require(rows.every(row => row.querySelector(".mt")?.textContent.trim() && row.querySelector(".mdesc")?.textContent.trim()), "each says what it does");
+    require(["left", "start"].includes(getComputedStyle(document.querySelector("#app-popover .menu-head")).textAlign), "the title stands on the left");
     require(document.querySelector("#app-popover").getBoundingClientRect().bottom <= document.querySelector(".cmp-mode").getBoundingClientRect().top + 1, "it opens above the button, inside the window");
     return { check: name };
   }
@@ -1660,7 +1709,7 @@ export function checkRendered(name, context = {}) {
     require(!/token/i.test(document.querySelector(".mc-pane-head").textContent), "no per-token price");
     return { check: name };
   }
-  if (name === "composer-model-small" || name === "composer-model-sources" || name === "composer-model-turned") {
+  if (name === "composer-model-small" || name === "composer-model-browse") {
     const menu = document.querySelector(".cb-menu"), now = menu.querySelector(".cb-now"), list = menu.querySelector(".cb-body");
     require(visible(now) !== visible(list), "the card shows one view at a time");
     if (name === "composer-model-small") {
@@ -1671,8 +1720,16 @@ export function checkRendered(name, context = {}) {
       require(visible(head.querySelector(".cb-back")), "a way back");
       const centre = (head.querySelector("h3").getBoundingClientRect().left + head.querySelector("h3").getBoundingClientRect().right) / 2;
       require(Math.abs(centre - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
-      if (name === "composer-model-sources") require(menu.querySelectorAll(".cb-source").length >= 3 && menu.querySelector(".cb-group h4") && [...menu.querySelectorAll("[data-model]")].every(row => row.closest(".cb-group") === menu.querySelector(".cb-group")), "the sources under their kinds, and no models but the starred ones");
-      else require(!menu.querySelector(".cb-source"), "one source's models");
+      const rail = list.querySelector(".cb-rail"), pane = list.querySelector(".cb-pane");
+      require(visible(rail) && visible(pane) && rail.getBoundingClientRect().right <= pane.getBoundingClientRect().left + 1, "the sources on the left, the models on the right");
+      require(rail.querySelectorAll('[aria-pressed="true"]').length === 1, "the source shown is marked");
+      require([...rail.querySelectorAll(".cb-name b")].every(name => name.scrollWidth <= name.clientWidth), "every source's name is whole");
+      const box = menu.getBoundingClientRect();
+      require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the card fits the window");
+      const first = rail.querySelector(".cb-source").getBoundingClientRect(), place = `${Math.round(first.left)},${Math.round(first.top)},${Math.round(list.getBoundingClientRect().height)}`;
+      const wasPlace = window.__cbRail;
+      window.__cbRail = place;
+      if (wasPlace !== undefined) require(wasPlace === place, `a source pressed stays where it was: ${wasPlace} / ${place}`);
     }
     require(menu.getBoundingClientRect().bottom <= document.querySelector(".composer .cmp-model .mp-trigger").getBoundingClientRect().top + 1, "the card opens above the button, wherever the composer stands");
     const bottom = menu.getBoundingClientRect().bottom, was = window.__cbBottom;
@@ -1737,10 +1794,10 @@ export function checkRendered(name, context = {}) {
     require(range && menu.querySelectorAll(".mc-stop").length >= 2, "its depth of thought is a slider right there");
     require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 1, "only the stop it is on is named");
     if (name === "composer-model-depth") {
-      const last = [...menu.querySelectorAll(".mc-stop")].at(-1);
-      require(Number(range.value) === Number(range.max), "the slider stands at the chosen stop");
-      const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string").at(-1);
-      require(saved.params.model.includes(last.dataset.effort) , "the depth is saved with the model");
+      const last = [...menu.querySelectorAll(".mc-stop")].filter(stop => stop.dataset.effort).at(-1);
+      require(Number(range.value) === range.dataset.levels.split(",").findLastIndex(Boolean), "the slider stands at the chosen stop");
+      const saved = window.__look.calls.filter(call => call.method === "settings.set" && call.params.key === "agent_model").at(-1);
+      require(saved.params.value.includes(last.dataset.effort), "the depth is saved with the model");
       require(document.querySelector(".composer .cmp-model .cb-depth")?.textContent === last.textContent, "the button says the depth");
     }
     return { check: name };

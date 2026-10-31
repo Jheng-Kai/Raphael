@@ -1,4 +1,5 @@
 """Opt-in native diagnostics: only Composio may read an existing credential; writes stay in memory."""
+import asyncio
 import os
 import re
 import json
@@ -149,6 +150,13 @@ async def vm_timezone_smoke(directory):
 
 def native_enabled(fake_llm: bool) -> bool:
     return fake_llm and os.environ.get("RAPHAEL_TEST_NATIVE") == "1"
+
+
+async def native_think() -> None:
+    """A native journey's model that takes as long as the journey says."""
+    seconds = os.environ.get("RAPHAEL_NATIVE_THINK_S") if os.environ.get("RAPHAEL_TEST_NATIVE") == "1" else None
+    if seconds:
+        await asyncio.sleep(float(seconds))
 
 
 async def wait_for_native_cancel(messages):

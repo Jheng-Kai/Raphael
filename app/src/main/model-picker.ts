@@ -67,6 +67,9 @@ export function fitFor(model: CatalogModel, role: PickerRole): { usable: boolean
   return { usable: fit?.usable === true, reason: fit?.reason ?? null };
 }
 
+/** A model on the owner's own plan, which has no price of its own: a CLI's or ChatGPT's. */
+export const planRef = (ref: string): boolean => ref.startsWith("cli:") || ref.startsWith("@chatgpt:");
+
 /** Whether `role` can use `model`. */
 export const usableFor = (model: CatalogModel, role: PickerRole): boolean => fitFor(model, role).usable;
 
@@ -83,7 +86,7 @@ const hasTokenPrice = (m: CatalogModel): boolean => m.input_per_mtok !== null ||
  * by the token, `$2.00 / $12 每百萬 token`. Else 免費, 價格不固定 (a router) or 價格未知.
  */
 export function priceText(model: CatalogModel, role: PickerRole): string {
-  if (model.id.startsWith("cli:")) return t("brains.subscription");
+  if (planRef(model.id)) return t("brains.subscription");
   if (model.variable_price) return t("picker.varies");
   if (model.free) return t("picker.free");
   if (model.per_minute !== null) return t("pricing.003", { p0: formatPerMinute(model.per_minute) });
@@ -506,7 +509,7 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
 
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
-  if (model.id.startsWith("cli:")) return "";
+  if (planRef(model.id)) return "";
   if (model.free || model.variable_price || model.per_minute !== null || hasTokenPrice(model)) return priceText(model, role);
   const raw = model.id.replace(/^@[^:]+:/, "");
   const maker = model.provider.toLowerCase();
@@ -526,17 +529,19 @@ function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
 }
 
 /** The same model name and connection source for picker buttons and read-only cards. */
-export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; model?: CatalogModel } {
+export function modelPickerSelection(o: ModelPickerLook): { name: string; source: string; provider: string; model?: CatalogModel } {
   // Public cached names remain useful after logout; only pickerModels can supply runnable rows.
   const models = [...pickerModels(o).filter((m) => !m.id.startsWith("cli:")), ...cliModels(o.clis ?? [], false)];
   const inherited = baseRef(o.current) === o.lead?.id && o.inheritFrom;
   const ref = concreteCurrent(inherited ? { ...o, current: inherited } : o, models), model = models.find((m) => m.id === ref);
   const local = o.local?.active ? faceTitle(o.local) : null;
   const name = local ? local.split(" · ").slice(1).join(" · ") : o.lead?.id === ref ? o.lead.name : model?.name ?? shortName(ref);
-  const provider = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
-    `${CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? t("chooser.same") : "";
-  const source = inherited ? `${provider} · ${t("services.sameAsAnswer")}` : provider;
-  return { name, source, model };
+  const cli = CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name;
+  const from = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
+    `${cli ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? t("chooser.same") : "";
+  const source = inherited ? `${from} · ${t("services.sameAsAnswer")}` : from;
+  // The plain name of where it runs, the same kind of word for every source.
+  return { name, source, provider: cli ?? (!model && ref.startsWith("@chatgpt:") ? "ChatGPT" : from), model };
 }
 
 function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
@@ -584,22 +589,50 @@ export const modelRefWith = (model: CatalogModel, effort: string): string =>
 
 const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (count - 1)) * 100 : 0);
 
-/** The depth of thought as something to drag or press along, or to move with the arrow keys; the stops are its scale. */
-export function effortSliderHTML(levels: readonly string[], value: string): string {
-  const at = Math.max(0, levels.indexOf(value));
+/** Every model's depth is read off one ruler, so that a stop stands in the same place whoever answers. */
+const RULER: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+
+/** What each stop of the ruler is for this model, "" where it has no such depth. A depth under 低 takes 低's stop when it is chosen or the model has no 低. */
+function rulerOf(levels: readonly string[], value: string): string[] {
+  const stops = RULER.map((stop) => (levels.includes(stop) ? stop : ""));
+  const under = [value, "minimal"].find((level) => (level === "minimal" || level === "none") && levels.includes(level));
+  if (under && (!stops[0] || under === value)) stops[0] = under;
+  return stops;
+}
+
+/**
+ * The depth of thought as something to drag or press along, or to move with the arrow keys. The ruler is the same for
+ * every model; the stops a model lacks are dim and the thumb does not rest on them, and with nothing to choose it is
+ * still and says so. `known` is false until the model has been read, when there is nothing to say yet.
+ */
+export function effortSliderHTML(levels: readonly string[], value: string, known = true): string {
+  const stops = rulerOf(levels, value), offered = stops.filter(Boolean);
+  const at = Math.max(0, stops.indexOf(value && stops.includes(value) ? value : offered[0] ?? ""));
+  const percent = stopPercent(at, stops.length);
+  const note = known && !offered.length ? t("chooser.noDepth") : "";
   return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
-    (levels.length > 1 ? `<div class="mc-track" style="--p:${stopPercent(at, levels.length) / 100}"><input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` +
-      `<span class="mc-dots" aria-hidden="true">${levels.map((level, index) => `<i class="mc-dot" data-dot="${esc(level)}" data-on="${index === at}"></i>`).join("")}</span></div>` : "") +
-    `<div class="mc-stops" aria-hidden="true">${levels.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${index === at}">${esc(effortText(level))}</span>`).join("")}</div></div>`;
+    `<div class="mc-track"${offered.length ? "" : " data-empty"} style="--p:${percent / 100}"><input type="range" class="mc-range" min="0" max="${stops.length - 1}" step="1" value="${at}"${offered.length < 2 ? " disabled" : ""} aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(note || effortText(stops[at] ?? ""))}" data-levels="${esc(stops.join(","))}" data-at="${at}" style="--at:${percent}%">` +
+    `<span class="mc-dots" aria-hidden="true">${stops.map((level, index) => `<i class="mc-dot" data-dot="${esc(level)}" data-on="${!!level && index === at}"></i>`).join("")}</span></div>` +
+    `<div class="mc-stops" aria-hidden="true">${offered.length ? stops.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${!!level && index === at}">${esc(effortText(level || (RULER[index] ?? "")))}</span>`).join("") : note ? `<span class="mc-stop" data-on="true">${esc(note)}</span>` : ""}</div></div>`;
+}
+
+/** Where a stop the model lacks sends the thumb: on the way it was going, else back to the nearest it has. */
+function restingStop(levels: readonly string[], to: number, from: number): number {
+  const offered = levels.flatMap((level, index) => (level ? [index] : []));
+  const up = offered.find((index) => index >= to), down = offered.filter((index) => index <= to).pop();
+  return (to >= from ? up ?? down : down ?? up) ?? from;
 }
 
 /** The slider where the pointer has it, and the level that is. */
 export function moveEffortSlider(range: HTMLInputElement): string {
-  const levels = (range.dataset.levels ?? "").split(","), at = Number(range.value), level = levels[at] ?? "";
+  const levels = (range.dataset.levels ?? "").split(",");
+  const at = restingStop(levels, Number(range.value), Number(range.dataset.at ?? 0)), level = levels[at] ?? "";
+  range.value = String(at);
+  range.dataset.at = String(at);
   range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
   range.parentElement?.style.setProperty("--p", String(stopPercent(at, levels.length) / 100));
   range.setAttribute("aria-valuetext", effortText(level));
-  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort], [data-dot]") ?? []) stop.dataset.on = String((stop.dataset.effort ?? stop.dataset.dot) === level);
+  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort], [data-dot]") ?? []) stop.dataset.on = String(!!level && (stop.dataset.effort ?? stop.dataset.dot) === level);
   return level;
 }
 

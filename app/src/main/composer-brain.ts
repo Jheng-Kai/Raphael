@@ -1,8 +1,10 @@
 /**
- * The model of the open conversation, chosen next to where the owner writes. One card stands on the composer and turns
- * through three views: the model with its depth of thought as a slider; pressing the model, the sources; pressing a
- * source, its models. Choosing a model saves it and turns back to the first view, where its depth is right there.
+ * The model of the open conversation, chosen next to where the owner writes. One card stands on the composer and shows
+ * one view at a time: the source and the model with its depth of thought as a slider, the same for every source; and,
+ * pressing the model, the sources on the left with the models of the one pressed on the right. Choosing a model saves
+ * it and turns back, where its depth is right there.
  *
+ * One model answers everywhere, so this writes what Settings writes, and in a quick conversation what 快速提問 writes.
  * The core holds the choice and every list. This reads them again whenever the core says one changed, which is how a
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
@@ -12,7 +14,7 @@ import * as api from "./api";
 import { t } from "./i18n";
 import {
   chooserSources, effortOf, effortSliderHTML, modelPickerHTML, modelPickerSelection, modelRefWith, moveEffortSlider, orderedEfforts, pickerModelsFor, buttonFaceHTML,
-  sourceMarkHTML, concreteModel, chooserPrice, usableFor, reasonText, fitFor, effortText, type ChooserSource, type ModelPickerLook,
+  sourceMarkHTML, concreteModel, chooserPrice, splitEffort, usableFor, reasonText, fitFor, effortText, type ChooserSource, type ModelPickerLook,
 } from "./model-picker";
 import { knownCatalog, knownClis, rememberCatalog, rememberClis } from "./brain-lists";
 import { RAPHAEL_ID } from "./members";
@@ -20,26 +22,33 @@ import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCat
 import { closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
 
+/** A source's models fold past this many, under a button that says how many there are. */
+const COMPACT = 5;
 const SEARCH_FROM = 12;
-const USAGE_URL = "https://chatgpt.com/settings/usage";
+/** The rail's first row when something is starred: not a source, what the owner starred across them. */
+const FAVORITES = "favorites";
+const GROUPS = ["subscriptions", "api", "local"] as const;
 /** How long a signed-in CLI may be silent about its models while the menu is open before this says so. */
 const MODEL_WAIT_TRIES = 20, MODEL_WAIT_MS = 2000;
 const CHANGES: readonly MainEvent["type"][] = ["SettingsChanged", "BrainsChanged", "ProvidersChanged"];
 
 export interface ComposerBrainHost {
   onEvent?: (handler: (event: MainEvent) => void) => unknown;
+  /** Whether the open conversation is the quick one, which answers on 快速提問's model. */
+  quick?: () => boolean;
 }
 
 export function mountComposerBrain(slot: HTMLElement, member: () => Member, host: ComposerBrainHost = {}): { draw(): void; reload(): void } {
-  let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", generation = 0;
-  let menu: HTMLElement | null = null, source = "", query = "", view: "now" | "sources" | "models" = "now";
+  let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", quickModel = "", quickEffort = "low", generation = 0;
+  let menu: HTMLElement | null = null, source = "", query = "", showAll = false, view: "now" | "browse" = "now";
   let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
   let paintedWho: string | null = null, paintedDepth: string | null = null;
   let favorites: readonly string[] = [];
 
   const look = (): ModelPickerLook => {
-    const who = member();
-    return { role: "answer", current: who.id === RAPHAEL_ID ? answerModel : who.model || answerModel, catalog, clis, label: t("members.brain"), key: "composer-brain" };
+    const who = member(), own = (who.id !== RAPHAEL_ID && who.model) || answerModel;
+    const current = host.quick?.() ? `${(quickModel || own).split("?effort=")[0]}?effort=${quickEffort}` : own;
+    return { role: "answer", current, catalog, clis, label: t("members.brain"), key: "composer-brain" };
   };
   const chosen = (): { model: CatalogModel | undefined; effort: string } => {
     const o = look(), models = pickerModelsFor(o);
@@ -59,13 +68,24 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (effort && levels.length > 1) button.querySelector(".mp-tname")?.insertAdjacentHTML("afterend", `<span class="cb-depth">${esc(effortText(effort))}</span>`);
   }
 
+  async function write(model: string): Promise<void> {
+    if (host.quick?.()) {
+      const split = splitEffort(model, pickerModelsFor(look()));
+      await api.settingsSet("quick_model", split.model);
+      quickModel = split.model;
+      if (split.effort) { await api.settingsSet("quick_effort", split.effort); quickEffort = split.effort; }
+      return;
+    }
+    const who = member(), result = await api.settingsSet("agent_model", model);
+    answerModel = result.settings.agent_model ?? model;
+    // A member that still holds a model of its own would go on answering on it.
+    if (who.id !== RAPHAEL_ID && who.model) { await api.membersUpdate(who.id, { model: "" }); who.model = ""; }
+  }
+
   function save(model: string, then?: () => void): void {
-    const who = member();
     // A read that began before this choice would put the old one back.
     generation++;
-    const saved = who.id === RAPHAEL_ID ? api.settingsSet("agent_model", model).then(result => { answerModel = result.settings.agent_model ?? model; })
-      : api.membersUpdate(who.id, { model }).then(() => { who.model = model; });
-    void saved.then(() => { then?.(); paintButton(); paintMenu(); }).catch(error => { toaster.info(describeError(error)); void reload(); });
+    void write(model).then(() => { then?.(); paintButton(); paintMenu(); }).catch(error => { toaster.info(describeError(error)); void reload(); });
   }
 
   /** What the owner starred in Settings, in the order they did, of what can answer now. */
@@ -74,162 +94,160 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     return favorites.flatMap(id => all.filter(row => row.id === id && usableFor(row, "answer")));
   }
 
-  function rowHTML(row: CatalogModel, note = ""): string {
-    const usable = usableFor(row, "answer"), checked = row.id === chosen().model?.id, words = note || chooserPrice(row, pickerModelsFor(look()), "answer");
-    return `<button type="button" role="radio" class="cb-row" data-model="${esc(row.id)}" aria-checked="${checked}"${usable ? "" : ` disabled title="${esc(reasonText(fitFor(row, "answer").reason))}"`}>` +
-      `<span class="cb-check" aria-hidden="true">${checked ? ico("check") : ""}</span><span class="cb-name"><b>${esc(row.name)}</b></span>${words ? `<small>${esc(words)}</small>` : ""}</button>`;
+  /** The rail: only what can answer now, since signing in and adding a source belong to Settings. */
+  function answering(): ChooserSource[] {
+    const sources = chooserSources(look());
+    return GROUPS.flatMap(group => sources.filter(item => item.group === group && (item.cli?.available || item.models.length)));
   }
 
-  function sourcesHTML(sources: ChooserSource[]): string {
+  /** The source pressed while it is there; before that, or after it is gone, the one holding what is chosen. */
+  function settleSource(sources: ChooserSource[]): void {
+    if (source === FAVORITES ? starred().length : sources.some(item => item.id === source)) return;
     const { model } = chosen();
-    const liked = starred();
-    const sourceName = (row: CatalogModel): string => sources.find(item => item.models.some(other => other.id === row.id))?.name ?? "";
-    const top = liked.length ? `<div class="cb-group" role="radiogroup" aria-label="${esc(t("chooser.favorites"))}"><h4>${esc(t("chooser.favorites"))}</h4>${liked.map(row => rowHTML(row, sourceName(row))).join("")}</div>` : "";
-    const groups = [["subscriptions", "chooser.subscriptions"], ["api", "chooser.api"], ["local", "chooser.local"]] as const;
-    const rows = top + groups.map(([group, title]) => {
-      // Only what can answer now: signing in and adding a source belong to Settings.
-      const items = sources.filter(item => item.group === group && (group !== "subscriptions" || item.cli?.available || item.models.length));
-      return !items.length ? "" : `<div class="cb-group"><h4>${esc(t(title))}</h4>${items.map(item => {
-        const holds = !!model && item.models.some(row => row.id === model.id);
-        return `<button type="button" role="menuitem" class="cb-source" data-cb-source="${esc(item.id)}" aria-haspopup="true">${sourceMarkHTML(item)}<span class="cb-name"><b>${esc(item.name)}</b></span>${holds ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}${ico("right")}</button>`;
-      }).join("")}</div>`;
-    }).join("");
-    return headHTML(t("chooser.title"), t("chooser.back")) + `<div class="cb-list">${rows || `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`}</div>`;
+    source = sources.find(item => model && item.models.some(row => row.id === model.id))?.id ?? sources[0]?.id ?? "";
   }
 
-  /** The way back on the left, and what this view is in the middle. */
-  function headHTML(title: string, back: string, mark = ""): string {
-    return `<header class="cb-head">${iconButton("left", back, ' data-cb-act="back"', "cb-back")}<h3>${mark}<span>${esc(title)}</span></h3></header>`;
+  function railHTML(sources: ChooserSource[]): string {
+    const rail = (id: string, mark: string, name: string): string =>
+      `<button type="button" class="menu-action cb-source" data-cb-source="${esc(id)}" aria-pressed="${id === source}">${mark}<span class="cb-name"><b>${esc(name)}</b></span></button>`;
+    const liked = starred().length ? rail(FAVORITES, `<span class="mono md" aria-hidden="true">${ico("star")}</span>`, t("chooser.favorites")) : "";
+    return `<div class="cb-rail" role="group" aria-label="${esc(t("chooser.rail"))}">${liked}${sources.map(item => rail(item.id, sourceMarkHTML(item), item.name)).join("")}</div>`;
   }
 
-  function modelsHTML(sources: ChooserSource[]): string {
-    const item = sources.find(row => row.id === source);
-    const searching = (item?.models.length ?? 0) > SEARCH_FROM;
-    return headHTML(item?.name ?? "", t("chooser.back"), item ? sourceMarkHTML(item) : "") +
-      `<div class="cb-pane">` + (searching ? `<input type="search" class="cb-search" aria-label="${esc(t("chooser.search"))}" placeholder="${esc(t("chooser.search"))}" value="${esc(query)}">` : "") +
-      `<div class="cb-list" role="radiogroup" aria-label="${esc(t("chooser.title"))}">${rowsHTML(sources)}</div></div>`;
+  function browseHTML(sources: ChooserSource[]): string {
+    const head = `<header class="cb-head">${iconButton("left", t("chooser.back"), ' data-cb-act="back"', "cb-back")}<h3><span>${esc(t("chooser.title"))}</span></h3></header>`;
+    if (!sources.length) return `${head}<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    const total = sources.find(row => row.id === source)?.models.length ?? 0;
+    return `${head}<div class="cb-browse">${railHTML(sources)}<div class="cb-pane">` +
+      (showAll && total > SEARCH_FROM ? `<input type="search" class="cb-search" aria-label="${esc(t("chooser.search"))}" placeholder="${esc(t("chooser.search"))}" value="${esc(query)}">` : "") +
+      `<div class="cb-list" role="radiogroup" aria-label="${esc(t("chooser.title"))}">${rowsHTML(sources)}</div>` +
+      (total > COMPACT + 1 ? `<button type="button" class="menu-action cb-all" data-cb-act="all" aria-expanded="${showAll}"><span>${esc(showAll ? t("chooser.showFewer") : t("chooser.showAll", { p0: total }))}</span>${ico("down")}</button>` : "") +
+      `</div></div>`;
+  }
+
+  /** What the owner starred and what is chosen come first; then a subscription's own order, or the newest of a long list. */
+  function rowsOf(item: ChooserSource): { rows: CatalogModel[]; first: number } {
+    const now = chosen().model?.id, liked = starred().filter(row => item.models.some(other => other.id === row.id));
+    const head = [...liked, ...item.models.filter(row => row.id === now && !liked.some(other => other.id === now))];
+    const order = item.group === "subscriptions" ? item.models : [...item.models].sort((a, b) => (b.created_at_ms ?? 0) - (a.created_at_ms ?? 0));
+    const rest = order.filter(row => !head.some(other => other.id === row.id));
+    return { rows: [...head, ...rest.filter(row => usableFor(row, "answer")), ...rest.filter(row => !usableFor(row, "answer"))], first: head.length };
   }
 
   function rowsHTML(sources: ChooserSource[]): string {
-    const item = sources.find(row => row.id === source);
-    if (!item) return `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    const all = pickerModelsFor(look()), checked = chosen().model?.id;
+    const row = (model: CatalogModel, note = ""): string => {
+      const words = note || chooserPrice(model, all, "answer");
+      return `<button type="button" role="radio" class="cb-row" data-model="${esc(model.id)}" aria-checked="${model.id === checked}"${usableFor(model, "answer") ? "" : ` disabled title="${esc(reasonText(fitFor(model, "answer").reason))}"`}>` +
+        `<span class="cb-name"><b>${esc(model.name)}</b>${words ? `<small>${esc(words)}</small>` : ""}</span>${model.id === checked ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`;
+    };
+    const empty = `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    if (source === FAVORITES) return starred().map(model => row(model, sources.find(item => item.models.some(other => other.id === model.id))?.name)).join("") || empty;
+    const item = sources.find(candidate => candidate.id === source);
+    if (!item) return empty;
     if (item.group === "subscriptions" && !item.models.length) {
       return modelTries < MODEL_WAIT_TRIES ? `<p class="cb-empty" role="status">${esc(t("chooser.readingModels"))}</p>`
         : `<div class="cb-empty"><p>${esc(t("chooser.modelsFailed"))}</p><button type="button" class="btn sm" data-cb-act="retry">${esc(t("page.retry"))}</button></div>`;
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const models = item.models.filter(row => words.every(word => `${row.name} ${row.provider} ${row.id}`.toLowerCase().includes(word)));
-    // What the owner starred comes first, under its own heading, as in Settings; a search looks through everything.
-    const liked = words.length ? [] : starred().filter(row => models.includes(row) || models.some(other => other.id === row.id));
-    if (liked.length && liked.length < models.length) {
-      const rest = models.filter(row => !liked.some(other => other.id === row.id));
-      return `<h4 class="cb-heading">${esc(t("chooser.favorites"))}</h4>${liked.map(row => rowHTML(row)).join("")}<h4 class="cb-heading">${esc(t("chooser.all"))}</h4>${rest.map(row => rowHTML(row)).join("")}`;
-    }
-    return models.map(row => rowHTML(row)).join("") || `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    if (words.length) return item.models.filter(model => words.every(word => `${model.name} ${model.provider} ${model.id}`.toLowerCase().includes(word))).map(model => row(model)).join("") || empty;
+    const { rows, first } = rowsOf(item);
+    return (showAll || rows.length <= COMPACT + 1 ? rows : rows.slice(0, Math.max(COMPACT, first))).map(model => row(model)).join("") || empty;
   }
 
   function depthHTML(): string {
     const { model, effort } = chosen();
-    const levels = orderedEfforts(model?.reasoning_efforts ?? []);
-    return levels.length > 1 ? effortSliderHTML(levels, effort) : "";
+    return effortSliderHTML(model?.reasoning_efforts ?? [], effort, !!model);
   }
 
-  /** What is chosen now, which is also the way to choose another. */
+  /** What is chosen now, which is also the way to choose another: the source above the model, whatever the source. */
   function nowHTML(): string {
-    const { name, source: from } = modelPickerSelection(look());
-    const onPlan = chosen().model?.id.startsWith("@chatgpt:");
-    return `<button type="button" class="menu-action cb-pick" data-cb-act="browse"><small>${esc(from)}</small><span class="cb-pick-name"><b>${esc(name)}</b>${ico("right")}</span></button>` +
-      (onPlan ? `<div class="cb-plan"><span>${esc(t("brains.usingPlan"))}</span><button type="button" class="btn sm" data-cb-act="usage">${esc(t("brains.manageUsage"))}</button></div>` : "");
+    const { name, provider } = modelPickerSelection(look());
+    return `<button type="button" class="menu-action cb-pick" data-cb-act="browse"><small>${esc(provider)}</small><span class="cb-pick-name"><b>${esc(name)}</b>${ico("right")}</span></button>`;
   }
 
   /** While the source shown is a signed-in CLI whose models have not come, keep asking, and stop to say so. */
   function waitForModels(sources: ChooserSource[]): void {
     clearTimeout(modelTimer);
     const item = sources.find(row => row.id === source);
-    if (!menu?.isConnected || view !== "models" || !item?.cli?.available || item.models.length || modelTries >= MODEL_WAIT_TRIES) return;
+    if (!menu?.isConnected || view !== "browse" || !item?.cli?.available || item.models.length || modelTries >= MODEL_WAIT_TRIES) return;
     modelTimer = setTimeout(() => { modelTries++; void reload(); }, MODEL_WAIT_MS);
   }
 
   function paintMenu(): void {
     if (!menu?.isConnected) return;
-    const sources = chooserSources(look());
+    const sources = answering();
+    settleSource(sources);
     // A change that arrives while the owner is here must not take the keyboard from them.
     const held = document.activeElement instanceof HTMLElement && menu.contains(document.activeElement) ? document.activeElement : null;
     const heldAt = held instanceof HTMLInputElement ? held.selectionStart : null;
-    const heldKey = held?.dataset.cbAct === "browse" ? ".cb-pick" : held?.dataset.cbAct === "back" ? ".cb-back" : held?.matches(".mc-range") ? ".mc-range" : held?.dataset.cbSource !== undefined ? `[data-cb-source="${CSS.escape(held.dataset.cbSource)}"]` : held?.dataset.model !== undefined ? `[data-model="${CSS.escape(held.dataset.model)}"]` : held?.matches(".cb-search") ? ".cb-search" : null;
+    const heldKey = held?.dataset.cbAct === "browse" ? ".cb-pick" : held?.dataset.cbAct === "back" ? ".cb-back" : held?.dataset.cbAct === "all" ? ".cb-all" : held?.matches(".mc-range") ? ".mc-range" : held?.dataset.cbSource !== undefined ? `[data-cb-source="${CSS.escape(held.dataset.cbSource)}"]` : held?.dataset.model !== undefined ? `[data-model="${CSS.escape(held.dataset.model)}"]` : held?.matches(".cb-search") ? ".cb-search" : null;
     const body = menu.querySelector<HTMLElement>(".cb-body")!;
-    const wasView = body.dataset.view, list = body.querySelector<HTMLElement>(".cb-list"), top = list?.scrollTop ?? 0;
+    const sameList = body.dataset.view === view && body.dataset.source === source, sameView = body.dataset.view === view;
+    const top = body.querySelector<HTMLElement>(".cb-list")?.scrollTop ?? 0, railTop = body.querySelector<HTMLElement>(".cb-rail")?.scrollTop ?? 0;
     body.dataset.view = view;
+    body.dataset.source = source;
     body.hidden = view === "now";
     menu.querySelector<HTMLElement>(".cb-now")!.hidden = view !== "now";
-    body.innerHTML = view === "now" ? "" : view === "sources" ? sourcesHTML(sources) : modelsHTML(sources);
+    body.innerHTML = view === "now" ? "" : browseHTML(sources);
     // A list that arrives while the owner drags the slider must not take the slider from under the pointer.
     const who = nowHTML(), slider = depthHTML();
     if (who !== paintedWho) menu.querySelector<HTMLElement>(".cb-now-who")!.innerHTML = paintedWho = who;
-    if (slider !== paintedDepth) {
-      const depth = menu.querySelector<HTMLElement>(".cb-depth-slot")!;
-      depth.innerHTML = paintedDepth = slider;
-      depth.hidden = slider === "";
-    }
-    const next = body.querySelector<HTMLElement>(".cb-list");
-    // A change while the owner reads leaves the list where it was; turning to another list starts it at the top.
-    if (next && wasView === view) next.scrollTop = top;
+    if (slider !== paintedDepth) menu.querySelector<HTMLElement>(".cb-depth-slot")!.innerHTML = paintedDepth = slider;
+    // A change while the owner reads leaves the lists where they were; another source's list starts at its top.
+    const rail = body.querySelector<HTMLElement>(".cb-rail"), next = body.querySelector<HTMLElement>(".cb-list");
+    if (rail && sameView) rail.scrollTop = railTop;
+    if (next && sameList) next.scrollTop = top;
     if (heldKey) {
-      const again = menu.querySelector<HTMLElement>(heldKey);
+      const again = menu.querySelector<HTMLElement>(heldKey) ?? menu.querySelector<HTMLElement>(view === "now" ? ".cb-pick" : ".cb-back");
       again?.focus({ preventScroll: true });
       if (again instanceof HTMLInputElement && heldAt !== null) again.setSelectionRange(heldAt, heldAt);
     }
-    // The views differ in height, and the menu keeps standing on the composer.
+    // The views differ in size, and the menu keeps standing on the composer.
     placeMenu();
     waitForModels(sources);
   }
 
   function open(button: HTMLButtonElement): void {
-    const o = look(), sources = chooserSources(o), { model } = chosen();
-    source = sources.find(item => model && item.models.some(row => row.id === model.id))?.id ?? sources[0]?.id ?? "";
-    query = ""; modelTries = 0; view = "now"; paintedWho = paintedDepth = null;
+    source = ""; query = ""; showAll = false; modelTries = 0; view = "now"; paintedWho = paintedDepth = null;
     menu = openPopover(button, `<div class="cb-card cb-body" hidden></div><div class="cb-card cb-now"><div class="cb-now-who"></div><div class="cb-depth-slot"></div></div>`,
       { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), placement: "above", onClose: () => { menu = null; clearTimeout(modelTimer); } });
     menu.addEventListener("click", click);
     menu.addEventListener("input", input);
     menu.addEventListener("change", change);
     paintMenu();
-    menu.querySelector<HTMLElement>(".mc-range, .cb-pick")?.focus({ preventScroll: true });
+    menu.querySelector<HTMLElement>(".mc-range:not(:disabled), .cb-pick")?.focus({ preventScroll: true });
     // What was read when the app started may be old by now.
     void reload();
   }
 
   /** The card shows one view at a time, and the keyboard goes where the owner would look next. */
   function turnTo(next: typeof view): void {
-    view = next; query = "";
+    view = next; query = ""; showAll = false;
     paintMenu();
-    const selected = next === "models" ? menu?.querySelector<HTMLElement>('.cb-list [aria-checked="true"]') : null;
+    const selected = next === "browse" ? menu?.querySelector<HTMLElement>('.cb-list [aria-checked="true"]') : null;
     selected?.scrollIntoView?.({ block: "nearest" });
-    const first = next === "now" ? ".cb-pick" : next === "sources" ? `[data-cb-source="${CSS.escape(source)}"]` : ".cb-back";
-    (selected ?? menu?.querySelector<HTMLElement>(first) ?? menu?.querySelector<HTMLElement>(".cb-back"))?.focus({ preventScroll: true });
+    (selected ?? menu?.querySelector<HTMLElement>(next === "now" ? ".cb-pick" : ".cb-back"))?.focus({ preventScroll: true });
   }
 
   function click(event: Event): void {
     const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-cb-act]");
     if (!target || (target as HTMLButtonElement).disabled) return;
-    if (target.dataset.cbAct === "browse") {
-      turnTo("sources");
-      return;
-    }
-    if (target.dataset.cbAct === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
-    if (target.dataset.cbAct === "usage") { void api.openExternalUrl(USAGE_URL).catch(error => toaster.info(describeError(error))); return; }
-    if (target.dataset.cbAct === "back") {
-      turnTo(view === "models" ? "sources" : "now");
-      return;
-    }
+    const act = target.dataset.cbAct;
+    if (act === "browse" || act === "back") { turnTo(act === "browse" ? "browse" : "now"); return; }
+    if (act === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
+    if (act === "all") { showAll = !showAll; query = ""; paintMenu(); return; }
     if (target.dataset.cbSource !== undefined) {
-      source = target.dataset.cbSource; modelTries = 0;
-      turnTo("models");
+      source = target.dataset.cbSource; modelTries = 0; query = ""; showAll = false;
+      paintMenu();
       return;
     }
     if (target.dataset.model === undefined) return;
     const row = pickerModelsFor(look()).find(item => item.id === target.dataset.model);
-    if (row) save(modelRefWith(row, row.default_effort ?? ""), () => { view = "now"; });
+    if (!row) return;
+    // The depth stays where the owner put it if the new model has that depth; else what the slider will then show.
+    const { effort } = chosen(), levels = row.reasoning_efforts ?? [];
+    save(modelRefWith(row, levels.includes(effort) ? effort : row.default_effort ?? orderedEfforts(levels)[0] ?? ""), () => { view = "now"; });
   }
 
   function saveDepth(effort: string): void {
@@ -242,7 +260,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (field.matches(".cb-search")) {
       query = field.value;
       const list = menu?.querySelector<HTMLElement>(".cb-list");
-      if (list) list.innerHTML = rowsHTML(chooserSources(look()));
+      if (list) list.innerHTML = rowsHTML(answering());
     } else if (field.matches(".mc-range")) moveEffortSlider(field);
   }
 
@@ -277,8 +295,11 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (catalogResult.status === "fulfilled" && Array.isArray(catalogResult.value?.llm)) { catalog = catalogResult.value; rememberCatalog(catalog); }
     if (cliResult.status === "fulfilled") { clis = cliResult.value?.clis ?? []; rememberClis(clis); }
     if (settingsResult.status === "fulfilled") {
-      answerModel = settingsResult.value?.settings?.agent_model ?? "";
-      favorites = settingsResult.value?.settings?.model_favorites?.answer ?? [];
+      const settings = settingsResult.value?.settings;
+      answerModel = settings?.agent_model ?? "";
+      quickModel = settings?.quick_model ?? "";
+      quickEffort = settings?.quick_effort ?? "low";
+      favorites = settings?.model_favorites?.answer ?? [];
     }
     draw();
   }

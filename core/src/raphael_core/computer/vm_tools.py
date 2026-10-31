@@ -275,7 +275,8 @@ class VmTools:
                     raise VmError("owner_holds_control")
                 if tool.name == "vm_exec":
                     data = await self.vm.execute(target, arguments["command"], arguments.get("timeout_seconds", 60))
-                    result = PluginResult(data["exit_code"] == 0, None if data["exit_code"] == 0 else "tool_error", json.dumps(data), data["truncated"])
+                    # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
+                    result = PluginResult(True, None, json.dumps(data), data["truncated"])
                 elif tool.name == "attach_file":
                     data = await self.vm.read_file(target, arguments["path"], limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name

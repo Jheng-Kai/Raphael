@@ -757,6 +757,7 @@ class AgentService:
         self._confirmations = Confirmations(clock)
         self._plugins = plugins
         self._gate = gate if gate is not None else ToolGate(plugins, conn=conn, now_ms=now_ms)
+        self._conversation.changes = self._gate.step_changes
         self._background = background
         from types import SimpleNamespace
         from .self_check import snapshot as diagnostics
@@ -2195,9 +2196,16 @@ class AgentService:
             detail=detail,
         )
 
-    def _context(self, count: int, member_id: int = 0, conversation_id: int | None = None) -> list[Turn]:
+    def _context(
+        self, count: int, member_id: int = 0, conversation_id: int | None = None, *, unfinished: bool = False
+    ) -> list[Turn]:
+        """The last `count` answered turns of the conversation; with `unfinished`, the owner's
+        requests that did not finish too, as a model that picks the tools for "try again" must read them."""
         try:
-            return self._history.recent(count, member_id=member_id, conversation_id=self.conversations.resolve(member_id, conversation_id))
+            return self._history.recent(
+                count, member_id=member_id, conversation_id=self.conversations.resolve(member_id, conversation_id),
+                unfinished=unfinished, changes=self._gate.step_changes,
+            )
         except sqlite3.Error as exc:
             logger.warning("Could not read the conversation so far: %s", type(exc).__name__)
             return []
@@ -2253,7 +2261,7 @@ class AgentService:
                 chosen = await self._picker.pick(
                     selectable,
                     ask.text,
-                    self._context(PLAN_CONTEXT_TURNS, ask.speaker.id, ask.conversation_id),
+                    self._context(PLAN_CONTEXT_TURNS, ask.speaker.id, ask.conversation_id, unfinished=True),
                     model=model,
                     ledger=ledger,
                 )
@@ -2261,7 +2269,7 @@ class AgentService:
             return await self._planner.plan(
                 offer,
                 ask.text,
-                self._context(PLAN_CONTEXT_TURNS, ask.speaker.id, ask.conversation_id),
+                self._context(PLAN_CONTEXT_TURNS, ask.speaker.id, ask.conversation_id, unfinished=True),
                 model=model,
                 ledger=ledger,
             )
@@ -2977,7 +2985,13 @@ class AgentService:
         return conversation.context(quick=quick)
 
     def _conversation_of(self, member_id: int, conversation_id: int | None = None) -> Conversation:
-        """The conversation of the thread of `member_id`: Raphael's for 0."""
+        """The conversation of the thread of `member_id`: Raphael's for 0. A request of it that did
+        not finish is told what it already did by the rule of the gate (`ToolGate.step_changes`)."""
+        conversation = self._find_conversation(member_id, conversation_id)
+        conversation.changes = self._gate.step_changes
+        return conversation
+
+    def _find_conversation(self, member_id: int, conversation_id: int | None = None) -> Conversation:
         if conversation_id is not None and conversation_id != self.conversations.main(member_id):
             if conversation_id not in self._named_conversations:
                 self._named_conversations[conversation_id] = Conversation(

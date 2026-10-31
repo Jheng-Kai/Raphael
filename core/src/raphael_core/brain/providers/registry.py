@@ -536,7 +536,8 @@ class ProviderRouter:
         for index, target in enumerate(chain):
             attempt = {**kwargs, "model": target, "timeout_s": timeout}
             try:
-                return await asyncio.wait_for(self._attempt(method, attempt), timeout)
+                # A conversation's call has no deadline of its own: its timeout is how long the connection may stay silent.
+                return await asyncio.wait_for(self._attempt(method, attempt), None if method == "chat_tools" else timeout)
             except TimeoutError:
                 error = OpenRouterError(0, "timeout", "Provider request timed out")
                 pid, _ = self.registry.resolve(target)

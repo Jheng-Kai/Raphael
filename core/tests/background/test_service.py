@@ -13,6 +13,7 @@ import pytest
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.persona import PREFIXES, phrase
+from raphael_core.agent.steps import Step
 from raphael_core.background.host import WorkerHost
 from raphael_core.background.run import RunLimits
 from raphael_core.background.service import MAX_QUEUED, report_from
@@ -218,6 +219,26 @@ async def test_the_context_is_the_last_turns_of_the_conversation_without_the_tas
     user = rig.client.chat_calls[0]["messages"][1]["content"]
     assert "question 2" in user and "question 4" in user and "question 1" not in user
     assert "Handed to the background." not in user
+
+
+async def test_the_context_of_a_task_holds_the_request_that_failed_just_before(make_rig, conn):
+    rig = make_rig()
+    history = AgentHistory(conn, rig.wall)
+    history.add(session_id="s", question="question 0", route="chat", prefix="Answer",
+                text="answer 0", status="done")  # fmt: skip
+    history.add(session_id="s", question="Rebuild the index of my notes", route="answer", prefix="Negative",
+                text="The reply took too long.", status="error",
+                steps=[Step("tool", "note", "Notes", "ok", 4)])  # fmt: skip
+    own = history.add(session_id="s", question=TASK_TEXT, route="delegate", prefix="Understood",
+                      text="Handed to the background.", status="done")  # fmt: skip
+    rig.client.replies = [report()]
+    task_id = rig.submit()
+    rig.service.attach_turn(task_id, own)
+    await rig.wait_for_reports()
+    user = rig.client.chat_calls[0]["messages"][1]["content"]
+    assert user.index("question 0") < user.index("Rebuild the index of my notes")
+    assert "did not finish" in user and "note (Notes)" in user
+    assert "Raphael: The reply took too long." not in user
 
 
 # --- the report the model writes ------------------------------------------------------------------

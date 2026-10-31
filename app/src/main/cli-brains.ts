@@ -60,7 +60,7 @@ function chatgptCardHTML(v: CliBrainsView): string {
   const signedIn = !!account?.signed_in && !signing;
   const status = v.state !== "ready" ? t(v.state === "loading" ? "common.loading" : "providers.error") :
     signing ? t("brains.chatgptSigning") : !signedIn ? t("brains.signedOut") :
-    account?.plan_scope_granted === false ? t("brains.chatgptNoPlan") : account?.email || t("brains.ready");
+    account?.plan_scope_granted === false ? t("brains.chatgptNoPlan") : [t("brains.usingPlan"), account?.email].filter(Boolean).join(" · ");
   const action = v.state !== "ready" ? "" : signing ?
     btn(esc(t("common.cancel")), "", ' data-chatgpt="cancel" data-k="chatgpt:cancel"') : signedIn ?
     iconButton("more", t("members.more", { p0: "ChatGPT" }), ' data-chatgpt-menu data-k="chatgpt-menu" aria-haspopup="menu" aria-expanded="false"') :

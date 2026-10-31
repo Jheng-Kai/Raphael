@@ -361,7 +361,7 @@ def test_confirmed_failures_count_across_api_pauses():
         assert loop.failure_guard.blocked("read") is (number == 1)
 
 
-async def test_transient_api_retry_is_three_times_and_never_replays_after_a_tool(make_rig, client, monkeypatch):
+async def test_transient_api_retry_is_three_times_and_after_work_it_goes_on_without_running_a_tool_again(make_rig, client, monkeypatch):
     from raphael_core.brain.openrouter import OpenRouterError
     sleeps = []
 
@@ -373,6 +373,8 @@ async def test_transient_api_retry_is_three_times_and_never_replays_after_a_tool
     assert (await typed(rig))["text"] == "Recovered."
     assert sleeps == [1, 3, 8]
     sleeps.clear()
-    client.chats = [chat("Checking.", ("local_time", {})), OpenRouterError(503, "server", "Temporarily unavailable")]
-    result = await typed(rig)
-    assert result["text"] == Failure("server", "Temporarily unavailable").sentence("openai/gpt-6-luna", "en") and not sleeps
+    client.chat_calls.clear()
+    client.chats = [chat("Checking.", ("local_time", {})), *[OpenRouterError(503, "server", "Temporarily unavailable")] * 5, chat('{"text":"Recovered."}')]
+    assert (await typed(rig))["text"] == "Recovered."
+    assert sleeps == [1, 3, 8, 30, 60]
+    assert client.chat_calls[1]["messages"] == client.chat_calls[-1]["messages"]

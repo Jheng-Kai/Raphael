@@ -263,7 +263,7 @@ export async function perform(page, step) {
       const element = await visible(step.selector);
       const { at, stops } = await element.evaluate((range, level) => {
         const levels = range.dataset.levels.split(",");
-        return { at: level === "last" ? levels.length - 1 : levels.indexOf(level), stops: levels.length };
+        return { at: level === "last" ? levels.findLastIndex(Boolean) : levels.indexOf(level), stops: levels.length };
       }, step.level);
       const box = await element.boundingBox();
       await page.mouse.click(box.x + 8 + (box.width - 16) * (at / (stops - 1)), box.y + box.height / 2);

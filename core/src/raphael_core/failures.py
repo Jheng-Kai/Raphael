@@ -186,10 +186,14 @@ def tool_failure(kind, content="", *, record=True):
 
 
 class RepeatFailures:
-    """A tool failing twice with the same kind must not be called again in this turn."""
+    """A tool failing twice with the same kind is not called again until other work has succeeded:
+    what stopped it may have changed by then, and a long job must not lose the tool for good."""
 
     def __init__(self):
         self.counts = {}
+
+    def succeeded(self):
+        self.counts.clear()
 
     def blocked(self, tool):
         return any(name == tool and count >= 2 for (name, _), count in self.counts.items())
@@ -200,5 +204,5 @@ class RepeatFailures:
         return self.counts[key] >= 2
 
 
-REPEAT_NOTE = "This tool failed twice with the same failure kind. Use a different approach once or report the blocker; do not call it again this turn."
+REPEAT_NOTE = "This tool failed twice with the same failure kind. Use a different approach or report the blocker; do not call it again until something else has worked."
 CORRECTIVE_NOTE = "The last tool failed. Read its reason, run self_check once if useful, then use a different approach at most once or report the exact blocker. Never claim success without evidence or bypass an owner denial."

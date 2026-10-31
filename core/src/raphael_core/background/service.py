@@ -82,7 +82,8 @@ from typing import Any
 from ..agent.answers import Reply, parse_reply
 from ..agent.failure import KINDS, AgentFailure
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS, ToolGate
-from ..agent.history import VOICE, AgentHistory, Turn
+from ..agent.attribution import unfinished_note
+from ..agent.history import VOICE, AgentHistory, Turn, is_unfinished
 from ..agent.ledger import Ledger
 from ..agent.narration import PUBLIC_PROGRESS_RULES
 from ..agent.persona import (
@@ -97,6 +98,7 @@ from ..agent.plugins import preview
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, Speaker
+from ..agent.steps import REFUSED_REASONS
 from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools
 from ..brain.providers.base import ModelProvider
@@ -156,17 +158,12 @@ _EARLIER_OUTCOME = {
     "cancelled": "cut off, may have run",
     "timeout": "timed out, may have run",
 }
-# A call that failed for one of these reasons was refused before it did anything, or by the tool
-# itself; any other failure came after the call was sent, so it may have been made.
-_REFUSED_REASONS = frozenset(
-    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "denied"}
-)
 
 
 def _earlier_outcome(step: Step) -> str:
     if step.outcome in _EARLIER_OUTCOME:
         return _EARLIER_OUTCOME[step.outcome]
-    if step.outcome == "blocked" or step.reason in _REFUSED_REASONS:
+    if step.outcome == "blocked" or step.reason in REFUSED_REASONS:
         return "failed"
     return "failed, unknown whether it ran"
 
@@ -288,7 +285,10 @@ def _prompts(
     voice = "Raphael" if speaker.is_raphael else "You"
     if context:
         lines = [
-            neutralize(f"User: {turn.question}\n{voice}: {turn.text or turn.prefix}")
+            neutralize(
+                f"User: {turn.question}\n{voice}: "
+                + (unfinished_note(turn) if is_unfinished(turn) else turn.text or turn.prefix)
+            )
             for turn in context
         ]
         parts.append("Conversation so far (oldest first):\n" + "\n".join(lines))
@@ -1622,7 +1622,9 @@ class BackgroundService:
 
     def _context(self, task: Task) -> list[Turn]:
         """The last turns of the thread the task is of, without the one that handed it over; for a
-        consultation, those of the asked member's own conversation with the owner."""
+        consultation, those of the asked member's own conversation with the owner. A request of the
+        owner's that did not finish is among them, told as one (`unfinished_note`), so that a task
+        handed over as "try again" knows what it is to try again."""
         try:
             if task.mode != "consult":
                 if task.scope != "private":
@@ -1630,7 +1632,9 @@ class BackgroundService:
                 origin = self._history.get(task.turn_id) if task.turn_id else None
                 if origin is not None and origin.scope != "private":
                     return []
-            turns = self._history.recent(CONTEXT_TURNS + 1, member_id=task.member_id)
+            turns = self._history.recent(
+                CONTEXT_TURNS + 1, member_id=task.member_id, unfinished=True, changes=self._gate.step_changes,
+            )
         except sqlite3.Error:
             return []
         return [turn for turn in turns if turn.id != task.turn_id][-CONTEXT_TURNS:]

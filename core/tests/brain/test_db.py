@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 46
+LATEST = 47
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -484,6 +484,20 @@ SCHEMA_V46 = {**SCHEMA_V45, "pages": [
     "page_revisions": ["page_id TEXT PK NOT NULL", "rev INTEGER PK NOT NULL", "title TEXT NOT NULL",
                        "html TEXT NOT NULL", "at_ms INTEGER NOT NULL"]}
 
+
+
+def test_v47_gives_every_member_the_one_model(tmp_path):
+    path = tmp_path / "v46.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 47):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members (id,name,model,position,created_at_ms) VALUES (5,'Kept','cli:codex:luna?effort=high',5,1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "")
 
 
 def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):

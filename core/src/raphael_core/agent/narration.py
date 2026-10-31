@@ -14,12 +14,19 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..background.run import estimate_cost
-from ..worker.loop import Call, Limits, Outcome, Stop, ToolOutcome, Turn, run_task
+from ..worker.loop import UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
 from .answers import Reply, loose_reply, parse_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
 from ..failures import RepeatFailures, RETRY_WAITS, classify, tool_failure
+
+# How long a model may say nothing before its connection counts as dead. No limit on how long it may think or a turn
+# may work: a stream that keeps sending never reaches this, and a call that does is made again.
+MODEL_SILENCE_S = 1800.0
+# Once a turn has done something it rides out a failed call for as long as that lasts, at this pace, until the owner
+# stops it. Asking again repeats nothing: the tools run only after a reply. Before that the owner is told in seconds.
+PATIENT_WAITS = (30.0, 60.0, 120.0, 300.0)
 
 PUBLIC_PROGRESS_RULES = """
 This is a live conversation: your owner sees your messages while you work.
@@ -88,6 +95,15 @@ def _reply_text(value: object) -> str:
     return _content(value)[1] if isinstance(value, str) else ""
 
 
+def _retrying(model: str, language: str) -> str:
+    name = model.split("?", 1)[0].rsplit(":", 1)[-1].rsplit("/", 1)[-1]
+    if language.startswith("ja"):
+        return f"{name} から応答がありません。作業はそのままで、再試行を続けます。"
+    if language == "zh-TW":
+        return f"{name} 暫時沒有回應。工作沒有中斷，我會持續重試。"
+    return f"{name} is not answering. The work is intact, and I keep trying."
+
+
 def _public_text(value: object, limit: int, *, sentences: int | None = None) -> str:
     """Bound public narration, preserving a complete sentence whenever one fits."""
     text = " ".join(_reply_text(value).split())
@@ -118,7 +134,6 @@ class NarratedLoop:
         self.thinking = thinking
         self.fallbacks = list(fallbacks or ())
         self.model_calls = self.tool_calls = 0
-        self.remaining_s = 1800.0
         self.messages: list[dict] | None = None
         self.waiting_call: str | None = None
         self.response: dict | None = None
@@ -131,14 +146,15 @@ class NarratedLoop:
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
         began = time.perf_counter()
         try:
-            waits = iter(RETRY_WAITS)
+            waits, patience = iter(RETRY_WAITS), iter(PATIENT_WAITS)
+            told = False
             while True:
                 try:
-                    answer = await asyncio.wait_for(self.client.chat_tools(
+                    answer = await self.client.chat_tools(
                         model=self.model, fallbacks=self.fallbacks,
-                        messages=list(messages), tools=list(tools), timeout_s=60,
+                        messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
                         max_tokens=4000, reasoning_effort=self.reasoning_effort,
-                    ), 60)
+                    )
                     self.last_failure = None
                     break
                 except Stop:
@@ -146,18 +162,19 @@ class NarratedLoop:
                 except Exception as error:
                     self.last_failure = classify(error)
                     wait = next(waits, None)
-                    if self.acted or self.last_failure.kind == "timeout" or not self.last_failure.transient or wait is None:
+                    if not self.last_failure.transient or (wait is None and not self.acted):
                         raise
+                    if wait is None:
+                        wait = next(patience, PATIENT_WAITS[-1])
+                        if not told:
+                            told = True
+                            self.progress(_retrying(self.model, self.language))
                     await asyncio.sleep(wait)
         except Stop:
             raise
         except OpenRouterError as error:
             self.ledger.add(model=self.model, cost_usd=0, ms=int((time.perf_counter()-began)*1000), outcome="error")
             raise Stop("failed", failure_kind(error)) from None
-        except TimeoutError:
-            self.ledger.add(model=self.model, cost_usd=estimate_cost(self.model, len(str(messages))),
-                            ms=int((time.perf_counter()-began)*1000), outcome="timeout")
-            raise Stop("failed", "timeout") from None
         except asyncio.CancelledError:
             self.ledger.add(model=self.model, cost_usd=estimate_cost(self.model, len(str(messages))),
                             ms=int((time.perf_counter()-began)*1000), outcome="cancelled")
@@ -194,15 +211,13 @@ class NarratedLoop:
         return await self.execute(call_id, name, arguments)
 
     async def run(self) -> Outcome:
-        began = time.monotonic()
         outcome = await run_task(
             self, system=self.system, user=self.user, tools=self.tools,
-            limits=Limits(80 - self.model_calls, 200 - self.tool_calls, self.remaining_s),
+            limits=UNLIMITED,
             messages=self.messages,
             failure_guard=self.failure_guard,
             corrective_rounds=1,
         )
-        self.remaining_s = max(0, self.remaining_s - (time.monotonic() - began))
         self.model_calls += outcome.model_calls
         self.tool_calls += outcome.tool_calls
         self.messages, self.waiting_call = outcome.messages, outcome.waiting_call

@@ -875,16 +875,20 @@ async def test_small_talk_is_a_short_reply_from_the_model(rig, client):
     assert "small talk" in client.json_calls[0]["system"]
 
 
-async def test_the_context_holds_only_what_was_answered(rig, client):
+async def test_the_context_holds_what_was_answered_and_what_did_not_finish(rig, client):
     rig.seed("kept", "kept answer")
-    rig.seed("refused", "no", status="denied")
-    rig.seed("failed", "no", status="error")
+    rig.seed("refused", "the stored no", status="denied")
+    rig.seed("failed", "the stored apology", status="error")
     rig.seed("waiting", "ask", status="confirm")
     client.decisions.append(decision("discuss"))
     client.replies.append(spoken())
     await rig.ask("continue")
     user = client.json_calls[0]["user"]
-    assert "kept" in user and "refused" not in user and "failed" not in user
+    assert "kept answer" in user
+    # A request that did not finish is part of the conversation, told as one that did not.
+    assert "owner: refused\n" in user and "owner: failed\n" in user
+    assert user.count("did not finish") == 2
+    assert "Raphael: the stored no" not in user and "Raphael: the stored apology" not in user
     assert "waiting" not in user
 
 

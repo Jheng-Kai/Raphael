@@ -164,8 +164,6 @@ class CliLoop:
             if self._handoff_pending and name != "handoff":
                 return ToolOutcome(False, 'waiting_for_handoff')
             self._calls += 1
-            if self._calls > 200:
-                return ToolOutcome(False, "tool_limit")
             if not self._repeats.allows(name, args):
                 return ToolOutcome(False, "repeated")
             if self._failures.blocked(name):
@@ -182,7 +180,9 @@ class CliLoop:
                                                         "behavior": "allow", "destination": "session"}]
                 return ToolOutcome(True, content=json.dumps(answer))
             result = await self._execute(identifier, name, args)
-            if not result.ok:
+            if result.ok:
+                self._failures.succeeded()
+            else:
                 failure = tool_failure(result.kind, result.content)
                 result.content = json.dumps(failure.wire(), ensure_ascii=False)
                 if self._failures.record(name, failure.kind):
@@ -339,7 +339,7 @@ class CliLoop:
                 workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
-                async with asyncio.timeout(1800), RaphaelMcp(lambda: self.tools, self._tool) as server:
+                async with RaphaelMcp(lambda: self.tools, self._tool) as server:
                     session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
                     waits = list(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     failure = await self._attempt(name, command, model, server, session, workspace)

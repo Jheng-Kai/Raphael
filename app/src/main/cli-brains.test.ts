@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
   chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })), mainWindowForward: vi.fn(async () => undefined) }));
 vi.mock("./api", () => api);
-import { createCliBrains, cliBrainsHTML, cliModels, signInFailure } from "./cli-brains";
+import { createCliBrains, cliBrainsHTML, cliModels, emptyCliBrainsView, signInFailure } from "./cli-brains";
 import { closeMenu } from "./ui";
 
 const CLIS = [
@@ -92,13 +92,24 @@ test("a sign-in brings the window forward, tells the owner once what it means, a
   expect(api.mainWindowForward).toHaveBeenCalledTimes(2);
   expect(api.chatgptModels).toHaveBeenCalledOnce();
   expect(root.querySelector('[role="alert"]')).toBeNull();
-  expect(root.textContent).toContain("owner@example.test");
+  expect(root.querySelector("[data-chatgpt-card] .ds")!.textContent).toBe("使用 ChatGPT 方案 · owner@example.test");
   expect(document.querySelector(".mb-confirm")!.textContent).toContain("你正在使用 ChatGPT 方案");
   api.openExternalUrl.mockResolvedValueOnce(undefined);
   document.querySelector<HTMLButtonElement>('.mb-confirm [data-dlg="usage"]')!.click();
   expect(api.openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
   expect(document.querySelector(".mb-confirm")).toBeNull();
   api.chatgptStatus.mockResolvedValue({ signed_in: false });
+});
+
+test("a signed-in ChatGPT row says it is using the plan, with the account when there is one", () => {
+  const status = (chatgpt: object): string => {
+    const root = document.createElement("div");
+    root.innerHTML = cliBrainsHTML({ ...emptyCliBrainsView(), state: "ready", chatgpt: chatgpt as never });
+    return root.querySelector("[data-chatgpt-card] .ds")!.textContent!;
+  };
+  expect(status({ signed_in: true, plan_scope_granted: true })).toBe("使用 ChatGPT 方案");
+  expect(status({ signed_in: true, email: "owner@example.test", plan_scope_granted: true })).toBe("使用 ChatGPT 方案 · owner@example.test");
+  expect(status({ signed_in: false })).toBe("未登入");
 });
 
 test("model rows obey the core availability even when stale models and login remain", () => {

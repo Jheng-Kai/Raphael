@@ -17,6 +17,7 @@ from raphael_core.agent.policy import (
     Tier,
     UnknownTool,
 )
+from raphael_core.agent.steps import Step
 from raphael_core.integrations.audit import AuditLog
 
 
@@ -61,6 +62,23 @@ def approval_for(action, tier=Tier.T2):
     confirmations = Confirmations()
     pending = confirmations.open("s", 1, action, tier, "en")
     return confirmations.resolve(pending.id, True).approval
+
+
+def test_a_recorded_step_changed_something_unless_it_only_read():
+    class Reading(FakeHub):
+        def kind_of(self, server, tool):
+            return "read" if tool == "look" else "write"
+
+    gate = ToolGate(Reading())
+    step = lambda tool, server="Notes", kind="tool": Step(kind, tool, server, "ok", 1)  # noqa: E731
+    assert not gate.step_changes(step("look"))  # its server says it only reads
+    assert gate.step_changes(step("note"))
+    assert not gate.step_changes(step("web_search", BUILTIN_SERVER))  # Raphael's own lookups are T0
+    assert gate.step_changes(step("memory_write", BUILTIN_SERVER))
+    assert not gate.step_changes(step("some_recall", BUILTIN_SERVER))  # no tier: it never passed the door
+    assert gate.step_changes(step("open", None, "command"))
+    assert gate.step_changes(step("whatever", "Chrome", "computer"))
+    assert ToolGate().step_changes(step("look"))  # no hub that can say: it changes things
 
 
 def test_the_gate_knows_the_commands_and_the_lookups_of_raphael():

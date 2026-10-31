@@ -59,6 +59,7 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_HOME;
       if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
+      if (journey.name === "long-think") env.RAPHAEL_NATIVE_THINK_S = "75";
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;

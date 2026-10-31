@@ -188,6 +188,10 @@ test.each([catalog, "loading", "failed"] as const)("a CLI answer is priced as su
   expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "cli:codex" } }))["agent-model"]).toBe("訂閱");
 });
 
+test.each([catalog, "loading", "failed"] as const)("a ChatGPT plan answer is priced as subscription regardless of API catalog availability", (source) => {
+  expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "@chatgpt:gpt-5" } }))["agent-model"]).toBe("訂閱");
+});
+
 test("answer and inherited quick prices keep the catalog identity when effort is selected", () => {
   const plain = priceTexts(view());
   const selected = priceTexts(view({ brain: { ...brain, agent_model: brain.agent_model + "?effort=high", quick_model: "" } }));

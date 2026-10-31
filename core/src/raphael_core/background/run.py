@@ -109,6 +109,9 @@ def estimate_cost(model: str, request_chars: int) -> float:
     given up on after a time-out or a cancel, when the provider may still bill it): the request's
     characters as input tokens plus the most the reply may be (`CHAT_MAX_TOKENS`), at the model's
     price; a model whose price is not known costs the floor, US$0.02."""
+    # The owner's plan has no price per call.
+    if model.startswith("@chatgpt:"):
+        return 0.0
     entry = find(builtin_catalog(), LLM, model)
     price = None if entry is None else entry.price
     if price is None or price.input_per_mtok is None or price.output_per_mtok is None:

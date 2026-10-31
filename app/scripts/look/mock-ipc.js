@@ -39,6 +39,14 @@ export function installMock(fixture, config = {}, target = window) {
     data.messages.push({ ...data.messages.at(-1), id: Math.max(...data.messages.map(message => message.id)) + 1, room_id: data.rooms[0].id, text: "週五計畫已準備完成", created: data.now, status: "done" });
   }
   if (variant.onlyRaphael) data.members = data.members.filter(member => member.id === 0);
+  if (variant.chatgptSignedIn) {
+    data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
+    data.settings.agent_model = "@chatgpt:gpt-6-sol?effort=medium";
+  }
+  if (variant.modelsMany) {
+    for (let index = 1; index <= 40; index++) data.catalog.llm.push({ ...data.catalog.llm[0], id: `maker/model-${index}`, name: `Model ${index}`, created_at_ms: index });
+    data.catalog.llm.push({ ...data.catalog.llm[0], id: "maker/no-depth", name: "Model 99", created_at_ms: 99, reasoning_efforts: [], default_effort: null });
+  }
   if (variant.waitingMember !== undefined) data.members.find(member => member.id === variant.waitingMember).waiting = true;
   // The owner's primary contact: Raphael until another member is chosen (`primaryMember` seeds it). The roster says it, as the core does.
   data.primaryId = variant.primaryMember ?? 0;
@@ -548,7 +556,7 @@ export function installMock(fixture, config = {}, target = window) {
         notify("BrainsChanged", {});
         return { started: !cli.available, reconnected: cli.available };
       }
-      case "models.catalog": return data.chatgpt?.signed_in ? { ...data.catalog, llm: [...data.catalog.llm, { ...data.catalog.llm[0], id: "gpt-6-sol", provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI", name: "GPT-6-Sol", input_per_mtok: null, output_per_mtok: null, free: false, variable_price: false, per_minute: null }] } : data.catalog;
+      case "models.catalog": return data.chatgpt?.signed_in ? { ...data.catalog, llm: [...data.catalog.llm, { ...data.catalog.llm[0], id: "gpt-6-sol", provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI", name: "GPT-6-Sol", input_per_mtok: null, output_per_mtok: null, free: false, variable_price: false, per_minute: null, reasoning_efforts: ["low", "medium", "high", "xhigh", "max"], default_effort: "medium" }] } : data.catalog;
       case "models.status": return data.modelStatus;
       case "models.local": return { models: data.localModels };
       case "providers.list": return { providers: data.providers };

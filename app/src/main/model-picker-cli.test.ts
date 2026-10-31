@@ -46,6 +46,10 @@ test("cancel and Escape discard drafts; install and connection buttons perform r
   click('[data-dlg="sources"]'); expect(sources).toHaveBeenCalledOnce(); picker.open();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); expect(picker.isOpen).toBe(false);
 });
+test("the chooser's button to connect another source says so", () => {
+  mount();
+  expect(document.querySelector('[data-dlg="sources"]')!.textContent).toBe("連接其他來源");
+});
 test.each(["cleanup", "stt", "vision"] as const)("%s excludes subscription brains", (role) => {
   mount(role); expect(document.querySelector('[data-source^="cli:"]')).toBeNull();
 });
@@ -196,14 +200,14 @@ function mountApi(role: PickerRole, current: string) {
 }
 const displayedEfforts = () => [...document.querySelectorAll<HTMLElement>(".mc-effort [data-effort]")].map(button => button.dataset.effort);
 
-test("a high-first API catalog displays shallow-to-deep efforts and keeps unknown order and the chosen depth", () => {
+test("a high-first API catalog lays its depths on the ruler shallow-to-deep and keeps the chosen depth", () => {
   const before = [...apiModel.reasoning_efforts!];
   const choose = mountApi("answer", "openai/test?effort=xhigh");
-  expect(displayedEfforts()).toEqual(["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-b", "future-a"]);
+  expect(displayedEfforts()).toEqual(["low", "medium", "high", "xhigh", "max"]);
   expect(document.querySelector('[data-effort="xhigh"]')?.getAttribute("data-on")).toBe("true");
   expect(apiModel.reasoning_efforts).toEqual(before);
-  slideTo("minimal"); click('[data-dlg="use"]');
-  expect(choose).toHaveBeenCalledWith("openai/test?effort=minimal");
+  slideTo("medium"); click('[data-dlg="use"]');
+  expect(choose).toHaveBeenCalledWith("openai/test?effort=medium");
 });
 
 test("display order does not replace a model's default effort", () => {
@@ -211,7 +215,7 @@ test("display order does not replace a model's default effort", () => {
   expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
 });
 
-test("a high-first subscription catalog uses the same display order and keeps its effort model mapping", () => {
+test("a high-first subscription catalog uses the same ruler, dim where it has no depth, and keeps its effort model mapping", () => {
   const slot = document.createElement("div"); document.body.append(slot);
   const choose = vi.fn();
   picker = mountModelPicker(slot, { role: "answer", catalog: null, label: "Answer", current: "cli:gemini:test-high", onChoose: choose,
@@ -219,7 +223,7 @@ test("a high-first subscription catalog uses the same display order and keeps it
       { id: "cli:gemini:test", name: "Test", reasoning_efforts: ["high", "minimal", "low"],
         effort_models: { high: "cli:gemini:test-high", minimal: "cli:gemini:test-minimal", low: "cli:gemini:test-low" } },
     ] }] });
-  picker.open(); expect(displayedEfforts()).toEqual(["minimal", "low", "high"]);
+  picker.open(); expect(displayedEfforts()).toEqual(["low", "", "high", "", ""]);
   expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
   slideTo("low"); click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("cli:gemini:test-low");

@@ -5,8 +5,10 @@ import time
 
 import pytest
 
+from raphael_core.agent.answers import build_user_message
 from raphael_core.agent.history import Turn
 from raphael_core.agent.ledger import Ledger
+from raphael_core.agent.steps import Step
 from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.spend import SpendTracker
 from raphael_core.memory import conversation as conversation_module
@@ -74,9 +76,21 @@ def test_the_fold_stops_before_a_protected_turn():
 
 
 def test_turns_that_say_nothing_are_covered_but_not_given_to_the_model():
-    turns = [turn(n, status="denied" if n % 2 else "done") for n in range(1, 70)]
+    # A question that waits for a yes and a request still running say nothing yet.
+    turns = [turn(n, status="confirm" if n % 2 else "done") for n in range(1, 70)]
     folded, through = plan_fold(turns, set())
     assert all(t.status == "done" for t in folded) and through > ids(folded)[-1] - 2
+
+
+def test_a_request_that_did_not_finish_is_folded_with_the_turns_around_it():
+    turns = [turn(n, status="error" if n == 3 else "done") for n in range(1, 40)]
+    folded, _ = plan_fold(turns, set())
+    assert 3 in ids(folded)
+
+
+def test_a_failed_request_counts_toward_the_time_to_fold():
+    failures = [turn(n, status="error") for n in range(1, FOLD_AT_TURNS + 2)]
+    assert plan_fold(failures, set()) is not None
 
 
 # --- which turns are protected ---------------------------------------------------------------------
@@ -138,7 +152,7 @@ def test_corrections_and_requests_to_remember_are_told_by_their_words():
 def test_the_context_is_the_summary_and_the_answered_turns_after_it(conversation, history):
     for n in range(5):
         add_turn(history, f"q{n}")
-    add_turn(history, "refused", status="denied")
+    add_turn(history, "waiting", status="confirm")
     conversation._save("Ongoing:\n- 規劃週末", 2)
     context = conversation.context()
     assert context.summary == "Ongoing:\n- 規劃週末"
@@ -176,6 +190,94 @@ def test_a_delegated_member_request_is_not_labelled_as_the_owner():
     assert "owner:" not in shown
     assert "Raphael: 記下明天的會" in shown
     assert "assistant (member 1): 好。" in shown
+
+
+# --- a request that did not finish ------------------------------------------------------------------
+
+MOMENT = {"date": "2026-10-22", "time": "21:40", "weekday": "Thursday", "utc_offset": "UTC+08:00"}
+
+
+def prompt_of(conversation, question="please retry"):
+    """What a model is shown of the conversation, with the next question: the words it reads."""
+    context = conversation.context()
+    return build_user_message(question, MOMENT, context.turns, [], "en", summary=context.summary)
+
+
+def tool_step(tool, server="Notion", outcome="ok", reason=None):
+    return Step(kind="tool", tool=tool, server=server, outcome=outcome, ms=5, reason=reason)
+
+
+def add_unfinished(history, question, text="The model took too long.", *, status="error", route="answer", steps=(), **fields):
+    return history.add(
+        session_id="s", question=question, route=route, prefix="否", text=text, status=status,
+        steps=list(steps), **fields,
+    )  # fmt: skip
+
+
+def test_a_request_that_failed_is_in_the_conversation_where_it_was_said(conversation, history):
+    add_turn(history, "Which desk lamp is brighter?", "The tall one.")
+    add_unfinished(history, "Sort every page of the wiki by owner", "The model took too long to answer.")
+    add_turn(history, "Never mind, that is settled.")
+    shown = prompt_of(conversation)
+    lamp, failed, settled = (shown.index(words) for words in ("desk lamp", "Sort every page", "that is settled"))
+    assert lamp < failed < settled
+    note = shown[failed:settled]
+    assert "did not finish" in note and "The model took too long to answer." in note
+    assert "Raphael: The model took too long" not in shown  # the apology is not an answer
+
+
+def test_a_failed_request_says_what_it_changed_by_name_and_counts_what_it_only_read(conversation, history):
+    conversation.changes = lambda step: step.tool != "fetch"
+    steps = [
+        *[tool_step("update-page")] * 2, tool_step("create-pages"), *[tool_step("fetch")] * 5,
+        tool_step("update-page", outcome="error", reason="tool_error"),  # refused: it changed nothing
+        tool_step("archive-page", outcome="timeout"),  # cut off: it may have
+    ]
+    add_unfinished(history, "Tidy the project wiki", steps=steps)
+    shown = prompt_of(conversation)
+    assert "update-page (Notion) x2" in shown and "create-pages (Notion)" in shown
+    assert "create-pages (Notion) x" not in shown and "update-page (Notion) x3" not in shown
+    assert "5 calls only read" in shown
+    assert "archive-page" not in shown and "may have taken effect" in shown
+
+
+def test_a_failed_request_that_did_nothing_says_so(conversation, history):
+    add_unfinished(history, "Tidy the project wiki")
+    assert "No tool calls were recorded." in prompt_of(conversation)
+
+
+def test_the_note_of_a_failed_request_stays_short_however_much_it_did(conversation, history):
+    conversation.changes = lambda step: step.tool != "fetch"
+    steps = [tool_step(f"update-record-{n:03d}-with-a-rather-long-name") for n in range(120)] + [tool_step("fetch")] * 500
+    add_unfinished(history, "Update everything", "x" * 3000, steps=steps)
+    shown = prompt_of(conversation)
+    note = shown.split("Update everything", 1)[1].split("Current date and time", 1)[0]
+    assert len(note) < 900
+    assert "more" in note and "500 calls only read" in note
+
+
+@pytest.mark.parametrize(("status", "why"), [("denied", "the owner"), ("expired", "nobody answered")])
+def test_a_request_the_owner_stopped_or_nobody_answered_is_part_of_the_conversation(conversation, history, status, why):
+    add_unfinished(history, "Archive last year's invoices", "Okay, I will not.", status=status)
+    shown = prompt_of(conversation)
+    assert "Archive last year's invoices" in shown
+    assert "did not finish" in shown and why in shown
+    assert "Okay, I will not." not in shown
+
+
+def test_a_request_still_running_or_waiting_for_a_yes_is_not_shown_yet(conversation, history):
+    add_turn(history, "Water the plants", "Done.")
+    add_unfinished(history, "Book the dentist", status="running")
+    add_unfinished(history, "Delete the draft", status="confirm")
+    shown = prompt_of(conversation)
+    assert "Water the plants" in shown
+    assert "Book the dentist" not in shown and "Delete the draft" not in shown
+
+
+def test_a_routine_that_failed_is_not_something_the_owner_asked(conversation, history):
+    add_turn(history, "Water the plants", "Done.")
+    add_unfinished(history, "Hourly inbox sweep", route="routine", source="routine")
+    assert "inbox sweep" not in prompt_of(conversation)
 
 
 # --- folding ----------------------------------------------------------------------------------------
@@ -218,6 +320,19 @@ async def test_a_fold_shows_each_turn_with_its_own_time(conversation, history, c
     assert stamp == time.strftime("%Y-%m-%d %a %H:%M", time.localtime(said_at / 1000))
     assert f"[{stamp}]\nowner: 明天有面試" in call["user"]
     assert "own date" in call["system"]
+
+
+async def test_a_fold_is_given_the_failed_request_and_told_how_to_read_it(conversation, history, conn, clock):
+    conversation.changes = lambda step: step.tool.startswith("update")
+    seed(history, 2)  # the start of the conversation stays outside the fold
+    add_unfinished(history, "Rename every folder by year", steps=[tool_step("update-folder")] * 3)
+    seed(history, 30)
+    conversation._client.replies.append({"summary": "Ongoing:\n- rename the folders"})
+    assert await conversation.fold("m", Ledger(SpendTracker(conn, clock.ms))) is True
+    call = conversation._client.calls[0]
+    middle = call["user"].split("Verbatim conversation start", 1)[0]
+    assert "Rename every folder by year" in middle and "update-folder (Notion) x3" in middle
+    assert "did not finish" in call["system"].lower()
 
 
 async def test_a_fold_that_fails_keeps_the_summary_and_waits_before_the_next_try(conversation, history, conn, clock):
