@@ -4,6 +4,15 @@ import { missingHTML, bindMissing, type Missing } from "./missing";
 import { setLocale } from "./i18n";
 
 const missing: Missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" };
+test("teaching names the independent member computer and opens its shared repair", () => {
+  setLocale("zh-TW");
+  const root = document.createElement("div");
+  root.innerHTML = missingHTML({resource:"computer",requirement:"member_computer",state:"missing",repair:"computer"});
+  expect(root.textContent).toContain("示範需要成員自己的電腦");
+  const go = vi.fn(); bindMissing(root, go);
+  root.querySelector("button")!.click();
+  expect(go).toHaveBeenCalledWith("settings", "repair:computer:computer");
+});
 test("a missing address is visible beside its one real repair button, never a hover reason", () => {
   setLocale("zh-TW");
   const root = document.createElement("div"); root.innerHTML = missingHTML(missing);

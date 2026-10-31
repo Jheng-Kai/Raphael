@@ -1,5 +1,12 @@
 # Raphael product rules
 
+## Owner demonstrations (2026-11-01)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-TE-01 | 2026-11-01 | Teaching takes only the selected member's independent computer through the existing viewer lease. Shared computers and previews are refused. Record ordered owner actions and changed screenshots in that member's home, bounded to 4 MiB, 2000 events and ten minutes. Password/sign-in or unreadable accessibility data keeps neither text nor images. | pytest | hard | core/tests/members/test_teaching.py::test_recorded_input_order_password_and_signin_are_redacted_before_disk; core/tests/members/test_teaching.py::test_teaching_refuses_shared_preview_and_changed_member_computers |
+| R-TE-02 | 2026-11-01 | A tool-less member-brain pass treats the recording as untrusted data and proposes semantic procedures, inputs and final checks. The existing skill editor requires the owner's explicit save; one discard removes the recording and cancels pending drafting. Saved skills use the ordinary API, CLI and routine paths. | pytest, vitest, look | hard | core/tests/evaluate/test_teaching.py::test_owner_saved_demonstration_reaches_api_cli_and_routine_turns; app/src/main/desktop-viewer.test.ts::teaching takes the member computer, warns visibly, and opens the shared unsaved skill editor on stop; features/member-computer.md |
+
 ## Connected-app event routines (2026-11-01)
 
 | ID | Date | Rule | Check | Severity | Evidence |

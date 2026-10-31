@@ -1,5 +1,48 @@
 # Member computer (Phases A and B)
 
+## Teach by demonstration (2026-11-01)
+
+The member computer has one Teach a task / Stop recording button. Starting uses
+the existing input lease and shows a persistent privacy line and one-press discard.
+Only the member's independent computer can record; a shared computer explains the
+missing requirement with the shared computer-settings repair action. Docker absent,
+stopped computers and previews retain their existing prerequisite controls.
+The independent-computer requirement uses the shared missing notice renderer.
+Repair buttons inside the fixed dark desktop frame use that frame's resting, hover and pressed fills,
+so the same light text stays readable in either application theme (R-UI-52).
+
+Recording saves ordered clicks, keys, nonprivate text and changed screenshots in
+the member's home. Password/sign-in or unavailable accessibility observations omit
+both text and images. Clipboard values are omitted. The cap is 4 MiB (including
+reserved draft space), 2000 events and ten minutes. Disconnect interrupts recording;
+restart can review/discard its data but never resumes control. Discard cancels a
+pending draft and removes its recording.
+
+Stop releases control and asks the selected member brain for a tool-less draft.
+It reads ordered actions and accessibility text; retained screenshots are evidence,
+not model attachments.
+The draft treats captured data as untrusted and uses the ordinary skill format
+plus Inputs, semantic goals and final Verification. The existing resource editor
+holds this unsaved document; only Save publishes it. Afterwards, the owner types
+a fresh input and presses Try once in that same conversation. The skill remains
+an ordinary private member skill on API, CLI and scheduled routine paths.
+
+Selected local UI matrix:
+
+```powershell
+npm run look -- desktop-teach-recording desktop-teach-draft desktop-teach-saved desktop-teach-try desktop-teach-discard desktop-teach-shared desktop-owner desktop-absent details-skills skill-private-detail --theme both --width 1120,720,1920x1080
+```
+
+The teach-* rendered checks assert lease actions, visible privacy/repair, the
+editable draft before Save, explicit publication, discard without publication,
+and the ordinary conversation call with skill name and fresh input. Compare the
+draft editor with details-skills/skill-private-detail, and teaching controls with
+desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.py
+(API and CLI plus routines), computer/test_rfb_input.py and desktop-viewer.test.ts.
+Real Docker/cua accessibility, screenshot privacy across third-party applications,
+native shell, live model quality and judge remain separately unverified. This unit
+explicitly prohibits Docker lifecycle, cargo, native, network and judge execution.
+
 ## Owner-PC commands (2026-11-01)
 
 Owner-PC diagnostics and CLI work use local__local_exec rather than the Linux

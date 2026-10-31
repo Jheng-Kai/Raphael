@@ -4,6 +4,18 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "teach.start": "一度やって教える",
+  "missing.memberComputer": "実演にはメンバー専用のコンピューターが必要です。設定でメンバーごとのコンピューターを選んでください。",
+  "teach.stop": "記録を停止",
+  "teach.review": "実演を確認",
+  "teach.drafting": "スキルの下書きを作成中…",
+  "teach.discard": "実演を破棄",
+  "teach.warning": "この画面と操作を記録しています。個人情報を開かないでください。ログインとパスワード入力は記録しません。",
+  "teach.full": "記録の上限に達しました。停止して確認するか、破棄してください。",
+  "teach.failed": "実演を完了できませんでした。メンバーのコンピューターとモデルを確認し、再試行するか破棄してください。",
+  "teach.try": "一度試す",
+  "teach.input": "今回の新しい入力",
+  "teach.tryPrompt": "「{name}」スキルを一度試してください。今回の新しい入力：{input}",
   ...missingJa,
   "ownerQuestion.title": "回答が必要です",
   "ownerQuestion.page": "ページの操作後に続ける",

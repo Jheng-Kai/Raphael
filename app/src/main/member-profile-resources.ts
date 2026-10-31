@@ -18,6 +18,7 @@ export interface ResourceHost {
   patch?(patch: MemberPatch): void;
   changed?(): void;
   onCount?(counts: { skills: number; commands: number }): void;
+  draft?: { text: string; save(text: string): Promise<void>; discard(): Promise<void> };
 }
 export interface ResourceEditor {
   refresh(): Promise<void>;
@@ -30,7 +31,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let busy = false;
   let failed = false;
   let generation = 0;
-  let loaded = false;
+  let loaded = !!host.draft;
   let skills: MemberSkill[] = [];
   let commands: MemberCommand[] = [];
   let voices: MemberVoice[] = [];
@@ -40,7 +41,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let suggested = false;
   let source = "";
   let undo: string | null = null;
-  let editing: { id: number; text: string; revision?: string } | null = null;
+  let editing: { id?: number; text: string; revision?: string } | null = host.draft ? { text: host.draft.text } : null;
   const counts = (): void => { if (host.tab !== "voice") host.onCount?.({ skills: skills.length, commands: commands.length }); };
   const empty = (text: string): string => `<p class="mp-empty">${esc(text)}</p>`;
   const label = (text: string, content: string): string => `<label class="mp-label"><span>${esc(text)}</span>${content}</label>`;
@@ -57,9 +58,9 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     capture();
     const off = busy ? " disabled" : "";
     const skillHTML = `<section class="mp-card"><h3>${esc(t("members.profile.skillsTitle"))}</h3>` +
-      `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>` +
+      (host.draft ? "" : `<div class="mp-add">${input("mp-skill-source", source, t("members.profile.source"), 2048)}${btn(esc(t("members.profile.import")), "sm", ` data-res="import"${off}`)}</div>`) +
       skills.map(s => `<div class="mp-resource"><div><b>${esc(s.name)}</b><p>${esc(s.description || s.source)}</p><p>${esc(s.provenance === "learned" ? t("skills.learnedAt", { p0: s.learned_at ? formatDate(s.learned_at) : "" }) : t(s.provenance === "owner" || s.source === "owner" ? "skills.owner" : "skills.imported"))}</p></div>${tg(s.enabled, `${t("members.profile.enable")} ${s.name}`, ` data-res="skill-toggle" data-id="${s.id}"${off}`)}${iconButton("more", t("members.more", { p0: s.name }), ` data-res="skill-menu" data-id="${s.id}" aria-haspopup="menu" aria-expanded="false"${off}`)}</div>`).join("") +
-      (skills.length ? "" : empty(t("members.profile.noSkills"))) +
+      (skills.length || host.draft ? "" : empty(t("members.profile.noSkills"))) +
       (editing ? `<label class="mp-label"><span>${esc(t("skills.instructions"))}</span><textarea id="mp-skill-text" class="mb-fin mb-ta" rows="12" spellcheck="false"${off}>${esc(editing.text)}</textarea></label><div class="mp-end">${btn(esc(t("common.cancel")), "sm", ` data-res="skill-cancel"${off}`)}${btn(esc(t("skills.save")), "sm", ` data-res="skill-save"${off}`)}</div>` : "") +
       (undo ? `<div class="mp-end">${btn(esc(t("skills.undo")), "sm", ` data-res="skill-undo"${off}`)}</div>` : "") + `</section>`;
     const commandsHTML = `<section class="mp-card"><h3>${esc(t("members.profile.commands"))}</h3>` +
@@ -116,7 +117,11 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     Object.assign(voiceState, next);
   }
   function choose(action: string | undefined, id: number, target: HTMLButtonElement): void {
-    if (action === "skill-cancel") { editing = null; draw(); return; }
+    if (action === "skill-cancel") {
+      if (host.draft) void run(async () => { await host.draft!.discard(); editing = null; });
+      else { editing = null; draw(); }
+      return;
+    }
     if (action === "skill-edit") {
       void (async () => {
         try {
@@ -136,6 +141,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {
       if (action === "skill-save" && editing) {
+        if (host.draft) { await host.draft.save(editing.text); editing = null; return; }
         await api.core("members.skills.update", { member_id: host.memberId, id: editing.id, text: editing.text, expected_hash: editing.revision });
         editing = null;
         await refresh();
@@ -197,7 +203,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   container.addEventListener("click", click);
   const stopLocale = onLocaleChange(draw);
   draw();
-  void refresh();
+  if (!host.draft) void refresh();
   return {
     refresh,
     suggest(next) {

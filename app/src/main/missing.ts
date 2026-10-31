@@ -35,6 +35,7 @@ const messages: Record<string, MissingKey> = {
   "unknown": "missing.unknown",
   "microphone": "missing.microphone",
   "docker": "missing.docker",
+  "member_computer": "missing.memberComputer",
   "audio_transcriber": "missing.audio_transcriber",
   "audio_ffmpeg": "missing.audio_ffmpeg",
   "audio_decode": "missing.audio_decode",

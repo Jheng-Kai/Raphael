@@ -136,6 +136,7 @@ class DesktopViewer:
         self.origin = ""
         self.tasks = set()
         self.control_lock = asyncio.Lock()
+        self.teaching = None
         self.open_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(trust_env=False, timeout=10)
 
@@ -175,7 +176,8 @@ class DesktopViewer:
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.status_for(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
-        return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {})}
+        return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
+                **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
 
     async def open(self, params):
         async with self.open_lock:
@@ -221,7 +223,8 @@ class DesktopViewer:
         token = self.owners.get(session.target.key)
         return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
                 "preview_allowed": state["control"] == "member", "granted": self.vm.grants.allowed(session.member_id),
-                **({"works": works} if works else {})}
+                **({"works": works} if works else {}),
+                **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}
 
     async def status_for(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.
@@ -246,6 +249,8 @@ class DesktopViewer:
         target = session.target
         owner = self.owners.get(target.key)
         pending = self.vm.work.pending(target)
+        if not held and self.teaching and self.teaching.active(token):
+            raise invalid_params("stop or discard the demonstration before handback")
         if session.preview:
             raise invalid_params("preview is read only")
         if pending and (pending.member_id != session.member_id or pending.conversation_id != session.conversation_id):
@@ -305,6 +310,8 @@ class DesktopViewer:
         token = params.get("session")
         session = self.sessions.get(token) if isinstance(token, str) else None
         if session:
+            if self.teaching:
+                await self.teaching.disconnected(token)
             if self.owners.get(session.target.key) == token:
                 await self.disconnect_target(session.target)
                 self.owners.pop(session.target.key, None)
@@ -323,6 +330,8 @@ class DesktopViewer:
             for token, session in list(self.sessions.items()):
                 if session.expires <= self.vm.clock():
                     await self.close({"session": token})
+                elif self.teaching:
+                    await self.teaching.tick(token)
 
     async def _respond(self, writer, code, body=b"", content_type="text/plain"):
         writer.write(f"HTTP/1.1 {code} Response\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n"
@@ -414,7 +423,16 @@ class DesktopViewer:
             async def input_pipe():
                 while data := await reader.read(65536):
                     accepted = gate.feed(data)
-                    if accepted:
+                    packets, gate.packets = gate.packets, []
+                    if self.teaching and self.teaching.active(token):
+                        from .rfb_input import frame
+                        for is_input, message, opcode in packets:
+                            if is_input:
+                                await self.teaching.input(token, message)
+                            if not is_input or input_allowed():
+                                upstream.write(frame(message, opcode))
+                                await upstream.drain()
+                    elif accepted:
                         upstream.write(accepted)
                         await upstream.drain()
 

@@ -1,5 +1,17 @@
 # Third-party notices
 
+## OpenBot demonstrations (MIT)
+
+The owner demonstration lifecycle in `computer/teaching.py` was informed by
+OpenBot `server/src/demonstrations/draft.ts`, `recording.ts` and `routes.ts`:
+ordered bounded recording, explicit review before publication, private input
+omission, and reuse through ordinary skills and routines. Raphael implements its
+own noVNC input recording, member-brain draft and existing skill editor.
+Upstream: https://github.com/CopilotKit/OpenBot. Copyright (c) 2026 CopilotKit.
+The upstream MIT permission and copyright are retained in `licenses/OpenBot-MIT.txt`.
+The closed Grok Bot product was a visual requirement reference only; no code or
+marks were copied.
+
 ## NousResearch/hermes-agent (MIT)
 
 `core/src/raphael_core/computer/local_patterns.py` adapts `DANGEROUS_PATTERNS`

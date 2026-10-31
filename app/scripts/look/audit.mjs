@@ -226,7 +226,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   };
   const hasText = element => [...element.childNodes].some(node => node.nodeType === 3 && node.textContent.trim());
   const marks = element => [...(hasText(element) ? [element] : []), ...element.querySelectorAll("*")].filter(node => (hasText(node) || node.matches("svg.i")) && visible(node));
-  const quiet = element => element.closest(":disabled, [aria-disabled='true'], [inert], .desktop-screen, .message-code");
+  const quiet = element => element.closest(":disabled, [aria-disabled='true'], [inert], .message-code") ||
+    element.closest('.desktop-screen') && !element.closest('.missing-note');
   const unreadable = (foreground, background) => foreground && background && foreground.a > 0.1 && ratio(over(foreground, background), background) < 3;
   const seenContrast = new Set();
   const reportContrast = (key, element, state) => {

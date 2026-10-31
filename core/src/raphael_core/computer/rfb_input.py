@@ -2,7 +2,8 @@
 
 Only negotiated RFB 3.7/3.8 with None/VNC authentication is accepted. Unknown
 messages fail closed. Framebuffer requests continue while owner input is denied.
-No payload is retained after parsing, logged or written to disk.
+Accepted messages are exposed transiently to the viewer's explicit owner recorder.
+This parser never logs or writes payloads to disk.
 """
 import secrets
 import struct
@@ -25,6 +26,7 @@ class RfbInputGate:
         self.fragmented = False
         self.keys = {}
         self.pointer = None
+        self.packets = []
 
     def release(self):
         """Release only currently held keys/buttons before the member can act again."""
@@ -36,6 +38,7 @@ class RfbInputGate:
         return frame(b"".join(messages)) if messages else b""
 
     def feed(self, data):
+        self.packets = []
         self.wire.extend(data)
         if len(self.wire) > 2**20:
             raise ValueError("desktop frame too large")
@@ -62,6 +65,7 @@ class RfbInputGate:
                 if length > 125 or not first & 0x80:
                     raise ValueError("invalid desktop control frame")
                 output.extend(frame(payload, opcode))
+                self.packets.append((False, payload, opcode))
                 continue
             if opcode not in (0, 2) or (opcode == 0) != self.fragmented:
                 raise ValueError("invalid desktop data frame")
@@ -124,6 +128,7 @@ class RfbInputGate:
             elif phase == "init":
                 self.phase = "ready"
             if not input_message or self.allowed():
+                self.packets.append((input_message, message, 2))
                 if phase == "ready" and message[0] in (4, 255):
                     extended = message[0] == 255
                     down = int.from_bytes(message[2:4], "big") if extended else message[1]

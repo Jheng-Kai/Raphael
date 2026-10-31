@@ -3,6 +3,18 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "teach.start": "教他做一次",
+  "missing.memberComputer": "示範需要成員自己的電腦，請先在電腦設定選擇每位成員獨立使用。",
+  "teach.stop": "停止錄製",
+  "teach.review": "審閱示範",
+  "teach.drafting": "正在整理技能草稿…",
+  "teach.discard": "丟棄示範",
+  "teach.warning": "正在錄製這個畫面與操作，請勿開啟私人內容。登入及密碼輸入會略過。",
+  "teach.full": "錄製已達上限，請停止並審閱，或丟棄示範。",
+  "teach.failed": "示範未完成。請確認成員的電腦及模型可用後再試；也可以丟棄示範。",
+  "teach.try": "試做一次",
+  "teach.input": "輸入這次的新資料",
+  "teach.tryPrompt": "請使用「{name}」技能試做一次。這次的輸入：{input}",
   ...missingZh,
   "ownerQuestion.title": "需要你的回答",
   "ownerQuestion.page": "完成頁面後繼續",

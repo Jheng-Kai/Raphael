@@ -4,6 +4,18 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "teach.start": "Teach a task",
+  "missing.memberComputer": "Teaching needs this member's own computer. Choose a separate computer per member in computer settings.",
+  "teach.stop": "Stop recording",
+  "teach.review": "Review demonstration",
+  "teach.drafting": "Preparing the skill draft…",
+  "teach.discard": "Discard demonstration",
+  "teach.warning": "This screen and your actions are being recorded. Keep private content off it. Sign-in and password input are skipped.",
+  "teach.full": "The recording reached its limit. Stop and review it, or discard it.",
+  "teach.failed": "The demonstration could not finish. Check the member's computer and model, then retry or discard it.",
+  "teach.try": "Try once",
+  "teach.input": "Enter a new input for this run",
+  "teach.tryPrompt": "Try the skill \"{name}\" once with this new input: {input}",
   ...missingEn,
   "ownerQuestion.title": "Your answer is needed",
   "ownerQuestion.page": "Continue after using the page",

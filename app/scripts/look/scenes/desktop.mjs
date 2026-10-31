@@ -4,7 +4,16 @@ const computer = (state = "running") => ({ running:"fresh", runningMember:1, des
 ]} });
 const entry = [member(1), wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
 const take = [...entry, click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
+const teachComputer = () => ({desktop:{state:'running',ready:true,control:'member'}});
+const teaching = [member(1),click('[data-act="computer"]'),wait('.desktop-screen iframe:not([hidden])'),click('[data-desktop="teach"]'),wait('.desktop-recording:not([hidden])')];
+const draft = [...teaching,click('[data-desktop="teach"]'),wait('.desktop-review #mp-skill-text')];
 export default [
+  scene('desktop-teach-recording','Owner demonstration records only the member computer with a visible privacy line',[...teaching,check('teach-recording')],teachComputer()),
+  scene('desktop-teach-draft','Stopping opens the existing unsaved editable skill document',[...draft,check('teach-draft')],teachComputer()),
+  scene('desktop-teach-saved','Explicit save offers a new input in the same conversation',[...draft,click('[data-res="skill-save"]'),wait('.desktop-try:not([hidden])'),type('[data-teach-input]','第二季報告'),check('teach-saved')],teachComputer()),
+  scene('desktop-teach-try','The saved skill and fresh input enter the existing conversation',[...draft,click('[data-res="skill-save"]'),wait('.desktop-try:not([hidden])'),type('[data-teach-input]','第二季報告'),click('[data-desktop="try-teach"]'),wait('[data-desktop="teach"]:not([disabled])'),check('teach-try')],teachComputer()),
+  scene('desktop-teach-discard','One press discards the owner recording and returns control',[...teaching,click('[data-desktop="discard-teach"]'),wait('[data-desktop="teach"]:not([disabled])'),check('teach-discard')],teachComputer()),
+  scene('desktop-teach-shared','A shared computer visibly explains the separate member computer requirement',[member(1),click('[data-act="computer"]'),wait('.desktop-teach-missing:not([hidden])'),check('teach-shared')],{desktop:{state:'running',ready:true,control:'member',teach_available:false}}),
   scene("desktop-host-remote", "Select another computer and persist its SSH config alias", [...settings("agent"),scroll('[data-k="computer-host"]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','studio-mini'),key('Tab'),wait('#computer-ssh-alias'),check("host-settings-remote")]),
   scene("desktop-host-invalid", "Invalid SSH aliases stay in the field with a contextual error", [...settings("agent"),scroll('[data-k="computer-host"]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','-oBad'),key('Tab'),wait('#computer-ssh-alias[aria-invalid="true"]'),check("host-settings-invalid")]),
   scene("desktop-collapse", "Collapse the member frame without handing back or reconnecting", [...entry,click('[data-desktop="collapse"]'),check("host-panel-collapsed")],computer()),

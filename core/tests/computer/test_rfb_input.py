@@ -61,6 +61,18 @@ def test_handback_releases_held_keys_and_buttons_without_reconnecting():
     assert gate.release() == b""
 
 
+def test_recording_receives_each_accepted_input_in_order_without_handshake_or_denied_payloads():
+    held = [True]
+    gate = ready(lambda: held[0])
+    click = b"\x05\x01\0\x10\0\x20"
+    key = b"\x04\x01\0\0\0\0\0a"
+    gate.feed(frame(click + key))
+    assert [(is_input,message) for is_input,message,_ in gate.packets] == [(True,click),(True,key)]
+    held[0] = False
+    gate.feed(frame(key))
+    assert not gate.packets
+
+
 @pytest.mark.parametrize("wire", [b"\x82\x00", frame(b"RFB 003.003\n"), b"\x82\xff" + struct.pack("!Q", 2**21)])
 def test_unknown_protocol_unmasked_and_oversized_frames_fail_closed(wire):
     with pytest.raises(ValueError):

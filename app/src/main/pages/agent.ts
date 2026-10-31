@@ -320,6 +320,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     name: () => members.nameOf(members.current()),
     openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
     available: on => { el.querySelector<HTMLElement>('[data-act="computer"]')!.hidden = !on; },
+    trySkill: text => sendFromPage(text),
   });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";

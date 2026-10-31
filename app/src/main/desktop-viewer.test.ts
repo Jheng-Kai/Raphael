@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
+const api = vi.hoisted(() => ({ desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, type DesktopState } from "./desktop-viewer";
 import { setLocale } from "./i18n";
@@ -13,15 +13,82 @@ const frame = (): HTMLIFrameElement => host.querySelector('iframe')!;
 const take = (): HTMLButtonElement => host.querySelector('[data-desktop="take"]')!;
 const peek = (): HTMLButtonElement => host.querySelector('[data-desktop="peek"]')!;
 const handback = (): HTMLButtonElement => host.querySelector('[data-desktop="return"]')!;
+const trySent = vi.fn();
+test('teaching takes the member computer, warns visibly, and opens the shared unsaved skill editor on stop',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  expect(api.desktopTeach).toHaveBeenCalledWith({action:'start',session:'one'});
+  expect(host.textContent).toContain('錄製');expect(host.textContent).toContain('私人');
+  expect(handback().hidden).toBe(true);
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'draft',text:'Draft instructions'});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  expect(host.querySelector<HTMLTextAreaElement>('#mp-skill-text')!.value).toBe('Draft instructions');
+  expect(api.desktopTeach.mock.calls.filter(([p])=>p.action==='save')).toHaveLength(0);
+  api.desktopTeach.mockResolvedValueOnce({skill:{id:9,name:'report'}});
+  host.querySelector<HTMLButtonElement>('[data-res="skill-save"]')!.click();await flush();
+  expect(api.desktopTeach).toHaveBeenLastCalledWith({action:'save',member_id:1,id:'demo',text:'Draft instructions'});
+  expect(host.querySelector('[data-teach-input]')).not.toBeNull();
+  const input = host.querySelector<HTMLInputElement>('[data-teach-input]')!;
+  input.value = 'Quarter two';
+  host.querySelector<HTMLButtonElement>('[data-desktop="try-teach"]')!.click();
+  expect(trySent).toHaveBeenCalledWith('請使用「report」技能試做一次。這次的輸入：Quarter two');
+});
+
+test('one discard releases the recording and never creates a skill',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  api.desktopTeach.mockResolvedValueOnce({});
+  host.querySelector<HTMLButtonElement>('[data-desktop="discard-teach"]')!.click();await flush();
+  expect(api.desktopTeach).toHaveBeenLastCalledWith({action:'discard',member_id:1,id:'demo'});
+  expect(api.desktopTeach.mock.calls.some(([p])=>p.action==='save')).toBe(false);
+});
 function message(state: string, extra = {}): void { window.dispatchEvent(new MessageEvent('message', {source:frame().contentWindow, origin:'http://127.0.0.1:5000', data:{type:'raphael-desktop', state, ...extra}})); }
 beforeEach(() => {
   vi.useFakeTimers(); vi.resetAllMocks(); setLocale('zh-TW'); member=1; panelOpen=false;
   api.desktopStatus.mockResolvedValue(running); api.desktopRenew.mockResolvedValue(running); api.desktopClose.mockResolvedValue({});
   api.desktopOpen.mockResolvedValue({session:'one',url:'http://127.0.0.1:5000/one/vnc.html'});
   host=document.createElement('aside'); host.innerHTML='<div class="mb-det-scroll"></div><ol><li data-desktop-slot="42"></li></ol>'; document.body.append(host);
-  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",openPanel:()=>{panelOpen=true;},panelVisible:()=>panelOpen});
+  mounted=mountDesktopViewer(host,()=>member,{timeline:host.querySelector('ol')!,conversation:()=>11,name:()=>"小晴",openPanel:()=>{panelOpen=true;},panelVisible:()=>panelOpen,trySkill:trySent});
 });
 afterEach(async()=>{mounted.hide();await flush();document.body.replaceChildren();vi.useRealTimers();});
+
+test('a slow draft can be discarded once and its late answer cannot open an editor',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  let finish!:(value:unknown)=>void;
+  api.desktopTeach.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  expect(host.textContent).toContain('正在整理技能草稿');
+  const discard=host.querySelector<HTMLButtonElement>('[data-desktop="discard-teach"]')!;
+  expect(discard.disabled).toBe(false);
+  api.desktopTeach.mockResolvedValueOnce({});discard.click();await flush();
+  finish({id:'demo',state:'draft',text:'Late draft'});await flush();
+  expect(host.querySelector('#mp-skill-text')).toBeNull();expect(trySent).not.toHaveBeenCalled();
+});
+
+test('a failed draft can be retried without recording again',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  api.desktopTeach.mockRejectedValueOnce(new Error('model unavailable'));
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  expect(host.querySelector<HTMLElement>('.desktop-recording')!.hidden).toBe(true);
+  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'draft',text:'Retry draft'});
+  host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.click();await flush();
+  expect(api.desktopTeach).toHaveBeenLastCalledWith({action:'draft',member_id:1,id:'demo'});
+  expect(host.querySelector<HTMLTextAreaElement>('#mp-skill-text')!.value).toBe('Retry draft');
+});
+
+test('shared computers show why teaching is unavailable and offer the existing repair',async()=>{
+  api.desktopStatus.mockResolvedValue({...running,teach_available:false});
+  panelOpen=true;mounted.show();await flush();message('connected');
+  expect(host.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!.disabled).toBe(true);
+  expect(host.querySelector('.desktop-teach-missing')!.textContent).toContain('成員自己的電腦');
+  expect(host.querySelector('.desktop-teach-missing [data-missing-repair="computer"]')).not.toBeNull();
+});
 test('working conversations reveal the existing panel and open one persistent stream',async()=>{
   api.desktopStatus.mockResolvedValue({...running,works:[{...work,state:'running',reason:''}]});
   mounted.show();await flush();message('connected');
