@@ -131,7 +131,9 @@ async def test_a_chief_makes_a_team_and_they_work_at_once_and_wait_for_the_compu
         # The shared computer, on a container engine that is a fake.
         hub = app.vm_tools
         runtime = Docker()
-        vm = LocalVm(tmp_path / "vm", settings=SettingsStore(app._conn), runner=runtime, clock=time.monotonic)
+        settings = SettingsStore(app._conn)
+        settings.set("computer_vm_mode", "shared")
+        vm = LocalVm(tmp_path / "vm", settings=settings, runner=runtime, clock=time.monotonic)
         workspace = runtime.workspace = vm.target(0).workspace
         workspace.mkdir(parents=True)
         runtime.raw = container(vm, vm.target(0), runtime)
