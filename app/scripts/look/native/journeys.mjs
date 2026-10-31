@@ -675,7 +675,7 @@ export async function drive(name, context) {
     result.computer.timezone = { ...clock, ownerZone, expected, checks: timezoneChecks };
     if (clock?.offset !== expected) throw new Error(`VM UTC offset ${clock?.offset ?? "unavailable"} differs from host ${expected}`);
     await chat(page);
-    await perform(page, { action:"open-details" });
+    await click(page, '[data-act="computer"]');  // the panel shows the computer on demand, until something is at work on it
     await wait(page, ' .desktop-panel:not([hidden])');
     await capture("entry");
     await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });

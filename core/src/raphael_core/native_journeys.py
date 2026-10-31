@@ -129,14 +129,21 @@ async def vm_smoke(directory):
 
 
 def vm_signin_fixture(directory, member_id):
-    """Seed only the isolated journey member's own workspace, without starting Docker."""
+    """Seed only the isolated journey member's own workspace, and its grant, without starting Docker."""
     import shutil
+    from .brain.db import connect
+    from .computer.grants import ComputerGrants
     from .computer.vm import LocalVm
     if not native_enabled(True):
         raise RuntimeError("VM sign-in fixture requires the native runner")
     workspace = LocalVm(directory).target(member_id).workspace
     workspace.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", workspace / "native-signin.py")
+    conn = connect(Path(directory) / "raphael.db")
+    try:
+        ComputerGrants(conn).set(member_id, True)
+    finally:
+        conn.close()
 
 
 async def vm_cleanup(directory):
