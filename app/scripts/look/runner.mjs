@@ -166,7 +166,7 @@ export async function run(options) {
             ? `${scene.name}-${theme}-${width}-${step.measure.name}.trace.json` : null;
           if (trace) await page.tracing.start({ path: join(directory, trace), categories: ["devtools.timeline", "blink.user_timing", "v8.execute", "disabled-by-default-v8.cpu_profiler"] });
           let assertion;
-          try { assertion = await perform(page, step); }
+          try { assertion = await perform(page, step, directory); }
           catch (error) {
             if (error.assertion) (result.assertions ??= []).push(error.assertion);
             throw error;

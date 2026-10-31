@@ -1,6 +1,7 @@
 import { perform, pressInFrame } from "../driver.mjs";
 import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
+import { idleCost, slimeSharp } from "../slime-board.mjs";
 
 export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
@@ -18,6 +19,7 @@ export const journeys = [
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
   { name: "member-computer", description: "Docker desktop with fake brain, real MCP screenshot, exec, attachment and noVNC; no host desktop actions" },
   { name: "readable-layout", description: "Inspect the shared sidebar, aligned details and compact drawer in the real WebView" },
+  { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
   { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
@@ -945,6 +947,13 @@ export async function drive(name, context) {
     result.homes = await context.homes();
     if (!result.homes.receipt?.member_home || !String(result.turn.model).startsWith("cli:codex")) throw new Error("The member did not use its Codex brain and migrated home");
     await capture("member-codex-answer");
+  } else if (name === "slime-sharp") {
+    for (let index = 0; index < 12; index++) await context.rpc("members.create", { name: `Colleague ${index + 1}`, role: "Research" });
+    await page.setViewport({ width: 1280, height: 800 });
+    await chat(page); await pause(1500);
+    result.idle = await idleCost(page, 10);
+    await capture("slime-sidebar");
+    result.sharp = await slimeSharp(page, "#nav");
   } else if (name === "readable-layout") {
     result.layout = [];
     const inspect = async (label, checks, checkContext = {}) => {

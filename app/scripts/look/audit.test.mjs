@@ -163,11 +163,26 @@ describe("rendered look checks", () => {
     window.document.querySelector('.shimmer').style.backgroundImage = 'linear-gradient(90deg,rgba(9,9,9,0.4),rgb(9,9,9))';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-55')).toEqual([]);
   });
+  it("rejects a slime on a fraction of a pixel (R-UI-63)", () => {
+    const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:visible"><svg></svg></span>');
+    const slime = window.document.querySelector(".mb-av-slime");
+    const sized = (width, height) => { slime.getBoundingClientRect = () => ({ width, height, left: 10, top: 10, right: 10 + width, bottom: 10 + height, x: 10, y: 10 }); };
+    sized(27.67, 27.67);
+    expect(audit().productRules.filter(item => item.rule === "R-UI-63")).toHaveLength(1);
+    sized(28, 28);
+    expect(audit().productRules.filter(item => item.rule === "R-UI-63")).toEqual([]);
+  });
   it("rejects a crop on a slime (R-UI-54)", () => {
     const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:hidden"><svg></svg></span>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toHaveLength(1);
     window.document.querySelector('.mb-av-slime').style.overflow = 'visible';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toEqual([]);
+    const face = window.document.querySelector('.mb-av-slime');
+    face.style.overflow = 'clip';
+    face.style.setProperty('overflow-clip-margin', '100px');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toEqual([]);
+    face.style.setProperty('overflow-clip-margin', '99px');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toHaveLength(1);
   });
   it("rejects words that hug the edge of a hover fill (R-UI-53)", () => {
     const { window, audit } = productAudit('<div class="row" style="color:rgb(10,10,10);background-color:rgb(255,255,255)">Quick questions</div><style>.row:hover{background-color:rgb(230,230,230)}</style>');

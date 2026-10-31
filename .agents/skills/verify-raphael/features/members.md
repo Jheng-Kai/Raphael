@@ -37,7 +37,7 @@ npm run look -- details member-avatar member-edit details-memory details-routine
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
 npm run look -- member-delete new-conversation-rests conversation-delete-main --theme both --width 1120,720,1920x1080
 npm run look -- member-maker member-maker-chosen member-maker-made --theme both --width 1120,720,1920x1080
-npm run look -- slime-states slime-picker --theme both --width 1120,720,1920x1080
+npm run look -- slime-states slime-picker slime-sizes slime-gallery slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-sharp slime-pointer slime-cost --theme both --width 1120,720,1920x1080
 ```
 
 These walk the owner's flows to their end: `member-delete`
@@ -72,6 +72,22 @@ Fixture member 1 is 小晴 with conversation 11; Raphael has special avatar beha
 Skills/commands/voices have empty fixture collections. Seed resources before claiming
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
+
+## How a slime moves, and why it stays sharp
+
+The owner (2026-10-31): the slimes looked blurred, and the motion should be finer and cuter, 「那個是我們 App 的核心精隨」. Judge them on his screen: 1920x1080 at 100%.
+
+Sharpness (R-UI-63). At DPR 1 in software Edge, the original SVG-group `transform` animation broadened the antialiased fringe compared with the same pose drawn without animation. Pausing retained that blur too. The compositor/resampling explanation is an inference from pixels, not a successful layer trace; GPU and WebView2 remain separate acceptance.
+
+Active states deform vectors through individual `translate`, `rotate` and `scale` properties. Arriving has no opacity animation: combining its fade with a squash broadened the fringe again. Idle at up to 72px uses two seven-cel vector strips: the body and the eyes. CSS steps slide HTML strips by three whole avatar widths, with a fixed three-box paint reserve, avoiding both raster resampling and per-frame SVG layout across the sidebar. Larger faces repaint a breathing path and eye motion directly. Small faces fit eye spacing, centre and stroke to the pixel grid. Avatar sizes are rounded to whole pixels. A 120px outer paint reserve prevents a wide landing from contributing scrollable overflow without cutting horns or wings. The surrounding control never changes geometry.
+
+`slime-sharp` captures a nearly stationary running animation and then cancels every animation, preserving only its computed animated properties inline. It covers nineteen idle sizes (18-120px, including the 19px room face), all nine active states at 40/96px, and a transition at 40/72/96px. It records changed pixels and each size's antialiased pixel counts. A wider fringe (over 5% plus two pixels) fails; a different coverage value on the same antialiased edge is retained as evidence, not mislabeled as blur. The four-times nearest-neighbour enlargement includes the entire specimen area, running above static. `LOOK_SLIME_BASELINE=a47aa935` runs the same check on the original local commit and must fail. This is a diagnostic environment override, not a product setting. No network is used.
+
+Motion is CSS keyed on `data-state`; JavaScript runs only at creation, state changes and pointer events. Idle's 23.3s body and 9.7s eyes share no beat, with per-member `--slime-tempo` and clock-based `--slime-delay`. `--slime-since` preserves one-shot progress through redraws. Active states have anticipation, squash, landing and delayed marks; done and arriving play once, error holds its deflate, and sleeping has two separated Zs. `handOver` preserves the current pose through registered numeric transitions. A pair of rotations around a signed scale preserves shear without animating a cached CSS matrix. The first 320ms returning to idle uses that continuous vector before the cel loop takes over. Motion capture waits a rendered frame before freezing a newly created transition. The pointer moves the same surface, so body, marks and eyes stay together; its squish follows press and release. Reduced motion disables the whole surface, including the idle strips.
+
+`slime-sizes` compares actual sizes with the shared search glyph at 20/40px. `slime-gallery` shows every state at sidebar and large sizes. `slime-motion-idle`, `slime-motion-busy`, `slime-motion-moments` and `slime-motion-change` retain timed strips. `slime-pointer` drives real pointer hover/down/up and checks a stationary control. `slime-cost` measures the same twelve-slime sidebar for 12 seconds per variant, original commit then working tree, preserving colours, hats and layout; it records main-thread/style/layout/script and whole-browser CPU as percent of one core, without a machine-dependent pass threshold. R-UI-54 permits an explicit full-box clip margin; the maker additionally checks the visible paths against ancestor clipping bounds.
+
+The selected consumer matrix is sidebar, sidebar-many, sidebar-rail, sidebar-group-avatar-four, details, member-text, member-avatar, member-maker-chosen, member-maker-made and home, plus the eleven slime scenes above, at both themes and 1120/720/1920x1080. Inspect every contact sheet, the state strips and full-size consumers. The native `slime-sharp` journey is implemented for a maintainer's later isolated WebView2 check; its existence is not a passed native result. This task explicitly forbids native, network and judge runs.
 
 ## Raphael sidebar administration
 

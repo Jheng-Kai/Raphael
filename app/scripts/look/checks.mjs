@@ -1996,9 +1996,13 @@ export function checkRendered(name, context = {}) {
     require(dialog.querySelectorAll(".cr-colors [data-slime-color]").length >= 8 && dialog.querySelectorAll(".cr-characters [data-slime-character]").length >= 20, "every colour and character is on the page");
     require(dialog.querySelectorAll("input, textarea").length === 1, "it asks only for a name");
     const stands = dialog.querySelector(".cr-face svg.slime").parentElement;
+    const painted = [...dialog.querySelectorAll(".cr-face svg.slime path")].filter(part => part.getBoundingClientRect().width && getComputedStyle(part).visibility !== "hidden").map(part => part.getBoundingClientRect());
+    require(painted.length > 0, "the chosen slime is painted");
     for (let box = stands; box && box !== dialog; box = box.parentElement) {
       const seen = getComputedStyle(box);
-      require(box.matches(".mb-dlg-body") || (seen.clipPath === "none" && seen.overflow === "visible"), `nothing cuts the slime's wings and horns (.${box.className})`);
+      const bounds = box.getBoundingClientRect(), reserve = Number(seen.overflowClipMargin.match(/([\d.]+)px/)?.[1] ?? 0);
+      const fits = seen.overflow === "visible" || painted.every(part => part.left >= bounds.left - reserve && part.right <= bounds.right + reserve && part.top >= bounds.top - reserve && part.bottom <= bounds.bottom + reserve);
+      require(box.matches(".mb-dlg-body") || (seen.clipPath === "none" && fits), `nothing cuts the slime's wings and horns (.${box.className})`);
     }
     require(getComputedStyle(dialog.querySelector(".cr-face svg.slime")).clipPath === "none", "nothing cuts the slime's wings and horns");
     const start = dialog.querySelector('[data-dlg="create"]');
@@ -2044,17 +2048,36 @@ export function checkRendered(name, context = {}) {
       const svg = face(id);
       require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);
       require(svg.getAnimations({ subtree: true }).some(running => running.animationName === animation && running.playState === "running"), `member ${id} is really moving as ${state}`);
-      const eye = getComputedStyle(svg.querySelector(".slime-eye-l path"));
-      require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent paths");
+      const eye = getComputedStyle(svg.querySelector(".slime-eyes"));
+      require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent path");
     }
-    require(getComputedStyle(face(2).querySelector(".slime-eye-l path")).strokeWidth === "4.5px", "working narrows its eyes");
+    require(getComputedStyle(face(2).querySelector(".slime-eyes")).d.includes("48.53"), "working keeps its focused slit eyes");
     const rows = [...document.querySelectorAll(".mb-row svg.slime")];
-    require(rows.length >= 3 && rows.every(svg => svg.getAnimations({ subtree: true }).length > 0), "every slime in the list is alive");
+    require(rows.length >= 3 && rows.every(svg => svg.closest(".slime-surface").getAnimations({ subtree: true }).length > 0), "every slime in the list is alive");
     for (const svg of rows) {
       const box = svg.getBoundingClientRect(), row = svg.closest(".mb-row").getBoundingClientRect();
       require(box.top >= row.top - 1 && box.bottom <= row.bottom + 1, "a slime stays inside its row");
     }
     return { check: name, rows: rows.length };
+  }
+  if (name === "slime-handover") {
+    // Each row is a change of state: its first frame holds the old pose, its second the instant after the change, and it must not jump.
+    for (const row of document.querySelectorAll(".look-slime-board > div")) {
+      const [before, after] = [...row.querySelectorAll(".mb-av-slime")].map(face => {
+        const svg = face.querySelector("svg.slime");
+        const painted = (kind, fallback) => {
+          const surface = svg.closest(".slime-surface");
+          const strip = surface?.querySelector(`.slime-idle-${kind} .slime-cels`);
+          if (svg.dataset.state !== "idle" || !strip || getComputedStyle(strip.parentElement).display === "none" || getComputedStyle(strip.parentElement).visibility === "hidden") return svg.querySelector(fallback).getBoundingClientRect();
+          const frame = Math.round(-new DOMMatrix(getComputedStyle(strip).transform).e / (surface.clientWidth * 3));
+          return strip.querySelectorAll("[data-idle-pose]")[frame].getBoundingClientRect();
+        };
+        const box = face.getBoundingClientRect(), body = painted("body", ".slime-body"), eyes = painted("eyes", ".slime-eyes");
+        return { left: body.left - box.left, top: body.top - box.top, right: body.right - box.left, bottom: body.bottom - box.top, eyeX: (eyes.left + eyes.right) / 2 - box.left };
+      });
+      for (const edge of Object.keys(before)) require(Math.abs(before[edge] - after[edge]) <= 1, `a change of state jumps in ${row.textContent.slice(0, 3)}: ${edge} moved ${Math.abs(before[edge] - after[edge]).toFixed(1)}px`);
+    }
+    return { check: name, rows: document.querySelectorAll(".look-slime-board > div").length };
   }
   if (name === "slime-picker") {
     const menu = document.querySelector(".mb-avpop");

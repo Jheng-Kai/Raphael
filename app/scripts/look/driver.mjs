@@ -1,5 +1,6 @@
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
+import { idleCost, slimeBoard, slimePointer, slimeSharp } from "./slime-board.mjs";
 
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
@@ -62,7 +63,7 @@ export function findVisibleElement(selector) {
   }) ?? null;
 }
 
-export async function perform(page, step) {
+export async function perform(page, step, evidenceDirectory) {
   let stableAssertion;
   // A collapsed work section can precede the visible reply with the same selector.
   const visible = async selector => {
@@ -211,6 +212,13 @@ export async function perform(page, step) {
       // Every animation held `at` ms in, also on elements drawn again later, so a moving frame is the same each run.
       await page.addStyleTag({ content: `*, *::before, *::after { animation-delay: -${Number(step.at)}ms !important; animation-play-state: paused !important; }` });
       break;
+    case "slime-board": return await page.evaluate(slimeBoard, step.rows, step.columns);
+    case "slime-sharp": {
+      const revision = process.env.LOOK_SLIME_BASELINE;
+      return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);
+    }
+    case "slime-pointer": return await slimePointer(page, step.selector);
+    case "idle-cost": return await idleCost(page, step.seconds, step.revision);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);
