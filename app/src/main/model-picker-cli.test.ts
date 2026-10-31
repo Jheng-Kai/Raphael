@@ -160,7 +160,8 @@ test("local speech selection waits for confirmation, including downloads; delete
   picker.open(); click('[data-act="use"][data-name="qwen3-asr"]');
   expect(use).not.toHaveBeenCalled(); expect(document.querySelector('[data-act="download"]')).toBeNull();
   click('[data-dlg="use"]'); expect(use).toHaveBeenCalledWith("qwen3-asr");
-  click('[data-act="delete"][data-name="sensevoice"]'); expect(remove).not.toHaveBeenCalled();
+  click('[data-act="local-menu"][data-name="sensevoice"]'); expect(document.querySelector('#app-popover [data-pick="delete"]')?.textContent).toContain("SenseVoice");
+  click('#app-popover [data-pick="delete"]'); expect(remove).not.toHaveBeenCalled();
   click('[data-act="confirm"][data-name="sensevoice"]'); expect(remove).toHaveBeenCalledWith("sensevoice");
 });
 

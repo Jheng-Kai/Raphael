@@ -100,9 +100,9 @@ const LOCAL_MODELS: LocalModel[] = [
 const view = (over: Partial<SettingsView> = {}): SettingsView => ({
   pane: "general", device, brain, hasKey: true, openrouter, spend, catalog, checkingOpenrouter: false,
   devices: { devices: [{ index: 0, name: REALTEK, is_default: true }], selected: null, automatic_device: REALTEK },
-  altgr: false, version: "0.1.0", replacingKey: false, confirmingKeyRemoval: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
+  altgr: false, version: "0.1.0", replacingKey: false, keyBusy: false, keyError: null, limitDraft: null, limitError: null,
   cityDraft: null, cityError: null, languageGroups: GROUPS, now: NOW, connections: emptyConnectionsView(), messaging: emptyMessagingView(),
-  confirmingClear: null, localModels: LOCAL_MODELS, localDownload: null, ...over,
+  localModels: LOCAL_MODELS, localDownload: null, ...over,
 });
 
 test("appearance offers one theme dropdown and language without a preview gallery", () => {
@@ -475,19 +475,19 @@ describe("Models", () => {
     const key = rowOf(tab("usage"), "金鑰");
     expect(key).toContain("已連線");
     expect(key).toContain("延遲 120 ms");
-    expect(buttons(key)).toEqual(['<button type="button" class="btn danger" data-act="key-remove">', '<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn" data-act="key-replace" data-k="key">']);
+    expect(buttons(key).slice(0, 2)).toEqual(['<button type="button" class="btn" data-act="or-check">', '<button type="button" class="btn" data-act="key-replace" data-k="key">']);
     expect(key).toContain(">變更</button>");
     const bad = rowOf(tab("usage", { openrouter: { ...openrouter, state: "error", error: "auth" } }), "金鑰");
     expect(bad).toContain("金鑰無效，請更換");
   });
 
-  test("has a bordered button to remove the key, only while a key is set, that asks once more", () => {
+  test("removing the key waits in its row's ⋯, only while a key is set (R-UI-56)", () => {
     const key = rowOf(tab("usage"), "金鑰");
-    expect(buttons(key)).toContain('<button type="button" class="btn danger" data-act="key-remove">');
-    expect(key).toContain(">移除金鑰</button>");
-    expect(rowOf(tab("usage", { confirmingKeyRemoval: true }), "金鑰")).toContain(">確定移除？</button>");
+    expect(key).toContain('data-act="key-menu"');
+    expect(key).not.toContain("移除金鑰");
+    expect(key).not.toContain("danger");
     for (const over of [{ hasKey: false }, { replacingKey: true }]) {
-      expect(rowOf(tab("usage", over), "金鑰")).not.toContain("key-remove");
+      expect(rowOf(tab("usage", over), "金鑰")).not.toContain("key-menu");
     }
   });
 
@@ -598,7 +598,7 @@ describe("資料", () => {
   test("is the dictation history (how long it is kept, and a clear), then the conversation with 拉斐爾 (a clear)", () => {
     const html = tab("data");
     expect(groups(html)).toEqual(["聽寫紀錄", "拉斐爾的對話"]);
-    expect(names(html)).toEqual(["保留聽寫紀錄", "清除聽寫紀錄", "清除拉斐爾的對話"]);
+    expect(names(html)).toEqual(["保留聽寫紀錄", "所有聽寫紀錄", "所有對話紀錄"]);
     expect(described(html)).toEqual([]);
     expect(html).not.toContain('class="foot"');
   });
@@ -612,13 +612,13 @@ describe("資料", () => {
     expect(rowOf(tab("data", { brain: { ...brain, history_retention_days: 90 } }), "保留聽寫紀錄")).toContain("90 天");
   });
 
-  test("clears with a bordered button that asks once more, in red", () => {
+  test("clearing waits in each row's ⋯: nothing on the page says clear (R-UI-56)", () => {
     const html = tab("data");
-    expect(rowOf(html, "清除聽寫紀錄")).toContain('<button type="button" class="btn danger" data-act="clear-dictation" data-k="clear-dictation">清除</button>');
-    expect(rowOf(html, "清除拉斐爾的對話")).toContain('<button type="button" class="btn danger" data-act="clear-conversation" data-k="clear-conversation">清除</button>');
-    const asking = tab("data", { confirmingClear: "dictation" });
-    expect(rowOf(asking, "清除聽寫紀錄")).toContain('class="btn danger" data-act="clear-dictation" data-k="clear-dictation">確定清除？<');
-    expect(rowOf(asking, "清除拉斐爾的對話")).toContain(">清除<");
+    expect(rowOf(html, "所有聽寫紀錄")).toContain('data-act="data-menu" data-what="dictation"');
+    expect(rowOf(html, "所有對話紀錄")).toContain('data-act="data-menu" data-what="conversation"');
+    expect(html).not.toContain("清除聽寫紀錄");
+    expect(html).not.toContain("清除拉斐爾的對話");
+    expect(html).not.toContain("danger");
   });
 
   test("has no export: the app cannot save a file where the user chooses yet", () => {
@@ -724,7 +724,7 @@ describe("while the core does not answer", () => {
     for (const id of ["general", "appearance", "dictation", "agent", "usage", "data"] as const) expect(tab(id, down)).toContain("core-note");
     expect(tab("about", down)).not.toContain("core-note");
     expect(rowOf(tab("data", down), "保留聽寫紀錄")).toMatch(/data-k="retention" disabled>/);
-    expect(rowOf(tab("data", down), "清除拉斐爾的對話")).not.toContain("disabled");
+    expect(rowOf(tab("data", down), "所有對話紀錄")).not.toContain("disabled");
     const dictation = tab("dictation", down);
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");

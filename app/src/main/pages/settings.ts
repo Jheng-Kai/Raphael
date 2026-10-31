@@ -54,6 +54,7 @@ import {
   ico,
   iconBtn,
   menuIsOpenFor,
+  openConfirmMenu,
   openMenu,
   openMenuOnArrow,
   openPopover,
@@ -159,10 +160,6 @@ export interface SettingsPage extends Page {
   /** Reads ahead, so that the first opening has nothing to wait for either. */
   preload(): Promise<void>;
 }
-/** How long 「移除金鑰」 waits for its second press. */
-const KEY_REMOVAL_CONFIRM_MS = 5000;
-/** How long a clear of 資料 waits for its second press. */
-const CLEAR_CONFIRM_MS = 5000;
 /** How long a row the search jumped to stays lit. */
 const FOUND_MS = 1600;
 
@@ -219,9 +216,6 @@ export function createSettings(app: AppContext): SettingsPage {
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
-  /** 「移除金鑰」 was pressed once: pressing it again, within a few seconds, removes the key. */
-  let confirmingKeyRemoval = false;
-  let keyRemovalTimer: ReturnType<typeof setTimeout> | undefined;
   let keyError: (() => string) | null = null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
   let limitDraft: string | null = null;
@@ -243,9 +237,6 @@ export function createSettings(app: AppContext): SettingsPage {
   let stopOutside = (): void => {};
   let loading = false;
   let loads = 0;
-  /** In 資料, the clear that was pressed once and waits for its second press. */
-  let confirmingClear: "dictation" | "conversation" | null = null;
-  let clearTimer: ReturnType<typeof setTimeout> | undefined;
   /** The 「連接」 tab: it keeps its own state and asks to be drawn again. 「試試看」 leaves for the 拉斐爾 page with a draft. */
   const connections = createConnections({
     root: el,
@@ -289,8 +280,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
     pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired,
-    replacingKey, confirmingKeyRemoval, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
-    connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), confirmingClear, localModels, localDownload,
+    replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
+    connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
 
   /** The item at the foot of the microphones' menu that looks for them again. */
@@ -504,8 +495,6 @@ export function createSettings(app: AppContext): SettingsPage {
     providers.reset();
     if (pane === "agent") void services.load();
     if (pane === "models" && modelsTab === "models") void providers.load();
-    clearTimeout(clearTimer);
-    confirmingClear = null;
     syncMonitor();
     body.scrollTop = 0;
     render();
@@ -992,21 +981,8 @@ export function createSettings(app: AppContext): SettingsPage {
     render();
   }
 
-  /** The first press asks again for a few seconds; the second removes the key. */
   async function removeKey(): Promise<void> {
     if (keyBusy) return;
-    clearTimeout(keyRemovalTimer);
-    if (!confirmingKeyRemoval) {
-      confirmingKeyRemoval = true;
-      keyRemovalTimer = setTimeout(() => {
-        confirmingKeyRemoval = false;
-        if (visible) render();
-      }, KEY_REMOVAL_CONFIRM_MS);
-      render();
-      el.querySelector<HTMLElement>('[data-act="key-remove"]')?.focus();
-      return;
-    }
-    confirmingKeyRemoval = false;
     keyBusy = true;
     render();
     try {
@@ -1059,22 +1035,10 @@ export function createSettings(app: AppContext): SettingsPage {
   }
 
   /**
-   * A clear of 資料: the first press asks again for a few seconds; the second empties what it names
-   * once the 10 seconds of 「復原」 have run out (`app.undo`), through the core.
+   * A clear of 資料, confirmed in its ⋯: it empties what it names once the 10 seconds of 「復原」 have
+   * run out (`app.undo`), through the core.
    */
   function clear(what: "dictation" | "conversation"): void {
-    clearTimeout(clearTimer);
-    if (confirmingClear !== what) {
-      confirmingClear = what;
-      clearTimer = setTimeout(() => {
-        confirmingClear = null;
-        if (visible) render();
-      }, CLEAR_CONFIRM_MS);
-      render();
-      return;
-    }
-    confirmingClear = null;
-    render();
     app.undo.begin({
       message: what === "dictation" ? t("data.dictationCleared") : t("data.conversationCleared"),
       commit: async () => {
@@ -1263,8 +1227,8 @@ export function createSettings(app: AppContext): SettingsPage {
         render();
         el.querySelector<HTMLElement>('[data-act="key-replace"]')?.focus();
         break;
-      case "key-remove":
-        void removeKey();
+      case "key-menu":
+        openConfirmMenu(target.closest<HTMLElement>('[data-act]')!, { label: t("settings.keyRemove"), ask: t("settings.keyRemoveConfirm"), run: () => void removeKey() });
         break;
       case "key-paste":
         void pasteKey();
@@ -1284,12 +1248,12 @@ export function createSettings(app: AppContext): SettingsPage {
       case "docker-download":
         void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
         break;
-      case "clear-dictation":
-        clear("dictation");
+      case "data-menu": {
+        const anchor = target.closest<HTMLElement>('[data-act]')!;
+        const what = anchor.dataset.what === "dictation" ? "dictation" : "conversation";
+        openConfirmMenu(anchor, { label: t(what === "dictation" ? "data.clearDictation" : "data.clearConversation"), ask: t("data.clearConfirm"), run: () => clear(what) });
         break;
-      case "clear-conversation":
-        clear("conversation");
-        break;
+      }
       case "help":
         void api.openExternalUrl("https://github.com/Jack-hehe/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1444,8 +1408,6 @@ export function createSettings(app: AppContext): SettingsPage {
       searchField.value = "";
       hits = [];
       pendingJump = null;
-      clearTimeout(clearTimer);
-      confirmingClear = null;
       body.scrollTop = 0;
       closeMenu();
       render();

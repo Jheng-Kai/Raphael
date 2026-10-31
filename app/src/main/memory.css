@@ -20,4 +20,3 @@
 .mem-body { width: 100%; min-height: 96px; resize: vertical; padding: var(--sp-2) var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); font-size: var(--fs-sm); line-height: 1.6; }
 .mem-title { width: 100%; min-height: 32px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); border: 1px solid var(--btn-edge); background: var(--panel); font-size: var(--fs-sm); }
 .mem-body:focus, .mem-title:focus { outline: 0; }
-.mem-foot { margin: var(--sp-2) 0 0 var(--sp-1); }

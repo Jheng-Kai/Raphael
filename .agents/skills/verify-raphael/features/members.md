@@ -199,6 +199,23 @@ and the audit of every look scene (`R-UI-44`) fails a rendered ⋯ that no row r
 npm run look -- context-menu-member context-menu-conversation context-menu-routine context-menu-key --theme both --width 1120,720,1920x1080
 ```
 
+## What destroys waits in the ⋯ (R-UI-56)
+
+Clear, clear all, delete and remove never stand open on a page (the owner, 2026-10-31, about the memory tab). They wait in the ⋯ of the row or section title they
+act on, and its right click: 全部清除 in the title of each memory section, 清除 in the conversation summary's row, the clears of Settings › 資料 in their rows (所有聽寫紀錄,
+所有對話紀錄), 移除金鑰 in the key's row of Settings › 模型 › 用量, a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
+`openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
+it. A local model still asks in its row, and a clear of 資料 still gives its ten seconds of 復原.
+
+The audit of every look scene (`R-UI-56`) fails a button named for clearing, deleting or removing, in any of the three languages, unless it stands in a menu, in a
+dialog about that one thing (`.mb-dialog`, `.cs-dialog`), in a local model's inline question, or in what is being composed (`.composer`, `.draft-panel`). The Settings window is a page: it is
+not excepted. Telegram's 中斷連線, a pending person's reject and a mail draft's 捨棄 use other words and stay where they are.
+
+```powershell
+npm run look -- memory-clear-menu memory-clear-done memory-summary-menu memory-summary-done context-menu-memory-title context-menu-memory-summary details-memory global-private-memory --theme both --width 1120,720,1920x1080
+npm run look -- data data-clear-menu data-clear-undo context-menu-data usage-key-menu usage-key-removed context-menu-api-key messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
+```
+
 Each scene presses the real right button (the `right-click` driver step, which keeps the point it pressed) and its `context-menu` check asserts that the menu is open, starts
 at the pointer, does not cover it, and has the same items as the menu a click on the ⋯ opens. It closes the menu on the way, and the scene presses again so that the picture
 shows it. `context-menu-key` presses Shift+F10 (`key` with `shift`) on the focused member row and asserts that the menu stands under its ⋯. The connection and message

@@ -36,6 +36,15 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     return right > left && bottom > top;
   };
+  // R-UI-56: what clears, deletes or removes waits in a ⋯ and the right click of its row. Keep the places it may stand explicit:
+  // the menu itself; a dialog about that one thing, which confirms or edits it; a local model's inline question; what is being
+  // composed (a message's attachments and quote, Raphael's member drafts); and a favourite's star, which destroys nothing.
+  const destroyWords = /^(?:確定)?(?:全部)?(?:清除|刪除|移除)|^(?:clear|delete|remove)\b|消去|削除/i;
+  const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .lm-confirm, .composer, .draft-panel, .mp-star';
+  const destroysInTheOpen = button => {
+    const name = (button.getAttribute('aria-label') || button.textContent).trim();
+    return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand);
+  };
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
   // A textarea holds the document its owner is editing (a private skill's SKILL.md), so Markdown there is data, not unrendered copy.
@@ -138,6 +147,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     }
     if (element.matches('button.danger, button[data-row-action="delete"], button[data-row-action="rename"]') && !element.closest('[role="menu"], .menu, .action-row') && element.closest('.mp-resource, .mb-routine, .mb-tool-row, .au-room-row, .mem-row, .rule-row, .rules-row, .word-row, .wrow, .history-row, .hrow, .mb-rt, .row, [role="listitem"]'))
       violation('R-UI-11', 'Visible list-row delete or rename action');
+    if (element.matches('button') && destroysInTheOpen(element)) violation('R-UI-56', 'A button that clears, deletes or removes stands open on the page');
     if (element.matches('button.btn')) {
       // Navigation cards, list choices and disclosures are not text action buttons; an event line
       // that opens its room navigates like the sidebar's room rows.

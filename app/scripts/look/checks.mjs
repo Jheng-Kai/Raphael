@@ -314,6 +314,52 @@ export function checkRendered(name, context = {}) {
     else require(calls.some(c => c.method === "members.skills.delete") && calls.some(c => c.method === "members.skills.update" && c.params.undo), "Raphael deletes and restores through the same owner boundary");
     return { check: name };
   }
+  if (name === "confirm-menu-label" || name === "confirm-menu-asks") {
+    // R-UI-56: the item in the ⋯ names what it destroys, and its first press only asks.
+    const item = document.querySelector('#app-popover [data-confirm-item]');
+    require(visible(item) && item.classList.contains("danger"), "the ⋯ opens a danger item");
+    require(document.querySelector('[data-overflow][aria-expanded="true"]'), "the menu belongs to a ⋯ button");
+    require(/^確定/.test(item.textContent.trim()) === (name === "confirm-menu-asks"), `the item says ${item.textContent.trim()}`);
+    const destroying = ["memory.clear", "memory.summary_clear", "secrets.clear_openrouter_key", "history.clear", "agent.history.clear"];
+    require(!window.__look.calls.some(call => destroying.includes(call.method)), "nothing is destroyed before the second press");
+    return { check: name };
+  }
+  if (name === "memory-clear-done") {
+    const clears = window.__look.calls.filter(call => call.method === "memory.clear");
+    require(clears.length === 1 && clears[0].params.space === "own", "one clear, of the member's own section");
+    require(document.querySelector('.mb-det [data-mem-space="shared"] [data-mem="section-more"]'), "the shared section keeps its notes and its ⋯");
+    require(!document.querySelector('.mb-det [data-mem-space="own"] [data-mem="section-more"]'), "an empty section has nothing to clear");
+    return { check: name };
+  }
+  if (name === "memory-summary-done") {
+    require(window.__look.calls.some(call => call.method === "memory.summary_clear"), "the summary was cleared through the core");
+    require(!window.__look.calls.some(call => call.method === "memory.clear"), "the notes were left alone");
+    return { check: name };
+  }
+  if (name === "data-clear-undo") {
+    require(document.body.textContent.includes("已清除聽寫紀錄"), "the notice with 復原 is on screen");
+    require(!window.__look.calls.some(call => call.method === "history.clear"), "the history is still there during 復原");
+    return { check: name };
+  }
+  if (name === "usage-key-removed") {
+    require(window.__look.calls.some(call => call.method === "secrets.clear_openrouter_key"), "the key was removed through the core");
+    require(visible(document.querySelector("#key-input")) && !document.querySelector('[data-act="key-menu"]'), "the row asks for a key and has nothing left to remove");
+    return { check: name };
+  }
+  if (name === "messaging-user-removed") {
+    require(window.__look.calls.some(call => call.method === "messaging.telegram.remove_user" && call.params.user_id === "42"), "the person was removed through the core");
+    return { check: name };
+  }
+  if (name === "local-model-menu") {
+    require(document.querySelector('#app-popover [data-pick="delete"]').textContent.includes("SenseVoice"), "the item names the model");
+    require(!document.querySelector('.lm-row [data-act="delete"], .lm-del'), "no delete stands in the row");
+    return { check: name };
+  }
+  if (name === "local-model-asks") {
+    require(visible(document.querySelector('.lm-row[data-name="sensevoice"] .lm-confirm')), "the row asks before anything is deleted");
+    require(!window.__look.calls.some(call => call.method === "models.delete"), "nothing is deleted before the answer");
+    return { check: name };
+  }
   if (name === "pending-memory") {
     const editor = document.querySelector('[data-mem-space="own"] [data-mem-editor]');
     require(visible(editor), "the pending memory opens in the existing memory editor");

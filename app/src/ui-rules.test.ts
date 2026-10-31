@@ -63,7 +63,7 @@ describe("action rows", () => {
 describe("buttons", () => {
   // Every <button> is one of the shapes of the component inventory (docs/ui.md), or a part of a menu / list / dialog.
   const ALLOWED_CLASS = [
-    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-action", "lang-item", "lm-main", "lm-del", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color",
+    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-action", "lang-item", "lm-main", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color",
   ];
   const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "radio", "checkbox", "switch", "tab"];
   const classOf = (tag: string): string[] => (/\bclass="([^"]*)"/.exec(tag)?.[1] ?? "").split(/\s+/).filter(Boolean);
@@ -93,7 +93,7 @@ describe("buttons", () => {
     const styles = strip(read(join(MAIN, "styles.css")));
     expect(styles).toMatch(/\.btn\.icon\s*\{[^}]*background:\s*transparent/);
     expect(styles).toMatch(/\.btn\.icon:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\)/);
-    const classes = new Set(["icon", "cmp-attach", "cmp-send", "cmp-voice", "mp-star", "lm-del", "chip-x", "window-button", "window-close"]);
+    const classes = new Set(["icon", "cmp-attach", "cmp-send", "cmp-voice", "mp-star", "chip-x", "window-button", "window-close"]);
     const composer = strip(read(join(MAIN, "agent.css")));
     expect(composer).toMatch(/\.composer \.cmp-pair \.btn\.cmp-send[^{}]*\{[^}]*background: transparent; color: var\(--accent-icon\)/);
     // Read the optional class argument of every iconButton/iconBtn call, balancing nested calls.

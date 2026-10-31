@@ -12,6 +12,7 @@ import { modelMark, providerMark } from "./provider-marks";
 import { CLIS, cliModels } from "./cli-brains";
 import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
 import { CHECK, btn, esc, ico, openMenu, sel } from "./ui";
+import { openActions } from "./member-column";
 import { openDialog, type Dialog } from "./member-dialogs";
 
 // ---------- what the list shows ----------
@@ -896,7 +897,7 @@ class MountedPicker implements ModelPicker {
     const act = target.dataset.act, name = target.dataset.name;
     if (act === "use" && name) { this.localDraft = name; this.paintRows(); }
     if (act === "cancel") this.o.onCancelLocal?.();
-    if (act === "delete" && name) { this.confirm = { kind: "delete", name }; this.paintRows(); }
+    if (act === "local-menu" && name) openActions(target, [{ id: "delete", label: t("local.deleteLabel", { p0: target.dataset.title ?? name }), icon: "trash" }], () => { this.confirm = { kind: "delete", name }; this.paintRows(); });
     if (act === "dismiss") { this.confirm = null; this.paintRows(); }
     if (act === "confirm" && name) { this.confirm = null; this.o.onDeleteLocal?.(name); }
   }

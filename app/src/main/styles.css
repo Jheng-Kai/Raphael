@@ -699,13 +699,12 @@ kbd.ob-cap { white-space: nowrap; }
 
 /* Custom icon controls share the same interaction policy as iconButton. */
 /* Window controls use caption hover surfaces, as requested by the owner (2026-10-25). */
-:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .lm-del, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
-:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .lm-del, .chip-x):is(:active, [aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
+:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
+:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:active, [aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-attach:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-voice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .mp-star:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-:where(:root[data-keys]) .lm-del:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .chip-x:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .window-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .menu .btn.icon:is(:hover, :active, :focus-visible) { background: transparent; }

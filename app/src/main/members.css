@@ -180,7 +180,7 @@
 .mb-det .mem-head .ctl { gap: var(--sp-1); }
 .page-agent .mb-det .mem .btn.icon { width: calc(28px + 8 * var(--pa-u)); min-height: calc(28px + 8 * var(--pa-u)); }
 /* the pencil and the trash of a note show under the pointer, so that its line has the room */
-.mb-det .mem-sub .ctl .btn.icon:not([data-mem="more"]) { display: none; }
+.mb-det .mem-sub .ctl .btn.icon:not([data-overflow]) { display: none; }
 .mb-det .mem-sub:hover .ctl .btn.icon, .mb-det .mem-sub:focus-within .ctl .btn.icon { display: inline-flex; }
 .mb-det .sgroup + .sgroup { margin-top: var(--sp-3); }
 

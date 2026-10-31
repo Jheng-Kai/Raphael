@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check, member } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, settings, scroll, key, check, member, rightClick } from "./steps.mjs";
 
 const connections = settings("connections");
 const add = [...connections, click('[data-k="conn-add"]')];
@@ -10,6 +10,10 @@ const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cl
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
 const modelChooser = role => [...settings("models"), click(`.modal-scrim [data-model-picker="${role}"] .mp-trigger`), wait(".model-chooser .mc-row")];
 const localChooser = [...modelChooser("stt"), click('[data-source="local-speech"]'), wait(".lm-main")];
+const downloaded = [
+  { name: "qwen3-asr", title: "Qwen3-ASR", languages: ["zh", "en", "ja", "ko", "yue"], note: "dictionary", size: 878702423, ready: false },
+  { name: "sensevoice", title: "SenseVoice", languages: ["zh", "en", "ja", "ko", "yue"], note: "fast", size: 163002883, ready: true },
+];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
@@ -35,6 +39,8 @@ export default [
   ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),
   scene("model-choices-local-selected", "Preview a local model without downloading and keep keyboard focus visible", [...localChooser, click('.lm-main[data-name="qwen3-asr"]'), key("Tab"), { action: "focus", selector: '.lm-main[data-name="qwen3-asr"]' }, check("model-choice-selection"), check("model-choice-layout")]),
+  scene("model-choices-local-menu", "Deleting a downloaded local model waits in its row's ⋯ and still asks in the row", [...localChooser, click('[data-act="local-menu"][data-name="sensevoice"]'), wait('#app-popover [data-pick="delete"]'), check("local-model-menu"), click('#app-popover [data-pick="delete"]'), wait('.lm-confirm'), check("local-model-asks")], { localModels: downloaded }),
+  scene("context-menu-local-model", "A right click on a downloaded local model's row opens the menu of its ⋯", [...localChooser, rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover'), check("context-menu"), rightClick('.lm-row[data-name="sensevoice"]'), wait('#app-popover')], { localModels: downloaded }),
   scene("chatgpt-signed-out", "ChatGPT sign-in is the first subscription account", [...settings("models"), scroll(".cli-accounts"), wait('[data-chatgpt="sign-in"]')]),
   scene("chooser-chatgpt-signed-out", "Choosing a model, ChatGPT is a subscription that says what signing in means and has the button for it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), check("chooser-chatgpt")]),
   scene("chooser-chatgpt-signed-in", "Signing in from the chooser brings the plan's models into it", [...modelChooser("answer"), click('.model-chooser [data-source="chatgpt"]'), wait('.mc-signin'), click('.model-chooser [data-dlg="chatgpt"]'), wait('.model-chooser [data-model="@chatgpt:gpt-6-sol"]'), check("chooser-chatgpt-models")]),

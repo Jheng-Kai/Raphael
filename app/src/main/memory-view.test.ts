@@ -49,12 +49,15 @@ describe("the memory's rows", () => {
     expect(html).toContain('data-mem="expand" aria-expanded="false"');
   });
 
-  test("open, a row for each note with its type and an overflow menu, then the summary and 全部清除", () => {
+  test("open, a row for each note with its type and an overflow menu, then the summary; no clear stands on the page (R-UI-56)", () => {
     const html = memoryHTML(view({ expanded: true }));
     expect(html.match(/<div class="row mem-sub/g)).toHaveLength(3);
-    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 偏好 回答保持兩三句 推測 對話摘要 清除 全部清除");
+    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 偏好 回答保持兩三句 推測 對話摘要");
     expect(html).toContain('data-mem="more" data-name="user-city"');
     expect(html).toContain('data-mem="more" data-name="preference-short"');
+    expect(html).toContain('aria-label="「記憶」的選項" title="「記憶」的選項" data-mem="section-more"');
+    expect(html).toContain('aria-label="「對話摘要」的選項" title="「對話摘要」的選項" data-mem="summary-more"');
+    expect(html).not.toContain("danger");
     expect(html).not.toMatch(/data-mem="(?:edit|delete)"/);
     // The summary's text itself is not shown: only that there is one, and the way to clear it.
     expect(html).not.toContain("規劃週末");
@@ -64,14 +67,22 @@ describe("the memory's rows", () => {
     const told = { ...LIST.memories[0], member: 0, updated: "2026-10-27T00:44:52+08:00" };
     const html = memoryHTML(view({ expanded: true, status: { memories: [told, LIST.memories[1]], summary: null },
       nameOf: (id) => (id === 0 ? "拉斐爾" : "") }));
-    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 拉斐爾 · 2026/10/27 偏好 回答保持兩三句 推測 全部清除");
+    expect(visible(html)).toBe("記憶 2 本人 主人住在台北 拉斐爾 · 2026/10/27 偏好 回答保持兩三句 推測");
   });
 
   test("with no notes it says so and opens on nothing", () => {
     const html = memoryHTML(view({ status: { memories: [], summary: null }, expanded: true }));
     expect(visible(html)).toBe("記憶 尚無記憶");
     expect(html).not.toContain('data-mem="expand"');
-    expect(html).not.toContain('data-mem="clear"');
+    expect(html).not.toContain('data-mem="section-more"');
+  });
+
+  test("the title's ⋯ is there while the list is closed, and only with notes to clear", () => {
+    expect(memoryHTML(view())).toContain('data-mem="section-more"');
+    const summaryOnly = memoryHTML(view({ expanded: true, status: { memories: [], summary: LIST.summary } }));
+    expect(summaryOnly).not.toContain('data-mem="section-more"');
+    expect(summaryOnly).toContain('data-mem="summary-more"');
+    expect(memoryHTML(view({ busy: true }))).toMatch(/data-mem="section-more"[^>]* disabled/);
   });
 
   test("every action is a real button; the icon-only ones are named in their label and tooltip", () => {
@@ -102,14 +113,6 @@ describe("the memory's rows", () => {
     expect(visible(html).startsWith("記憶 1 ")).toBe(true);
   });
 
-  test("全部清除 and the summary's 清除 ask for a second press", () => {
-    const html = memoryHTML(view({ expanded: true, confirmingClear: true, confirmingSummary: true }));
-    expect(html).toContain('class="btn danger sm" data-mem="clear"');
-    expect(html).toContain('class="btn danger sm" data-mem="summary"');
-    expect(visible(html)).toContain("確定全部清除？");
-    expect(visible(html)).toContain("確定清除？");
-  });
-
   test("names, types and text are escaped", () => {
     const html = memoryHTML(view({ expanded: true, status: { memories: [{ ...LIST.memories[0], description: '<b>"x"</b>' }], summary: null } }));
     expect(html).not.toContain("<b>");
@@ -118,9 +121,9 @@ describe("the memory's rows", () => {
 
   test("one language at a time", () => {
     setLocale("en");
-    expect(visible(memoryHTML(view({ expanded: true })))).toBe("Memory 2 About you 主人住在台北 Preference 回答保持兩三句 Inferred Conversation summary Clear Clear all");
+    expect(visible(memoryHTML(view({ expanded: true })))).toBe("Memory 2 About you 主人住在台北 Preference 回答保持兩三句 Inferred Conversation summary");
     setLocale("ja");
-    expect(visible(memoryHTML(view({ expanded: true })))).toBe("記憶 2 本人 主人住在台北 好み 回答保持兩三句 推測 会話の要約 消去 すべて消去");
+    expect(visible(memoryHTML(view({ expanded: true })))).toBe("記憶 2 本人 主人住在台北 好み 回答保持兩三句 推測 会話の要約");
   });
 
   test("while it loads, and when it cannot be read", () => {
@@ -326,43 +329,13 @@ describe("the controller", () => {
     expect((c.view().status as MemoryList).memories.map((m) => m.name)).toEqual(["preference-short"]);
   });
 
-  test("全部清除 clears only on the second press, and the first is forgotten after a while", async () => {
-    const c = make();
-    await c.load();
-    vi.useFakeTimers();
-    try {
-      click(c, "clear");
-      expect(c.view().confirmingClear).toBe(true);
-      vi.advanceTimersByTime(5000);
-      expect(c.view().confirmingClear).toBe(false);
-      click(c, "clear");
-      expect(api.core).not.toHaveBeenCalledWith("memory.clear");
-      click(c, "clear");
-      expect(api.core).toHaveBeenCalledWith("memory.clear");
-    } finally {
-      vi.useRealTimers();
-    }
-    await vi.waitFor(() => expect(toaster.info).toHaveBeenCalledWith("已清除全部記憶"));
-  });
-
-  test("the summary's 清除 clears it on the second press", async () => {
-    const c = make();
-    await c.load();
-    click(c, "summary");
-    expect(api.core).not.toHaveBeenCalledWith("memory.summary_clear");
-    click(c, "summary");
-    expect(api.core).toHaveBeenCalledWith("memory.summary_clear");
-    await vi.waitFor(() => expect(toaster.info).toHaveBeenCalledWith("已清除對話摘要"));
-  });
-
   test("a click elsewhere is not the memory's, and leaving the tab closes everything", async () => {
     const c = make();
     await c.load();
     expect(c.click({ closest: () => null } as unknown as Element)).toBe(false);
     click(c, "expand");
-    click(c, "clear");
     c.reset();
-    expect(c.view()).toMatchObject({ expanded: false, editing: null, confirmingClear: false });
+    expect(c.view()).toMatchObject({ expanded: false, editing: null });
   });
 });
 

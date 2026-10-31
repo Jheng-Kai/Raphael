@@ -35,7 +35,7 @@ import { pricingNote } from "../pricing";
 import type { HotkeyField } from "../hotkey-recording";
 import type { AudioDevices, BrainSettings, DeviceSettings, LocalModel, ModelCatalog, ModelRole, SettingsPane, Status } from "../types";
 import { keyEntryRow, micRow } from "../setup-rows";
-import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, keys, note, row, sel, st, tabs, tg } from "../ui";
+import { type Choice, type IconName, actionRow, btn, esc, fieldHTML, ico, iconBtn, iconButton, keys, note, row, sel, st, tabs, tg } from "../ui";
 
 /** The models the core reads when none is chosen (brain/settings.py), shown while it does not answer. */
 const DEFAULT_MODELS = { cleanup: "openai/gpt-6-luna", answer: "openai/gpt-6-luna", stt: "elevenlabs/scribe-v2" } as const;
@@ -169,8 +169,8 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "models", label: "settings.agentModel", also: "settings.searchModel" },
   { pane: "models", label: "conversations.quick", words: ["Alt", "Space"] },
   { pane: "data", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "data", label: "data.clearDictation", also: "settings.searchHistory" },
-  { pane: "data", label: "data.clearConversation" },
+  { pane: "data", label: "data.dictationAll", also: "data.clearDictation" },
+  { pane: "data", label: "data.conversationAll", also: "data.clearConversation" },
   { pane: "about", label: "settings.078" },
   { pane: "about", label: "nav.help" },
   { pane: "about", label: "settings.079" },
@@ -274,8 +274,6 @@ export interface SettingsView {
   version: string;
   /** The key field is shown although there is a key (「變更」). */
   replacingKey: boolean;
-  /** 「移除金鑰」 was pressed once and waits for the second press. */
-  confirmingKeyRemoval: boolean;
   keyBusy: boolean;
   keyError: (() => string) | null;
   /** What was typed in the limit field while it is not a limit, and what is wrong with it. */
@@ -286,8 +284,6 @@ export interface SettingsView {
   cityError: (() => string) | null;
   /** Telegram, in the 訊息平台 tab. */
   messaging: MessagingView;
-  /** In 資料, the clear that was pressed once and waits for its second press. */
-  confirmingClear: "dictation" | "conversation" | null;
   /** Raphael's own memory, in the 拉斐爾 tab, after its settings (none: not drawn). */
   memory?: MemoryView;
   /** The owner's safety rules, in the 拉斐爾 tab, after the memory (none: not drawn). */
@@ -480,10 +476,9 @@ function keyRow(v: SettingsView): string {
       t("common.apiKey"),
       keyStatus(v),
       actionRow({
-        destructive: { label: t(v.confirmingKeyRemoval ? "settings.keyRemoveConfirm" : "settings.keyRemove"), attrs: ' data-act="key-remove"' },
         secondary: btn(v.checkingOpenrouter ? t("common.checking") : t("settings.046"), "", ` data-act="or-check"${v.checkingOpenrouter ? " disabled" : ""}`) +
           btn(t("home.018"), "", ' data-act="key-replace" data-k="key"'),
-      }),
+      }) + iconButton("more", t("members.more", { p0: t("common.apiKey") }), ' data-act="key-menu" aria-haspopup="menu" aria-expanded="false"'),
       { attrs, cls: "row-key" },
     );
   }
@@ -694,17 +689,16 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-/** A clear button of 資料: 「清除」, and 「確定清除？」 while it waits for the second press. */
-function clearButton(v: SettingsView, what: "dictation" | "conversation"): string {
-  const asking = v.confirmingClear === what;
-  return actionRow({ destructive: { label: esc(asking ? t("data.clearConfirm") : t("data.clear")), attrs: ` data-act="clear-${what}" data-k="clear-${what}"` } });
+/** A row of what 資料 keeps; clearing it waits in the row's ⋯ (R-UI-56). */
+function dataRow(label: string, what: "dictation" | "conversation"): string {
+  return row(label, "", iconButton("more", t("members.more", { p0: label }), ` data-act="data-menu" data-what="${what}" aria-haspopup="menu" aria-expanded="false"`), { cls: "data-row" });
 }
 
 /**
  * 資料: what is kept on this computer and how to get rid of it, gathered from where it was. How long
- * the dictation history is kept (the row says it is the dictation history's), and a clear for the
- * dictation history and one for the conversation with 拉斐爾, each asking twice and then giving 10
- * seconds of 「復原」. There is no export: the app has no way to save a file where the user chooses yet.
+ * the dictation history is kept (the row says it is the dictation history's), and a row for the
+ * dictation history and one for the conversation with 拉斐爾, whose ⋯ clears it, asking twice and then
+ * giving 10 seconds of 「復原」. There is no export: the app has no way to save a file where the user chooses yet.
  */
 function dataHTML(v: SettingsView): string {
   return (
@@ -712,9 +706,9 @@ function dataHTML(v: SettingsView): string {
     coreNote(v) +
     section(t("data.groupDictation"), [
       row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)),
-      row(t("data.clearDictation"), "", clearButton(v, "dictation")),
+      dataRow(t("data.dictationAll"), "dictation"),
     ]) +
-    section(t("data.groupConversation"), [row(t("data.clearConversation"), "", clearButton(v, "conversation"))])
+    section(t("data.groupConversation"), [dataRow(t("data.conversationAll"), "conversation")])
   );
 }
 

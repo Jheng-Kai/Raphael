@@ -1,7 +1,8 @@
 // Raphael's memory in Settings shares the standard rows. A collapsed section shows its note
 // count; expanded notes show their type and description. Each note's overflow menu offers
 // editing, deletion with the existing ten-second Undo period, and an optional space move.
-// Summary and clear-all actions retain their second-press confirmation.
+// Clearing everything and clearing the summary wait in the ⋯ of their rows (R-UI-56), behind a
+// second press.
 //
 // `memoryHTML` draws it from a snapshot (pure, so its rules can be tested without a browser);
 // `createMemory` holds the state and does what the buttons say, through the core's `memory.*`
@@ -17,7 +18,7 @@ import { core } from "./api";
 import { describeError, formatDate } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
-import { DISCONNECT_CONFIRM_MS, actionRow, btn, closeMenu, esc, iconButton, note, openPopover, row, st, toaster } from "./ui";
+import { actionRow, btn, closeMenu, esc, iconButton, note, openConfirmMenu, openPopover, row, st, toaster } from "./ui";
 import type { Undoable } from "./undo";
 
 /** A note as `memory.list` gives it. */
@@ -69,13 +70,11 @@ export interface MemoryView {
   editing: MemoryEditor | null;
   /** Deleted, and waiting out their 10 s of 「復原」: not drawn. */
   hidden: readonly string[];
-  confirmingClear: boolean;
-  confirmingSummary: boolean;
   busy: boolean;
 }
 
 export const emptyMemoryView = (): MemoryView => ({
-  status: "loading", expanded: false, editing: null, hidden: [], confirmingClear: false, confirmingSummary: false, busy: false,
+  status: "loading", expanded: false, editing: null, hidden: [], busy: false,
 });
 
 /** The most a note's text holds (the core's limit). */
@@ -134,12 +133,12 @@ function itemRows(v: MemoryView, list: MemoryList): string[] {
   });
 }
 
-/** The memory: its row, and when it is open a row for each note, the summary and 「全部清除」. */
+/** The memory: its row, with 「全部清除」 in its ⋯, and when it is open a row for each note and the summary. */
 export function memoryHTML(v: MemoryView): string {
   const title = v.title ?? t("mem.title");
   const space = v.space ? ` data-mem-space="${v.space}"` : "";
-  const group = (rows: string[], after = ""): string =>
-    `<section class="sgroup mem" data-mem-section${space} aria-label="${esc(title)}"><div class="slist">${rows.join("")}</div>${after}</section>`;
+  const group = (rows: string[]): string =>
+    `<section class="sgroup mem" data-mem-section${space} aria-label="${esc(title)}"><div class="slist">${rows.join("")}</div></section>`;
   if (v.status === "loading") {
     return group([row(esc(title), "", `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`, { cls: "mem-head" })]);
   }
@@ -151,21 +150,19 @@ export function memoryHTML(v: MemoryView): string {
     ? `<span class="val num">${notes.length}</span>`
     : `<span class="val">${esc(t("mem.empty"))}</span>`;
   const chevron = anything ? iconButton("down", t("mem.details"), ` data-mem="expand" aria-expanded="${v.expanded}"`, "mem-more") : "";
-  const head = row(esc(title), "", count + chevron, { cls: "mem-head" });
-  if (!v.expanded || !anything) return group([head]);
   const off = v.busy ? " disabled" : "";
+  const menu = notes.length ? iconButton("more", t("mem.more", { p0: title }), ` data-mem="section-more" aria-haspopup="menu" aria-expanded="false"${off}`) : "";
+  const head = row(esc(title), "", count + menu + chevron, { cls: "mem-head" });
+  if (!v.expanded || !anything) return group([head]);
   const summary = list.summary
     ? [row(
         esc(t("mem.summary")),
         "",
-        actionRow({ destructive: { label: esc(v.confirmingSummary ? t("mem.summaryConfirm") : t("mem.summaryClear")), kind: "sm", attrs: ` data-mem="summary"${off}` } }),
+        iconButton("more", t("mem.more", { p0: t("mem.summary") }), ` data-mem="summary-more" aria-haspopup="menu" aria-expanded="false"${off}`),
         { cls: "mem-sub mem-summary" },
       )]
     : [];
-  const clear = notes.length
-    ? actionRow({ cls: "mem-foot", destructive: { label: esc(v.confirmingClear ? t("mem.clearConfirm") : t("mem.clearAll")), kind: "sm", attrs: ` data-mem="clear"${off}` } })
-    : "";
-  return group([head, ...itemRows(v, list), ...summary], clear);
+  return group([head, ...itemRows(v, list), ...summary]);
 }
 
 // ---------- state ----------
@@ -223,17 +220,14 @@ export function createMemory(host: MemoryHost): MemoryPanel {
   const ownTitle = (): string => t("mem.own", { p0: host.ownerName?.() ?? t("agent.title") });
   let editing: MemoryEditor | null = null;
   let hidden: string[] = [];
-  let confirmingClear = false;
-  let confirmingSummary = false;
   let busy = false;
   let loads = 0;
-  const timers: { clear?: ReturnType<typeof setTimeout>; summary?: ReturnType<typeof setTimeout> } = {};
 
   const redraw = (): void => {
     if (host.visible()) host.redraw();
   };
   const view = (): MemoryView => ({
-    status, expanded, editing, hidden, confirmingClear, confirmingSummary, busy, nameOf: host.memberName,
+    status, expanded, editing, hidden, busy, nameOf: host.memberName,
     ...(space
       ? {
           space,
@@ -332,19 +326,6 @@ export function createMemory(host: MemoryHost): MemoryPanel {
     });
   }
 
-  /** The first press of a button that asks for a second: it waits that long, then forgets. */
-  function arm(which: "clear" | "summary"): void {
-    clearTimeout(timers[which]);
-    if (which === "clear") confirmingClear = true;
-    else confirmingSummary = true;
-    timers[which] = setTimeout(() => {
-      if (which === "clear") confirmingClear = false;
-      else confirmingSummary = false;
-      redraw();
-    }, DISCONNECT_CONFIRM_MS);
-    redraw();
-  }
-
   async function act(work: () => Promise<unknown>, done: MessageKey): Promise<void> {
     busy = true;
     redraw();
@@ -427,24 +408,22 @@ export function createMemory(host: MemoryHost): MemoryPanel {
       case "more":
         moreMenu(button, name);
         return true;
-      case "clear":
-        if (!confirmingClear) {
-          arm("clear");
-          return true;
-        }
-        clearTimeout(timers.clear);
-        confirmingClear = false;
-        editing = null;
-        void act(() => call("memory.clear"), "mem.cleared");
+      case "section-more":
+        openConfirmMenu(button, {
+          label: t("mem.clearAll"),
+          ask: t("mem.clearConfirm"),
+          run: () => {
+            editing = null;
+            void act(() => call("memory.clear"), "mem.cleared");
+          },
+        });
         return true;
-      case "summary":
-        if (!confirmingSummary) {
-          arm("summary");
-          return true;
-        }
-        clearTimeout(timers.summary);
-        confirmingSummary = false;
-        void act(() => call("memory.summary_clear"), "mem.summaryCleared");
+      case "summary-more":
+        openConfirmMenu(button, {
+          label: t("mem.summaryClear"),
+          ask: t("mem.summaryConfirm"),
+          run: () => void act(() => call("memory.summary_clear"), "mem.summaryCleared"),
+        });
         return true;
     }
     return false;
@@ -486,10 +465,6 @@ export function createMemory(host: MemoryHost): MemoryPanel {
     status = "loading";
     editing = null;
     expanded = host.expanded === true;
-    confirmingClear = false;
-    confirmingSummary = false;
-    clearTimeout(timers.clear);
-    clearTimeout(timers.summary);
   }
 
   return { view, load, click, input, key, reset };

@@ -107,10 +107,10 @@
 .lm-main[aria-current="true"] .lm-state { color: var(--accent-text); font-weight: 600; }
 .lm-bar { display: block; height: 4px; margin-top: var(--sp-1); border-radius: var(--r-sm); background: var(--line); overflow: hidden; }
 .lm-bar i { display: block; height: 100%; border-radius: var(--r-sm); background: var(--accent); transition: width 0.15s linear; }
-.model-chooser .lm-del { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 28px; height: var(--h-ctl-sm); min-height: 0; margin: 0 var(--sp-2) 0 0; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-3); }
-.model-chooser .lm-del:hover { background: transparent; color: var(--text); }
-.model-chooser .lm-row .btn { flex: none; width: auto; justify-content: center; min-height: var(--h-ctl-sm); margin: var(--sp-1) var(--sp-1) 0 0; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); font-size: var(--fs-xs); color: var(--text); }
+.model-chooser .lm-row .btn:not(.icon) { flex: none; width: auto; justify-content: center; min-height: var(--h-ctl-sm); margin: var(--sp-1) var(--sp-1) 0 0; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); font-size: var(--fs-xs); color: var(--text); }
 .model-chooser .lm-row .btn:hover { background: var(--hover); border-color: var(--text-3); }
+.model-chooser .lm-row .btn.icon { flex: none; margin-right: var(--sp-2); }
+.model-chooser .lm-row .btn.icon:hover { background: transparent; }
 .model-chooser .lm-row .btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .model-chooser .lm-row .btn.pri:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .model-chooser .lm-row .btn:focus-visible { box-shadow: none; }

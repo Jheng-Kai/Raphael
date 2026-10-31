@@ -279,6 +279,7 @@ export function installMock(fixture, config = {}, target = window) {
   const copy = value => value === undefined ? undefined : structuredClone(value);
   const nextId = items => Math.max(0, ...items.map(item => item.id)) + 1;
   const unsupported = name => { const message = `Unmocked IPC: ${name}`; state.errors.push(message); throw new Error(message); };
+  let keyRemoved = false;
   const notify = (type, extra = {}) => { setTimeout(() => state.emit({ type, ...extra }), 0); };
   const byMember = (items, p) => items.filter(item => item.member_id === (p.member_id ?? 0));
   // As the core's Conversations.main: a member always has a main conversation; when it is deleted the latest one takes
@@ -378,7 +379,7 @@ export function installMock(fixture, config = {}, target = window) {
         return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts),report:data.status};
       }
       case "status.check_openrouter": data.status.openrouter.state = "ok"; return data.status.openrouter;
-      case "secrets.status": return { has_key: !variant.problem };
+      case "secrets.status": return { has_key: !variant.problem && !keyRemoved };
       case "stats.summary": return data.stats;
       case "history.list": return { items: data.history.filter(item => (!p.query || item.text.includes(p.query)) && (!p.after_ms || item.created_at_ms >= p.after_ms) && (!p.before_ms || item.created_at_ms < p.before_ms)) };
       case "history.delete": data.history = data.history.filter(item => item.id !== p.id); return { deleted: true };
@@ -499,7 +500,9 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.question.open": return null;
       case "background.questions.list": return { questions: [] };
       case "quota.list": return { quotas: data.allowances.quotas };
-      case "memory.list": return { memories: p.space === "shared" ? data.sharedMemories : byMember(data.memories, p), summary: null };
+      case "memory.list": return { memories: p.space === "shared" ? data.sharedMemories : byMember(data.memories, p), summary: p.space === "shared" ? null : data.memorySummary };
+      case "memory.clear": if (p.space === "shared") data.sharedMemories = []; else data.memories = data.memories.filter(item => item.member_id !== (p.member_id ?? 0)); return { cleared: true };
+      case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
       case "memory.get": { const item = (p.space === "shared" ? data.sharedMemories : byMember(data.memories, p)).find(item => item.name === p.name); if (!item) throw new Error("Memory fixture not found"); return { ...item, body: item.body ?? item.text ?? item.description }; }
       case "memory.update": { const item = data.memories.find(item => item.name === p.name && item.member_id === (p.member_id ?? 0)); if (!item) throw new Error("Memory fixture not found"); if (item.origin === "pending") data.memories = data.memories.filter(note => note !== item); else Object.assign(item, p); return { approved: true }; }
       case "memory.delete": data.memories = data.memories.filter(item => item.name !== p.name || item.member_id !== (p.member_id ?? 0)); return { deleted: true };
@@ -766,6 +769,10 @@ export function installMock(fixture, config = {}, target = window) {
       case "usage.analytics": return { ...data.analytics, range: p.range ?? data.analytics.range };
       case "usage.export": return { csv: data.usageCsv };
       case "messaging.telegram.status": return data.messaging;
+      case "messaging.telegram.remove_user": data.messaging.allowed = data.messaging.allowed.filter(user => user.user_id !== p.user_id); return data.messaging;
+      case "secrets.clear_openrouter_key": keyRemoved = true; return {};
+      case "history.clear": return { deleted: 0 };
+      case "agent.history.clear": return { deleted: 0 };
       default: return unsupported(method);
     }
   }

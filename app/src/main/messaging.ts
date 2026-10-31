@@ -12,6 +12,7 @@ import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
+import { openActions } from "./member-column";
 import { monogram, serviceIconSVG } from "./service-icons";
 import { DISCONNECT_CONFIRM_MS, actionRow, btn, esc, fieldHTML, ico, iconButton, note, row, st, tg, toaster } from "./ui";
 
@@ -104,7 +105,7 @@ function detailRows(v: MessagingView, s: TelegramStatus): string[] {
     return row(
       `<span class="msg-pair"><span class="msg-avatar" aria-hidden="true">${monogram(name)}</span><span class="msg-who" title="${esc(String(u.user_id))}">${esc(name)}</span></span>`,
       "",
-      iconButton("x", t("msg.tg.removeUser", { p0: name }), ` data-msg="remove" data-user="${u.user_id}"${off}`),
+      iconButton("more", t("members.more", { p0: name }), ` data-msg="user-menu" data-user="${u.user_id}" aria-haspopup="menu" aria-expanded="false"${off}`),
       { cls: "msg-sub" },
     );
   });
@@ -298,9 +299,12 @@ export function createMessaging(host: MessagingHost): Messaging {
       case "reject":
         void act(() => api.telegramReject(button.dataset.code ?? ""));
         return true;
-      case "remove":
-        void act(() => api.telegramRemoveUser(button.dataset.user ?? ""));
+      case "user-menu": {
+        const user = button.dataset.user ?? "";
+        const name = (typeof status === "object" ? status.allowed.find((u) => String(u.user_id) === user)?.name : "") || user;
+        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => api.telegramRemoveUser(user)));
         return true;
+      }
       case "disconnect":
         if (!confirming) {
           confirming = true;

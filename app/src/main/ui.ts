@@ -599,6 +599,40 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   return el;
 }
 
+/**
+ * The menu of a ⋯ whose one item destroys something (R-UI-56). The first press asks in the item's place, for
+ * `DISCONNECT_CONFIRM_MS`; the second closes the menu and does `run`. Closing the menu forgets the first press.
+ */
+export function openConfirmMenu(anchor: HTMLElement, o: { label: string; ask: string; run(): void }): void {
+  let asking = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const el = openPopover(
+    anchor,
+    `<button type="button" role="menuitem" class="danger" tabindex="-1" data-confirm-item><span class="ck">${ico("trash")}</span><span class="mt">${esc(o.label)}</span></button>`,
+    { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined, onClose: () => clearTimeout(timer) },
+  );
+  const item = el.querySelector<HTMLElement>("[data-confirm-item]")!;
+  const say = (text: string): void => {
+    item.querySelector<HTMLElement>(".mt")!.textContent = text;
+    placeMenu();
+  };
+  item.addEventListener("click", () => {
+    if (asking) {
+      closeMenu();
+      anchor.focus({ preventScroll: true });
+      o.run();
+      return;
+    }
+    asking = true;
+    say(o.ask);
+    timer = setTimeout(() => {
+      asking = false;
+      say(o.label);
+    }, DISCONNECT_CONFIRM_MS);
+  });
+  item.focus();
+}
+
 function menuRootAnchor(): HTMLElement | undefined {
   let root = menu;
   while (root?.parent) root = root.parent;

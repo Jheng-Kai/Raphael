@@ -270,7 +270,31 @@ describe("rendered look checks", () => {
   });
   it("rejects visible row destruction but permits overflow menus", () => {
     const { audit } = productAudit('<div class="mp-resource"><button class="danger">Delete</button></div><div role="menu"><div class="mp-resource"><button class="danger">Delete</button></div></div><div class="mp-resource" hidden><button class="danger">Delete</button></div>');
-    expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-11']);
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-11')).toHaveLength(1);
+  });
+  it("rejects a button that destroys standing open on a page (R-UI-56)", () => {
+    const rule = html => productAudit(html).audit().productRules.filter(item => item.rule === 'R-UI-56').map(item => item.text || item.tag);
+    // In the open: the words a clear, a delete or a removal goes by, on a word button or an icon's label, in each language.
+    expect(rule('<section class="mem"><div class="action-row"><button class="btn danger">全部清除</button></div></section>')).toEqual(['全部清除']);
+    expect(rule('<div class="row"><button class="btn danger">確定清除？</button></div>')).toEqual(['確定清除？']);
+    expect(rule('<div class="row"><button class="btn icon" aria-label="移除 小晴"></button></div><div class="row"><button class="btn icon" aria-label="Delete Paraformer"></button></div>')).toHaveLength(2);
+    expect(rule('<div class="row"><button class="btn">Clear all</button></div><div class="row"><button class="btn">すべて消去</button></div><div class="row"><button class="btn">音声入力の履歴を削除</button></div>')).toHaveLength(3);
+    // The ⋯ and the menu it opens are where they belong, and the Settings window is still a page.
+    expect(rule('<div class="row"><button class="btn icon" data-overflow aria-label="「共同記憶」的選項"></button></div><div class="menu" role="menu"><button role="menuitem" class="danger">全部清除</button></div>')).toEqual([]);
+    expect(rule('<div class="modal" role="dialog"><div class="row"><button class="btn danger">清除</button></div></div>')).toEqual(['清除']);
+    // A dialog about one thing, a model's own question, what is being composed, and words that destroy nothing.
+    for (const allowed of [
+      '<div class="mb-dialog" role="dialog"><button class="btn danger">刪除例行任務</button></div>',
+      '<div class="cs-dialog" role="dialog"><button class="btn danger">移除</button></div>',
+      '<div class="lm-row"><div class="lm-confirm"><button class="btn danger">刪除</button></div></div>',
+      '<div class="composer"><button class="chip-x" aria-label="移除檔案"></button></div>',
+      '<section class="draft-panel"><button class="btn icon" aria-label="移除 紫苑"></button></section>',
+      '<button class="mp-star" aria-label="Remove from favourites: Luna"></button>',
+      '<div class="row"><button class="btn">從最愛移除</button></div>',
+      '<div class="row"><button class="btn">Clearly a longer label</button></div>',
+      '<div class="row"><button class="btn">刪除舊檔案的每週例行任務，以及把整理好的結果寄給主人</button></div>',
+      '<div class="row" hidden><button class="btn danger">清除</button></div>',
+    ]) expect(rule(allowed), allowed).toEqual([]);
   });
   it("rejects a ⋯ that a right click on its row does not reach (R-UI-44)", () => {
     const { window, audit } = productAudit('<div class="row"><button class="btn icon" data-overflow aria-label="更多"></button></div>');
@@ -289,7 +313,7 @@ describe("rendered look checks", () => {
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
   });
   it("checks rendered primary and destructive action positions", () => {
-    const { window, audit } = productAudit('<div class="action-row"><button class="pri">Save</button><span class="action-destructive"><button>Delete</button></span></div>');
+    const { window, audit } = productAudit('<div class="mb-dialog"><div class="action-row"><button class="pri">Save</button><span class="action-destructive"><button>Delete</button></span></div></div>');
     const primary = window.document.querySelector('.pri');
     primary.getBoundingClientRect = () => ({ left: 0, top: 10, right: 50, bottom: 40, width: 50, height: 30 });
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-27', 'R-UI-27']);
