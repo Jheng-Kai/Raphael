@@ -558,6 +558,24 @@ async def test_failed_nested_work_cannot_be_reported_as_success(make_rig):
     assert child['reason']=='work_without_action'
 
 
+async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(make_rig):
+    rig=make_rig()
+    target,source=setup(rig)
+    design='設計規格：' + '辦公室有四張桌子，每張桌子上有成員的史萊姆，鏡頭可以環顧。' * 12
+    rig.client.replies.append(report(design))
+    result=rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.report_text)==('done',design)
+    later=colleague(rig,source,target,'Later')
+    rig.client.replies.append(report('明早我會完成。'))
+    result=rig.service.handoff(RAPHAEL,args(later,stage_id='later'),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('failed','work_without_action')
+    assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
+
+
 async def test_required_artifact_and_modified_artifact_cannot_complete(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig)
