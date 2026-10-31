@@ -181,7 +181,9 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
       case "tools/call":
         if (typeof params.name !== "string" || !params.name) return refuse(-32602, "tools/call needs {name, arguments?}.");
         try {
-          return answer(await api.pagesToolCall(live.id, params.name, (params.arguments ?? {}) as object));
+          const called = await api.pagesToolCall(live.id, params.name, (params.arguments ?? {}) as object);
+          if (called.status === "confirm") return refuse(-32000, t("page.waitingYes"));
+          return called.ok ? answer(called.tool_result ?? { content: [] }) : refuse(-32000, called.error ?? t("page.failed"));
         } catch (error) {
           return refuse(-32000, describeError(error));
         }

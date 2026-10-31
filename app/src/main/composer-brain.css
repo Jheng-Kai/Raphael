@@ -1,5 +1,6 @@
 /* The composer's model menu: sources on the left stay where they are while the models on the right change. */
 .menu.cb-menu { width: min(560px, calc(100vw - 16px)); max-width: min(560px, calc(100vw - 16px)); padding: var(--sp-1); overflow: hidden; }
+.menu.cb-menu .menu-head { text-align: left; }
 .cb-panes { display: grid; grid-template-columns: minmax(150px, 2fr) minmax(0, 3fr); gap: var(--sp-1); height: min(300px, 45vh); min-height: 0; }
 .cb-rail { min-height: 0; overflow-y: auto; padding-right: var(--sp-1); border-right: 1px solid var(--line); scrollbar-width: none; }
 .cb-pane { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-height: 0; min-width: 0; }

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
-import { isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG } from "./slime";
+import { followSlimeRoster, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG } from "./slime";
 
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
@@ -74,7 +74,7 @@ test("one press chooses one slime, in a menu that shows it", () => {
   expect(pickSlime(document.createElement("button"))).toBeNull();
 });
 
-test("a row shows what it knows: an answer it waits for, the core's last word, or sleep after a long silence", () => {
+test("a row shows what it knows: an answer it waits for, or sleep after a long silence", () => {
   const now = Date.now();
   const drawn = (member: Parameters<typeof slimeFaceHTML>[0]): string | undefined => {
     const el = document.createElement("div"); el.innerHTML = slimeFaceHTML(member, 40); return stateIn(el);
@@ -83,8 +83,29 @@ test("a row shows what it knows: an answer it waits for, the core's last word, o
   expect(drawn({ id: 11 })).toBe("idle");
   expect(drawn({ id: 11, last_at: now - 3 * 24 * 60 * 60 * 1000 })).toBe("sleeping");
   expect(drawn({ id: 11, waiting: true, last_at: now - 3 * 24 * 60 * 60 * 1000 })).toBe("waiting");
-  expect(drawn({ id: 11, activity: "searching" })).toBe("searching");
-  expect(drawn({ id: 11, activity: "nonsense" })).toBe("idle");
+});
+
+test("a window that opens late learns from the list what a member is doing, and a later word wins", () => {
+  const drawn = (): string | undefined => {
+    const el = document.createElement("div"); el.innerHTML = slimeFaceHTML({ id: 12 }, 40); return stateIn(el);
+  };
+  followSlimeRoster([{ id: 12, activity: "searching" }]);
+  expect(drawn()).toBe("searching");
+  setSlimeState(12, "idle");
+  expect(drawn()).toBe("idle");
+  followSlimeRoster([{ id: 12, activity: "nonsense" }]);
+  expect(drawn()).toBe("idle");
+});
+
+test("the core's idle right after done does not cut the moment short", () => {
+  vi.useFakeTimers();
+  document.body.innerHTML = slimeFaceHTML({ id: 13 }, 40);
+  setSlimeState(13, "done");
+  setSlimeState(13, "idle");
+  followSlimeRoster([{ id: 13, activity: "idle" }]);
+  expect(stateIn(document.body)).toBe("done");
+  vi.advanceTimersByTime(2000);
+  expect(stateIn(document.body)).toBe("idle");
 });
 
 test("what the core says moves every face of that member and no other, and a redraw keeps it", () => {

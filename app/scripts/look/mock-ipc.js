@@ -9,6 +9,7 @@ export function installMock(fixture, config = {}, target = window) {
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
   }
+  let codexArrived = false, codexTimer;
   const desktopSessions = new Map();
   let desktopSequence = 0;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
@@ -146,7 +147,7 @@ export function installMock(fixture, config = {}, target = window) {
     const base = data.turns.find(turn => turn.member_id === 1);
     data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
-      pages: [{ id: "page-product", title: "輕量後背包", rev: 0, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
+      pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
   }
   if (variant.colleagues) {
     // 小森 asked 小晴 from its own chat; 小晴's main chat shows each question where it came.
@@ -337,7 +338,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "pages.open":
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // Not a file of the dev server, which would write its own client into the page.
-        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 0, height: 320, source: "html", server: null };
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         const session = `look-desktop-${++desktopSequence}`;
@@ -510,7 +511,14 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
       case "rooms.send": { const message = { id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message" }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
-      case "brains.cli": return { clis: data.clis };
+      case "brains.cli":
+        // As the core does: a CLI's models come after the first read, in the background.
+        if (variant.codexLate && !codexArrived) {
+          // Counted from the menu opening, so that a slow start of the scene still sees them come.
+          if (!codexTimer && target.document.querySelector(".cb-menu")) codexTimer = setTimeout(() => { codexArrived = true; notify("BrainsChanged", {}); }, variant.codexLate);
+          return { clis: data.clis.map(cli => cli.id === "codex" ? { ...cli, models: [] } : cli) };
+        }
+        return { clis: data.clis };
       case "chatgpt.status": return data.chatgpt ?? (config.fixture?.chatgptSignedIn ? { signed_in: true, email: "owner@example.test", plan_scope_granted: true } : { signed_in: false });
       case "chatgpt.sign_in": data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true }; return data.chatgpt;
       case "chatgpt.models": return { models: [] };

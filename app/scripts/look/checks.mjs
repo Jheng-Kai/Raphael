@@ -1623,6 +1623,30 @@ export function checkRendered(name, context = {}) {
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
     return { check: name };
   }
+  if (name.startsWith("model-sync-")) {
+    const saved = window.__look.data.settings.agent_model;
+    const known = [...window.__look.data.catalog.llm, ...window.__look.data.clis.flatMap(cli => cli.models)];
+    const named = known.find(model => model.id === saved.split("?")[0] || `@${model.provider_id}:${model.id}` === saved.split("?")[0])?.name;
+    const composer = document.querySelector(".composer .cmp-model .mp-trigger .mp-tname").textContent;
+    require(named && composer === named, `the composer shows the saved model: ${composer} / ${saved}`);
+    if (name === "model-sync-composer") require(saved.startsWith("cli:codex:gpt-6.1"), `the composer's choice is what the core holds: ${saved}`);
+    if (name !== "model-sync-composer") {
+      const row = document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-tname').textContent;
+      require(row === composer, `Settings and the composer agree: ${row} / ${composer}`);
+    }
+    if (name === "model-sync-both") require(!saved.startsWith("cli:codex"), `the choice in Settings is what the core holds: ${saved}`);
+    return { check: name, saved };
+  }
+  if (name === "composer-model-reading") {
+    const pane = document.querySelector(".cb-menu .cb-pane");
+    require(!pane.textContent.includes("尚無可用模型"), "a signed-in CLI whose models are coming is not called empty");
+    require(pane.querySelector('[role="status"]'), "it says the models are being read");
+    return { check: name };
+  }
+  if (name === "composer-model-arrived") {
+    require(document.querySelectorAll(".cb-menu .cb-pane [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-pane [role="status"]'), "the models took the place of the message without reopening");
+    return { check: name };
+  }
   if (name === "composer-model-menu" || name === "composer-model-depth") {
     const menu = document.querySelector(".cb-menu"), box = menu.getBoundingClientRect(), composer = document.querySelector(".composer").getBoundingClientRect();
     require(!document.querySelector(".model-chooser"), "no separate dialog");

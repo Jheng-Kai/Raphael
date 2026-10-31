@@ -212,7 +212,9 @@ class CliBrains:
                 if self.notify:
                     self.notify("brains.changed", {})
         except (OSError, ValueError, TimeoutError):
-            pass
+            # The owner may be looking at an empty list: the next read tries again soon, a known list can wait.
+            self._models_at[name] = asyncio.get_running_loop().time() - (0 if self._models.get(name) else 50)
+            return
         self._models_at[name] = asyncio.get_running_loop().time()
 
     async def _refresh_models(self):

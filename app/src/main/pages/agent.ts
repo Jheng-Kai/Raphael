@@ -453,7 +453,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
-  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), () => app.go("settings", "models"));
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { openSources: () => app.go("settings", "models"), onEvent: handler => app.onEvent(handler) });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;

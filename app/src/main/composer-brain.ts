@@ -2,6 +2,10 @@
  * The model of the open conversation, chosen next to where the owner writes: a menu above the composer like the one
  * beside it, with every source on the left, its models on the right and the depth of thought as a slider under both.
  * A choice is saved as it is made and the menu stays, so that a model and its depth are set together.
+ *
+ * The core holds the choice and every list. This reads them again whenever the core says one changed, which is how a
+ * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
+ * first read, in the background.
  */
 import "./composer-brain.css";
 import * as api from "./api";
@@ -11,15 +15,24 @@ import {
   sourceMarkHTML, sourceStatus, concreteModel, chooserPrice, usableFor, reasonText, fitFor, effortText, type ChooserSource, type ModelPickerLook,
 } from "./model-picker";
 import { RAPHAEL_ID } from "./members";
-import type { BrainSettings, CatalogModel, CliBrain, Member, ModelCatalog } from "./types";
+import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCatalog } from "./types";
 import { closeMenu, esc, ico, openPopover, placeMenu, toaster } from "./ui";
 import { describeError } from "./format";
 
 const SEARCH_FROM = 12;
+/** How long a signed-in CLI may be silent about its models while the menu is open before this says so. */
+const MODEL_WAIT_TRIES = 6, MODEL_WAIT_MS = 2000;
+const CHANGES: readonly MainEvent["type"][] = ["SettingsChanged", "BrainsChanged", "ProvidersChanged"];
 
-export function mountComposerBrain(slot: HTMLElement, member: () => Member, openSources: () => void = () => {}): { draw(): void; reload(): void } {
+export interface ComposerBrainHost {
+  openSources?: () => void;
+  onEvent?: (handler: (event: MainEvent) => void) => unknown;
+}
+
+export function mountComposerBrain(slot: HTMLElement, member: () => Member, host: ComposerBrainHost = {}): { draw(): void; reload(): void } {
   let catalog: ModelCatalog | null = null, clis: CliBrain[] = [], answerModel = "", generation = 0;
   let menu: HTMLElement | null = null, source = "", query = "";
+  let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
 
   const look = (): ModelPickerLook => {
     const who = member(), raphael = who.id === RAPHAEL_ID;
@@ -47,9 +60,11 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
 
   function save(model: string): void {
     const who = member();
+    // A read that began before this choice would put the old one back.
+    generation++;
     const saved = who.id === RAPHAEL_ID ? api.settingsSet("agent_model", model).then(result => { answerModel = result.settings.agent_model ?? model; })
       : api.membersUpdate(who.id, { model }).then(() => { who.model = model; });
-    void saved.then(() => { paintButton(); paintMenu(); }).catch(error => toaster.info(describeError(error)));
+    void saved.then(() => { paintButton(); paintMenu(); }).catch(error => { toaster.info(describeError(error)); void reload(); });
   }
 
   function railHTML(sources: ChooserSource[]): string {
@@ -59,7 +74,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
       const items = sources.filter(item => item.group === group);
       return !items.length ? "" : `<div class="cb-group"><h4>${esc(t(title))}</h4>${items.map(item => {
         const holds = !!model && item.models.some(row => row.id === model.id);
-        return `<button type="button" class="cb-source" data-cb-source="${esc(item.id)}" aria-pressed="${item.id === source}">${sourceMarkHTML(item)}<span class="cb-name"><b>${esc(item.name)}</b><small>${esc(sourceStatus(item, look()))}</small></span>${holds ? '<i class="cb-here" aria-hidden="true"></i>' : ""}</button>`;
+        return `<button type="button" role="menuitem" class="cb-source" data-cb-source="${esc(item.id)}" aria-pressed="${item.id === source}">${sourceMarkHTML(item)}<span class="cb-name"><b>${esc(item.name)}</b><small>${esc(sourceStatus(item, look()))}</small></span>${holds ? '<i class="cb-here" aria-hidden="true"></i>' : ""}</button>`;
       }).join("")}</div>`;
     }).join("");
   }
@@ -69,6 +84,10 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
     if (!item) return `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
     if (item.group === "subscriptions" && !item.cli?.available) {
       return `<div class="cb-empty"><p>${esc(t(item.cli?.disconnected ? "brains.disconnected" : item.cli?.installed ? "chooser.loginNote" : "chooser.installNote"))}</p><button type="button" class="btn sm" data-cb-act="sources">${esc(t(item.cli?.installed ? "brains.connect" : "brains.install"))}</button></div>`;
+    }
+    if (item.group === "subscriptions" && !item.models.length) {
+      return modelTries < MODEL_WAIT_TRIES ? `<p class="cb-empty" role="status">${esc(t("chooser.readingModels"))}</p>`
+        : `<div class="cb-empty"><p>${esc(t("chooser.modelsFailed"))}</p><button type="button" class="btn sm" data-cb-act="retry">${esc(t("page.retry"))}</button></div>`;
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const models = item.models.filter(row => words.every(word => `${row.name} ${row.provider} ${row.id}`.toLowerCase().includes(word)));
@@ -88,9 +107,21 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
     return levels.length > 1 ? effortSliderHTML(levels, effort) : "";
   }
 
+  /** While the source shown is a signed-in CLI whose models have not come, keep asking, and stop to say so. */
+  function waitForModels(sources: ChooserSource[]): void {
+    clearTimeout(modelTimer);
+    const item = sources.find(row => row.id === source);
+    if (!menu?.isConnected || !item?.cli?.available || item.models.length || modelTries >= MODEL_WAIT_TRIES) return;
+    modelTimer = setTimeout(() => { modelTries++; void reload(); }, MODEL_WAIT_MS);
+  }
+
   function paintMenu(): void {
     if (!menu?.isConnected) return;
     const o = look(), sources = chooserSources(o);
+    // A change that arrives while the owner is here must not take the keyboard from them.
+    const held = document.activeElement instanceof HTMLElement && menu.contains(document.activeElement) ? document.activeElement : null;
+    const heldAt = held instanceof HTMLInputElement ? held.selectionStart : null;
+    const heldKey = held?.dataset.cbSource !== undefined ? `[data-cb-source="${CSS.escape(held.dataset.cbSource)}"]` : held?.dataset.model !== undefined ? `[data-model="${CSS.escape(held.dataset.model)}"]` : held?.matches(".cb-search") ? ".cb-search" : null;
     const body = menu.querySelector<HTMLElement>(".cb-body")!;
     const list = body.querySelector<HTMLElement>(".cb-list"), top = list?.scrollTop ?? 0;
     const item = sources.find(row => row.id === source);
@@ -104,17 +135,25 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
     depth.hidden = depth.innerHTML === "";
     const next = body.querySelector<HTMLElement>(".cb-list");
     if (next) next.scrollTop = top;
+    if (heldKey) {
+      const again = menu.querySelector<HTMLElement>(heldKey);
+      again?.focus({ preventScroll: true });
+      if (again instanceof HTMLInputElement && heldAt !== null) again.setSelectionRange(heldAt, heldAt);
+    }
     // The slider comes and goes with the model, and the menu keeps standing on the composer.
     placeMenu();
+    waitForModels(sources);
   }
 
   function open(button: HTMLButtonElement): void {
     const o = look(), sources = chooserSources(o), { model } = chosen();
     source = sources.find(item => model && item.models.some(row => row.id === model.id))?.id ?? sources[0]?.id ?? "";
-    query = "";
-    menu = openPopover(button, `<div class="menu-head">${esc(t("chooser.title"))}</div><div class="cb-body"></div><div class="cb-depth-slot"></div>` +
+    query = ""; modelTries = 0;
+    const who = member();
+    const head = who.id === RAPHAEL_ID ? t("chooser.forDefault") : t("chooser.forMember", { name: who.name });
+    menu = openPopover(button, `<div class="menu-head">${esc(head)}</div><div class="cb-body"></div><div class="cb-depth-slot"></div>` +
       `<div class="menu-sep" role="separator"></div><button type="button" class="menu-action" data-cb-act="sources"><span class="mt">${esc(t("chooser.sources"))}</span></button>`,
-      { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), onClose: () => { menu = null; } });
+      { className: "menu cb-menu", role: "dialog", label: t("chooser.title"), onClose: () => { menu = null; clearTimeout(modelTimer); } });
     menu.addEventListener("click", click);
     menu.addEventListener("input", input);
     menu.addEventListener("change", change);
@@ -122,13 +161,16 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
     const selected = menu.querySelector<HTMLElement>('.cb-list [aria-checked="true"]');
     selected?.scrollIntoView?.({ block: "nearest" });
     selected?.focus({ preventScroll: true });
+    // What was read when the app started may be old by now.
+    void reload();
   }
 
   function click(event: Event): void {
     const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-effort], [data-cb-act]");
     if (!target || (target as HTMLButtonElement).disabled) return;
-    if (target.dataset.cbAct === "sources") { closeMenu(); openSources(); return; }
-    if (target.dataset.cbSource !== undefined) { source = target.dataset.cbSource; query = ""; paintMenu(); return; }
+    if (target.dataset.cbAct === "sources") { closeMenu(); host.openSources?.(); return; }
+    if (target.dataset.cbAct === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
+    if (target.dataset.cbSource !== undefined) { source = target.dataset.cbSource; query = ""; modelTries = 0; paintMenu(); return; }
     if (target.dataset.effort) { saveDepth(target.dataset.effort); return; }
     if (target.dataset.model === undefined) return;
     if (target.dataset.model === look().lead?.id) { save(target.dataset.model); return; }
@@ -183,6 +225,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, open
     if (settingsResult.status === "fulfilled") answerModel = settingsResult.value?.settings?.agent_model ?? "";
     draw();
   }
+  host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(); });
   draw(); void reload();
   return { draw, reload: () => void reload() };
 }

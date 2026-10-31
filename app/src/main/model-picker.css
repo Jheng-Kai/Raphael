@@ -135,6 +135,6 @@
 .mc-range::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; border: 0; border-radius: var(--r-pill); background: var(--text); appearance: none; transition: transform 120ms ease; }
 .mc-range:active::-webkit-slider-thumb { transform: scale(1.15); }
 .mc-stops { display: flex; grid-column: 2; justify-content: space-between; }
-.mc-depth .mc-stop { width: auto; min-height: 20px; padding: 0 2px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-3); font-size: var(--fs-xs); cursor: pointer; }
-.mc-depth .mc-stop:hover { background: transparent; color: var(--text); }
-.mc-depth .mc-stop[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.mc-depth .btn.mc-stop { width: auto; min-height: 20px; padding: 0 2px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-3); font-size: var(--fs-xs); cursor: pointer; }
+.mc-depth .btn.mc-stop:is(:hover, :active):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
+.mc-depth .btn.mc-stop[aria-pressed="true"] { color: var(--text); font-weight: 600; }

@@ -31,7 +31,7 @@ import {
   openDialog,
 } from "./member-dialogs";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
-import { setSlimeState } from "./slime";
+import { followSlimeRoster, setSlimeState } from "./slime";
 import type { AppContext, AvatarPreset, MainEvent, Member, MemberGroup, MemberPatch, MembersList, WireAttachment } from "./types";
 import { type Choice, btn, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
 
@@ -206,6 +206,7 @@ export function createMembers(host: MembersHost): MembersShell {
     if (mine !== loads) return;
     const ids = new Set(read.members.map((m) => m.id));
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
+    followSlimeRoster(read.members);
     for (const id of fresh) setSlimeState(id, "arriving");
     known = ids;
     list = read;

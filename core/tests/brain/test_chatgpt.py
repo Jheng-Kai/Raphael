@@ -333,6 +333,17 @@ async def test_a_plan_model_offers_the_depths_it_lists_and_a_chosen_depth_reache
     assert rig.body_checks[-1]["reasoning"] == {"effort": "high"}
 
 
+async def test_settings_accept_a_plan_model_at_a_depth_it_offers_and_refuse_one_it_does_not(rig):
+    from raphael_core.brain.catalog import choice_problem
+    from raphael_core.brain.service import ROLE_OF_SETTING
+    await rig.sign_in()
+    await rig.router.call("chatgpt.models", {})
+    entries, role = rig.registry.catalog_entries(), ROLE_OF_SETTING["agent_model"]
+    assert choice_problem(role, "@chatgpt:chosen-model", entries, "") is None
+    assert choice_problem(role, "@chatgpt:chosen-model?effort=high", entries, "") is None
+    assert choice_problem(role, "@chatgpt:chosen-model?effort=xhigh", entries, "") == "unsupported_effort"
+
+
 async def test_unknown_tool_stays_behind_the_shared_gate(rig):
     await rig.sign_in()
     rig.responses = [sse([{"type": "function_call", "call_id": "blocked", "name": "not_offered", "arguments": "{}"}]),

@@ -1,4 +1,4 @@
-"""Which machine a turn can reach: a member only its own, and the owner's desktop only through Raphael."""
+"""Which machine a turn can reach: its own computer when it has one, never that and the owner's desktop together."""
 from types import SimpleNamespace
 
 from raphael_core.agent.persona import _SHARED_CONTRACT
@@ -27,14 +27,15 @@ def offered(member_id, plugins):
     return set(snapshot.refs)
 
 
-def test_a_member_is_never_offered_the_owners_desktop():
-    assert "computer" not in offered(1, Plugins())
+def test_a_speaker_with_a_computer_of_its_own_is_not_also_offered_the_owners_desktop():
     assert "computer" not in offered(1, Plugins(1))
-
-
-def test_raphael_reaches_the_owners_desktop_until_he_has_a_computer_of_his_own():
-    assert "computer" in offered(0, Plugins())
     assert "computer" not in offered(0, Plugins(0))
+
+
+def test_a_speaker_without_one_keeps_the_guarded_desktop():
+    assert "computer" in offered(1, Plugins())
+    assert "computer" in offered(0, Plugins())
+    assert "computer" in offered(1, Plugins(2))
 
 
 def test_a_model_is_told_to_work_where_the_owner_can_see():

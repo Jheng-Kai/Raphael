@@ -580,7 +580,7 @@ export function effortSliderHTML(levels: readonly string[], value: string): stri
   const at = Math.max(0, levels.indexOf(value));
   return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
     (levels.length > 1 ? `<input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` : "") +
-    `<div class="mc-stops" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level, index) => `<button type="button" class="mc-stop" data-effort="${esc(level)}" aria-pressed="${index === at}">${esc(effortText(level))}</button>`).join("")}</div></div>`;
+    `<div class="mc-stops" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level, index) => `<button type="button" class="btn mc-stop" data-effort="${esc(level)}" aria-pressed="${index === at}">${esc(effortText(level))}</button>`).join("")}</div></div>`;
 }
 
 /** The slider where the pointer has it, and the level that is. */
@@ -776,7 +776,7 @@ class MountedPicker implements ModelPicker {
         list.rows = all.filter((row) => !favorites.includes(row));
         listEl.innerHTML = `<h4>${esc(t("chooser.favorites"))}</h4>${first}<h4>${esc(t("chooser.all"))}</h4>${listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite)}`;
       } else listEl.innerHTML = listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite);
-      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t(this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t(source.cli?.available && !source.models.length ? "chooser.readingModels" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
     }
     const model = this.effortModel();
     const supported = model?.reasoning_efforts ?? [];

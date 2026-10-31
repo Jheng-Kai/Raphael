@@ -150,12 +150,11 @@ const FLEETING_MS: Partial<Record<SlimeState, number>> = { done: 2000, arriving:
 /** The states the core tells (`member.activity`). */
 const LIVE_STATES: readonly string[] = ["thinking", "working", "searching", "computer", "done", "error"];
 
-interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null; activity?: string }
+interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null }
 
-/** What a member's own row says, for when nothing live is telling: an answer it waits for, or what the core last knew. */
+/** What a member's own row says, for when it is doing nothing: an answer it waits for, or sleep after a long silence. */
 function restingState(member: SlimeFacts, now: number): SlimeState {
   if (member.waiting) return "waiting";
-  if (member.activity && LIVE_STATES.includes(member.activity)) return member.activity as SlimeState;
   const last = member.last_at ?? NaN;
   return Number.isFinite(last) && now - last > SLEEP_AFTER_MS ? "sleeping" : "idle";
 }
@@ -164,8 +163,19 @@ const paint = (id: number, state: SlimeState): void => {
   for (const svg of document.querySelectorAll<SVGElement>(`svg.slime[data-slime-member="${id}"]`)) svg.dataset.state = state;
 };
 
+/** The list the core just read says what each member is doing, for a window that opened late. A moment plays out first. */
+export function followSlimeRoster(members: readonly { id: number; activity?: string }[]): void {
+  for (const { id, activity: state } of members) {
+    if (fleeting.has(id)) continue;
+    if (state && LIVE_STATES.includes(state)) activity.set(id, state as SlimeState);
+    else activity.delete(id);
+  }
+}
+
 /** What the core says a member is doing; `idle` hands it back to what its row says. A moment like `done` passes by itself. */
 export function setSlimeState(id: number, state: SlimeState): void {
+  // The core says `idle` right after `done`: the moment plays out, and then the row has its say anyway.
+  if (state === "idle" && fleeting.has(id)) return;
   const was = fleeting.get(id);
   if (was !== undefined) { clearTimeout(was); fleeting.delete(id); }
   if (state === "idle") activity.delete(id); else activity.set(id, state);

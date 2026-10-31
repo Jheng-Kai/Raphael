@@ -161,7 +161,7 @@ test("expand takes the same frame to the large dialog and closing brings it back
 
 test("a plugin's page gets the MCP Apps handshake and its tools go through the core; a member's page gets neither", async () => {
   vi.mocked(api.pagesOpen).mockResolvedValue({ ...opened, source: "mcp", server: "Shop", tool_input: { sku: "a" }, tool_result: { content: [{ type: "text", text: "ok" }] } });
-  const call = vi.spyOn(api, "pagesToolCall").mockResolvedValue({ content: [] });
+  const call = vi.spyOn(api, "pagesToolCall").mockResolvedValue({ status: "done", ok: true, tool_result: { content: [] } });
   const { frame } = mount([{ ...card, source: "mcp", server: "Shop" }]);
   await flush();
   const posted: unknown[] = [];

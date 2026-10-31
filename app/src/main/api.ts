@@ -427,7 +427,7 @@ export const openLink = (url: string): Promise<void> => invoke("open_link", { ur
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
-export const pagesToolCall = (id: string, tool: string, args: object): Promise<object> => core("pages.tool_call", { id, tool, arguments: args });
+export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 
 
 export const deviceSettingsGet = (): Promise<DeviceSettings> => invoke("device_settings_get");
