@@ -1071,6 +1071,51 @@ END;
 PRAGMA user_version = 45;
 COMMIT;
 """
+_MIGRATIONS[46] = """
+BEGIN;
+CREATE TABLE pages (
+    id TEXT PRIMARY KEY,
+    turn_id INTEGER NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL,
+    fallback TEXT NOT NULL,
+    height INTEGER NOT NULL,
+    rev INTEGER NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('html', 'mcp')),
+    server TEXT,
+    tool TEXT,
+    tool_input TEXT NOT NULL,
+    tool_result TEXT NOT NULL,
+    network TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX pages_by_turn ON pages(turn_id);
+CREATE TABLE page_revisions (
+    page_id TEXT NOT NULL,
+    rev INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL,
+    at_ms INTEGER NOT NULL,
+    PRIMARY KEY(page_id, rev)
+);
+CREATE TRIGGER clear_page_revisions AFTER DELETE ON pages BEGIN
+  DELETE FROM page_revisions WHERE page_id=OLD.id;
+END;
+CREATE TRIGGER clear_turn_pages AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM pages WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_conversation_pages AFTER DELETE ON conversations BEGIN
+  DELETE FROM pages WHERE conversation_id=OLD.id;
+END;
+CREATE TRIGGER clear_member_pages AFTER DELETE ON members BEGIN
+  DELETE FROM pages WHERE member_id=OLD.id;
+END;
+PRAGMA user_version = 46;
+COMMIT;
+"""
 LATEST_VERSION = max(_MIGRATIONS)
 
 

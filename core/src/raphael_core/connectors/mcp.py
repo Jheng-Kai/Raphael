@@ -16,7 +16,7 @@ from .http import ConnectorFailure, PrivateHttp
 def _tool(raw: dict):
     annotations = raw.get("annotations", {})
     return SimpleNamespace(name=raw["name"], description=raw.get("description", ""),
-        input_schema=raw.get("inputSchema", {}), title=raw.get("title"),
+        input_schema=raw.get("inputSchema", {}), title=raw.get("title"), meta=raw.get("_meta", {}),
         annotations=SimpleNamespace(read_only_hint=annotations.get("readOnlyHint"),
                                     destructive_hint=annotations.get("destructiveHint")))
 
@@ -24,7 +24,8 @@ def _tool(raw: dict):
 def _result(raw: dict):
     # Connected app results are in memory only and are never diagnostics.
     content = [SimpleNamespace(**item) for item in raw.get("content", []) if isinstance(item, dict)]
-    return SimpleNamespace(content=content, structured_content=raw.get("structuredContent"), is_error=raw.get("isError", False))
+    return SimpleNamespace(content=content, structured_content=raw.get("structuredContent"),
+                           is_error=raw.get("isError", False), meta=raw.get("_meta"))
 
 
 class ManagedMcp:
@@ -115,6 +116,13 @@ class ManagedMcp:
             raise McpFailure("denied")
         try:
             return _result(await self.rpc("tools/call", {"name": name, "arguments": arguments}))
+        except ConnectorFailure as error:
+            raise McpFailure("auth" if error.kind == "auth" else "protocol") from None
+
+    async def read_resource(self, uri):
+        try:
+            data = await self.rpc("resources/read", {"uri": str(uri)})
+            return SimpleNamespace(contents=[SimpleNamespace(**item) for item in data.get("contents", [])])
         except ConnectorFailure as error:
             raise McpFailure("auth" if error.kind == "auth" else "protocol") from None
 

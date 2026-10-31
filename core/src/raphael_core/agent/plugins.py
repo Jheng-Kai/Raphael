@@ -93,6 +93,8 @@ class PluginResult:
     text: str = ""
     truncated: bool = False
     blocks: list[dict] = field(default_factory=list)
+    page: dict | None = None
+    mcp_result: dict | None = None
 
 
 class PluginHub(Protocol):

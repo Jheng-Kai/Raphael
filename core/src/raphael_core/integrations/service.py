@@ -772,6 +772,8 @@ class IntegrationsService:
             if not server.enabled:
                 continue
             for tool in server.tools:
+                if "model" not in tool.ui.get("visibility", ["model", "app"]):
+                    continue
                 if server.tool_on(tool) and (not server.managed_by or (
                     self.managed is not None and self.managed.tool_available(server.id, tool.name)
                 )):
@@ -876,7 +878,7 @@ class IntegrationsService:
         except McpFailure as failure:
             if server.managed_by and failure.kind == "auth":
                 await self.managed.auth_failed(server.id)
-            if failure.kind == "gone":
+            if failure.kind in ("gone", "tool_not_visible"):
                 return end("blocked", PluginResult(False, failure.kind))
             if failure.kind == "cancelled":  # sent, and the connection ended: not known to have failed
                 return end("error", PluginResult(False, failure.kind))
@@ -898,6 +900,23 @@ class IntegrationsService:
                 except OSError as exc:
                     logger.warning("Could not save the plugins: %s", type(exc).__name__)
         if outcome.is_error:
-            result = PluginResult(False, "tool_error", outcome.text, outcome.truncated)
+            result = PluginResult(False, "tool_error", outcome.text, outcome.truncated,
+                                  page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None))
             return end("error", result)
-        return end("ok", PluginResult(True, None, outcome.text, outcome.truncated))
+        return end("ok", PluginResult(True, None, outcome.text, outcome.truncated,
+                                     page=getattr(outcome, "page", None), mcp_result=getattr(outcome, "mcp_result", None)))
+
+    def page_tool(self, server_id: str, name: str) -> PluginTool:
+        """Resolve an app's exact server/tool using current connection and visibility state."""
+        server = self._config.get(server_id)
+        kind = ("server_removed" if server is None else "server_disabled" if not server.enabled else
+                "server_disconnected" if self._failure.get(server_id) in ("auth", "missing_secret", "denied") else None)
+        if kind:
+            raise RpcError(1005, "The page's plugin server is unavailable", {"kind": kind, "server": server_id})
+        record = server.tool(name)
+        if record is None or "app" not in record.ui.get("visibility", ["model", "app"]):
+            raise RpcError(1005, "This tool is not available to apps on this server", {"kind": "tool_not_visible", "server": server_id})
+        key = tool_key(server_id, name)
+        if self._usable(key) is None:
+            raise RpcError(1005, "This tool is disabled", {"kind": "tool_disabled", "server": server_id})
+        return PluginTool(key, server.name, name, record.description, record.input_schema, self.tier_of(key))

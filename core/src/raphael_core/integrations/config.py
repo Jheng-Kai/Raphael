@@ -68,6 +68,7 @@ class ToolRecord:
     destructive_hint: bool | None = None
     # The human name the server gives the tool, if it does. For the screen only.
     title: str | None = None
+    ui: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -117,6 +118,7 @@ def tool_record(
     read_only_hint: Any = None,
     destructive_hint: Any = None,
     title: Any = None,
+    meta: Any = None,
 ) -> ToolRecord | None:
     """A tool as it is kept, from what a server reported; None for one whose name cannot be kept
     (a name is shown, audited and sent to a model, so it must be plain)."""
@@ -128,14 +130,21 @@ def tool_record(
         schema = dict(_OPEN_SCHEMA)
     elif len(json.dumps(schema, ensure_ascii=False)) > MAX_SCHEMA_CHARS:
         schema = dict(_OPEN_SCHEMA)
+    ui = meta.get("ui", {}) if isinstance(meta, dict) else {}
+    ui = ui if isinstance(ui, dict) and len(json.dumps(ui)) <= 8000 else {}
+    if "visibility" in ui:
+        visibility = ui["visibility"]
+        ui = {**ui, "visibility": [item for item in visibility if item in ("model", "app")]
+              if isinstance(visibility, list) else []}
     return ToolRecord(
         name=name,
         description=text,
         input_schema=schema,
-        fingerprint=fingerprint(name, text, schema),
+        fingerprint=fingerprint(name, text, schema if not ui else {"schema": schema, "ui": ui}),
         read_only_hint=read_only_hint if isinstance(read_only_hint, bool) else None,
         destructive_hint=destructive_hint if isinstance(destructive_hint, bool) else None,
         title=(title.strip()[:MAX_TITLE_CHARS] or None) if isinstance(title, str) else None,
+        ui=ui,
     )
 
 
@@ -262,6 +271,7 @@ def _tool_to_json(tool: ToolRecord) -> dict[str, Any]:
         "read_only_hint": tool.read_only_hint,
         "destructive_hint": tool.destructive_hint,
         "title": tool.title,
+        "ui": tool.ui,
     }
 
 
@@ -333,6 +343,7 @@ def _server_from_json(raw: Any) -> ServerConfig | None:
             item.get("read_only_hint"),
             item.get("destructive_hint"),
             item.get("title"),
+            {"ui": item.get("ui", {})},
         )
         if tool is not None:
             server.tools.append(tool)

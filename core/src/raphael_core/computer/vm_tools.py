@@ -143,6 +143,9 @@ class VmTools:
     def offered(self):
         return self.offered_for(0)
 
+    def page_tool(self, server_id, name):
+        return self.delegate.page_tool(server_id, name)
+
     def is_computer_tool(self, key):
         return key in self.tools or key in self.requests
 
