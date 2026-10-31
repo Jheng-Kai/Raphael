@@ -121,7 +121,7 @@ async def test_composio_validation_is_non_transient_and_explains_the_bad_connect
         await client.patch("trs_test", {}, 1)
     failure = classify(caught.value)
     assert failure.kind == "invalid_request" and not failure.transient
-    assert "連線請求" in failure.sentence("Composio", "zh-TW")
+    assert "更新拉斐爾" in failure.sentence("Composio", "zh-TW")
 
 
 class Platform:

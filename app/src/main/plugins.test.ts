@@ -200,6 +200,7 @@ test("missing key offers an optional dialog without requesting managed apps", as
   expect(root.querySelector("#conn-key")).toBeNull();
   click("configure-composio");
   expect(root.querySelector<HTMLInputElement>("#conn-key")?.type).toBe("password");
+  expect(root.querySelector(".cs-key-form .note")?.textContent).toContain("Settings > Project Settings > API Keys");
   expect(root.querySelector(".cs-composio-section")).toBeNull();
   expect(api.connectorsCatalog).not.toHaveBeenCalled();
 });

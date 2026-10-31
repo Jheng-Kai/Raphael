@@ -31,6 +31,7 @@
 // `servicesHTML` draws the section and the open dialog from a snapshot (pure, so its rules can be
 // tested without a browser); `createServices` holds the state and does what the buttons say.
 
+import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { iconHTML } from "./connections";
@@ -357,7 +358,7 @@ function subViewHTML(entry: (typeof CAPABILITIES)[number], service: string, v: S
     secondary: entry.kind === "voice" ? btn(esc(t("conn.tryIt")), "", ` data-svc="try" data-service="fish" data-k="svc-try"${idle ? " disabled" : ""}`) : "",
     primary: { label: esc(t("services.use")), attrs: ` data-svc="use" data-service="${esc(service)}" data-k="svc-use"${inUse || !row?.usable || idle ? " disabled" : ""}` },
   });
-  return head + fields + acts;
+  return head + fields + (entry.kind === "vision" && service === VISION_SAME && !row?.usable ? noticeHTML("sameVision") : "") + acts;
 }
 
 /**
@@ -406,6 +407,7 @@ export interface ServicesHost {
 }
 
 export interface ServicesPanel {
+  openRepair(kind: Capability, service?: string | null): void;
   view(): ServicesView;
   load(): Promise<void>;
   /** A click on the page: whether it was the section's. */
@@ -748,5 +750,5 @@ export function createServices(host: ServicesHost): ServicesPanel {
     closing = false;
   }
 
-  return { view, load, click, key, chooseVision, reset };
+  return { view, load, click, key, chooseVision, reset, openRepair: openDialog };
 }

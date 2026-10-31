@@ -240,7 +240,7 @@ class VmTools:
             if not self.vm.grants.allowed(member):
                 return PluginResult(False, "computer_permission_required", "The owner revoked computer access.")
             if not self.catalogs.get(self.vm.target(member).key):
-                return PluginResult(False, "unavailable", "Computer access was granted, but computer tools are disabled.")
+                return PluginResult(False, "unavailable", "Computer access was granted, but this installation has not enabled computer tools. Ask an administrator to enable them before trying again; there is no setting here to add them.")
             return PluginResult(True, text="Computer access granted. Computer tools are now available; continue the owner's task.")
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)

@@ -98,8 +98,11 @@ test.each(['starting','building','preparing'] as const)('%s shows preparation wi
   panelOpen=true;api.desktopStatus.mockResolvedValue({state,ready:false,control:'member',progress:'#3 [2/4] Installing tools'});mounted.show();await flush();
   expect(host.querySelector('iframe')).toBeNull();expect(host.querySelectorAll('.desktop-preparation li')).toHaveLength(3);expect(take().hidden).toBe(true);
 });
-test('absent Docker has no computer section',async()=>{
-  api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(true);expect(api.desktopOpen).not.toHaveBeenCalled();
+test('absent Docker keeps a visible reason and the exact installation entry without starting a computer',async()=>{
+  api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(false);expect(api.desktopOpen).not.toHaveBeenCalled();
+  expect(panel().textContent).toContain('成員電腦需要 Docker Desktop');
+  expect(panel().querySelector('[data-missing-repair="computer"]')).not.toBeNull();
+  expect(panel().querySelector<HTMLButtonElement>('[data-desktop="retry"]')!.hidden).toBe(true);
 });
 
 test('a press on the picture only enlarges it, and only the named button takes the computer',async()=>{

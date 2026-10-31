@@ -9,6 +9,7 @@
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
  */
+import { noticeHTML } from "./missing";
 import "./composer-brain.css";
 import * as api from "./api";
 import { t } from "./i18n";
@@ -116,7 +117,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
 
   function browseHTML(sources: ChooserSource[]): string {
     const head = `<header class="cb-head">${iconButton("left", t("chooser.back"), ' data-cb-act="back"', "cb-back")}<h3><span>${esc(t("chooser.title"))}</span></h3></header>`;
-    if (!sources.length) return `${head}<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    if (!sources.length) return `${head}${noticeHTML("noModels", "models")}`;
     const total = sources.find(row => row.id === source)?.models.length ?? 0;
     return `${head}<div class="cb-browse">${railHTML(sources)}<div class="cb-pane">` +
       (showAll && total > SEARCH_FROM ? `<input type="search" class="cb-search" aria-label="${esc(t("chooser.search"))}" placeholder="${esc(t("chooser.search"))}" value="${esc(query)}">` : "") +
@@ -137,8 +138,8 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   function rowsHTML(sources: ChooserSource[]): string {
     const all = pickerModelsFor(look()), checked = chosen().model?.id;
     const row = (model: CatalogModel, note = ""): string => {
-      const words = note || chooserPrice(model, all, "answer");
-      return `<button type="button" role="radio" class="cb-row" data-model="${esc(model.id)}" aria-checked="${model.id === checked}"${usableFor(model, "answer") ? "" : ` disabled title="${esc(reasonText(fitFor(model, "answer").reason))}"`}>` +
+      const words = !usableFor(model, "answer") ? reasonText(fitFor(model, "answer").reason) || t("missing.modelFormat") : note || chooserPrice(model, all, "answer");
+      return `<button type="button" role="radio" class="cb-row" data-model="${esc(model.id)}" aria-checked="${model.id === checked}"${usableFor(model, "answer") ? "" : " disabled"}>` +
         `<span class="cb-name"><b>${esc(model.name)}</b>${words ? `<small>${esc(words)}</small>` : ""}</span>${model.id === checked ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`;
     };
     const empty = `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;

@@ -61,11 +61,11 @@ function directoryHTML(v: ProvidersView): string {
     });
     count += kinds.length;
     return kinds.length ? `<section class="sgroup"><h3>${esc(GROUP_TITLES[group]())}</h3><div class="pv-grid">` + kinds.map((k) => {
-      const note = description(k);
+      const note = k.available ? description(k) : t("providers.soon");
       const connected = v.providers.some((p) => p.kind === k.kind);
       const action = t(connected ? "providers.manage" : "providers.connect");
       return `<div class="pv-card pv-add"><span class="ic">${providerMark(k.kind)}</span><span class="tx"><span class="pv-kind-title"><span class="nm">${esc(k.name)}</span>${connected ? `<span class="pv-connected">${esc(t("providers.connected"))}</span>` : ""}</span><span class="ds" title="${esc(note)}">${esc(note)}</span></span>` +
-        btn(esc(action), "", ` data-pv="add" data-id="${esc(k.kind)}" data-k="pv-add:${esc(k.kind)}" aria-label="${esc(action + " " + k.name)}"${k.available ? "" : ` title="${esc(t("providers.soon"))}"`}${(k.available || connected) && !v.busy ? "" : " disabled"}`) + `</div>`;
+        btn(esc(action), "", ` data-pv="add" data-id="${esc(k.kind)}" data-k="pv-add:${esc(k.kind)}" aria-label="${esc(action + " " + k.name)}"${(k.available || connected) && !v.busy ? "" : " disabled"}`) + `</div>`;
     }).join("") + `</div></section>` : "";
   }).join("");
   return `<div class="cs-scrim" data-pv="scrim" data-dialog="provider:add"><div class="cs-dialog pv-dialog pv-catalog" id="pv-dialog" role="dialog" aria-modal="true" aria-labelledby="pv-title" tabindex="-1" data-trap>` +
@@ -354,6 +354,13 @@ export function createProviders(host: ProvidersHost) {
   }
   return {
     view: () => state, load,
+    openRepair(id: string): void {
+      const provider = state.providers.find(p => p.id === id);
+      if (provider) {
+        show(provider.kind, provider.id);
+        (host.root.querySelector<HTMLElement>('[data-pv="replace"]') ?? host.root.querySelector<HTMLElement>('#pv-dialog input, #pv-dialog textarea'))?.focus();
+      } else directory();
+    },
     click(target: Element): boolean {
       const button = target.closest<HTMLElement>("[data-pv]");
       if (!button) return false;

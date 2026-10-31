@@ -230,10 +230,10 @@ describe("a step in words", () => {
   });
 
   test("a failure says why in a few words, from its kind; an unknown kind is a plain error", () => {
-    expect(reasonText(step({ outcome: "error", reason: "auth" }))).toBe("需要重新登入");
+    expect(reasonText(step({ outcome: "error", reason: "auth" }))).toBe("登入或金鑰尚未就緒，請到「設定 › 連接」開啟對應應用程式並完成登入設定。");
     expect(reasonText(step({ outcome: "error", reason: "bad_arguments" }))).toBe("參數錯誤");
     expect(reasonText(step({ outcome: "timeout", reason: null }))).toBe("服務無回應");
-    expect(reasonText(step({ outcome: "error", reason: "something new" }))).toBe("發生錯誤");
+    expect(reasonText(step({ outcome: "error", reason: "something new" }))).toBe("目前無法確認失敗原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。");
     expect(reasonText(step())).toBe("");
   });
 
@@ -303,7 +303,7 @@ describe("what a turn did", () => {
     expect(summary).toContain('aria-label="3 個動作 · 2.4 秒 · 1 件失敗"');
     expect(summaryText(t1, T0).time).toBe("2.4 秒"); // the first start (0.48 s) to the last end (2.9 s)
     expect(html.match(/class="step is-ok/g)).toHaveLength(2);
-    expect(html).toContain("需要重新登入"); // a failure is said in words
+    expect(html).toContain("登入或金鑰尚未就緒，請到「設定 › 連接」開啟對應應用程式並完成登入設定。"); // a failure is said in words
     // the service is the picture's name, and its tool is said as the service and what it did
     expect(html).toContain('role="img" aria-label="Google Calendar" title="Google Calendar"');
     expect(visible(html)).toContain("Google Calendar：修改");
@@ -710,14 +710,14 @@ describe("Raphael operating an app", () => {
 
   test("the reasons of a refusal have words in each language", () => {
     const why = (reason: string): string => reasonText(computer("click", { outcome: "error", reason }));
-    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "需主人操作", "不允許的 App", "主人中斷", "未允許"]);
+    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["密碼欄位", "這一步需要你親自完成登入、付款或系統管理員提示；完成後再回到原對話繼續。", "不允許的 App", "主人中斷", "未允許"]);
     setLocale("en");
-    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["Password field", "Needs you to take over", "App not allowed", "Interrupted by you", "Not allowed"]);
+    expect(["password", "handoff", "refused_app", "interrupted", "denied"].map(why)).toEqual(["Password field", "Complete this sign-in, payment or administrator prompt yourself, then return to the conversation.", "App not allowed", "Interrupted by you", "Not allowed"]);
     setLocale("ja");
     expect(["password", "handoff", "refused_app", "interrupted", "denied"].every((reason) => why(reason) !== "")).toBe(true);
     // a service's refused login keeps its own words
     setLocale("zh-TW");
-    expect(reasonText(step({ outcome: "error", reason: "denied" }))).toBe("登入被拒");
+    expect(reasonText(step({ outcome: "error", reason: "denied" }))).toBe("這項操作未獲允許，請到「設定 › 連接」確認讀寫工具與登入授權；你已拒絕的操作不會自動重試。");
   });
 });
 

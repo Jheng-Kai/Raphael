@@ -14,6 +14,6 @@ export default [
   scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),
   scene("desktop-handback", "Hand back preserves the stream and clears interactive input", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-interactive="false"]'),check("desktop-handback")],computer()),
   ...["stopped","unavailable","starting","building","preparing"].map(state=>scene(`desktop-${state}`, "Desktop preparation and contextual retry in the existing side panel", [member(1),click('[data-act="computer"]'),wait(`.desktop-panel[data-desktop-state="${state}"]`),check("desktop-offline")], {desktop:{state,ready:false,control:"member",...(state === "building" ? {progress:"#3 [2/4] Installing desktop tools"} : {}),...(state === "unavailable" ? {error:"docker_start_timeout"} : {})}})),
-  scene("desktop-absent", "Docker absent has no computer section", [member(1),check("desktop-absent")]),
+  scene("desktop-absent", "Docker absent keeps the computer entry with a visible reason and repair", [member(1),click('[data-act="computer"]'),wait('.desktop-panel .missing-note'),check("desktop-absent")]),
   scene("desktop-install", "Absent Docker keeps the existing download action", [...settings("agent"),scroll('[data-act="docker-download"]'),check("desktop-install")]),
 ];

@@ -456,3 +456,7 @@ provider, worker and architecture consumers, then `npm run verify -- --core`.
 No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference and
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
+
+## Missing prerequisites (2026-11-01)
+
+See [conversation.md](conversation.md#missing-prerequisites-2026-11-01) for the shared failure data, localized note, affected scenes and explicit native/judge limits. Rule R-UI-69 rejects reasons held only in a disabled control title.

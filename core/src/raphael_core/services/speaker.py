@@ -175,7 +175,10 @@ class Speaker:
         """Whether Raphael can be heard now: a voice service is chosen and has its key and voice.
         The assistant asks before it shows a line, to know whether to wait for the voice and to
         have the Japanese line made."""
-        return self._hub.tts_ready()
+        ready = self._hub.tts_ready()
+        if not ready and self._hub.enabled("voice"):
+            self._failed("not_configured")
+        return ready
 
     async def say(self, prefix: str, text: str, *, turn_id: int | None = None) -> None:
         """Speak a line of Raphael's (see the module), replacing what was being said. Returns when
@@ -338,6 +341,9 @@ class Speaker:
 
     def _failed(self, kind: str, detail: str | None = None) -> None:
         if kind != self._last_failure:
+            if kind in ("not_configured", "missing_secret") and self._notify:
+                from ..failures import missing_for
+                self._notify("setup.missing", missing_for(kind, "tts", "fish").wire())
             suffix = "" if detail is None else f" ({detail})"
             logger.warning("Raphael could not speak: %s%s", kind, suffix)
         self._last_failure = kind

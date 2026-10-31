@@ -806,8 +806,8 @@ describe("what the section does", () => {
     ["not_configured", "先填入聲音模型 ID"],
     ["missing_secret", "先儲存 API 金鑰"],
     ["auth", "Fish Audio 不接受這把金鑰"],
-    ["network", "無法發聲"],
-    [undefined, "無法發聲"],
+    ["network", "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
+    [undefined, "Fish Audio 試聽未成功，無法確認原因，請確認音訊輸出後再試，仍失敗時檢查服務狀態。"],
   ])("a voice that could not be played (%s) is said in a few words", async (kind, words) => {
     const { host } = await opened("voice");
     press(host, '[data-k="svc-svc:fish"]');

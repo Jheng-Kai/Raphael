@@ -265,7 +265,8 @@ def _failure_as_error(error: Exception) -> RpcError:
     if isinstance(error, RpcError):
         return error
     if isinstance(error, FileNotFoundError):
-        return RpcError(NOT_CONFIGURED, f"A speech model is not downloaded: {error}")
+        from ..failures import Missing
+        return RpcError(NOT_CONFIGURED, "A local speech model is not downloaded", {"missing": Missing("stt", "local_model", "missing", "dictation").wire()})
     return RpcError(INTERNAL_ERROR, f"Speech-to-text failed: {error or type(error).__name__}")
 
 

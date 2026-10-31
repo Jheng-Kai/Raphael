@@ -486,6 +486,17 @@ class ProviderRouter:
             raise OpenRouterError(0, "auth", "Could not read provider credential") from None
         return False
 
+    def missing(self, model):
+        from ...failures import Failure, Missing
+        reference = self.model_for(model)
+        pid = reference[1:].partition(":")[0] if reference.startswith("@") else "openrouter"
+        try:
+            config = self.registry.config(pid)
+            state = "off" if not config["enabled"] else "missing"
+        except ValueError:
+            state = "missing"
+        return Failure("auth_expired", "Selected provider unavailable", missing=Missing(pid, "provider", state, "models"))
+
     def cleanup_fallback(self, primary):
         """The mandatory cleanup retry follows the owner's provider preference order."""
         api_providers = {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
@@ -575,6 +586,10 @@ class ProviderRouter:
         try:
             result = await getattr(client, method)(**kwargs)
         except OpenRouterError as error:
+            from ...failures import Missing, classify
+            diagnostic = classify(error, record=False)
+            if diagnostic.kind in ("auth_expired", "chatgpt_scope", "chatgpt_plan_unavailable"):
+                error.diagnostic = replace(diagnostic, missing=Missing(pid, "provider", "broken", "models"))
             self.registry.record_result(pid, error)
             raise
         self.registry.record_result(pid)

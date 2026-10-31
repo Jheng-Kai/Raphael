@@ -439,6 +439,7 @@ export type MailDraft = MailDraftCard | MailDraftHanded;
 
 /** A connector card: an app a task needs, and where its sign-in stands. Never a URL or a token. */
 export interface ConnectorCard {
+  missing?: import("./missing").Missing | null;
   id: string;
   app: string;
   name: string;
@@ -513,6 +514,8 @@ export interface WireAttachment {
 
 /** One thing Raphael did for a turn. Never what a tool was given or what it returned. */
 export interface AgentStep {
+  missing?: import("./missing").Missing | null;
+  detail?: string | null;
   /**
    * `tool` (a lookup or a connected service's tool), `command` (something done to this PC), `computer`
    * (Raphael operating an app: `tool` is `apps`, `look`, `open`, `focus`, `click`, `type`, `keys` or
@@ -730,6 +733,7 @@ export interface DeviceSettings {
 
 /** What commands.rs sends on the `main_events` channel (`MainEvent`). */
 export type MainEvent =
+  | { type: "SetupMissing"; missing: import("./missing").Missing }
   | { type: "DictationPasted"; text: string }
   | { type: "ConversationsChanged"; member_id: number }
   | { type: "QuotaChanged" }
@@ -1039,7 +1043,7 @@ export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
 export type CalendarCreate = `calendar-new:${CalendarDate}`;
 /** Calendar on the week of that day, its usual view. */
 export type CalendarWeek = `calendar-week:${CalendarDate}`;
-export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek;
+export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek | `repair:${string}:${string}`;
 
 /** One of the five pages of the main window. */
 export interface Page {

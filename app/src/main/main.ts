@@ -33,6 +33,7 @@ import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, P
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
 import { leave, toaster } from "./ui";
+import { bindMissing, missingHTML, noticeHTML } from "./missing";
 import "./styles.css";
 import "./sidebar.css";
 
@@ -108,6 +109,8 @@ function mountWindowChrome(): void {
   }
 }
 
+let startupHasSettings = false;
+
 async function start(): Promise<void> {
   applyTheme();
   // Focus rings only while Tab moves the focus (focus-keys.ts); a click or the caret shows the rest.
@@ -146,6 +149,7 @@ async function start(): Promise<void> {
     rerunGuide: () => startGuide("rerun"),
   };
 
+  bindMissing(document, go);
   const history = createHistory(ctx);
   const dictionary = createDictionary(ctx);
   const overview = createDictationOverview(ctx);
@@ -271,8 +275,11 @@ async function start(): Promise<void> {
   /** Stops the settings' way out (`closeSettings`) when they are opened again before it is over. */
   let stopLeaving: (() => void) | null = null;
 
-  function openSettings(pane?: SettingsPane): void {
-    if (settingsOpen) return;
+  function openSettings(pane?: PageArgument): void {
+    if (settingsOpen) {
+      if (pane?.startsWith("repair:")) void settings.show(pane);
+      return;
+    }
     settingsOpen = true;
     stopLeaving?.();
     stopLeaving = null;
@@ -319,6 +326,7 @@ async function start(): Promise<void> {
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));
 
   api.subscribeMainEvents((event) => {
+    if (event.type === "SetupMissing") toaster.notice(() => missingHTML(event.missing));
     if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));
@@ -357,6 +365,8 @@ async function start(): Promise<void> {
     );
   }
 
+  startupHasSettings = true;
+
   // Until the first-run guide is done it takes the place of the pages. (Settings that could not be
   // read are no reason to start a guide for someone who has been through it.)
   if (deviceRead && !device.get().onboarded) {
@@ -384,4 +394,5 @@ start().catch((err) => {
   // Whatever went wrong, the window must not stay blank.
   document.getElementById("ob")!.hidden = true;
   showPages();
+  document.getElementById("main")?.insertAdjacentHTML("afterbegin", noticeHTML(startupHasSettings ? "onboarding" : "startup", startupHasSettings ? "general" : null));
 });

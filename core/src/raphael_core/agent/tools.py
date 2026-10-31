@@ -220,7 +220,11 @@ class Tools:
     @staticmethod
     def _failed(name: str, kind: str, detail: str | None = None) -> ToolResult:
         logger.warning("The %s tool failed: %s", name, kind)
-        return ToolResult(name, False, None, kind, detail=detail)
+        from ..failures import missing_for
+        missing = missing_for(kind, name, detail)
+        data = {"error": kind, "missing": missing.wire()} if missing else None
+        return ToolResult(name, False, data, kind, detail=detail,
+                          instruction=missing.sentence("en") if missing else None)
 
     async def _get_json(self, url: str, params: dict[str, Any]) -> Any:
         response = await self._http_client().get(url, params=params, timeout=_HTTP_STAGE_TIMEOUT_S)
@@ -383,7 +387,7 @@ class Tools:
         except ServiceError as error:
             return self._failed("read_attachment", error.kind, kind)
         data = {"file": number, "kind": kind, **found}
-        return ToolResult("read_attachment", True, data, untrusted=True, detail=kind)
+        return ToolResult("read_attachment", True, data, untrusted=True, detail=found.get("limitation_kind", kind))
 
     async def look(
         self,

@@ -444,6 +444,7 @@
 .attachment-drop > .i { width: 28px; height: 28px; }
 .attachment-name { display: flex; flex-direction: column; min-width: 0; text-align: start; }
 .attachment-name small { color: var(--text-3); font-size: var(--fs-xs); }
+.attachment-file:disabled .attachment-name small { white-space: normal; overflow-wrap: anywhere; }
 .attachment-icon { display: inline-flex; flex-direction: column; align-items: center; flex-shrink: 0; gap: var(--sp-1); }
 .attachment-icon small { font-size: var(--fs-2xs); font-weight: 600; line-height: 1.2; }
 

@@ -45,7 +45,7 @@ export function sentFileHTML(file: TurnAttachment): string {
     `<span class="attachment-audio-body"><span class="attachment-name"><span class="me-file-t">${esc(file.name)}</span></span><input type="range" min="0" max="100" step="0.1" value="0" disabled data-audio-progress aria-label="${esc(t("agent.audioProgress"))}"><small data-audio-time>0:00 / 0:00</small></span>${open}</div>`;
   const ext = file.name.includes(".") ? file.name.split(".").pop()!.toUpperCase() : "";
   const details = [fileSize(file.size), ext].filter(Boolean).join(" · ");
-  return `<button type="button" class="btn me-file attachment-file"${id ? ` data-act="attachment-open" data-id="${esc(id)}"` : " disabled"} aria-label="${esc(t("agent.openFile"))}: ${esc(file.name)}">${fileIcon(file)}<span class="attachment-name"><span class="me-file-t">${esc(file.name)}</span><small>${esc(details)}</small></span></button>`;
+  return `<button type="button" class="btn me-file attachment-file"${id ? ` data-act="attachment-open" data-id="${esc(id)}"` : " disabled"} aria-label="${esc(t("agent.openFile"))}: ${esc(file.name)}">${fileIcon(file)}<span class="attachment-name"><span class="me-file-t">${esc(file.name)}</span><small>${esc(details)}${id ? "" : ` · ${esc(t("missing.attachment"))}`}</small></span></button>`;
 }
 
 /** A depth counter keeps child crossings from dismissing the thread's drop target. */

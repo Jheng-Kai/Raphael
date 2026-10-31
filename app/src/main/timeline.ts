@@ -1,3 +1,4 @@
+import { missingHTML, missingText } from "./missing";
 import { ownerFaceHTML } from "./owner-avatar";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
@@ -80,6 +81,10 @@ const REASONS: Record<string, MessageKey> = {
   interrupted: "agent.reason.interrupted",
   forbidden: "agent.reason.forbidden",
   bad_arguments: "agent.reason.bad_arguments",
+  auth_expired: "agent.reason.auth",
+  permission_denied: "agent.reason.denied",
+  tool_broken: "agent.reason.protocol",
+  unknown: "agent.reason.error",
   auth: "agent.reason.auth",
   missing_secret: "agent.reason.missing_secret",
   denied: "agent.reason.denied",
@@ -182,7 +187,10 @@ export function stepPlace(step: AgentStep): string {
 
 /** Why a step failed, in a few words; empty for one that went well. */
 export function reasonText(step: AgentStep): string {
+  if (step.missing) return missingText(step.missing);
   if (step.outcome === "ok") return "";
+  if (["encrypted", "bad_pdf", "no_text"].includes(step.reason ?? "")) return (t as (key: MessageKey) => string)(`missing.${step.reason}` as MessageKey);
+  if (["bad_url", "blocked_address", "redirects", "unsupported_type"].includes(step.reason ?? "")) return t("missing.urlRead");
   // On the owner's PC a refusal is Raphael not being allowed to touch an app; `denied` elsewhere is a login that was refused.
   if (step.kind === "computer" && step.reason === "denied") return t("agent.reason.notAllowed");
   const key = REASONS[step.reason ?? ""] ?? (step.outcome === "timeout" ? REASONS.timeout : step.outcome === "blocked" ? REASONS.blocked : REASONS.error);
@@ -313,7 +321,7 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     `<li class="step ${ok ? "is-ok" : "is-bad"}${isNew ? " is-new" : ""}">` +
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
-    (ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
+    (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
     `<span class="step-mark" role="img" aria-label="${esc(ok ? t("agent.ok") : why)}">${ok ? ico("check") : ico("x")}</span></span>` +

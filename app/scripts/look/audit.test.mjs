@@ -6,6 +6,13 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("keeps the WAV format name while still rejecting an English interface word", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>WAV</p><button>Save</button>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left: 10, top: 10, right: 310, bottom: 40, width: 300, height: 30});
+    expect(auditDocument(window.document, {width: 1120, height: 900}, [], LATIN_NAMES.map(name => name.toLowerCase())).mixedLanguage.map(item => item.word)).toEqual(["Save"]);
+    window.happyDOM.abort();
+  });
   it("accepts read-only calendar details and rejects an unexpected edit action", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="au-pop-detail"><p class="au-pop-time">10:00</p><p class="au-pop-from">Google Calendar</p></div>';
@@ -172,6 +179,15 @@ describe("rendered look checks", () => {
     window.document.querySelector('.dim').style.color = 'rgb(245,245,245)';
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
+  it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
+    const { window, audit } = productAudit('<div><button disabled title="Needs an API key">Add</button></div>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-69')).toHaveLength(1);
+    window.document.querySelector('button').insertAdjacentHTML('afterend', '<p hidden>Needs an API key</p>');
+    window.document.querySelector('p').getBoundingClientRect = window.document.querySelector('button').getBoundingClientRect;
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-69')).toHaveLength(1);
+    window.document.querySelector('p').hidden = false;
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-69')).toEqual([]);
   });
   it("rejects a light in the colour of the words it passes over (R-UI-55)", () => {
     const { window, audit } = productAudit('<span class="shimmer" style="background-image:linear-gradient(90deg,rgb(9,9,9),rgb(9,9,9))">x</span>');

@@ -42,7 +42,7 @@ from .composio import KEY
 from .google import PREFIX
 from .service import GOOGLE_SERVER
 from .toolkits import SIGN_IN
-from ..failures import Failure, classify
+from ..failures import Failure, Missing, classify
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,18 @@ class Card:
         """The card as the window draws it."""
         return {"id": self.id, "app": self.app, "name": self.name, "logo": self.app_logo, "state": self.state,
                 "error": self.error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
-                "expires_at_ms": self.expires_at_ms, "resumed": self.resumed}
+                "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
+                **({"missing": missing.wire()} if (missing := _card_missing(self.error)) else {})}
+
+
+def _card_missing(error):
+    if error == "needs_composio_key":
+        return Missing("composio", "composio_key", "missing", "store")
+    if error == "not_configured":
+        return Missing("google", "google_client", "missing", "store")
+    if error == "mcp_unavailable":
+        return Missing("mcp", "installation", "missing", None)
+    return None
 
 
 def _card(row: sqlite3.Row) -> Card:
@@ -351,7 +362,7 @@ class ConnectorCards:
         name = app.name
         if kind == "needs_composio_key":
             return Failure("auth_expired", f"No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Settings > "
-                                           f"Connections (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.")
+                                           f"Connections > Store (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.", missing=_card_missing(kind))
         if kind == "key_rejected":
             return Failure("auth_expired", f"{name} did not accept the key the owner entered. The owner checks it and enters it again "
                                            f"from the card or with Add on {name} in {WHERE}.")

@@ -25,7 +25,7 @@ def test_owner_failure_copy_never_exposes_machine_diagnostics(kind, language, na
     assert not re.search(r"[A-Za-z]+_[A-Za-z_]+|[（(]" + re.escape(kind) + r"[）)]|;", text)
     assert text.endswith("." if language == "en" else "。")
     if language != "en":
-        assert not re.search(r"[A-Za-z]|[,:.!?]", text)
+        assert not re.search(r"[A-Za-z]|[,:.!?]", text.replace("ChatGPT", ""))
     assert failure.wire() == {"kind": kind, "reason": failure.reason}
 
 

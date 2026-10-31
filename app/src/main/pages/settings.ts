@@ -45,7 +45,7 @@ import { createCliBrains } from "../cli-brains";
 import { createProviders } from "../providers";
 import { mountUsageAnalytics, type UsageAnalyticsMount } from "../usage-analytics";
 import { MonitorSwitch } from "../monitor";
-import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, SettingsPane, Status } from "../types";
+import type { AppContext, AudioDevices, BrainSettings, DeviceSettings, LocalModel, MainEvent, ModelCatalog, ModelRole, Page, PageArgument, SettingsPane, Status } from "../types";
 import {
   type Choice,
   type MenuAction,
@@ -1381,7 +1381,9 @@ export function createSettings(app: AppContext): SettingsPage {
       try { const apply = await readSettings(); if (!visible) apply(); }
       finally { preloading = false; }
     },
-    async show(open?: SettingsPane) {
+    async show(open?: PageArgument) {
+      const repair = open?.startsWith("repair:") ? open.split(":").slice(1) : null;
+      if (repair) open = ({ search: "agent", read: "agent", vision: "agent", pdf: "agent", voice: "agent", store: "connections", computer: "agent" } as Record<string, SettingsPane>)[repair[0]] ?? repair[0] as SettingsPane;
       const hadUsage = usage !== null;
       visible = true;
       stopOutside();
@@ -1397,7 +1399,7 @@ export function createSettings(app: AppContext): SettingsPage {
       cityDraft = null;
       cityError = null;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
-      pane = open && PANES.some((p) => p.id === canonicalPane(open)) ? canonicalPane(open) : "general";
+      pane = open && PANES.some((p) => p.id === canonicalPane(open as SettingsPane)) ? canonicalPane(open as SettingsPane) : "general";
       if (open === "usage" || open === "models") modelsTab = open;
       if (pane !== "models") destroyUsage();
       connections.reset();
@@ -1424,6 +1426,33 @@ export function createSettings(app: AppContext): SettingsPage {
       if (mine !== loads || !visible) return;
       // Nothing is redrawn under the owner's hands unless the read found something new.
       if (apply() || loading) { loading = false; render(); }
+      if (repair) {
+        const [target, resource] = repair;
+        if (["search", "read", "vision", "pdf", "voice"].includes(target)) {
+          await services.load();
+          if (mine !== loads || !visible) return;
+          services.openRepair(target as "search" | "read" | "vision" | "pdf" | "voice", ["searxng", "tavily", "brave", "exa", "fish", "jina", "firecrawl"].includes(resource) ? resource : null);
+          el.querySelector<HTMLElement>('#svc-dialog input, #svc-dialog button')?.focus();
+        } else if (target === "models") {
+          await providers.load();
+          if (mine !== loads || !visible) return;
+          if (resource === "chatgpt") {
+            const card = el.querySelector<HTMLElement>('[data-chatgpt-card]');
+            card?.scrollIntoView({block: "center"}); card?.querySelector<HTMLElement>('button')?.focus();
+          } else providers.openRepair(resource);
+        } else if (target === "store") {
+          await connections.load();
+          if (mine !== loads || !visible) return;
+          el.querySelector<HTMLButtonElement>('[data-k="conn-tab:store"]')?.click();
+          if (resource === "composio" || resource === "google") el.querySelector<HTMLButtonElement>('[data-conn="configure-composio"]')?.click();
+        } else if (target === "general") {
+          const field = el.querySelector<HTMLElement>('[data-act="rerun-guide"]');
+          field?.scrollIntoView({block: "center"}); field?.focus();
+        } else if (target === "computer") {
+          const field = el.querySelector<HTMLElement>('[data-act="docker-download"]');
+          field?.scrollIntoView({block: "center"}); field?.focus();
+        }
+      }
       void hiddenMembers.load();
       if (!el.contains(document.activeElement)) el.querySelector<HTMLElement>("#set-title")?.focus();
       void loadCatalog();

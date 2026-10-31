@@ -7,6 +7,7 @@
 // Every state comes from the core (`agent.drafts`). What the owner types lives in the fields only until it is
 // saved as a version (`mail-actions.ts`); a card drawn again takes it from the old field to the new one (`carryMail`).
 
+import { noticeHTML } from "./missing";
 import { NAME, eventLineHTML } from "./event-line";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -67,9 +68,9 @@ function senderRow(draft: MailDraftCard, editable: boolean): string {
   const choices = draft.senders.map((sender) => ({ value: sender.key, label: sender.name }));
   const known = draft.senders.some((sender) => sender.key === draft.from.key);
   const label = plain("mail.from");
-  const control = draft.senders.length === 0 || !known
+  const control = draft.senders.length === 0
     ? `<span class="mail-none">${esc(plain("mail.noSender"))}</span>`
-    : sel(choices, draft.from.key, label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
+    : sel(known ? choices : [{ value: "", label: plain("mail.noSender") }, ...choices], known ? draft.from.key : "", label, ` data-act="mail-from" data-via="${esc(draft.from.key)}"${editable ? "" : " disabled"}`);
   return `<div class="mail-row"><span class="mail-k">${esc(label)}</span>${control}</div>`;
 }
 
@@ -90,6 +91,7 @@ function editableHTML(draft: MailDraftCard): string {
     fieldRow(draft, "subject", plain("mail.subject"), editable) + `</div>` +
     `<textarea class="mb-fin mb-ta mail-body" data-mail-field="body" aria-label="${esc(plain("mail.body"))}" rows="7" maxlength="50000"` +
     ` spellcheck="false"${editable ? "" : " disabled"}>${esc(draft.body)}</textarea>` +
+    (!draft.senders.some(sender => sender.key === draft.from.key) ? noticeHTML("mail", "store") : "") +
     (note ? `<div class="mail-note" role="status" data-mail-error="${esc(draft.error ?? draft.state)}">${esc(note)}</div>` : "") +
     (sending ? `<div class="mail-note is-busy" role="status"><span class="spin" aria-hidden="true"></span><span>${esc(plain("mail.sending"))}</span></div>` : "") +
     (sending ? "" : `<div class="mail-actions">` +

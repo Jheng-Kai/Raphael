@@ -28,7 +28,7 @@ async def test_a_search_that_is_off_is_not_made_and_the_answer_is_told_it_cannot
     assert "web_search: turned off by the owner; say briefly that you cannot do this now" in user
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_search")
-    assert (step["outcome"], step["reason"]) == ("error", "blocked")
+    assert (step["outcome"], step["reason"]) == ("error", "disabled")
 
 
 async def test_the_openrouter_search_is_switched_off_too(services_rig, client):
