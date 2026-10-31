@@ -253,3 +253,25 @@ compatible running containers, retains last-use order, and stops only an idle
 computer to make room; held or active computers yield local_capacity. Remote
 computers skip idle sweep and local capacity limits. Native journey teardown
 removes its own container by exact target after validation, retaining workspace.
+
+
+## Durable owner input (2026-11-01)
+
+OwnerQuestions stores nonsecret question/card references and a conditional final answer.
+Its partial unique index permits only one unanswered question per worker task. The
+existing Stop("waiting"), Waiting, worker messages and worker_tasks.continuation
+release the carrier and persist the continuation, counters, cost, declined tools,
+seen URLs and untrusted-content marker. An answered question conditionally queues
+that task once; unanswered questions remain waiting through restart. Crash recovery
+never replays uncertain running effects.
+
+AgentService supplies the existing connect, secret, draft and page services to the
+worker through a limited callback. It returns only card completion metadata, never
+secret material. Room work projects its waiting turn into room_messages and uses
+shared room notes without private history or member memory. Draft revisions use
+the originating room and thread, and private draft lookup excludes room turns.
+Background snapshots
+explicitly add owner cards and own-member routine tools, without interactive=True.
+The native allowlist exposes owner_questions.answer; it grants no execution approval.
+API and CLI/MCP conversation questions transfer the same turn to this worker rather
+than retaining a CLI process. All question states reuse the conversation card component.

@@ -4,6 +4,13 @@ import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
   ...missingZh,
+  "ownerQuestion.title": "需要你的回答",
+  "ownerQuestion.page": "完成頁面後繼續",
+  "ownerQuestion.answer": "輸入回答",
+  "ownerQuestion.submit": "送出回答",
+  "ownerQuestion.answered": "已回答",
+  "ownerQuestion.cancelled": "已取消",
+  "ownerQuestion.waiting": "等待你回答 · {p0} 項",
   "desktop.open": "即時桌面",
   "desktop.expand": "展開",
   "desktop.done": "我完成了",

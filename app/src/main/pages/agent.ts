@@ -65,6 +65,7 @@ import { openConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
+import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { permissionFor } from "../permission-card";
 import { describeError } from "../format";
 import { loadingHTML } from "../loading";
@@ -574,7 +575,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searches = 0;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
-  const pagesHost = mountPages(thread, { send: text => sendFromPage(text) });
+  const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
+  mountOwnerQuestions(thread, () => { void load(false); });
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
   let drewOnce = false;

@@ -402,6 +402,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_close",
     "computer.revoke",
     "pages.open",
+    "owner_questions.answer",
     "pages.tool_call",
     "home.overview",
     "connectors.catalog",
@@ -2575,6 +2576,7 @@ mod tests {
     #[test]
     fn the_whole_list_of_allowed_methods() {
         for method in [
+            "owner_questions.answer",
             "connectors.catalog",
             "connectors.categories",
             "connectors.toolkit",

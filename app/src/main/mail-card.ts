@@ -166,7 +166,7 @@ export function mailDirty(card: Element): boolean {
  * Call the result once `after` is in the page. The words pass from one field to the next and are kept nowhere else.
  */
 export function carryMail(before: Element, after: Element): () => void {
-  const focused: { id: string; field: string; start: number | null; end: number | null }[] = [];
+  const focused: { field: HTMLInputElement | HTMLTextAreaElement; start: number | null; end: number | null }[] = [];
   for (const old of before.querySelectorAll<HTMLElement>("[data-mail-card]")) {
     const id = old.dataset.mailCard ?? "";
     const fresh = [...after.querySelectorAll<HTMLElement>("[data-mail-card]")].find((card) => card.dataset.mailCard === id);
@@ -176,14 +176,13 @@ export function carryMail(before: Element, after: Element): () => void {
       const next = fresh.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mail-field="${name}"]`);
       if (!next) continue;
       if (field.value !== field.defaultValue) next.value = field.value;
-      if (field === document.activeElement) focused.push({ id, field: name, start: field.selectionStart, end: field.selectionEnd });
+      if (field === document.activeElement) focused.push({ field: next, start: field.selectionStart, end: field.selectionEnd });
     }
   }
   return () => {
     for (const item of focused) {
-      const card = [...after.querySelectorAll<HTMLElement>("[data-mail-card]")].find((node) => node.dataset.mailCard === item.id);
-      const field = card?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-mail-field="${item.field}"]`);
-      if (!field || field.disabled) continue;
+      const field = item.field;
+      if (field.disabled) continue;
       field.focus({ preventScroll: true });
       if (item.start !== null && item.end !== null) field.setSelectionRange(Math.min(item.start, field.value.length), Math.min(item.end, field.value.length));
     }

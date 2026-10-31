@@ -468,3 +468,8 @@ and top-right collapse in both themes.
 ## Missing prerequisites (2026-11-01)
 
 See [conversation.md](conversation.md#missing-prerequisites-2026-11-01) for the shared failure data, localized note, affected scenes and explicit native/judge limits. Rule R-UI-69 rejects reasons held only in a disabled control title.
+
+## Durable owner questions (2026-11-01)
+
+See [Conversation](conversation.md#durable-owner-questions-and-background-cards-2026-11-01)
+for ask_owner, background card completion and the selected question-card matrix.

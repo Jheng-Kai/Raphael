@@ -53,6 +53,28 @@ describe("look browser interaction contracts", () => {
     expect(target.click).toHaveBeenCalledTimes(3);
     expect(target.dispose).toHaveBeenCalledTimes(3);
   });
+  it("types into the connected field when a redraw replaced the located handle", async () => {
+    document.body.innerHTML = '<input class="target">';
+    const old = document.querySelector("input"), current = old.cloneNode();
+    const changed = vi.fn();
+    current.addEventListener("change", changed);
+    const handle = { evaluate: async (fn, value) => fn(old, value), dispose: vi.fn() };
+    const fresh = { evaluate: async (fn, value) => fn(current, value), dispose: vi.fn() };
+    const page = {
+      evaluate: async (fn, argument) => fn(argument),
+      waitForFunction: vi.fn().mockResolvedValueOnce({ asElement: () => { old.replaceWith(current); return handle; } })
+        .mockResolvedValue({ asElement: () => fresh }),
+    };
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    current.getBoundingClientRect = () => ({ width: 100, height: 30 });
+    try {
+      await perform(page, { action: "type", selector: ".target", text: "Revised subject" });
+      expect(current.value).toBe("Revised subject");
+      expect(changed).toHaveBeenCalledOnce();
+      expect(handle.dispose).toHaveBeenCalledOnce();
+      expect(fresh.dispose).toHaveBeenCalledOnce();
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("waits for an absence by its selector and says what is still there when it does not come", async () => {
     const page = { evaluate: vi.fn().mockResolvedValue(false), waitForFunction: vi.fn().mockResolvedValue(undefined) };
     await perform(page, { action: "wait-gone", selector: ".row" });

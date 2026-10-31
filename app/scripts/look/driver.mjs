@@ -84,9 +84,22 @@ export async function perform(page, step, evidenceDirectory) {
     }
   };
   const fill = async (selector, text) => {
-    const element = await visible(selector);
-    await element.evaluate((input, value) => { input.focus(); input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); }, text);
-    await element.dispose();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const element = await visible(selector);
+      try {
+        const filled = await element.evaluate((input, value) => {
+          if (!input.isConnected) return false;
+          input.focus();
+          if (!input.isConnected) return false;
+          input.value = value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return true;
+        }, text);
+        if (filled) return;
+      } finally { await element.dispose(); }
+    }
+    throw new Error(`Field was replaced before input: ${selector}`);
   };
   // Measure the real event through its next painted frame, excluding automation transport time.
   if (step.measure) await page.evaluate(({ selector, action, measure }) => {

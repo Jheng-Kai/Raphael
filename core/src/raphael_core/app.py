@@ -958,6 +958,7 @@ class App(Router):
             calendar=self.calendar,
         )
         self.agent.register(self)
+        self.rooms.turn_view = lambda turn: self.agent._turn_views([turn])[0]
         from .native_journeys import bot_homes_brain, home_timing_brain
         native_brain = bot_homes_brain(fake_llm, data_dir) or home_timing_brain(fake_llm, data_dir)
         if native_brain is not None:
@@ -977,6 +978,10 @@ class App(Router):
         self.vm.timezone = lambda: self.home.timezone_name
         self.home.timezone_changed = self.vm.refresh_timezone
         self.background.use_team(self.members, self.agent.team_tool)
+        self.background.use_owner_tools(self.agent.background_owner_tool)
+        self.background.use_attachment_store(self.attachment_store)
+        self.background.owner_questions.on_cancel = self.agent.cancel_owner_card
+        self.agent.sync_owner_cards()
         self.background.use_cli(self.agent._cli_brains, self.agent.quotas.record)
         # The questions the background waits on: a thread one waits in is `waiting` in the member
         # column, and the overlay's notice of one names the member whose thread holds it.
@@ -1386,6 +1391,8 @@ class App(Router):
         """The assistant's notifications go to the app; a turn written or completed is news in its
         thread, unless that thread is on screen (`MembersService.turn_arrived`)."""
         if method == "agent.turn" and type(params.get("turn_id")) is int:
+            if hasattr(self, "agent"):
+                asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
             self.members.turn_arrived(params["turn_id"])
             self.rooms.turn_arrived(params["turn_id"])
         self.notify(method, params)

@@ -1145,6 +1145,31 @@ PRAGMA user_version = 48;
 COMMIT;
 """
 
+_MIGRATIONS[49] = """
+BEGIN;
+CREATE TABLE owner_questions (
+    id TEXT PRIMARY KEY,
+    task_id INTEGER NOT NULL REFERENCES worker_tasks(id) ON DELETE CASCADE,
+    turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    card_id TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL,
+    result TEXT,
+    created_at_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX owner_question_wait ON owner_questions(task_id) WHERE result IS NULL;
+CREATE INDEX owner_question_turn ON owner_questions(turn_id);
+CREATE TRIGGER clear_turn_owner_questions AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM owner_questions WHERE turn_id=OLD.id;
+END;
+CREATE TRIGGER clear_task_owner_questions AFTER DELETE ON worker_tasks BEGIN
+  DELETE FROM owner_questions WHERE task_id=OLD.id;
+END;
+PRAGMA user_version = 49;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

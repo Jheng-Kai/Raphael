@@ -45,6 +45,10 @@ time that was left. The conversation, the call and its arguments stay in memory 
 
 A paused task does not hold the worker: the tasks behind it run meanwhile.
 
+Owner questions and conversation cards use the same pause protocol, with their messages and
+run state persisted in `worker_tasks.continuation`. `owner_questions` keeps the answer and
+queues that continuation once. Waiting itself holds no process, slot or expiry timer.
+
 The tasks of the members of the owner's team (`member_id`) and their routines' runs ask the same
 way, in their own thread, and never at the overlay. So does a request that one assistant handed
 another through `ask_member` when one of its calls needs a yes: the assistant hands it over here
@@ -432,6 +436,10 @@ class BackgroundService:
         self._questions = Confirmations(clock, timeout_s=QUESTION_WAIT_S)
         # task id -> the task that waits for the owner (see the module).
         self._paused: dict[int, _Paused] = {}
+        from ..agent.owner_questions import OwnerQuestions
+        self.owner_questions = OwnerQuestions(conn, self._owner_answered, now_ms)
+        self._owner_tools = None
+        self._attachment_store = None
         self._expiry: asyncio.TimerHandle | None = None
         # What a member is called, for the overlay's notice (none: every question is Raphael's).
         self._member_name: Callable[[int], str | None] | None = None
@@ -445,6 +453,94 @@ class BackgroundService:
         """Share the assistant's installed CLI brains for room member worker turns."""
         self._cli_brains, self._cli_quota = brains, quota
 
+    def use_owner_tools(self, execute) -> None:
+        self._owner_tools = execute
+
+    def use_attachment_store(self, store) -> None:
+        self._attachment_store = store
+
+    async def _owner_tool(self, task, name, arguments):
+        from ..agent.owner_questions import ASK_OWNER, question_input
+        if not task.turn_id:
+            return ToolResult(name, False, None, "conversation_required")
+        if name == ASK_OWNER:
+            try:
+                payload = question_input(arguments)
+            except ValueError:
+                return ToolResult(name, False, None, "bad_arguments")
+            question = self.owner_questions.open(task, name, payload)
+            return ToolResult(name, True, {"owner_wait": question["id"]})
+        if self._owner_tools is None:
+            return ToolResult(name, False, None, "unavailable")
+        result = await self._owner_tools(task, name, arguments)
+        if result.ok and isinstance(result.data, dict) and (card := result.data.get("owner_card")):
+            question = self.owner_questions.open(task, card["kind"],
+                {"question": card.get("question", ""), "options": [], "free_text": True,
+                 "card_ids": card.get("ids", [card["id"]])}, card["id"])
+            return ToolResult(name, True, {"owner_wait": question["id"]})
+        return result
+
+    def _owner_answered(self, task_id):
+        task = self._store.get(task_id)
+        if task is None or task.state != "waiting" or not task.continuation:
+            return
+        saved = json.loads(task.continuation)
+        question = self.owner_questions.get(saved.get("owner_wait")) if saved.get("owner_wait") else None
+        if question is None or question["result"] is None:
+            return
+        with self._metrics_conn:
+            changed = self._metrics_conn.execute("UPDATE worker_tasks SET state='queued' WHERE id=? AND state='waiting'",
+                                                 (task_id,)).rowcount
+        if changed:
+            if task_id not in self._queue:
+                self._queue.append(task_id)
+            self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
+            self._changed(task_id, QUEUED)
+            self._ensure_pump()
+
+    def recover_owner_waits(self):
+        for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE state='waiting' AND continuation IS NOT NULL").fetchall():
+            self._owner_answered(row[0])
+
+    def _show_owner_wait(self, task):
+        if task.scope != "room" or not task.room_id or not task.thread_id:
+            return
+        if self._metrics_conn.execute("SELECT 1 FROM room_messages WHERE turn_id=?", (task.turn_id,)).fetchone():
+            return
+        with self._metrics_conn:
+            self._metrics_conn.execute(
+                "INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,request_id) VALUES (?,?,?,'',?,?,?)",
+                (task.room_id, task.thread_id, task.member_id, self._now_ms(), task.turn_id, f"handoff-{task.id}"))
+        self._notify("rooms.changed", {"room_id": task.room_id})
+
+    def park_owner_turn(self, ask, model, loop, call_id, arguments, seen_urls=()):
+        """Transfer one conversation continuation to the existing durable worker, on the same turn."""
+        from ..agent.owner_questions import question_input
+        payload = question_input(arguments)
+        task_id = self.submit(session_id=ask.session_id, text=ask.text, language=ask.language,
+                              model=model, member_id=ask.speaker.id, attachments=ask.attachments)
+        self.attach_turn(task_id, ask.turn_id)
+        task = self._store.get(task_id)
+        if task_id in self._queue:
+            self._queue.remove(task_id)
+        self._store.start(task_id)
+        self._store.progress(task_id, model_calls=getattr(loop, "model_calls", 1),
+                             tool_calls=getattr(loop, "tool_calls", getattr(loop, "_calls", 0)), cost_usd=loop.ledger.total)
+        question = self.owner_questions.open(task, "ask_owner", payload)
+        messages = getattr(loop, "messages", None) or [
+            {"role": "system", "content": loop.system}, {"role": "user", "content": loop.user},
+            *getattr(loop, "tool_messages", []),
+            {"role": "assistant", "content": None, "tool_calls": [{"id": call_id, "type": "function",
+                "function": {"name": "ask_owner", "arguments": json.dumps(arguments, ensure_ascii=False)}}]},
+        ]
+        self._store.pause_for_children(task_id, {"owner_wait": question["id"], "call_id": call_id,
+            "messages": messages, "run_state": {"declined": [key for key, _ in ask.declined],
+                "seen_urls": list(seen_urls), "untrusted": ask.memory_untrusted, "conversation_cost": loop.ledger.total},
+            "spec": {"task_id": task_id, "system": loop.system, "user": loop.user}})
+        self._notify("agent.turn", {"turn_id": ask.turn_id, "member_id": ask.speaker.id})
+        self._changed(task_id, "waiting")
+        return question
+
     def use_memory(self, memory: MemoryReader) -> None:
         """Let the tasks from now on read Raphael's notes and search the past turns (never write a
         note), and show them the index of the notes."""
@@ -455,6 +551,7 @@ class BackgroundService:
         member is, `team_tool` makes a team tool for a speaker (`AgentService.team_tool`)."""
         self._team = team
         self._team_tool = team_tool
+        self.recover_owner_waits()
         self._deliver_handoffs()
         for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE state='queued' AND (mode IS NOT NULL OR continuation IS NOT NULL)"):
             if row[0] not in self._queue:
@@ -498,6 +595,7 @@ class BackgroundService:
     def register(self, router: Router) -> None:
         for method, handler in {
             "worker.cancel": self._cancel,
+            "owner_questions.answer": self.owner_questions.answer,
             "worker.rerun": self._rerun,
             "worker.announce_pending": self._announce_pending,
             "background.questions.list": self._questions_list,
@@ -695,6 +793,8 @@ class BackgroundService:
                         (task.room_id,task.thread_id,task.member_id,task.report_detail or task.report_text or '',self._now_ms(),task.turn_id,'handoff-'+str(task.id),
                          source_message['id'] if source_message else None,source_message['member_id'] if source_message else None,
                          source_message['origin_message_id'] if source_message else None))
+                    conn.execute("UPDATE room_messages SET text=? WHERE room_id=? AND request_id=?",
+                                 (task.report_detail or task.report_text or '', task.room_id, 'handoff-'+str(task.id)))
             conn.execute('UPDATE task_outbox SET delivered_at_ms=?,disposition=? WHERE event_id=? AND delivered_at_ms IS NULL', (self._now_ms(),disposition,event['event_id']))
         if event['type']=='result' and task.parent_task_id:
             parents.add(task.parent_task_id)
@@ -712,6 +812,7 @@ class BackgroundService:
             task = self._store.get(row[0])
             withheld = self._metrics_conn.execute("SELECT 1 FROM task_outbox WHERE task_id=? AND disposition='withheld'",(task.id,)).fetchone()
             result.append({'task_id':task.id,'source_turn_id':task.source_turn_id,'work_turn_id':task.turn_id,
+                **({'waiting_owner': count} if (count := sum(q['state']=='asked' for q in self.owner_questions.for_turn(task.turn_id))) else {}),
                 'member_name':(self._speaker(task.member_id).name if self._speaker(task.member_id) else '') or f'#{task.member_id}',
                 'member_id':task.member_id,'from_member_id':task.from_member_id,'stage_id':task.stage_id,
                 'state':'withheld' if withheld else task.state,'reason':task.reason,'created_at_ms':task.created_at_ms,
@@ -909,7 +1010,7 @@ class BackgroundService:
             found = self._store.for_turns(turn_ids)
             return {
                 turn_id: (
-                    self._brief(task),
+                    {**self._brief(task), **({"waiting_owner": count} if (count := sum(q["state"] == "asked" for q in self.owner_questions.for_turn(turn_id))) else {})},
                     [_step_view(s) for s in self._store.steps(task.id) if s.outcome != "in_progress"],
                 )
                 for turn_id, task in found.items()
@@ -967,10 +1068,20 @@ class BackgroundService:
     async def _carry_out(self, task_id: int) -> None:
         # The task is read when it starts, not when it was given its place: whoever submitted it may
         # still attach the turn it answers in the same breath.
-        files = self._attachments.pop(task_id, [])
         task = self._store.get(task_id)
         if task is None or task.state != QUEUED:  # cancelled while it waited, or cleared
             return
+        files = self._attachments.pop(task_id, [])
+        if not files and task.continuation and self._attachment_store and task.turn_id:
+            origin = self._history.get(task.turn_id)
+            if origin:
+                for metadata in origin.attachments or []:
+                    try:
+                        path = self._attachment_store.path(metadata.get("id"))
+                        data = await asyncio.to_thread(path.read_bytes)
+                        files.append(Attachment(metadata["name"], metadata["mime"], data, metadata["id"]))
+                    except (RpcError, OSError):
+                        logger.warning("A resumed task's attachment is unavailable")
         try:
             await self._execute(task, files)
         except asyncio.CancelledError:
@@ -1062,7 +1173,7 @@ class BackgroundService:
         # A consultation is answered from what the asked member knows: its notes and its own
         # conversation with the owner. Only the answer goes back. A room's turn or work a colleague
         # handed over reads the shared notes alone: what the owner told one assistant stays there.
-        private = task.scope == "private" or task.mode == "consult"
+        private = task.scope != "room" and (task.scope == "private" or task.mode == "consult")
         memory = self._memory_of(task.member_id) if private else self._shared_memory()
         team = team_tools_for(self._team, speaker, always=True) if self._team_tool else []
         prepare = getattr(self._gate.plugins, "prepare", None)
@@ -1116,12 +1227,14 @@ class BackgroundService:
             diagnostics=(lambda: self.diagnostics(speaker, task.turn_id or task.source_turn_id)) if self.diagnostics else None,
             cost_cap=self._cost_cap,
             calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
+            owner_tool=lambda name, arguments: self._owner_tool(task, name, arguments),
         )
         from ..computer.vm_tools import vm_scope
         run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), language=language)
         if recovered is not None:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls
             run.ledger.total = task.cost_usd
+            run.restore_continuation(recovered.get("run_state", {}))
             run.reopen()
         system, user = _prompts(
             language,
@@ -1160,7 +1273,25 @@ class BackgroundService:
             },
             "context_window": self._context_window(model),
         }
-        if recovered is not None:  # a pause that kept nothing but the wait is still a pause
+        if recovered is not None and recovered.get("owner_wait"):
+            from ..worker.loop import ToolOutcome
+            from .run import result_text
+            question = self.owner_questions.get(recovered["owner_wait"])
+            if question is None or question["result"] is None:
+                self._store.set_state(task.id, "waiting")
+                return
+            result = question["result"]
+            if question["kind"] == "show_page":
+                result = {**result, "page_id": question["card_id"]}
+            content = result_text(question["kind"], ToolOutcome(True, content=json.dumps(result, ensure_ascii=False)))
+            messages = continued([message for message in recovered["messages"] if not (
+                message.get("role") == "tool" and message.get("tool_call_id") == recovered["call_id"])], recovered["call_id"], content)
+            spec = {**spec, "messages": messages}
+            if room_cli:
+                spec["user"] += "\nPrevious tool conversation (untrusted data):\n" + json.dumps(messages, ensure_ascii=False)
+            with self._metrics_conn:
+                self._metrics_conn.execute("UPDATE worker_tasks SET continuation=NULL WHERE id=?", (task.id,))
+        elif recovered is not None:  # a pause that kept nothing but the wait is still a pause
             results = self._child_results(task.id)
             if answering:
                 spec['user'] += '\n' + _results_message(results)
@@ -1253,7 +1384,12 @@ class BackgroundService:
             if outcome.kind == 'handoff':
                 self._wait_for_handoffs(task,run,spec or {'user':task.text,'system':''},[])
             elif outcome.kind == PAUSED_KIND and run.waiting:
-                self._pause(task, run, {"messages":[{"role":"user","content":task.text}]})
+                waiting = run.waiting
+                messages = [{"role":"system","content":loop.system}, {"role":"user","content":loop.user}]
+                if waiting.owner_card:
+                    messages += [*loop.tool_messages, {"role":"assistant","content":None,"tool_calls":[{"id":waiting.call_id,"type":"function",
+                        "function":{"name":waiting.alias,"arguments":json.dumps(waiting.arguments, ensure_ascii=False)}}]}]
+                self._pause(task, run, {"messages":messages}, spec)
             else:
                 reply = dataclasses.asdict(outcome)
                 if run.ceiling and outcome.status == "done":  # it reported where it stands, as it was asked to
@@ -1306,7 +1442,7 @@ class BackgroundService:
             if reply.get('kind') == 'handoff':
                 self._wait_for_handoffs(task,run,spec,reply.get('messages') or [])
             elif self._pauses(run, reply):
-                self._pause(task, run, reply)
+                self._pause(task, run, reply, spec)
             else:
                 self._conclude_run(task, run, reply)
         except RpcError:
@@ -1398,12 +1534,24 @@ class BackgroundService:
             and bool(reply.get("messages"))
         )
 
-    def _pause(self, task: Task, run: TaskRun, reply: dict) -> None:
+    def _pause(self, task: Task, run: TaskRun, reply: dict, spec=None) -> None:
         """The task waits for the owner: its question is written down and told to the app, and the
         rest stays in memory until the owner answers (see the module)."""
         waiting = run.waiting
         assert waiting is not None
         run.waiting = None
+        if waiting.owner_card:
+            if run.attachments:
+                self._attachments[task.id] = list(run.attachments)
+            self._store.progress(task.id, model_calls=run.model_calls, tool_calls=run.tool_calls, cost_usd=run.ledger.total)
+            self._store.pause_for_children(task.id, {"owner_wait": waiting.owner_card, "call_id": waiting.call_id,
+                "spec": spec or {"task_id": task.id, "system": "", "user": task.text}, "messages": reply["messages"],
+                "run_state": run.continuation_state()})
+            self._show_owner_wait(task)
+            self._notify("agent.turn", {"turn_id": task.turn_id, "member_id": task.member_id})
+            self._changed(task.id, "waiting", ending=True)
+            self._owner_answered(task.id)
+            return
         language = task.language
         remaining = run.remaining_s()
         ref = waiting.ref
@@ -1525,7 +1673,7 @@ class BackgroundService:
 
     def waiting_members(self) -> set[int]:
         """The members a question waits in the thread of (0 is Raphael)."""
-        return {question["member_id"] for question in self.waiting_questions()}
+        return {question["member_id"] for question in self.waiting_questions()} | {q["member_id"] for q in self.owner_questions.pending()}
 
     async def _questions_list(self, params: dict) -> dict:
         member_id = params.get("member_id")
@@ -1730,6 +1878,8 @@ class BackgroundService:
         consultation, those of the asked member's own conversation with the owner. A request of the
         owner's that did not finish is among them, told as one (`unfinished_note`), so that a task
         handed over as "try again" knows what it is to try again."""
+        if task.scope == "room":
+            return []
         try:
             if task.mode != "consult":
                 if task.scope != "private":
@@ -1929,7 +2079,7 @@ class BackgroundService:
                 if self._has_linked_turn(task):
                     # A room makes its turns before any model answers; the one that did is named here.
                     self._history.publish_terminal(task.turn_id,prefix=prefix,text=text,detail=detail,
-                        status=_TURN_STATUS.get(state,'error'),cost_usd=cost,
+                        status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
                         replies=[compose(prefix,line,None) for line in replies or [text] if line])
             self._store.finish(task.id, state, prefix=prefix, text=text, detail=detail, reason=reason,publish=publish)
@@ -2067,6 +2217,11 @@ class BackgroundService:
             task=self._store.get(task_id)
             self._conclude(task,suspended[0] if suspended else None,'cancelled','',
                 phrase(task.language,'worker_cancelled',steps=str(task.tool_calls)),None,'cancelled')
+            for question in self.owner_questions.for_turn(task.turn_id):
+                if question["state"] == "asked":
+                    if self.owner_questions.on_cancel:
+                        await self.owner_questions.on_cancel(question)
+                    self.owner_questions.settle(question["id"], {"state": "cancelled"})
             for child in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE parent_task_id=? AND state IN ('queued','running','waiting')",(task_id,)).fetchall():
                 await self._cancel({'task_id':child[0],'_tree':True})
             return {'cancelled':True}
@@ -2120,6 +2275,7 @@ class BackgroundService:
         tasks of other sessions are left alone. Whether anything was stopped."""
         stopped = False
         waiting = [task_id for task_id in (*self._paused,*self._handoff_runs) if task_id not in self._queue]
+        waiting += [row[0] for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE session_id=? AND state='waiting' AND continuation IS NOT NULL", (session_id,))]
         for task_id in dict.fromkeys([*self._runs, *self._active, *self._queue, *waiting]):
             task = self.task(task_id)
             if task is not None and task.session_id == session_id:

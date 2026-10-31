@@ -7,7 +7,7 @@ import { NAME, eventLineHTML } from "./event-line";
 import { handoffLineHTML } from "./handoff-line";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
-import { permissionCardsHTML } from "./permission-card";
+import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
@@ -345,6 +345,12 @@ function liveStepHTML(task: AgentTask, nowMs: number): string {
 /** How many things a turn did, in words: 「1 個動作」, 「3 個動作」. */
 const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDoneOne") : t("agent.stepsDone", { p0: count }));
 
+/** The same conversation cards and controls are used in private and room replies. */
+export function conversationCardsHTML(turn: AgentTurn): string {
+  return connectorCardsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn) +
+    mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn);
+}
+
 /** The words of a summary: how many things were done, how long it took, how many failed; or that a task is under way. */
 export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; time: string; failed: number } {
   const steps = shownSteps(turn).filter((step) => step.kind !== "model");
@@ -353,7 +359,7 @@ export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; tim
   const done = actionsText(steps.length);
   let lead = done;
   if (isLive(task)) lead = task!.state === "queued" ? t("agent.queued") : t("agent.working");
-  else if (task?.state === "waiting") lead = t("agent.taskWaiting"); // its question is the gold card
+  else if (task?.state === "waiting") lead = task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting");
   else if (task && TASK_ENDS[task.state]) lead = `${plain(TASK_ENDS[task.state])} · ${done}`;
   const ms = task?.state === "waiting" ? 0 : workMs(turn, nowMs); // the time it waits is not its own
   return { lead, time: ms > 0 || isLive(task) ? formatDuration(ms) : "", failed };
@@ -569,7 +575,7 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
   const task = turn.task;
   if (!task) return "";
   const live = isLive(task) || task.state === "waiting";
-  const label = task.state === "waiting" ? t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
+  const label = task.state === "waiting" ? task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
   return `<div class="turn-event task-actions"><span>${esc(label)}</span>` +
     (live ? btn(esc(t("agent.stop")), "sm stop", ` data-act="stop" data-task="${esc(task.id)}"${state.stopping.has(task.id) ? " disabled" : ""}`) : "") +
     (RERUNNABLE.has(task.state) ? btn(esc(t("agent.rerun")), "sm rerun", ` data-act="rerun" data-task="${esc(task.id)}"${state.rerunning.has(task.id) ? " disabled" : ""}`) : "") + `</div>`;
@@ -688,8 +694,8 @@ const plainLine = (text: string): string => plainReplies([text])[0];
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && !learnedSkillEvent(m.text) && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
-  if (!messages.length && !(turn.steps?.length) && turn.status !== "running" && !isLive(turn.task) && !revealing) return "";
-  const live = turn.status === "running" || isLive(turn.task);
+  const live = turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  if (!messages.length && !(turn.steps?.length) && !live && !revealing) return "";
   const start = state.workStartedAt.get(turn.id) ?? turn.created_at_ms;
   const firstReply = (turn.messages ?? []).find(m => m.kind === "reply" && m.at_ms >= turn.created_at_ms)?.at_ms;
   const end = live ? state.nowMs : turn.task?.finished_at_ms ?? firstReply ?? Math.max(turn.created_at_ms, ...messages.map(m => m.at_ms), ...(turn.steps ?? []).map(step => step.at_ms + step.ms));
@@ -825,7 +831,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const resumed = sourceOf(turn) === "connector";
   const said = turn.question.trim() !== "" && !routine && !resumed;
   const asked = said || (turn.attachments?.length ?? 0) > 0;
-  const live = turn.status === "running" || isLive(turn.task);
+  const live = turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
   const meta = esc(answerMeta(turn));
   const more = detail
@@ -857,6 +863,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
+    ownerQuestionsHTML(turn) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +

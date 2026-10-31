@@ -1,0 +1,186 @@
+"""Production conversation and MCP paths transfer the same turn to a durable wait."""
+import pytest
+
+from .test_service import make_rig  # noqa: F401
+from .test_narration import chat, typed
+from background.conftest import Rig as BackgroundRig, plugins, report, until  # noqa: F401
+from background.conftest import call, turn
+
+
+@pytest.fixture
+async def wired(make_rig, conn, plugins):
+    background = BackgroundRig(conn, plugins)
+    agent = make_rig(background=background.service, plugins=plugins.hub, gate=background.gate)
+    agent.settings.set("worker_cost_cap_usd", 1.0)
+    background.service.use_owner_tools(agent.service.background_owner_tool)
+    background.service.owner_questions.on_cancel = agent.service.cancel_owner_card
+    yield agent, background
+    await background.close()
+
+
+@pytest.mark.parametrize("answer", ["Tuesday", None])
+async def test_api_question_ends_turn_and_answer_continues_same_turn(wired, client, answer):
+    agent, background = wired
+    client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday", "Tuesday"]}))]
+    await typed(agent, "Arrange a visit")
+    [turn] = await agent.turns()
+    [question] = turn["owner_questions"]
+    assert question["state"] == "asked" and turn["task"]["state"] == "waiting"
+    assert len(client.chat_calls) == 1
+    assert background.task(question["task_id"]).cost_usd == pytest.approx(0.3)
+    background.client.replies = [report("Scheduled." if answer else "No date chosen.")]
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": answer})
+    await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
+    assert background.task(question["task_id"]).state == "done", background.task(question["task_id"])
+    turns = await agent.turns()
+    assert len(turns) == 1 and turns[0]["id"] == turn["id"]
+    result = background.client.chat_calls[-1]["messages"][-1]
+    assert result["role"] == "tool" and (answer or "cancelled") in result["content"]
+
+
+@pytest.mark.parametrize("path", ["conversation", "background", "routine"])
+async def test_cli_mcp_question_releases_process_and_continues_with_answer(wired, tmp_path, path):
+    from members.test_cli_brains import fake_brain
+    agent, background = wired
+    agent.settings.set("agent_model", "cli:claude")
+    fake_brain(agent, tmp_path, '''import json, sys, urllib.request
+from pathlib import Path
+request=json.loads(sys.stdin.readline())
+if "Previous tool conversation" in str(request):
+    assert "Wednesday after lunch" in str(request) and "answered" in str(request)
+    assert str(request).count("tool_call_id") >= 2
+    print(json.dumps({"type":"result","subtype":"success","result":"Tuesday confirmed."}),flush=True)
+else:
+    config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    prior={"jsonrpc":"2.0","id":0,"method":"tools/call","params":{"name":"local_time","arguments":{}}}
+    urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(prior).encode(),headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read()
+    packet={"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ask_owner","arguments":{"question":"Which day?","options":["Tuesday"]}}}
+    call=urllib.request.Request(config["url"],data=json.dumps(packet).encode(),headers={**config["headers"],"Content-Type":"application/json"})
+    urllib.request.urlopen(call,timeout=15).read()
+''')
+    background.service.use_cli(agent.service._cli_brains)
+    if path == "conversation":
+        await typed(agent, "Arrange a visit")
+    else:
+        origin = agent.history.add(session_id="cli-job", question="Arrange a visit", route="routine" if path == "routine" else "delegate",
+            prefix="", text="", status="running", source="routine" if path == "routine" else "app",
+            conversation_id=agent.service.conversations.main())
+        task_id = background.service.submit(session_id="cli-job", text="Arrange a visit", language="en", model="cli:claude", routine_id=1 if path == "routine" else None)
+        background.service.attach_turn(task_id, origin)
+        await until(lambda: background.task(task_id).state == "waiting")
+        await until(lambda: task_id not in background.service._active)
+        assert task_id not in background.service._cli_loops
+
+    [turn] = await agent.turns()
+    [question] = turn["owner_questions"]
+    assert not agent.service._cli_loops
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Wednesday after lunch"})
+    await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
+    assert background.task(question["task_id"]).state == "done", background.task(question["task_id"])
+    assert "Tuesday confirmed" in background.task(question["task_id"]).report_text
+
+
+async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):
+    agent, background = wired
+    origin = agent.history.add(session_id="job", question="Prepare", route="delegate", prefix="", text="",
+                               status="running", conversation_id=agent.service.conversations.main())
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    task = background.task(task_id)
+    result = await agent.service.background_owner_tool(task, "show_page", {"title": "Choose", "html": "<button>Pick</button>"})
+    assert result.ok
+    assert agent.service.pages.store.shown_in([origin])[origin][0]["id"] == result.data["page_id"]
+    for name in ("open", "copy_text", "computer"):
+        assert not (await agent.service.background_owner_tool(task, name, {})).ok
+    assert (await agent.service.background_owner_tool(task, "routine_list", {"member_id": 99})).error == "own_routines_only"
+    await background.service._cancel({"task_id": task_id})
+
+
+@pytest.mark.parametrize("name", ["connect_app", "request_secret", "email_draft", "show_page"])
+@pytest.mark.parametrize("cancel", [False, True])
+@pytest.mark.parametrize("scope", ["private", "room"])
+async def test_real_background_cards_reach_history_and_return_only_the_outcome(wired, tmp_path, name, cancel, scope):
+    agent, background = wired
+    cleanup = None
+    if name == "connect_app":
+        from test_connect_cards import Rig, GoogleFixture
+        connector = Rig(tmp_path, agent.conn, GoogleFixture("background"))
+        await connector.configure()
+        agent.service._cards = connector.cards
+        connector.cards.resume = agent.service.resume_turn
+        cleanup = connector
+        arguments = {"app": "gmail"}
+    elif name == "request_secret":
+        from test_secret_cards import Rig
+        secret = Rig(tmp_path, agent.conn)
+        await secret.connection()
+        agent.service._secret_cards = secret.cards
+        secret.cards.resume = agent.service.resume_turn
+        arguments = {"connection": "Weather"}
+    elif name == "email_draft":
+        from raphael_core.agent.drafts import EmailDrafts
+        agent.service._drafts = EmailDrafts(agent.conn, background.plugins.hub, background.gate)
+        arguments = {"to": "owner@example.test", "subject": "Report", "body": "Prepared."}
+    else:
+        arguments = {"title": "Choose", "html": "<button>Tuesday</button>"}
+    room_id = None
+    if scope == "room":
+        with agent.conn:
+            room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Report room',0)").lastrowid
+    origin = agent.history.add(session_id="job", question="Prepare report", route="delegate", prefix="", text="",
+                               status="running", source="routine", scope=scope, room_id=room_id, thread_id=room_id,
+                               conversation_id=agent.service.conversations.main() if scope == "private" else None)
+    background.client.replies = [turn("Your card is ready.", [call(name, arguments, "actual-card")])]
+    task_id = background.submit()
+    background.service.attach_turn(task_id, origin)
+    await until(lambda: background.task(task_id).state == "waiting")
+    [view] = agent.service._turn_views([agent.history.get(origin)])
+    assert view[{"connect_app": "connectors", "request_secret": "secrets", "email_draft": "drafts", "show_page": "pages"}[name]]
+    [question] = view["owner_questions"]
+    background.client.replies = [report("Owner cancelled." if cancel else "Owner finished.")]
+    if cancel:
+        await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": None})
+    elif name == "connect_app":
+        await connector.connect(connector.cards.store.get(question["card_id"]))
+    elif name == "request_secret":
+        await secret.router.call("integrations.card_save", {"id": question["card_id"], "value": "synthetic-secret-value"})
+    elif name == "email_draft":
+        draft = agent.service._drafts.store.get(question["card_id"])
+        agent.service._drafts.store.claim_send(draft.id, draft.digest)
+        agent.service._drafts.store.finish(draft.id, draft.digest, ok=True)
+        agent.service.sync_owner_cards()
+    else:
+        await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
+    await until(lambda: background.task(task_id).state == "done")
+    content = background.client.chat_calls[-1]["messages"][-1]["content"]
+    assert "synthetic-secret-value" not in content
+    assert ("cancelled" if cancel else {"connect_app": "connected", "request_secret": "saved", "email_draft": "sent", "show_page": "Tuesday"}[name]) in content
+    if name == "show_page":
+        assert question["card_id"] in content  # The resumed task can update the page it just showed.
+    if cleanup:
+        await cleanup.cards.aclose()
+
+
+async def test_room_draft_revisions_stay_in_their_room(wired):
+    from raphael_core.agent.drafts import EmailDrafts
+    agent, background = wired
+    agent.service._drafts = EmailDrafts(agent.conn, background.plugins.hub, background.gate)
+    tasks = []
+    for name in ("Research", "Scheduling"):
+        with agent.conn:
+            room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES (?,0)", (name,)).lastrowid
+        origin = agent.history.add(session_id=name, question="Draft a report", route="delegate", prefix="", text="",
+            status="running", scope="room", room_id=room_id, thread_id=room_id)
+        task_id = background.service._store.create(session_id=name, text="Draft a report", language="en")
+        background.service.attach_turn(task_id, origin)
+        tasks.append(background.task(task_id))
+    arguments = {"to": "owner@example.test", "subject": "Research report", "body": "Prepared."}
+    first = await agent.service.background_owner_tool(tasks[0], "email_draft", arguments)
+    second = await agent.service.background_owner_tool(tasks[1], "email_draft", {**arguments, "subject": "Scheduling report", "revise": True})
+    first_id, second_id = first.data["owner_card"]["id"], second.data["owner_card"]["id"]
+    assert first_id != second_id
+    revised = await agent.service.background_owner_tool(tasks[0], "email_draft", {**arguments, "subject": "Revised research", "revise": True})
+    assert revised.data["owner_card"]["id"] == first_id
+    assert agent.service._drafts.store.get(second_id).subject == "Scheduling report"
+    assert agent.service._drafts.store.get(first_id).turn_id == tasks[0].turn_id
+    assert agent.service._drafts.store.open_in_chat(agent.service._drafts.store.get(first_id).holder_id, None) is None

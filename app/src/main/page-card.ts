@@ -86,7 +86,7 @@ export interface PagesHost {
   carry(from: Element, to: Element): () => void;
 }
 
-export function mountPages(thread: HTMLElement, o: { send(text: string): void }): PagesHost {
+export function mountPages(thread: HTMLElement, o: { send(text: string): void; answer?(pageId: string, text: string): boolean }): PagesHost {
   const frames = new Map<string, Live>();
   let lastSend = 0, asking = false;
   hearInput();
@@ -183,7 +183,7 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
     const now = Date.now();
     if (now - lastSend < SEND_GAP_MS) return;
     const words = text.trim();
-    whenPressed(live, "page.askSend", words, () => { lastSend = Date.now(); o.send(words); });
+    whenPressed(live, "page.askSend", words, () => { lastSend = Date.now(); if (!o.answer?.(live.id, words)) o.send(words); });
   }
 
   function openLink(live: Live, url: unknown): void {

@@ -12,7 +12,7 @@ import { clausesHTML } from "./connector-card";
 import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { connectionMarkHTML } from "./secret-card";
-import type { AgentTurn, PermissionCard } from "./types";
+import type { AgentTurn, OwnerQuestion, PermissionCard } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
@@ -85,3 +85,26 @@ export function permissionCardHTML(card: PermissionCard, answerable = true): str
 export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true, settled = false): string {
   return (turn.permissions ?? []).filter((card) => waitsForYes(card) !== settled).map((card) => permissionCardHTML(card, card.source === "run" || answerable(card.id))).join("");
 }
+
+/** Owner questions share the conversation card, with choices instead of permission controls. */
+export function ownerQuestionHTML(question: OwnerQuestion): string {
+  const waiting = question.state === "asked";
+  const title = question.kind === "show_page" ? t("ownerQuestion.page") : t("ownerQuestion.title");
+  const text = waiting ? question.question : question.state === "cancelled" ? t("ownerQuestion.cancelled") : question.result?.answer || t("ownerQuestion.answered");
+  const id = esc(question.id);
+  return `<div class="connector-card permission-card owner-question${waiting ? " has-form" : ""}" data-owner-question="${id}" data-owner-page="${esc(question.kind === "show_page" ? question.card_id : "")}" data-card-state="${question.state}" role="group" aria-label="${esc(title)}">` +
+    `<span class="mono md" aria-hidden="true">${ico("reply")}</span><div class="cc-meta"><div class="cc-name">${esc(title)}</div>` +
+    `<div class="cc-state cc-ask" aria-live="polite"><span>${esc(text)}</span></div>` +
+    (!waiting ? `<div class="cc-state cc-hint"><span>${esc(question.question)}</span></div>` : "") + `</div>` +
+    (waiting ? `<div class="owner-question-form">` +
+      (question.kind === "show_page" ? `<div class="cc-actions">${btn(esc(t("desktop.done")), "sm pri", ` data-owner-option="${esc(t("desktop.done"))}"`)}</div>` : "") +
+      (question.options.length ? `<div class="cc-actions">${question.options.map(option => btn(esc(option), "sm", ` data-owner-option="${esc(option)}"`)).join("")}</div>` : "") +
+      (question.free_text ? `<label for="owner-answer-${id}">${esc(t("ownerQuestion.answer"))}</label><textarea class="mb-fin mb-ta" data-owner-answer-input="${id}" id="owner-answer-${id}" rows="2" maxlength="4000" placeholder="${esc(t("ownerQuestion.answer"))}"></textarea>` : "") +
+      `<div class="cc-actions">${btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"')}` +
+      (question.free_text ? btn(esc(t("ownerQuestion.submit")), "sm pri", ' data-owner-answer="text" disabled') : "") + `</div><div class="cc-state" role="alert" hidden></div></div>` : "") + `</div>`;
+}
+
+export const ownerQuestionsHTML = (turn: AgentTurn): string => (turn.owner_questions ?? []).map(question =>
+  question.kind === "ask_owner" || question.kind === "show_page" ? ownerQuestionHTML(question) :
+    question.state === "asked" ? `<div class="cc-actions" data-owner-question="${esc(question.id)}">` +
+      btn(esc(t("common.cancel")), "sm", ' data-owner-answer="cancel"') + `<div role="alert" hidden></div></div>` : "").join("");

@@ -1,4 +1,10 @@
 {
+  "ownerQuestionCard": {
+    "id": "owner-choice", "task_id": 940, "turn_id": 940, "member_id": 1,
+    "kind": "ask_owner", "card_id": "", "question": "整理完成了。你希望哪一天寄出這份報告？",
+    "options": ["星期一", "星期二", "星期三", "星期四"], "free_text": true,
+    "state": "asked", "result": null
+  },
   "nativePage": "<style>body{margin:16px}.tall{height:520px;border:1px solid var(--line);border-radius:12px;display:grid;place-items:center;color:var(--muted)}button{font:inherit;padding:8px 14px}</style>\n<h1>Trail shoe</h1><div class=\"tall\">Photo</div>\n<p><button id=\"add\">Add one</button> <b id=\"count\">0</b></p>\n<p><button id=\"ask\">Ask about it</button> <button id=\"later\">Ask later</button></p>\n<p hidden><i id=\"ready\">1</i><i id=\"origin\"></i><i id=\"parent\"></i><i id=\"network\">waiting</i><i id=\"helper\"></i><i id=\"loaded\"></i></p>\n<script>\nconst set = (id, text) => { document.getElementById(id).textContent = text; };\nset(\"origin\", String(self.origin));\nset(\"helper\", typeof window.raphael);\nset(\"loaded\", String(Math.random()));\ntry { set(\"parent\", parent.document ? \"reached\" : \"isolated\"); } catch { set(\"parent\", \"isolated\"); }\nfetch(\"http://127.0.0.1:9/\").then(() => set(\"network\", \"reached\"), () => set(\"network\", \"blocked\"));\nlet count = 0;\ndocument.getElementById(\"add\").onclick = () => set(\"count\", String(++count));\ndocument.getElementById(\"ask\").onclick = () => raphael.send(\"Pressed in the page\");\ndocument.getElementById(\"later\").onclick = () => setTimeout(() => raphael.send(\"Sent long after the press\"), 6500);\nfor (const wait of [0, 300, 1200]) setTimeout(() => { window.focus(); document.getElementById(\"add\").focus(); raphael.send(\"Sent by the page alone\"); }, wait);\n</script>",
   "desktop": null,
   "richContent": {

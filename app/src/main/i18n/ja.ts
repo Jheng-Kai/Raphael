@@ -5,6 +5,13 @@ import type { Messages } from './zh-TW';
 
 export const ja = {
   ...missingJa,
+  "ownerQuestion.title": "回答が必要です",
+  "ownerQuestion.page": "ページの操作後に続ける",
+  "ownerQuestion.answer": "回答を入力",
+  "ownerQuestion.submit": "回答を送信",
+  "ownerQuestion.answered": "回答済み",
+  "ownerQuestion.cancelled": "キャンセル済み",
+  "ownerQuestion.waiting": "回答待ち · {p0} 件",
   "desktop.open": "ライブデスクトップ",
   "desktop.expand": "拡大",
   "desktop.done": "完了しました",

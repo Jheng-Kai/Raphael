@@ -89,6 +89,7 @@ class RoomsService:
         self._notify = notify
         self._now = now_ms
         self._history = AgentHistory(conn, now_ms)
+        self.turn_view = None
         self._settings = SettingsStore(conn)
         self._exchanges = RoomExchanges(self, decision)
         members.rooms = self
@@ -418,6 +419,8 @@ class RoomsService:
             except RpcError:
                 message["reply_reference"] = {"message_id":message["reply_to"], "unavailable":True}
         if turn and turn.scope == "room" and turn.room_id == message["room_id"] and turn.thread_id == message["thread_id"] and turn.member_id == message["member_id"]:
+            if self.turn_view is not None:
+                message["turn"] = self.turn_view(turn)
             message["text"] = (turn.detail or turn.text) if turn.status != 'running' else ''
             if (trailing := _TRAILING_PASS.fullmatch(message["text"])):
                 message["text"] = trailing.group(1)

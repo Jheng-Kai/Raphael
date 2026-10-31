@@ -333,8 +333,13 @@ async def test_a_consultation_answers_from_what_the_asked_member_knows_and_the_a
     await until(lambda:rig.task(parent).state in ('done','failed'),timeout=10)
     assert rig.task(parent).state=='done', rig.task(parent)
     [child]=rig.service._store.handoffs(source.id)
-    assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
-    assert 'history_search' in seen['tools'] and 'memory_read' not in seen['tools']
+    if brain == 'cli':  # this variant works in a room, where only shared notes are readable
+        assert 'PRIVATE-CHAT' not in seen['asked'] and 'PRIVATE-NOTE' not in seen['asked']
+        assert '品牌主色是金色' in seen['asked']
+    else:
+        assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
+    assert ('history_search' in seen['tools']) == (brain == 'api')
+    assert 'memory_read' not in seen['tools']
     # Only the answer reaches the asker: never the asked member's conversation or notes.
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker'] and '好，我記住了' not in seen['asker']
     exchange=AgentHistory(rig.conn).get(child.turn_id)

@@ -829,3 +829,33 @@ messaging, connections-empty and email-draft-edit as affected existing consumers
 Inspect all contact sheets and relevant full-size images. Offline tests cover the
 sanitized TTS event and dictation prerequisite routing; Rust/native acceptance,
 real microphone/audio, provider/login and judge are not authorized by this brief.
+
+## Durable owner questions and background cards (2026-11-01)
+
+The shared permission-card component renders ask_owner with at most four real
+choice buttons, optional text, submit and cancel. Its settled state is persisted
+on the same turn. The existing task summary reports the number waiting for the
+owner. API turns and authenticated CLI MCP transfer their continuation to the
+existing background worker; no model or worker slot is held during the wait.
+Background and routine connect/key/mail/page cards use the existing services
+and components, including in rooms. Page sends answer a waiting page before
+starting any new message. Cancellation is a tool outcome, never an approval.
+Room redraws keep the iframe connected while moving it into the new message, so
+answering a page does not reload it or lose its state. Room draft revisions stay
+inside their room and thread instead of sharing the null private-conversation key.
+
+Selected scenes: owner-question-asked, owner-question-answered,
+owner-question-cancelled, owner-question-background, owner-question-text, owner-question-room;
+Room consumers: owner-card-room-connect, owner-card-room-secret, owner-card-room-mail,
+owner-card-room-page; representative consumers: local-permission-card, page-product,
+chat-connect-gmail, chat-secret-masked, email-draft-edit, member-text, room-text.
+Run both themes at 1120,720,1920x1080. Inspect every sheet and relevant full-size
+card and compare its spacing and controls with the existing permission card.
+
+```powershell
+npm run look -- owner-question-asked owner-question-answered owner-question-cancelled owner-question-background owner-question-text owner-question-room owner-card-room-connect owner-card-room-secret owner-card-room-mail owner-card-room-page local-permission-card page-product chat-connect-gmail chat-secret-masked email-draft-edit member-text room-text --theme both --width 1120,720,1920x1080
+```
+
+Core contracts: core/tests/background/test_owner_cards.py and
+core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
+allowlist test include owner_questions.answer.

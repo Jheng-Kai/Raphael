@@ -215,6 +215,7 @@ class Waiting:
     call_id: str
     tier: Tier
     screening: Screening
+    owner_card: str | None = None
 
 
 class TaskRun:
@@ -254,6 +255,7 @@ class TaskRun:
         diagnostics: Callable[[], dict] | None = None,
         cost_cap: Callable[[], float] | None = None,
         calendar: "Callable[[str, dict], Awaitable[dict]] | None" = None,
+        owner_tool=None,
     ) -> None:
         self.activity = current()
         # The most this task may spend, as the owner's setting says now; None for none.
@@ -266,6 +268,7 @@ class TaskRun:
         self.scope: Callable[[], AbstractContextManager] = nullcontext
         # The app's own calendar (`own_calendar.OwnCalendar.tool`), for this task's speaker.
         self._calendar = calendar
+        self._owner_tool = owner_tool
         self._memory = memory
         self._memory_untrusted = bool(attachments) or any(
             step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
@@ -685,6 +688,19 @@ class TaskRun:
             raise stopped("failed", "computer_permission_required")
         return reply
 
+    def continuation_state(self):
+        return {"declined": sorted(self._declined), "seen_urls": self.seen_urls.snapshot(),
+                "untrusted": self._memory_untrusted, "handoff_receipts": self.handoff_receipts,
+                "conversation_cost": getattr(self, "conversation_cost", 0.0)}
+
+    def restore_continuation(self, state):
+        self._declined.update(state.get("declined", []))
+        for url in state.get("seen_urls", []):
+            self.seen_urls.add(url)
+        self._memory_untrusted = self._memory_untrusted or state.get("untrusted", False)
+        self.handoff_receipts = state.get("handoff_receipts", [])
+        self.conversation_cost = state.get("conversation_cost", 0.0)
+
     async def _screen(self, ref: ToolRef, arguments: dict) -> Screening:
         """What the owner's safety rules say of a call: PASS for a tool its server says only reads,
         and for Raphael's own except `create_member` and calendar writes. The judge is paid, so the
@@ -911,7 +927,17 @@ class TaskRun:
                     raise stopped(WAITING)
                 gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
                 return _refused(), "blocked", tier.name, None
-        result = await self._lookup(ref.name, arguments)
+        from ..agent.owner_questions import BACKGROUND_TOOLS
+        from ..agent.harness_tools import ROUTINE_TOOLS
+        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS:
+            result = (await self._owner_tool(ref.name, arguments) if self._owner_tool else
+                      ToolResult(ref.name, False, None, "unavailable"))
+            if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
+                self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier or Tier.T0, PASS,
+                                       result.data["owner_wait"])
+                raise stopped(WAITING)
+        else:
+            result = await self._lookup(ref.name, arguments)
         self._memory_untrusted = self._memory_untrusted or result.untrusted
         if result.error == "url_not_seen":
             outcome = "blocked"

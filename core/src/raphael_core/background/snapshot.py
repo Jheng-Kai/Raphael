@@ -50,6 +50,8 @@ from ..agent.speaker import RAPHAEL, Speaker
 from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
 from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
+from ..agent.owner_questions import BACKGROUND_TOOLS
+from ..agent.harness_tools import ROUTINE_TOOLS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import (
     PICK_MAX,
@@ -271,7 +273,8 @@ def take_snapshot(
             definitions.append(worker_definition(name))
     snapshot = Snapshot(refs, definitions)
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
-    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS)
+    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS,
+                  *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
     for name in everywhere:
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)
         definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})

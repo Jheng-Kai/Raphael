@@ -379,6 +379,21 @@ describe("what a turn did", () => {
     expect(html).toContain('<button type="button" class="btn sm stop" data-act="stop" data-task="41">停止</button>');
   });
 
+  test("the visible task controls show how many owner answers are waiting", () => {
+    const html = turnHTML(turn(3, { source: "app", route: "delegate", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
+    const controls = html.match(/<div class="turn-event task-actions">.*?<\/div>/)?.[0];
+    expect(controls).toContain("等待你回答 · 1 項");
+    expect(controls).toContain('data-act="stop"');
+  });
+
+  test("a background turn that waits for the owner does not keep thinking or ticking", () => {
+    const html = turnHTML(turn(3, { source: "routine", route: "delegate", status: "running", text: "", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
+    expect(html).toContain("等待你回答 · 1 項");
+    expect(html).not.toContain('data-live="true"');
+    expect(html).not.toContain("data-work-start");
+    expect(html).not.toContain('class="think"');
+  });
+
   test("a step that arrives is the only one that comes in moving", () => {
     const state = emptyTimelineState();
     const before = turn(3, { task: running(), steps: [step()] });
