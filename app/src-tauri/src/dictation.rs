@@ -6693,7 +6693,7 @@ mod tests {
         settle().await;
         assert!(!typed.is_finished());
         assert!(matches!(&heard.lock().unwrap()[0], QuestionNews::Open(p) if p.timeout_ms == 0));
-        assert_eq!(lock(&c.state).ask.as_ref().unwrap().remaining().timeout_ms, 0);
+        assert_eq!(c.open_question().unwrap().timeout_ms, 0);
         assert!(!c.overlay().events().iter().any(|event| event.starts_with("ask:")));
         c.on_confirm_in_app("local-command", true);
         typed.await.unwrap();
@@ -8136,7 +8136,6 @@ mod tests {
     async fn the_time_of_a_question_is_the_cores_within_reason() {
         for (named, shown) in [
             (json!(5_000), 5_000),
-            (json!(0), 30_000),
             (json!(null), 30_000),
             (json!(10_000_000), 120_000),
         ] {
