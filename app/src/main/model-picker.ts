@@ -451,7 +451,7 @@ export interface ChooserSource {
 }
 
 const baseRef = (ref: string): string => ref.split("?effort=")[0];
-const effortOf = (ref: string, models: readonly CatalogModel[]): string => ref.split("?effort=")[1] ??
+export const effortOf = (ref: string, models: readonly CatalogModel[]): string => ref.split("?effort=")[1] ??
   models.flatMap((model) => Object.entries(model.effort_models ?? {})).find(([, value]) => value === ref)?.[0] ?? "";
 
 /** A chosen ref as a model and an effort, for a page that saves them apart (快速提問): an effort's own model id gives its model. */
@@ -465,6 +465,8 @@ const shortName = (id: string): string => {
   const raw = baseRef(id).replace(/^@[^:]+:/, "").replace(/^cli:[^:]+:/, "");
   return raw.slice(raw.lastIndexOf("/") + 1) || id;
 };
+
+export function pickerModelsFor(o: ModelPickerLook): CatalogModel[] { return pickerModels(o); }
 
 function pickerModels(o: ModelPickerLook): CatalogModel[] {
   const models = o.catalog ? modelsFor(o.catalog, o.role).filter((m) =>
@@ -506,6 +508,8 @@ export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[
   return priced ? priceText(priced, role) : "";
 }
 
+export const concreteModel = (o: ModelPickerLook, models: CatalogModel[]): string => concreteCurrent(o, models);
+
 function concreteCurrent(o: ModelPickerLook, models = pickerModels(o)): string {
   const ref = baseRef(o.current);
   return /^cli:[^:]+$/.test(ref) ? models.find((m) => connectionId(m) === ref && m.is_default)?.id ?? ref :
@@ -532,6 +536,8 @@ function buttonFace(o: ModelPickerLook): { inner: string; label: string } {
     label: `${o.label}: ${name}${source ? ` · ${source}` : ""}` };
 }
 
+export const buttonFaceHTML = buttonFace;
+
 function buttonHTML(o: ModelPickerLook): string {
   const face = buttonFace(o);
   return `<button type="button" class="sel mp-trigger" aria-haspopup="dialog" aria-expanded="false" aria-label="${esc(face.label)}"` +
@@ -550,7 +556,7 @@ export function mountModelPicker(container: HTMLElement, options: ModelPickerOpt
 
 const effortOrder: readonly string[] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
 /** Display known efforts from shallow to deep, retaining unknown efforts in catalog order. */
-const orderedEfforts = (efforts: readonly string[]): string[] => {
+export const orderedEfforts = (efforts: readonly string[]): string[] => {
   const rank = (effort: string): number => {
     const index = effortOrder.indexOf(effort);
     return index < 0 ? effortOrder.length : index;
@@ -558,15 +564,46 @@ const orderedEfforts = (efforts: readonly string[]): string[] => {
   return [...efforts].sort((a, b) => rank(a) - rank(b));
 };
 
-const effortText = (effort: string): string => {
+export const effortText = (effort: string): string => {
   const keys = { none: "chooser.none", minimal: "chooser.minimal", low: "chooser.low", medium: "chooser.medium", high: "chooser.high", xhigh: "chooser.xhigh", max: "chooser.max" } as const;
   return effort in keys ? t(keys[effort as keyof typeof keys]) : effort;
 };
 
+/** A chosen model at a chosen depth, as the core reads it. */
+export const modelRefWith = (model: CatalogModel, effort: string): string =>
+  model.effort_models?.[effort] ?? (effort ? `${model.id}?effort=${effort}` : model.id);
+
+const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (count - 1)) * 100 : 0);
+
+/** The depth of thought as something to drag; each stop is also a button, for a press or for keys. */
+export function effortSliderHTML(levels: readonly string[], value: string): string {
+  const at = Math.max(0, levels.indexOf(value));
+  return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
+    (levels.length > 1 ? `<input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` : "") +
+    `<div class="mc-stops" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level, index) => `<button type="button" class="mc-stop" data-effort="${esc(level)}" aria-pressed="${index === at}">${esc(effortText(level))}</button>`).join("")}</div></div>`;
+}
+
+/** The slider where the pointer has it, and the level that is. */
+export function moveEffortSlider(range: HTMLInputElement): string {
+  const levels = (range.dataset.levels ?? "").split(","), at = Number(range.value), level = levels[at] ?? "";
+  range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
+  range.setAttribute("aria-valuetext", effortText(level));
+  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort]") ?? []) stop.setAttribute("aria-pressed", String(stop.dataset.effort === level));
+  return level;
+}
+
 /** Radio rows are shared by the dialog and the catalog's pure rendering tests. */
 /** A source's mark: its brand's, or for the models on this PC (and a custom connection) a plain one, so every row lines up. */
+export const sourceMarkHTML = (source: ChooserSource): string => sourceMark(source);
+
 const sourceMark = (source: ChooserSource): string =>
   providerMark(source.kind, true) || `<span class="mono md" aria-hidden="true">${ico(source.id === "local-speech" ? "mic" : "plug")}</span>`;
+
+/** What a source's row says under its name: whether it is ready, or how many models it has. */
+export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {
+  return source.id.startsWith("cli:") ? !o.clis ? t("common.loading") : t(source.cli?.disconnected ? "brains.disconnected" : !source.cli?.installed ? "brains.missing" : source.cli.available ? "brains.ready" : "brains.signedOut") :
+    t(source.group === "local" ? "chooser.localCount" : "chooser.modelCount", { n: source.id === "local-speech" && Array.isArray(o.local?.models) ? o.local.models.length : source.models.length });
+}
 
 export function listHTML(list: PickerList, selected = list.current, models: readonly CatalogModel[] = [], stars = false): string {
   return list.rows.map(({ model, usable, lead }) => {
@@ -659,6 +696,8 @@ class MountedPicker implements ModelPicker {
     this.dialog.el.addEventListener("input", (event) => {
       const input = event.target as HTMLInputElement;
       if (input.matches(".mc-search")) { this.query = input.value; this.paintRows(); }
+      // Not a repaint: the slider is under the pointer.
+      if (input.matches(".mc-range")) { this.effort = moveEffortSlider(input); this.paintFooter(); }
     });
     this.dialog.el.addEventListener("keydown", (event) => {
       const row = (event.target as HTMLElement).closest<HTMLButtonElement>(".mc-row, .lm-main");
@@ -685,8 +724,7 @@ class MountedPicker implements ModelPicker {
     const rail = (["subscriptions", "api", "local"] as const).map((group) => {
       const items = sources.filter((source) => source.group === group);
       return !items.length ? "" : `<section><h3>${esc(t(groupKeys[group]))}</h3>` + items.map((source) => {
-        const status = source.id.startsWith("cli:") ? !this.o.clis ? t("common.loading") : t(source.cli?.disconnected ? "brains.disconnected" : !source.cli?.installed ? "brains.missing" : source.cli.available ? "brains.ready" : "brains.signedOut") :
-          t(source.group === "local" ? "chooser.localCount" : "chooser.modelCount", { n: source.id === "local-speech" && Array.isArray(this.o.local?.models) ? this.o.local.models.length : source.models.length });
+        const status = sourceStatus(source, this.o);
         return `<button type="button" class="btn mc-source" data-source="${esc(source.id)}" aria-pressed="${this.source === source.id}">${sourceMark(source)}<span><strong>${esc(source.name)}</strong><small>${esc(status)}</small></span>${source.id === (this.o.local?.active ? "local-speech" : savedSource) ? '<i class="mc-current" aria-hidden="true"></i>' : ""}</button>`;
       }).join("") + `</section>`;
     }).join("");
@@ -745,7 +783,7 @@ class MountedPicker implements ModelPicker {
     const levels = this.inherits() || source.models.some((m) => m.id === model?.id) ? orderedEfforts(supported) : [];
     if (!supported.includes(this.effort)) this.effort = (this.o.defaultEffort && supported.includes(this.o.defaultEffort) ? this.o.defaultEffort : model?.default_effort) ?? supported[0] ?? "";
     const efforts = this.dialog!.el.querySelector(".mc-effort")!;
-    efforts.innerHTML = levels.length ? `<span>${esc(t("chooser.effort"))}</span><div class="mc-segments" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level) => `<button type="button" class="btn sm" data-effort="${esc(level)}" aria-pressed="${this.effort === level}">${esc(effortText(level))}</button>`).join("")}</div>` : "";
+    efforts.innerHTML = levels.length ? effortSliderHTML(levels, this.effort) : "";
     this.paintFooter();
   }
   private paintFooter(): void {

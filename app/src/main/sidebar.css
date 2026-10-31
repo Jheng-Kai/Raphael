@@ -20,13 +20,13 @@
 .side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-time { opacity: 1; }
 .side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-t:has(time) { padding-right: 40px; }
 /* Only a pinned member leaves the rows: a larger face centered above its name, side by side when there are several. */
-.side .mb-pinned { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); padding: 0 0 var(--sp-2); }
-.side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.side .mb-pinned { display: grid; grid-template-columns: minmax(0, 136px); justify-content: center; gap: var(--sp-1); padding: 0 0 var(--sp-2); }
+.side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 120px)); }
 .side .mb-pinned[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.side .mb-item .nav.mb-tile.mb-row { position: relative; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); min-height: 0; padding: var(--sp-3) var(--sp-2); text-align: center; }
-.side .nav.mb-tile.mb-row > .av { --av: 48px !important; }
-.side .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av { --av: clamp(64px, 5vw, 96px) !important; }
-.side .mb-pinned[data-count="1"] .mb-item .nav.mb-tile.mb-row { padding-bottom: var(--sp-5); }
+.side .mb-item .nav.mb-tile.mb-row { position: relative; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; min-height: 0; padding: var(--sp-3) var(--sp-2) var(--sp-2); border-radius: var(--r-lg); text-align: center; }
+.side .nav.mb-tile.mb-row > .av { --av: 48px !important; margin-bottom: var(--sp-1); }
+.side .mb-pinned[data-count="1"] .nav.mb-tile.mb-row > .av { --av: 72px !important; }
+.side .nav.mb-tile small { display: block; max-width: 100%; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .side .nav.mb-tile b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); font-weight: 600; }
 .side .mb-pinned:not([data-count="1"]) .nav.mb-tile b { font-size: var(--fs-sm); }
 .side .nav.mb-tile[aria-current="true"] b { color: var(--accent-text); }

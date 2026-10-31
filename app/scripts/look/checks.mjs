@@ -445,6 +445,7 @@ export function checkRendered(name, context = {}) {
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
+    require(document.querySelector('.cb-menu [aria-checked="true"]'), "the menu shows the choice in place");
     require(window.__look.data.members.find(member => member.id === 1).model === saved[0].params.model, "the member retains its own brain");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
@@ -1620,6 +1621,23 @@ export function checkRendered(name, context = {}) {
     require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
     require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
     require(document.querySelector(".pg-body").hidden, "no empty box is left");
+    return { check: name };
+  }
+  if (name === "composer-model-menu" || name === "composer-model-depth") {
+    const menu = document.querySelector(".cb-menu"), box = menu.getBoundingClientRect(), composer = document.querySelector(".composer").getBoundingClientRect();
+    require(!document.querySelector(".model-chooser"), "no separate dialog");
+    require(box.bottom <= composer.top + 1 || box.top >= composer.bottom - 1 || box.bottom <= innerHeight, "the menu opens from the composer, inside the window");
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the menu fits the window");
+    require(menu.querySelectorAll(".cb-source").length >= 3, "it lists every source");
+    const range = menu.querySelector(".mc-range");
+    require(range && menu.querySelectorAll(".mc-stop").length >= 2, "the depth of thought is a slider with named stops");
+    if (name === "composer-model-depth") {
+      const last = [...menu.querySelectorAll(".mc-stop")].at(-1);
+      require(Number(range.value) === Number(range.max), "the slider stands at the chosen stop");
+      const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string").at(-1);
+      require(saved.params.model.includes(last.dataset.effort) , "the depth is saved with the model");
+      require(document.querySelector(".composer .cmp-model .cb-depth")?.textContent === last.textContent, "the button says the depth");
+    }
     return { check: name };
   }
   if (name === "slime-states") {

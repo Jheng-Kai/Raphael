@@ -31,46 +31,42 @@ const SASH = "M 11 68 Q 50 82 89 68 L 91 75 Q 50 91 9 75 Z";
 
 /** Each character: its colour, and the marks on the same body. A mark is never hair unless it is all there is to tell them by. */
 const CHARACTERS = {
-  rimuru: { color: "#5AB4E8" },
-  shion: { color: COLORS.lavender, marks: fill(ONE_HORN, "#363140") },
-  diablo: {
-    color: COLORS.charcoal,
+  rimuru: { name: "slime.rimuru", color: "#5AB4E8" },
+  shion: { name: "slime.shion", color: COLORS.lavender, marks: fill(ONE_HORN, "#363140") },
+  diablo: { name: "slime.diablo", color: COLORS.charcoal,
     marks: `<path d="${COLLAR} M 48 73 L 52 73 L 53 77 L 51 83 L 49 83 L 47 77 Z" fill="#FFF6E9" fill-rule="evenodd"/>` +
       fill("M 60 31 L 64 32 L 69 42 L 65 40 Z", "#EE5A64") + fill("M 67 34 L 71 36 L 75 45 L 71 43 Z", "#F5CE55"),
   },
-  benimaru: { color: "#C8413F", marks: fill(TWO_HORNS, "#2B2430") },
-  shuna: { color: "#E58CB4", marks: fill(SMALL_HORNS, "#FBEFE3") },
-  souei: { color: "#2F4A80", marks: fill(ONE_HORN, "#1B2238") + fill(SASH, "#F2F2F5") },
-  hakurou: { color: "#8E949C", marks: fill("M 50 66 C 44 63 35 64 29 72 C 37 73 45 72 50 69 Z M 50 66 C 56 63 65 64 71 72 C 63 73 55 72 50 69 Z", "#FFFFFF") },
-  gobta: {
-    color: "#6BAA4C",
+  benimaru: { name: "slime.benimaru", color: "#C8413F", marks: fill(TWO_HORNS, "#2B2430") },
+  shuna: { name: "slime.shuna", color: "#E58CB4", marks: fill(SMALL_HORNS, "#FBEFE3") },
+  souei: { name: "slime.souei", color: "#2F4A80", marks: fill(ONE_HORN, "#1B2238") + fill(SASH, "#F2F2F5") },
+  hakurou: { name: "slime.hakurou", color: "#8E949C", marks: fill("M 50 66 C 44 63 35 64 29 72 C 37 73 45 72 50 69 Z M 50 66 C 56 63 65 64 71 72 C 63 73 55 72 50 69 Z", "#FFFFFF") },
+  gobta: { name: "slime.gobta", color: "#6BAA4C",
     marks: fill("M 28 37 Q 50 26 72 37 L 72 40 Q 50 30 28 40 Z", "#3A3A44") +
       `<circle cx="39" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/><circle cx="61" cy="33" r="5.5" fill="#D9E6EA" stroke="#3A3A44" stroke-width="2.5"/>`,
   },
-  rigur: { color: COLORS.leaf, marks: fill("M 22 42 C 30 27 68 25 78 42 Q 50 31 22 42 Z", "#A8342F") },
-  rigurd: { color: "#3D7440", marks: fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>` },
-  milim: { color: "#F07F9C", marks: `<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>` },
-  veldora: { color: "#2C4A8C", marks: fill(TWO_HORNS, "#C9D2E3") },
-  ranga: {
-    color: "#56607A",
+  rigur: { name: "slime.rigur", color: COLORS.leaf, marks: fill("M 22 42 C 30 27 68 25 78 42 Q 50 31 22 42 Z", "#A8342F") },
+  rigurd: { name: "slime.rigurd", color: "#3D7440", marks: fill(BOW, "#1E1E24") + `<circle cx="50" cy="72" r="3" fill="#D6A14A"/>` },
+  milim: { name: "slime.milim", color: "#F07F9C", marks: `<path d="M 50 30 C 47 21 53 13 61 15 C 55 17 52 23 54 30 Z" fill="var(--slime-color)"/>` },
+  veldora: { name: "slime.veldora", color: "#2C4A8C", marks: fill(TWO_HORNS, "#C9D2E3") },
+  ranga: { name: "slime.ranga", color: "#56607A",
     back: `<path d="M 19 42 Q 15 25 20 14 Q 32 19 38 32 Z M 62 32 Q 69 19 80 14 Q 85 26 81 42 Z" fill="var(--slime-color)"/>`,
     marks: fill("M 50 30 L 52 35 L 57 35 L 53 38 L 55 43 L 50 40 L 45 43 L 47 38 L 43 35 L 48 35 Z", "#F2C14E"),
   },
-  gabiru: { color: "#6E6A93", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
-  geld: { color: "#A57C4E", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
-  treyni: {
-    color: "#3FA287",
+  gabiru: { name: "slime.gabiru", color: "#6E6A93", marks: fill("M 18 78 Q 24 70 30 78 Q 36 70 42 78 Q 48 70 54 78 Q 60 70 66 78 Q 72 70 78 78 L 76 84 Q 50 90 22 84 Z", "#F2EBDD") },
+  geld: { name: "slime.geld", color: "#A57C4E", marks: fill("M 35 80 C 33 73 34 68 38 64 C 40 69 42 74 43 81 Z M 65 80 C 67 73 66 68 62 64 C 60 69 58 74 57 81 Z", "#FBF3DC") },
+  treyni: { name: "slime.treyni", color: "#3FA287",
     marks: fill("M 48 32 L 48 19 Q 49 17 51 19 L 52 32 Z", "#2E7D4F") + fill("M 50 24 C 35 25 29 18 29 12 C 41 10 49 14 50 24 Z M 50 24 C 51 11 61 8 71 10 C 70 20 61 25 50 24 Z", "#8FD18A"),
   },
-  kurobe: { color: "#6A5A4A", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
-  shizu: { color: "#5C6B8E", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
-  hinata: { color: "#454A66", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
-  guy: { color: "#A8283B", marks: fill(SASH, "#2A1A1E") },
-  testarossa: { color: "#D5D9D6", marks: fill(BOW, "#3FBF94") + `<circle cx="50" cy="72" r="3" fill="#FFFFFF"/>` },
-  ultima: { color: "#A86FB8", marks: fill(BOW, "#2A1A2E") },
-  carrera: { color: "#C9A227", marks: fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E") },
-  ramiris: { color: "#E0B23C", back: `<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>` },
-} as const satisfies Record<string, { color: string; back?: string; marks?: string }>;
+  kurobe: { name: "slime.kurobe", color: "#6A5A4A", marks: fill("M 23 39 Q 50 26 77 39 L 80 45 Q 50 31 20 45 Z", "#EFEFEF") },
+  shizu: { name: "slime.shizu", color: "#5C6B8E", marks: `<ellipse cx="50" cy="35" rx="15" ry="6" fill="#F4F4F7"/>` + `<path d="M 39 35 Q 44 31 50 35 T 61 35" fill="none" stroke="#C94250" stroke-width="2.5" stroke-linecap="round"/>` },
+  hinata: { name: "slime.hinata", color: "#454A66", marks: fill(COLLAR, "#F4F4F7") + fill("M 48 72 H 52 V 84 H 48 Z", "#D6A14A") },
+  guy: { name: "slime.guy", color: "#A8283B", marks: fill(SASH, "#2A1A1E") },
+  testarossa: { name: "slime.testarossa", color: "#D5D9D6", marks: fill(BOW, "#3FBF94") + `<circle cx="50" cy="72" r="3" fill="#FFFFFF"/>` },
+  ultima: { name: "slime.ultima", color: "#A86FB8", marks: fill(BOW, "#2A1A2E") },
+  carrera: { name: "slime.carrera", color: "#C9A227", marks: fill("M 50 66 L 45 71 L 48 85 H 52 L 55 71 Z", "#B3262E") },
+  ramiris: { name: "slime.ramiris", color: "#E0B23C", back: `<path d="M 16 54 C 2 48 -2 28 6 16 C 16 20 24 34 27 44 Z M 84 54 C 98 48 102 28 94 16 C 84 20 76 34 73 44 Z" fill="#F6C7DC"/>` },
+} as const satisfies Record<string, { name: string; color: string; back?: string; marks?: string }>;
 export type SlimeCharacter = keyof typeof CHARACTERS;
 
 const CHARACTER_IDS = Object.keys(CHARACTERS) as SlimeCharacter[];
@@ -210,7 +206,7 @@ export function slimePickerHTML(avatar: string | null | undefined, esc: (text: s
   const current = parseSlime(avatar);
   const who = current && "character" in current ? current.character : null, color = current && "color" in current ? current.color : null;
   return `<div class="mb-presets mb-slime-characters" role="group">${CHARACTER_IDS.map(id => {
-    const name = esc(t(`slime.${id}` as "slime.rimuru"));
+    const name = esc(t(CHARACTERS[id].name));
     return `<button type="button" role="menuitem" tabindex="-1" class="mb-preset mb-preset-slime" data-slime-character="${id}" aria-pressed="${id === who}" aria-label="${name}" title="${name}">${slimeSVG({ character: id }, { now: OFF_SEASON })}</button>`;
   }).join("")}</div>` +
     `<div class="mb-slime-colors" role="group">${COLOR_IDS.map((id, index) =>

@@ -113,7 +113,7 @@ export const zhTW = {
   "chooser.use": "使用這個模型",
   "chooser.downloadUse": "下載並使用",
   "chooser.selection": "選擇：",
-  "chooser.effort": "思考深度",
+  "chooser.effort": "思考程度",
   "conversations.quick": "快速提問",
   "conversations.heading": "對話",
   "conversations.clear": "清除紀錄",
