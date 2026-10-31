@@ -31,7 +31,9 @@ async def rig(tmp_path, conn):
 
     async def call(name, arguments=None, *, turn=42, private=True, task_id=None):
         with vm_scope(("turn", 1, 11), turn_id=turn, private=private):
-            return await gate.call_plugin(snapshot.refs["computer__" + name].key, arguments or {}, task_id=task_id)
+            result = await gate.call_plugin(snapshot.refs["computer__" + name].key, arguments or {}, task_id=task_id)
+            snapshot.refresh_computer(hub, 1)
+            return result
 
     try:
         yield vm, viewer, call, snapshot
@@ -73,7 +75,7 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         assert not vm.held
         with vm_scope(("turn", 1, 11), turn_id=42, private=True, task=asyncio.current_task()):
             work.task = asyncio.current_task()
-            assert (await call("click")).kind == "desktop_check_required"
+            assert (await call("vm_exec", {"command": "true"})).kind == "desktop_check_required"
             assert (await call("get_desktop_state")).ok
             assert (await call("click")).ok
     finally:
@@ -101,7 +103,7 @@ async def test_disconnect_timeout_and_stop_never_resume(rig, end):
     elif end == "timeout":
         result = await task
         assert not result.ok and result.kind == "takeover_expired"
-        assert (await call("click")).kind in ("owner_holds_control", "task_stopped")
+        assert (await call("vm_exec", {"command": "true"})).kind in ("owner_holds_control", "task_stopped")
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
     assert vm.work.views(1, 11)[0]["state"] in ("stopped", "expired")

@@ -71,6 +71,24 @@ class FakeHost:
         return outcome
 
 
+async def test_tool_result_can_replace_stale_definitions_and_schemas():
+    updated = copy.deepcopy(TOOLS[:1])
+    updated[0]["function"]["parameters"]["required"] = ["topic"]
+    seen = []
+
+    class Host(FakeHost):
+        async def chat(self, messages, tools):
+            seen.append(copy.deepcopy(list(tools)))
+            return await super().chat(messages, tools)
+
+        async def tool(self, call_id, name, arguments):
+            return ToolOutcome(True, tools=updated, replace_tools=True)
+
+    host = Host([Turn("Look.", [ask("Notes__look", {})]), Turn("Done.")])
+    assert (await run_task(host, system="", user="", tools=TOOLS)).status == "done"
+    assert seen[1] == updated
+
+
 async def run(host, **kwargs):
     kwargs.setdefault("system", "SYSTEM")
     kwargs.setdefault("user", "USER")

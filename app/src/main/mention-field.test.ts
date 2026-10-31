@@ -59,6 +59,19 @@ test("Backspace after a chip deletes all of it, Delete before it likewise, and e
   expect(input.value).toBe(" go");
 });
 
+test("a full-width mention keeps the mirror's words and length and deletes as one chip", () => {
+  const text = "see ＠小森";
+  typeText(text);
+  expect(chips()).toEqual(["＠小森"]);
+  expect(mirror.textContent!.replace("​", "")).toBe(text);
+  expect(input.value).toBe(text);
+  expect(press("Backspace").defaultPrevented).toBe(true);
+  expect(input.value).toBe("see ");
+  typeText("＠Notion go", 0);
+  expect(press("Delete").defaultPrevented).toBe(true);
+  expect(input.value).toBe(" go");
+});
+
 test("Backspace beside a space or inside plain words is the field's own", () => {
   typeText("@小森 ");
   expect(press("Backspace").defaultPrevented).toBe(false);

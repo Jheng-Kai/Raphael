@@ -90,7 +90,7 @@ DEFAULTS: dict[str, Any] = {
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
     "computer_vm_mode": "shared",
-    "computer_vm_idle_minutes": 480,
+    "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
     "worker_cost_cap_usd": 0.20,
     # The models the user starred in the pickers, per role (the page's names for them), in the order

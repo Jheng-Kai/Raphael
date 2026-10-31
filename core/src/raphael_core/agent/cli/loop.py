@@ -17,6 +17,7 @@ from ..mcp_server import RaphaelMcp
 from ...brain.textnorm import public_line
 from ..narration import PUBLIC_PROGRESS_RULES
 from ..policy import CONFIRM_TIMEOUT_S
+from ..persona import phrase
 from .discovery import NAMES, brain_ref, brain_effort
 from .drivers import Driver
 from .process import secure_directory
@@ -171,8 +172,8 @@ class CliLoop:
             self._progress()
             if name == "approve":
                 decision = await self._permission(args)
-                if decision == "deny":
-                    answer = {"behavior": "deny", "message": "The owner did not approve this action."}
+                if decision in ("deny", "expired"):
+                    answer = {"behavior": "deny", "message": phrase(self.language, "expired") if decision == "expired" else "The owner did not approve this action."}
                 else:
                     answer = {"behavior": "allow", "updatedInput": args.get("input", args.get("tool_input", {}))}
                     if decision == "always" and isinstance(args.get("tool_name"), str):
@@ -189,7 +190,8 @@ class CliLoop:
                     result.instruction = (result.instruction or result.content or failure.reason) + "\n" + REPEAT_NOTE
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
-            return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok), blocks=result.blocks)
+            return ToolOutcome(result.ok, result.kind, wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok), blocks=result.blocks,
+                               tools=result.tools, replace_tools=result.replace_tools)
 
     async def _execute(self, identifier, name, args):
         self.batch_calls = [Call(identifier, name, args)]
@@ -206,8 +208,7 @@ class CliLoop:
             except TimeoutError:
                 if self.expire:
                     self.expire()
-                self.cancel()
-                return ToolOutcome(False, "expired")
+                return ToolOutcome(False, "expired", phrase(self.language, "expired"))
         except Exception as exc:
             failure = classify(exc)
             return ToolOutcome(False, failure.kind, json.dumps(failure.wire()))
@@ -215,6 +216,8 @@ class CliLoop:
     async def _permission(self, args):
         self._progress()
         outcome = await self._execute("permission", "cli_permission", args)
+        if outcome.kind == "expired":
+            return "expired"
         return ("always" if self.permission_always else "once") if outcome.ok else "deny"
 
     def continue_with(self, outcome):
@@ -346,7 +349,7 @@ class CliLoop:
                     while failure == "tools_changed":
                         self.catalog_changed = False
                         session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
-                        self.user = ("The owner granted computer access. Reload the computer MCP catalog and continue "
+                        self.user = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                                      "the original task. Do not repeat completed actions.\n" + self.user)
                         failure = await self._attempt(name, command, model, server, session, workspace)
                     # Running the request again is safe only while nothing of it has happened yet.

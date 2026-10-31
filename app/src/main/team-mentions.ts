@@ -35,7 +35,7 @@ export function mentionTargets(list: MembersList, allowed?: number[]): (MentionT
 
 /** `composing`: an input method is composing in the field, which keeps the focus (see `bindTeamMentions`). */
 export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allowed?: number[], composing = false): void {
-  const before = input.value.slice(0, input.selectionStart), match = /@([^@\n]*)$/.exec(before);
+  const before = input.value.slice(0, input.selectionStart), match = /[@＠]([^@＠\n]*)$/.exec(before);
   if (!match || match[1].length > 40) {
     if (menuIsOpenFor(input) && document.querySelector("#app-popover[data-team-mentions]")) closeMenu();
     return;
@@ -46,7 +46,7 @@ export function teamMentions(input: HTMLTextAreaElement, list: MembersList, allo
   const caret = input.selectionStart;
   openMenu(input, choices, "", value => {
     const prefix = before.slice(0, match.index);
-    input.value = prefix + "@" + value + " " + input.value.slice(caret);
+    input.value = prefix + match[0][0] + value + " " + input.value.slice(caret);
     input.focus(); input.setSelectionRange(prefix.length + value.length + 2, prefix.length + value.length + 2);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }, undefined, [], { placement: "start", anchorRect: () => textPositionRect(input, match.index), selectionIndicator: false, focus: !composing });

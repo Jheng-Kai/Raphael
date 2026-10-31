@@ -448,7 +448,7 @@ async def test_mcp_memory_write_is_autonomous_and_member_scoped(setup, tmp_path,
 
 
 @pytest.mark.parametrize("stop", ["cancel", "expired", "deadline"])
-async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch, stop):
+async def test_paused_cli_cancels_on_stop_but_finishes_after_expiry_and_closes_mcp(setup, tmp_path, monkeypatch, stop):
     from pathlib import Path
     import httpx
     from agent.test_cli_brains import alive
@@ -457,7 +457,7 @@ async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch,
         monkeypatch.setattr(cli_loop, "CONFIRM_TIMEOUT_S", .05)
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    fake_mcp(rig, tmp_path, [("approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})])
+    fake_mcp(rig, tmp_path, [("approve", {"tool_name": "Write", "input": {"path": "lesson.txt"}})], allowed=False)
     pending = await typed(rig, "Make a lesson", teacher.id)
     assert pending["status"] == "confirm"
     [active] = rig.service._cli_loops
@@ -470,15 +470,62 @@ async def test_paused_cli_is_reaped_and_mcp_closes(setup, tmp_path, monkeypatch,
         rig.clock.now += 31
         if stop == "expired":
             await rig.confirm(pending["confirm"]["id"])
-        else:
-            async with asyncio.timeout(5):
-                while rig.service._cli_loops:
-                    await asyncio.sleep(.01)
+        async with asyncio.timeout(5):
+            while rig.service._cli_loops or rig.service._inflight:
+                await asyncio.sleep(.01)
+        turn = rig.service._history.get(pending["turn_id"])
+        assert turn.status == "done" and turn.text == "Finished."
     assert not alive(pid) and not config.parent.exists()
     assert not rig.service._cli_loops
     async with httpx.AsyncClient() as http:
         with pytest.raises(httpx.ConnectError):
             await http.post(url, json={})
+
+
+@pytest.mark.parametrize("stop", [False, True])
+async def test_expiry_cannot_answer_the_next_card_and_an_immediate_stop_still_stops(setup, tmp_path, stop):
+    from agent.test_cli_brains import alive
+
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys, time, urllib.request
+from pathlib import Path
+config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+json.loads(sys.stdin.readline())
+for number in (1, 2):
+    packet={"jsonrpc":"2.0","id":number,"method":"tools/call","params":{"name":"approve","arguments":{"tool_name":"Write","input":{"path":str(number)+".txt"}}}}
+    request=urllib.request.Request(config["url"],data=json.dumps(packet).encode(),headers={**config["headers"],"Content-Type":"application/json"})
+    result=json.load(urllib.request.urlopen(request,timeout=15))["result"]
+    content=json.loads(result["content"][0]["text"])
+    assert content["behavior"] == ("deny" if number==1 else "allow"), content
+    if number==1:
+        assert content["message"] == "逾時未獲回應。未執行。", content
+        if STOP: time.sleep(60)
+print(json.dumps({"type":"result","subtype":"success","result":"Finished after two cards."}),flush=True)
+'''.replace("STOP", repr(stop)))
+    pending = await typed(rig, "Make two lessons", teacher.id)
+    [active] = rig.service._cli_loops
+    pid = active.driver.child.process.pid
+    try:
+        rig.clock.now += 31
+        rig.service._expire(rig.service._confirmations.sweep())
+        if stop:
+            await rig.call("agent.cancel", {"session_id": "s1"})
+            async with asyncio.timeout(2):
+                while alive(pid):
+                    await asyncio.sleep(.01)
+            assert not rig.service._cli_loops and not rig.service._inflight
+        else:
+            async with asyncio.timeout(5):
+                while not rig.service._followups:
+                    await asyncio.sleep(.01)
+            [card] = rig.service._followups
+            assert card != pending["confirm"]["id"] and alive(pid)
+            result = await rig.confirm(card)
+            assert result["text"] == "Finished after two cards."
+            assert rig.service._history.get(pending["turn_id"]).status == "done"
+    finally:
+        await active.aclose()
 
 
 async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp_path):

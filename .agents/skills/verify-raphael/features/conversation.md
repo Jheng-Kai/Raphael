@@ -746,3 +746,24 @@ See the feature map. Selected acceptance:
 ```powershell
 npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
+
+## Small core regressions (2026-10-31)
+
+The mention menu, chips, mirror and room recipients accept both ASCII `@` and full-width
+`＠` (U+FF20). Both sides retain the same whole-name, longest-match and quotation rules.
+The original prefix and owner text stay unchanged, including in the mirror and when sent;
+Backspace/Delete still remove a whole chip. Offline contracts are the shared case tables in
+`core/tests/members/test_rooms.py` and `app/src/main/mention-text.test.ts`, plus
+`mention-field.test.ts` and `team-mentions.test.ts`.
+
+Direct search services share one provider queue across hubs, members and turns on the
+core event loop. Starts are at least 1.1 seconds apart; HTTP 429 observes Retry-After
+(seconds or HTTP date), with at most three attempts. Queueing, waits and requests share
+a 12-second deadline and remain cancellable. `core/tests/services/test_web.py` and
+`core/tests/agent/test_services_turns.py` cover mock transport and tool consumers.
+
+An expired CLI owner confirmation declines only its call, using the existing localized
+expired wording. The same CLI continues, its answer is saved, subsequent cards wait for
+their own answers, and Stop still cancels it. The card lifetime and non-CLI expiry stay
+unchanged. Offline contracts are `core/tests/agent/test_cli_confirmation.py` and the
+fake-child expiry/Stop regressions in `core/tests/members/test_cli_brains.py`.

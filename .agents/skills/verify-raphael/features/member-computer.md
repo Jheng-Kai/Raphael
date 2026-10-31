@@ -2,14 +2,20 @@
 
 The optional Docker desktop is shared by default. `computer_vm_mode=per-bot`
 selects a durable workspace per member. Host paths use pathlib and Docker CSV bind
-mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter when preparing
-the computer. Docker absent means no computer entry or tools; the existing Settings
-computer area has one requirement line and an official download button.
+mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
+computer operation. A granted turn's tool preparation never invokes Docker. When Docker is absent,
+the existing Settings computer area has one requirement line and an official download button;
+an offered operation reports the lifecycle's existing availability error on use.
 
 `computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
 `attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
 state, input, application/window discovery, clipboard, verification and the Linux
-CDP browser helpers are offered together, regardless of the question. Core-owned
+CDP browser helpers are offered together after the first real driver listing, regardless of the question. Before that listing, an offline
+bootstrap offers `get_desktop_state`, `vm_exec`, `attach_file` and `request_takeover`.
+The screen tool discovers the actual driver schemas on use and refreshes the same
+API/CLI/background turn's catalog; missing tools are removed and changed schemas
+are validated before forwarding an action. The real catalog stays in memory for
+later turns in this process. Core-owned
 `PluginTool.pinned` metadata excludes them from the 40-plugin budget, keyword
 shortlists, model refinement and the foreground planner's selection. Other plugins
 keep their existing cap and discovery. Driver updates/installs, configuration,
@@ -58,7 +64,7 @@ as `TZ`, falling back to UTC until one is known. The zone stays in memory; no
 setting or platform-specific lookup is added. Existing containers are not recreated.
 
 Container reuse checks ownership, image ID/labels, bind mount, loopback publishing
-and resource/security limits. Idle shutdown defaults to 480 minutes (5-1440),
+and resource/security limits. Idle shutdown defaults to 15 minutes (5-1440),
 preserves the workspace and skips owner-held or active desktops. Startup recovers
 only containers owned by this data directory and verifies compatibility before use.
 
@@ -150,7 +156,7 @@ or judge request is authorized.
 Computer access defaults off per member, including Raphael (0). The only computer
 capability offered before permission is computer__request_computer(reason), a pinned
 T2 request answered by the existing private-chat permission card (YES/NO; no Always).
-YES persists a per-member computer_grants row (schema 45), prepares the VM and updates
+YES persists a per-member computer_grants row (schema 45), prepares an offline tool offer and updates
 the same turn's production snapshot before the next API model step. CLI loops reload
 the MCP catalog in a new isolated CLI attempt within the same owner turn, preserving
 the native session and without replaying completed actions. NO/expiry explicitly say
@@ -167,14 +173,41 @@ snapshots, but does not kill already running commands, containers or owner viewe
 Container state never grants access. Without an explicit per-member grant, prepare
 does not probe the engine or container, offer operation tools, or persist any grant
 row, even if a compatible VM is already running. The member must request permission.
-After permission, prepare rechecks revocation before starting the VM; viewer launch
+After permission, prepare offers tools without starting or probing the VM; viewer launch
 also rechecks after its status probe. No lifecycle, idle-stop, attachment, takeover
 or handback semantics change under a grant. Both native VM journeys grant explicitly.
 
 Offline regressions: core/tests/computer/test_grants.py and
 core/tests/agent/test_computer_grants.py, plus the existing computer/agent/background
-suites. Native member-computer grants first and runs only with an already running
-Docker engine. This brief prohibits judge and live/paid providers; core-only code
+suites. Native member-computer grants first and starts the installed Docker engine
+only when its first screen tool is called. This brief prohibits judge and live/paid providers; core-only code
 has no changed visual scene or new UI. Fixture/fake results are not native acceptance.
 
 The panel view has a start button for a stopped computer and a take-back button for a granted member. `computer.revoke` keeps the row at 0, so a later request asks again. Looking at the panel never starts a computer.
+
+## Quiet, lazy startup (CODEX_BRIEF2)
+
+The Windows host prefers PATH `docker.exe`, then
+`%ProgramFiles%/Docker/Docker/resources/bin/docker.exe`. A hidden, read-only
+`docker desktop start --help` probe checks the installed CLI. A supported CLI starts
+with `docker desktop start --detach`, with no shell and discarded standard streams.
+The GUI launcher is a legacy fallback only when the CLI is absent or the probe
+fails with an explicit diagnostic that `desktop` is not a Docker command. Other
+probe failures do not open the GUI. LocalVm retains its engine readiness polling,
+preparation progress, errors, grants, owner holds and leases.
+
+Offline coverage: `tests/computer/test_desktop_host.py`, `test_vm.py`,
+`test_grants.py`, `test_takeover.py`, `tests/agent/test_computer_grants.py`,
+`tests/background/test_computer_lazy.py`, and the snapshot/CLI/worker consumers.
+All startup tests fake processes and Docker. No real Docker/native run was made
+for this brief.
+
+Owner acceptance: from `app/`, run `npm.cmd run native -- member-computer`
+in the authorized native environment. Its pre-launch smoke asserts zero Docker
+commands while preparing a granted turn, starts on the first actual screen call,
+refreshes controls, and asserts zero Docker commands for the following prepare.
+Also run a granted API and CLI greeting with Docker Desktop initially stopped,
+then request a screen operation: greetings must leave it stopped, the screen
+operation must complete without a Docker Desktop window appearing or taking focus,
+and a following greeting must not start anything. Inspect the report and captures;
+CLI fakes cannot establish real Windows window/focus behavior.

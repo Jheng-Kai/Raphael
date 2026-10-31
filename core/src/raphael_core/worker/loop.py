@@ -117,6 +117,7 @@ class ToolOutcome:
     tools: list[dict] = field(default_factory=list)  # tools the call made available from now on
     instruction: str = ""  # a refusal of Raphael's own tool: what the model is told instead of `kind`
     blocks: list[dict] = field(default_factory=list)
+    replace_tools: bool = False  # tools is the complete offer, including changed schemas/removals
 
 
 class Host(Protocol):
@@ -287,6 +288,9 @@ async def run_task(
                         if verdict == "stop":
                             raise Stop("failed", "tool_failures")
                         steer = steer or verdict == "steer"
+                    if outcome.replace_tools:
+                        tools[:] = outcome.tools
+                        offered = {tool["function"]["name"] for tool in tools}
                     for found in outcome.tools:
                         name = found["function"]["name"]
                         if name not in offered:

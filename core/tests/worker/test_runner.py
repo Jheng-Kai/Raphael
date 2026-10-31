@@ -76,6 +76,15 @@ async def test_the_worker_says_hello_with_the_protocol_version_and_its_process_i
     assert hello == {"protocol": 1, "pid": os.getpid()}
 
 
+async def test_host_can_replace_the_worker_catalog_after_discovery(core):
+    replacement = [{"type": "function", "function": {"name": "computer__click", "parameters": {"type": "object"}}}]
+    core.chats = [calling(), final()]
+    core.tools = [{"ok": True, "content": "Discovered controls.", "tools": replacement, "replace_tools": True}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done"
+    assert core.chat_requests[1]["tools"] == replacement
+
+
 async def test_a_task_is_carried_out_by_asking_the_core_for_every_model_reply_and_tool_result(core):
     core.chats = [calling(), final("Tea is green.")]
     core.tools = [{"ok": True, "kind": None, "content": "green", "truncated": False}]

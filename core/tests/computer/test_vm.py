@@ -342,7 +342,7 @@ async def test_recovery_and_idle_stop_keep_workspace_and_ignore_busy_or_held(des
     file.write_text("persistent")
     await vm.recover()
     assert target.key in vm.last_activity
-    vm.clock = lambda: 480 * 60 + 1
+    vm.clock = lambda: 15 * 60 + 1
     vm.active[target.key] = 1
     await vm.sweep()
     assert runtime.raw["State"]["Running"]
@@ -437,10 +437,52 @@ class CatalogBridge(Bridge):
         return await super().request(method, params)
 
 
+async def test_first_screen_starts_engine_once_and_later_turn_reuses_catalog(desktop, tmp_path):
+    from unittest.mock import AsyncMock
+    vm, target, runtime = desktop
+    runtime.up = False
+    runtime.raw["State"]["Running"] = False
+    async def start_engine():
+        runtime.up = True
+    vm.desktop = SimpleNamespace(installed=lambda: True, start=AsyncMock(side_effect=start_engine))
+    class RecordingBridge(Bridge):
+        calls = []
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=RecordingBridge)
+    await hub.prepare()
+    assert runtime.calls == []
+    shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    result = await hub.call(shot.key, {}, approver="auto")
+    assert result.ok and result.blocks
+    vm.desktop.start.assert_awaited_once()
+    assert sum(args[0] == "start" for args, _ in runtime.calls) == 1
+    before = len(runtime.calls), len(RecordingBridge.calls)
+    await hub.prepare()
+    assert (len(runtime.calls), len(RecordingBridge.calls)) == before
+    assert "click" in {tool.name for tool in hub.offered()}
+    assert (await hub.call(shot.key, {}, approver="auto")).ok
+    vm.desktop.start.assert_awaited_once()
+    assert sum(method == "tools/list" for method, _ in RecordingBridge.calls) == 1
+
+
+async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop, tmp_path):
+    from unittest.mock import AsyncMock
+    vm, target, runtime = desktop
+    vm.start = AsyncMock(side_effect=VmError("docker_start_failed"))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
+    await hub.prepare()
+    vm.start.assert_not_awaited()
+    shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await hub.call(shot.key, {}, approver="auto")).kind == "docker_start_failed"
+    assert not hub.actions[target.key].locked() and vm.active[target.key] == 0
+
+
 async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_path):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
     await hub.prepare()
+    assert not runtime.calls
+    shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await hub.call(shot.key, {}, approver="auto")).ok
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
@@ -448,6 +490,7 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     snapshot = take_snapshot(hub)
     assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover"}
     assert not snapshot.hidden()
+    assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
     assert hub.tier_of("mcp:computer-shared/install_extension") is None
 
@@ -477,6 +520,8 @@ async def test_computer_set_survives_plugin_shortlists_and_refine(desktop, tmp_p
     vm, target, runtime = desktop
     hub = VmTools(ManyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=CatalogBridge)
     await hub.prepare()
+    shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await hub.call(shot.key, {}, approver="auto")).ok
     snapshot = take_snapshot(hub, question, memory=True, team=SKILL_TOOLS, interactive=interactive)
     expected = {"computer__" + name for name in CURATED} | set(MEMORY_TOOLS) | set(SKILL_TOOLS)
     assert expected <= snapshot.refs.keys()
@@ -516,6 +561,9 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
     assert "computer__vm_exec" in snapshot.refs and "computer__get_desktop_state" in snapshot.refs
     gate = ToolGate(hub, conn=conn)
     SettingsStore(conn).set("action_mode", action_mode)
+    shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await gate.call_plugin(shot.key, {})).ok
+    assert snapshot.refresh_computer(hub, 0)
     click = next(tool for tool in hub.offered() if tool.name == "click")
     execute = next(tool for tool in hub.offered() if tool.name == "vm_exec")
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
@@ -619,9 +667,10 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
     assert report["completed"] == report["without_approval"] == report["owner_held_refused"] == expected
     assert forwarded == [name.removeprefix("computer__") for name in expected]
     assert report["paid_requests"] == 0
+    assert report["prepare_docker_commands"] == report["next_turn_docker_commands"] == 0
 
 
-async def test_optional_tools_disappear_when_engine_stops(desktop, tmp_path):
+async def test_stopped_engine_keeps_offline_tools_without_probing(desktop, tmp_path):
     vm, target, runtime = desktop
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
@@ -629,8 +678,9 @@ async def test_optional_tools_disappear_when_engine_stops(desktop, tmp_path):
     runtime.up = False
     vm.clock = lambda: 11
     await hub.prepare()
-    assert not any(name.startswith("computer__") for name in take_snapshot(hub).refs)
-    assert hub.tier_of(shot.key) is None
+    assert "computer__get_desktop_state" in take_snapshot(hub).refs
+    assert hub.tier_of(shot.key) == Tier.T0
+    assert not runtime.calls
 
 
 async def test_mode_change_revokes_previously_offered_shared_tools(desktop, conn, tmp_path):

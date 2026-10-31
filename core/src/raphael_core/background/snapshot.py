@@ -191,7 +191,9 @@ class Snapshot:
         return [alias for alias in (self.pool.by_alias if self.pool else {}) if alias not in self.refs]
 
     def refresh_computer(self, plugins, member_id):
-        """Refresh only this member's computer offer after an owner decision."""
+        """Refresh this member's computer offer after a grant or driver discovery."""
+        before = {item["function"]["name"]: item for item in self.definitions
+                  if item["function"]["name"].startswith("computer__")}
         old = {alias for alias, ref in self.refs.items() if ref.server == "computer"}
         for alias in old:
             self.refs.pop(alias)
@@ -200,6 +202,9 @@ class Snapshot:
         computer = [tool for tool in plugins.offered_for(member_id) if tool.server == "computer"]
         self.pool = make_offer([*kept, *computer])
         self.show([alias for alias, tool in self.pool.by_alias.items() if tool.server == "computer"])
+        after = {item["function"]["name"]: item for item in self.definitions
+                 if item["function"]["name"].startswith("computer__")}
+        return after != before
 
     def show(self, aliases: Sequence[str]) -> list[dict[str, Any]]:
         """Show the task these tools of the pool; returns the definitions that are new."""

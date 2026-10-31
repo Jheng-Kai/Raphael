@@ -481,7 +481,7 @@ class RoomsService:
         # Whole names, longest match at each @, then textual order. Emails are not addresses.
         hits = []
         for name, ids in candidates:
-            pattern = r"(?<!\w)@" + re.escape(name) + r"(?!\w)"
+            pattern = r"(?<!\w)[@＠]" + re.escape(name) + r"(?!\w)"
             hits.extend((match.start(), match.end(), ids) for match in re.finditer(pattern, text, re.IGNORECASE))
         targets = []
         for start, end, ids in sorted(hits, key=lambda hit: (hit[0], -hit[1])):

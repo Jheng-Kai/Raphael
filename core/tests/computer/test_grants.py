@@ -54,7 +54,7 @@ async def test_shared_vm_does_not_share_grants_and_revocation_blocks_stale_calls
     await hub.prepare(0)
     await hub.prepare(7)
     assert [tool.name for tool in hub.offered_for(7)] == ["request_computer"]
-    tool = next(tool for tool in hub.offered() if tool.name == "click")
+    tool = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     before = len(runtime.calls)
     with vm_scope(("turn", 7, 1)):
         assert (await hub.call(tool.key, {}, approver="auto")).kind == "computer_permission_required"
@@ -149,20 +149,23 @@ async def test_worker_stops_and_persists_a_failed_report_for_missing_grant(tmp_p
     vm.start.assert_not_awaited()
 
 
-async def test_revoke_during_engine_probe_prevents_start(tmp_path, conn):
+async def test_revoke_during_first_listing_prevents_driver_action(tmp_path, conn):
     vm = LocalVm(tmp_path, runner=Runtime())
     vm.start = AsyncMock()
-    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    calls = []
+    class RevokingBridge(Bridge):
+        async def request(self, method, params=None):
+            calls.append(method)
+            vm.grants.set(0, False)
+            return await super().request(method, params)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=RevokingBridge)
     vm.grants.set(0, True)
-    async def installed():
-        vm.grants.set(0, False)
-        return True
-    vm.installed = installed
     await hub.prepare()
+    tool = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
+    assert (await hub.call(tool.key, {}, approver="auto")).kind == "computer_permission_required"
     assert vm.grants.state(0) is False
     assert [tool.name for tool in hub.offered()] == ["request_computer"]
-    assert not hub.catalogs
-    vm.start.assert_not_awaited()
+    assert calls == ["tools/list"]
 
 
 async def test_revoke_during_viewer_status_probe_prevents_launch(tmp_path):

@@ -666,6 +666,10 @@ class TaskRun:
             "truncated": cut or result.truncated,
             **({"blocks": result.blocks} if result.blocks else {}),
         }
+        if ref.server == "computer":
+            task = self._store.get(self.task_id)
+            if task and self.snapshot.refresh_computer(self._gate.plugins, task.member_id):
+                reply.update(tools=list(self.snapshot.definitions), replace_tools=True)
         return reply, _outcome_of(result), None if now is None else now.name, sent
 
     @tool_step(lambda self, waiting, approval, action: waiting.alias,

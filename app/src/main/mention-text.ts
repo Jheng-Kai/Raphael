@@ -21,13 +21,13 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 /** Where `text` addresses one of `targets`, in order and never overlapping. */
 export function mentionRanges(text: string, targets: readonly MentionTarget[]): MentionRange[] {
-  if (!text.includes("@") || !targets.length) return [];
+  if (!/[@＠]/u.test(text) || !targets.length) return [];
   const open = text.replace(QUOTED, quoted => " ".repeat(quoted.length));
   const hits: MentionRange[] = [];
   for (const target of targets) {
     for (const name of [target.name, ...(target.aliases ?? [])]) {
       if (!name) continue;
-      const pattern = new RegExp(`(?<!${WORD})@${escapeRegExp(name)}(?!${WORD})`, "giu");
+      const pattern = new RegExp(`(?<!${WORD})[@＠]${escapeRegExp(name)}(?!${WORD})`, "giu");
       for (const match of open.matchAll(pattern)) hits.push({ start: match.index, end: match.index + match[0].length, target });
     }
   }
@@ -43,7 +43,7 @@ export function mentionRanges(text: string, targets: readonly MentionTarget[]): 
  * with it, and a copied selection still reads `@Name`), then the name as it was typed.
  */
 export const mentionChipHTML = (typed: string, target: MentionTarget, size = 14): string =>
-  `<span class="mention-chip" data-mention="${target.kind}"><span class="mention-at">@<span class="mention-ico" aria-hidden="true">${target.mark(size)}</span></span>${esc(typed.slice(1))}</span>`;
+  `<span class="mention-chip" data-mention="${target.kind}"><span class="mention-at">${esc(typed.slice(0, 1))}<span class="mention-ico" aria-hidden="true">${target.mark(size)}</span></span>${esc(typed.slice(1))}</span>`;
 
 /** `text` with each address a chip; `plain` draws the words between them. */
 export function mentionsHTML(text: string, targets: readonly MentionTarget[], plain: (words: string) => string): string {

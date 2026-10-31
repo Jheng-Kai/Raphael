@@ -38,6 +38,17 @@ test("an input method composing the @ keeps the focus while the menu is drawn, a
   expect(input.value).toBe("@");
 });
 
+test("a full-width at opens the menu during composition and completes without changing its prefix", () => {
+  bindTeamMentions(input, () => ({ list }));
+  compose("ask ＠小");
+  expect(rows()).toEqual(["小森", "小晴"]);
+  expect(blurred).not.toHaveBeenCalled();
+  input.dispatchEvent(new Event("compositionend"));
+  document.querySelector<HTMLElement>('#app-popover [data-value="小森"]')!.click();
+  expect(input.value).toBe("ask ＠小森 ");
+  expect(input.selectionStart).toBe(input.value.length);
+});
+
 test("a syllable composed after the @ never moves the focus, and the menu narrows to what is committed", () => {
   bindTeamMentions(input, () => ({ list }));
   compose("@");

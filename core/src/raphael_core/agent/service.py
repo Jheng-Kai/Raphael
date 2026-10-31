@@ -1982,6 +1982,9 @@ class AgentService:
                     return ToolOutcome(False, "already_done", instruction=(
                         "This exact action was already done before the pause. Do not do it again."))
                 result = await execute(call_id, name, args)
+                if ref is not None and ref.server == "computer" and loop.refresh_computer():
+                    result.tools = list(loop.tools)
+                    result.replace_tools = True
                 reads = ref is not None and (self._gate.reads_only(ref.server, ref.name, args) if ref.kind == MCP else ref.tier == Tier.T0)
                 if result.ok and digest and not reads:
                     ask.made.append((key, digest))
@@ -2020,11 +2023,13 @@ class AgentService:
             else:
                 loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), **common)
             def refresh_computer():
-                snapshot.refresh_computer(self._plugins, ask.speaker.id)
+                if not snapshot.refresh_computer(self._plugins, ask.speaker.id):
+                    return False
                 loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
                 loop.tools.extend(item for item in snapshot.definitions if item["function"]["name"].startswith("computer__"))
                 if isinstance(loop, CliLoop):
                     loop.catalog_changed = True
+                return True
             loop.refresh_computer = refresh_computer
         try:
             outcome = await loop.run()
@@ -3245,8 +3250,9 @@ class AgentService:
         *,
         drafts: list[dict] | None = None,
         groups: list[dict] | None = None,
+        expired: bool = False,
     ) -> dict:
-        """The yes came: make the call, then word what came of it."""
+        """Resolve the waiting call, then word what came of it and continue the turn."""
         language = pending.language
         if followup.admin_batch:
             ledger = followup.ask.ledger or Ledger(self._spend)
@@ -3345,10 +3351,12 @@ class AgentService:
             approval = None
         steps: list[Step] = []
         if isinstance(followup.loop, CliLoop) and approval is None:
-            self._gate.record_unrun(call.tool.key, outcome="denied")
-            result = ToolResult(call.tool.key, False, None, "denied",
-                                instruction=DECLINED_NOTE if followup.ask.declined else None)
-            steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), "denied"))
+            kind = "expired" if expired else "denied"
+            self._gate.record_unrun(call.tool.key, outcome=kind)
+            instruction = phrase(language, "expired") if expired else DECLINED_NOTE if followup.ask.declined else None
+            result = ToolResult(call.tool.key, False, None, kind,
+                                instruction=instruction)
+            steps.append(self._step("tool", call.tool.name, call.tool.server, "blocked", time.perf_counter(), kind))
         else:
             result = await self._make_call(
                 followup.ask, call, approval, ledger, pending.action, steps=steps
@@ -3365,7 +3373,8 @@ class AgentService:
                 self._message(followup.ask, "event", phrase(
                     language, "member_created", member=str((result.data or {}).get("created", ""))
                 ))
-            loop.continue_with(self._loop_result(result))
+            if not expired:
+                loop.continue_with(self._loop_result(result))
             # The confirmed step was written above; future snapshots must not duplicate it.
             followup.ask.steps.extend(steps)
             followup.ask.recorded_steps = len(followup.ask.steps)
@@ -3777,27 +3786,41 @@ class AgentService:
         groups: list[dict] | None = None,
     ) -> dict:
         """Keep the approved call and all later rounds cancellable as one live request."""
-        task = asyncio.ensure_future(
-            self._confirm_plugin(pending, approval, followup, drafts=drafts, groups=groups)
-        )
-        session_id = followup.ask.session_id
-        self._inflight[session_id] = task
-        self._inflight_members[session_id] = followup.ask.speaker.id
-        self._inflight_scopes[session_id] = (followup.ask.speaker.id, followup.ask.conversation_id)
+        task = self._start_narrated(pending, approval, followup, drafts=drafts, groups=groups)
         try:
             return await task
         except asyncio.CancelledError:
             if not task.cancelled() or asyncio.current_task().cancelling():
                 raise
             return _Silent({"status": "done", "turn_id": pending.turn_id, "prefix": "", "text": ""})
-        finally:
-            if task.cancelled():
+
+    def _start_narrated(
+        self, pending: Pending, approval: Approval | None, followup: _Followup, *,
+        drafts: list[dict] | None = None, groups: list[dict] | None = None, expired: bool = False,
+    ) -> asyncio.Task:
+        """Register a continued turn immediately, even when no RPC is waiting for its answer."""
+        task = asyncio.ensure_future(
+            self._confirm_plugin(pending, approval, followup, drafts=drafts, groups=groups, expired=expired)
+        )
+        session_id = followup.ask.session_id
+        self._inflight[session_id] = task
+        self._inflight_members[session_id] = followup.ask.speaker.id
+        self._inflight_scopes[session_id] = (followup.ask.speaker.id, followup.ask.conversation_id)
+        def finished(done):
+            if done.cancelled():
+                if isinstance(followup.loop, CliLoop):
+                    followup.loop.cancel()
                 self._finish(followup.ask, "answer", "understood", phrase(pending.language, "denied"),
                              followup.loop.ledger, status="denied")
+            elif expired and done.exception() is not None:
+                logger.warning("An expired CLI confirmation could not resume: %s", type(done.exception()).__name__)
+                self._failed(followup.ask, "answer", "error", followup.loop.ledger)
             if self._inflight.get(session_id) is task:
                 del self._inflight[session_id]
                 self._inflight_members.pop(session_id, None)
                 self._inflight_scopes.pop(session_id, None)
+        task.add_done_callback(finished)
+        return task
 
     def _outcome(
         self,
@@ -3863,6 +3886,14 @@ class AgentService:
     def _expire(self, pendings: list[Pending]) -> None:
         for pending in pendings:
             self._card_state(pending.id, "expired")
+            followup = self._followups.get(pending.id)
+            if followup is not None and isinstance(followup.loop, CliLoop):
+                self._followups.pop(pending.id)
+                # Release this card's waiter before scheduling its history continuation;
+                # a late continuation must never answer the next card the CLI opens.
+                followup.loop.continue_with(ToolOutcome(False, "expired", phrase(pending.language, "expired")))
+                self._start_narrated(pending, None, followup, expired=True)
+                continue
             self._drop_followup(pending, "expired")
             self._outcome(pending, "negative", self._computer_refusal(pending, "expired"), "expired")
 

@@ -26,7 +26,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   };
   const draw = (): void => {
     const text = input.value;
-    ranges = text.includes("@") ? mentionRanges(text, targets()) : [];
+    ranges = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;

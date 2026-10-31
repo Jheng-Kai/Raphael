@@ -3,9 +3,11 @@ addresses in the owner's own words, and the files handed with a request (`agent.
 {attachments}`). Fakes for every service (httpx MockTransport) and for OpenRouter: no test reaches
 the network or spends money."""
 
+import asyncio
 import base64
 import json
 import logging
+import time
 
 import httpx
 import pytest
@@ -14,6 +16,8 @@ from raphael_core.brain.catalog import parse_catalog
 from raphael_core.protocol import INVALID_PARAMS, RpcError
 from raphael_core.services.hub import ServiceHub
 from raphael_core.services.keys import memory_keys
+from raphael_core.services import web as web_service
+from raphael_core.agent.tools import Tools
 
 from brain.test_catalog import RECORDED, edited
 
@@ -89,6 +93,27 @@ def steps(turn, tool):
 
 
 # --- the search ---------------------------------------------------------------------------------
+
+
+async def test_two_members_search_together_and_the_next_turn_keeps_the_provider_pace(services_rig, client, monkeypatch):
+    rig = services_rig
+    rig.settings.set("web_search_service", "brave")
+    rig.service_keys.set("brave", "brave-key")
+    monkeypatch.setattr(web_service, "SEARCH_INTERVAL_S", .03)
+    starts = []
+    original = web_service._call
+
+    async def observed(*args, **kwargs):
+        starts.append(time.monotonic())
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(web_service, "_call", observed)
+    first, second = Tools(client, services=rig.hub), Tools(client, services=rig.hub)
+    results = await asyncio.gather(first.web_search("one", "fake", None), second.web_search("two", "fake", None))
+    results.append(await first.web_search("next turn", "fake", None))
+    assert all(result.ok and result.untrusted and result.detail == "brave" for result in results)
+    assert all(b - a >= .025 for a, b in zip(starts, starts[1:]))
+    assert client.text_calls == []
 
 
 async def test_a_search_with_brave_gives_the_answer_its_results_as_untrusted_data(

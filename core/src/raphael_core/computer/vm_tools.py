@@ -52,6 +52,8 @@ ATTACH = {"description": "Copy an existing file from /home/cua/workspace into Ra
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
 REQUEST = {"description": "Ask the owner to grant you persistent computer access. Use only when the owner asks for computer work or the task truly needs it. No computer starts before yes. On denial or expiry, say plainly that you cannot use the computer. Routines cannot grant access; ask the owner in a private chat first.",
            "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
+SCREEN = {"description": VM_CONTRACT + " Inspect screen and discover control tools.",
+          "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
 
 
 class VmTools:
@@ -69,27 +71,39 @@ class VmTools:
         self.leases = {}
         self.scope_busy = lambda scope: scope[0] == "async" and not scope[1].done()
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
-        self._checked_at, self._available = -100.0, False
+        self.listed = set()
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
 
     async def prepare(self, member_id=0):
-        if not self.vm.grants.allowed(member_id):
+        if not self.vm.enabled or not self.vm.grants.allowed(member_id):
             return
-        if self.vm.clock() - self._checked_at > 10:
-            self._available = await self.vm.installed()
-            self._checked_at = self.vm.clock()
-        if not self._available:
+        # Looking for the program runs nothing. With no Docker on this PC there is no computer to offer.
+        if self.vm.desktop and not self.vm.desktop.installed():
             return
         target = self.vm.target(member_id)
+        if target.key not in self.catalogs:
+            # This offer is entirely offline. Driver schemas are learned only
+            # after an actual screen call, never by probing Docker at turn start.
+            self._catalog(target, {"get_desktop_state": SCREEN})
+
+    def _catalog(self, target, definitions):
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER)
+        keys = []
+        for name, definition in definitions.items():
+            key = tool_key(f"computer-{target.key}", name)
+            self.tools[key] = PluginTool(key, "computer", name, definition["description"], definition["parameters"], Tier.T0, pinned=True)
+            self.routes[key] = target
+            self.schemas[key] = definition.get("validation", definition["parameters"])
+            keys.append(key)
+        self.catalogs[target.key] = keys
+
+    async def _discover(self, target):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
-            if not self.vm.grants.allowed(member_id):
-                return
-            if target.key in self.catalogs:
+            if target.key in self.listed:
                 return
             try:
-                await self.vm.start(target)
                 async with self.bridge(self.vm, target) as client:
                     listed, cursor = [], None
                     for _ in range(10):
@@ -113,27 +127,17 @@ class VmTools:
                     # Keep the contract first and within Offer's description cap.
                     definitions[name] = {"description": VM_CONTRACT + " " + item.get("description", ""), "parameters": schema,
                         "validation": item.get("originalInputSchema", schema)}
-                definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER)
-                keys = []
-                for name, definition in definitions.items():
-                    key = tool_key(f"computer-{target.key}", name)
-                    # Sandbox steps need no tier approval, even in the owner's global Ask mode.
-                    tier = Tier.T0
-                    self.tools[key] = PluginTool(key, "computer", name, definition["description"], definition["parameters"], tier, pinned=True)
-                    self.routes[key] = target
-                    self.schemas[key] = definition.get("validation", definition["parameters"])
-                    keys.append(key)
-                self.catalogs[target.key] = keys
+                self._catalog(target, definitions)
+                self.listed.add(target.key)
                 self.problem = None
             except Exception as error:
-                # Docker/image/driver availability must never break unrelated conversation.
-                self.catalogs.pop(target.key, None)
                 self.problem = str(error) if isinstance(error, VmError) else type(error).__name__
+                raise
 
     def offered_for(self, member_id):
         target = self.vm.target(member_id)
         if self.vm.grants.allowed(member_id):
-            native = [self.tools[key] for key in self.catalogs.get(target.key, [])] if self._available else []
+            native = [self.tools[key] for key in self.catalogs.get(target.key, [])] if self.vm.enabled else []
         else:
             key = tool_key(f"computer-access-{member_id}", "request_computer")
             self.requests[key] = member_id
@@ -158,7 +162,7 @@ class VmTools:
         if key in self.tools:
             shared = self.vm.settings is None or self.vm.settings.get("computer_vm_mode") == "shared"
             matches = (self.routes[key].key == "shared") == shared
-            return self.tools[key].tier if self._available and matches else None
+            return self.tools[key].tier if self.vm.enabled and matches and key in self.catalogs.get(self.routes[key].key, []) else None
         return self.delegate.tier_of(key)
 
     def tier_for_call(self, key, arguments):
@@ -208,8 +212,8 @@ class VmTools:
             await self.prepare(member)
             if not self.vm.grants.allowed(member):
                 return PluginResult(False, "computer_permission_required", "The owner revoked computer access.")
-            if not self._available or not self.catalogs.get(self.vm.target(member).key):
-                return PluginResult(False, self.problem or "unavailable", "Computer access was granted, but the computer could not start.")
+            if not self.catalogs.get(self.vm.target(member).key):
+                return PluginResult(False, "unavailable", "Computer access was granted, but computer tools are disabled.")
             return PluginResult(True, text="Computer access granted. Computer tools are now available; continue the owner's task.")
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
@@ -284,6 +288,18 @@ class VmTools:
                         Attachment(name, mimetypes.guess_type(name)[0] or "application/octet-stream", data))
                     result = PluginResult(True, text=json.dumps({"attachment": attachment.metadata()}))
                 else:
+                    await self._discover(target)
+                    if not self.vm.grants.allowed(member):
+                        result = PluginResult(False, "computer_permission_required")
+                        return result
+                    if target.key in self.vm.held:
+                        raise VmError("owner_holds_control")
+                    if self.tier_of(key) is None:
+                        result = PluginResult(False, "tool_changed", "This driver does not offer that tool. Read the refreshed computer tool catalog.")
+                        return result
+                    if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
+                        result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
+                        return result
                     async with self.bridge(self.vm, target) as client:
                         data = await client.request("tools/call", {"name": tool.name, "arguments": dict(arguments)})
                     blocks, text = [], []

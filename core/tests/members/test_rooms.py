@@ -113,9 +113,21 @@ async def test_mentions_are_read_from_the_words_exactly_as_the_composer_draws_it
         ("@Ops Lead and @Ops", ["Ops Lead", "Ops"]),
         ("`@小森` 「@小晴」 \"@Ops\"", []),           # code and quotations are not addresses
         ("\n> @小森\n@小晴 ", ["小晴"]),
+        ("＠Ops Lead and @Ops", ["Ops Lead", "Ops"]),
+        ("請 ＠小森 看一下", ["小森"]),
+        ("＠小森，＠小晴。", ["小森", "小晴"]),
+        ("＠小森請看一下", []),
+        ("請＠小森 看", []),
+        ("jo＠Ops.com and ＠Opsgenie", []),
+        ("`＠小森` 「＠小晴」 \"＠Ops\"", []),
+        ("\n> ＠小森\n＠小晴 ", ["小晴"]),
     ]
     for words, named in cases:
         assert rooms._targets(room, words) == [ids[name] for name in named], words
+    words = "請 ＠小森 看一下"
+    await rig.call("rooms.send", {"room_id": room["id"], "request_id": "full-width", "text": words})
+    assert rig.background.submitted[-1]["member_id"] == ids["小森"]
+    assert rig.conn.execute("SELECT text FROM room_messages WHERE request_id='full-width'").fetchone()[0] == words
 
 
 async def test_what_the_owner_typed_in_a_room_joins_what_they_typed_for_the_arrow_keys(rig, rooms):

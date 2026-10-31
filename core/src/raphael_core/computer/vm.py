@@ -471,7 +471,7 @@ print(base64.b64encode(data).decode())
             raise VmError("file_unavailable") from None
 
     async def sweep(self):
-        minutes = 480 if self.settings is None else self.settings.get("computer_vm_idle_minutes")
+        minutes = 15 if self.settings is None else self.settings.get("computer_vm_idle_minutes")
         for key, last in list(self.last_activity.items()):
             if self.clock() - last >= minutes * 60 and not self.active.get(key) and key not in self.held and not self.busy(key):
                 try:

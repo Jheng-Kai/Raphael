@@ -37,6 +37,14 @@ async def vm_smoke(directory):
     directory = Path(directory)
     conn = connect(directory / "raphael.db")
     vm = LocalVm(directory, settings=SettingsStore(conn))
+    docker_commands = []
+    run = vm.run
+
+    async def record_run(args, **kwargs):
+        docker_commands.append(args[0])
+        return await run(args, **kwargs)
+
+    vm.run = record_run
     preparation = {"states": [], "last_build_progress": ""}
     progress = vm._progress
 
@@ -51,14 +59,13 @@ async def vm_smoke(directory):
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(directory), conn=conn)
     try:
         vm.grants.set(0, True)
-        await vm.ensure_engine(vm.target())
         await hub.prepare()
+        assert not docker_commands, "Preparing a granted turn must not invoke Docker"
         snapshot = take_snapshot(hub)
         assert vm.target(0) == vm.target(1), "Expected shared desktop"
         shot = next((name for name in snapshot.refs if name == "computer__get_desktop_state"), None)
         if not shot:
             raise VmError("Desktop tool discovery failed: " + str(hub.problem or "unavailable"))
-        assert "computer__click" in snapshot.refs, "Desktop click tool discovery failed"
         gate, completed = ToolGate(hub, conn=conn), []
         calls = [(shot, {}), ("computer__click", {"x": 640, "y": 480, "scope": "desktop"}),
                  ("computer__vm_exec", {"command": "printf 'Raphael VM smoke\\n' > raphael-smoke.txt; cat raphael-smoke.txt"}),
@@ -88,10 +95,17 @@ async def vm_smoke(directory):
                     attachment = json.loads(result.text)["attachment"]
                     assert hub.attachments.path(attachment["id"]).read_bytes() == b"Raphael VM smoke\n"
                 completed.append(name)
-                return ToolOutcome(True, content=result.text, blocks=result.blocks)
+                changed = snapshot.refresh_computer(hub, 0)
+                if name == shot:
+                    assert "computer__click" in snapshot.refs, "Desktop click tool discovery failed"
+                return ToolOutcome(True, content=result.text, blocks=result.blocks,
+                                   tools=list(snapshot.definitions) if changed else [], replace_tools=changed)
 
         outcome = await run_task(FakeBrain(), system="Deterministic fake brain; use only the specified test tools.", user="Test the optional desktop", tools=snapshot.definitions)
         assert outcome.status == "done" and completed == [name for name, _ in calls]
+        before = len(docker_commands)
+        await hub.prepare()
+        assert len(docker_commands) == before, "The next turn must reuse the catalog without Docker"
         target = vm.target()
         import shutil
         target.workspace.mkdir(parents=True, exist_ok=True)
@@ -106,6 +120,7 @@ async def vm_smoke(directory):
         assert state["ready"] and state["viewer_url"]
         state.pop("viewer_url", None)
         return {"state": state, "completed": completed, "brain": "fake", "paid_requests": 0,
+                "prepare_docker_commands": 0, "next_turn_docker_commands": 0,
                 "without_approval": completed, "owner_held_refused": refused,
                 "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments),
                 "preparation": preparation}

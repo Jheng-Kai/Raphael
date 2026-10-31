@@ -86,6 +86,7 @@ class CoreHost:
             tools=[t for t in (reply.get("tools") or []) if _is_tool(t)],
             instruction=instruction if isinstance(instruction, str) else "",
             blocks=reply.get("blocks") or [],
+            replace_tools=reply.get("replace_tools") is True,
         )
 
 
