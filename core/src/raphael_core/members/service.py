@@ -259,6 +259,8 @@ class MembersService:
         self._memory = memory
         self._language = language
         self._notify = notify
+        # Told of each member made through the tools: who made it, and which it is.
+        self.member_made = lambda maker, made: None
         self._connections = connections
         self._now_ms = now_ms
         self._tz = tz
@@ -1307,7 +1309,10 @@ class MembersService:
                     created_group = (await self._group_create({"name": group_name}))["group"]
                 params["group_id"] = group.id if group else created_group["id"] if created_group else None
             try:
-                return await (self._create(params) if name == "member_create" else self._update(params))
+                result = await (self._create(params) if name == "member_create" else self._update(params))
+                if name == "member_create":
+                    self.member_made(member_id, result["member"]["id"])
+                return result
             except RpcError:
                 # Failed validation must not leave behind the automatically created group.
                 if created_group:

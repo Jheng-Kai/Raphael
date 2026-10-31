@@ -987,6 +987,9 @@ class App(Router):
         self.background.use_workspaces(
             lambda member: self.vm.target(member).workspace if self.vm.grants.allowed(member) else None)
         self.vm_tools.names = self.members.name_of
+        # A member made by one the owner let use a computer has one too: it is a sandbox of its own, and a team
+        # that was just made would otherwise stop at its first step to ask for each of them.
+        self.members.member_made = lambda maker, made: self.vm.grants.set(made, True) if self.vm.grants.allowed(maker) else None
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),

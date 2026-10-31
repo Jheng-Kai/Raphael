@@ -3108,7 +3108,7 @@ class AgentService:
                               None if text is not None else "not_found", untrusted=True)
         if name == CREATE_MEMBER:
             try:
-                created = await team.admin_tool(0, "member_create", dict(arguments))
+                created = await team.admin_tool(speaker.id, "member_create", dict(arguments))
             except RpcError as error:
                 return ToolResult(name, False, {"field": (error.data or {}).get("kind", "")}, "bad_arguments")
             except sqlite3.Error as exc:

@@ -70,7 +70,7 @@ async function run(options) {
         if (!process.env.RAPHAEL_NATIVE_MODEL_CATALOG) throw new Error("Set RAPHAEL_NATIVE_MODEL_CATALOG to a recorded public GET /api/v1/models response");
         env.RAPHAEL_TEST_NATIVE_MODEL_PICKER = "1";
       }
-      if (journey.name === "member-computer") env.RAPHAEL_TEST_NATIVE_COMPUTER = "1";
+      if (["member-computer", "office-mission"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_COMPUTER = "1";
       if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {

@@ -143,6 +143,14 @@ async def test_member_deletion_always_asks_and_obeys_the_answer(setup, client, a
     assert (team.members.speaker(one.id) is None) == approved
 
 
+async def test_who_made_a_member_is_told_so_it_can_have_what_its_maker_has(setup):
+    rig, team = setup
+    one, made = member(team), []
+    team.members.member_made = lambda maker, new: made.append((maker, new))
+    created = await team.members.admin_tool(one.id, "member_create", {"name": "Added", "role": "COO"})
+    assert made == [(one.id, created["member"]["id"])]
+
+
 async def test_a_member_has_the_same_team_tools_as_raphael_and_the_owner_still_confirms(setup, client):
     from raphael_core.agent.team_admin import DEFINITIONS
 

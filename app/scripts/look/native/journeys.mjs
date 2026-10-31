@@ -2,6 +2,8 @@ import { perform, pressInFrame } from "../driver.mjs";
 import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 import { idleCost, slimeSharp } from "../slime-board.mjs";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 export const journeys = [
   { name: "appearance", description: "Real Appearance dropdown, theme persistence and narrow rows at three native sizes" },
@@ -12,6 +14,7 @@ export const journeys = [
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
   { name: "owner-words", description: "The real core and the real Codex CLI, on what the owner really asks: an event goes on today's calendar, and a question about this PC's CPU runs read-only commands after the card" },
+  { name: "office-mission", description: "The acceptance test, on the real Codex and real computers: the owner asks for a 3D office, Raphael plans roles, makes the team and hands out the work, and they finish it" },
   { name: "member-job", description: "The real core and the real Codex CLI: a member made with only a name speaks first, and the owner's answer becomes its job" },
   { name: "pages", description: "A stored page from the core's real host under the real CSP: isolated, speaks only on a real press, survives a redraw, expands, follows the theme, comes back after a reload" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
@@ -470,6 +473,68 @@ export async function drive(name, context) {
     if (computer) throw new Error("The question about this PC went to a computer");
     if (JSON.stringify(cpu.steps ?? []).includes(commands[0].slice(0, 30))) throw new Error("A command reached the public steps");
     if (cpu.member_id !== member.id || calendar.member_id !== member.id) throw new Error("The member was not the one asked");
+    return;
+  }
+  if (name === "office-mission") {
+    await keepFocus(page);
+    let codex;
+    for (let i = 0; i < 150 && !codex; i++) {
+      const models = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models ?? [];
+      codex = models.find(model => model.id.endsWith("gpt-6-sol")) ?? models.at(-1);
+      if (!codex) await pause(200);
+    }
+    if (!codex) throw new Error("The real Codex listed no models");
+    await context.rpc("settings.set", { key: "agent_model", value: `${codex.id}?effort=medium` });
+    await context.computerSignin(0);  // the owner has let Raphael use a computer; those it makes have one too
+    const text = "幫我做一個 3D 的 Bots 辦公室：先想好需要哪些角色，把團隊成員建立起來，分派給他們一起完成。成品是一個用瀏覽器打開就能看的 three.js 網頁，放在團隊資料夾，裡面每位成員有自己的辦公桌和史萊姆造型，可以用滑鼠環顧。做好後告訴我檔案在哪裡，以及每個人做了什麼。";
+    await type(page, ".composer .cmp-input", text);
+    await click(page, ".cmp-send");
+    const began = Date.now(), mission = result.mission = { cards: 0, questions: 0, states: [] };
+    let seen = "", changed = Date.now(), done = false, shots = 0;
+    while (Date.now() - began < 90 * 60_000) {
+      const yes = await page.$('.page-agent [data-act="perm-once"]:not([disabled])');
+      if (yes) { mission.cards += 1; await yes.click().catch(() => undefined); await pause(1000); }
+      for (const question of (await context.rpc("background.questions.list", {})).questions ?? []) {
+        mission.questions += 1;
+        await context.rpc("background.answer", { task_id: question.task_id, question_id: question.id, approved: true }).catch(() => undefined);
+      }
+      const data = await snapshot();
+      const tasks = data.worker_tasks ?? [], turns = data.agent_turns;
+      const state = JSON.stringify([data.members.map(row => row.name), tasks.map(task => [task.id, task.member_id, task.state, task.tool_calls]), turns.map(turn => [turn.id, turn.status])]);
+      if (state !== seen) {
+        seen = state; changed = Date.now();
+        mission.states.push({ at_s: Math.round((changed - began) / 1000), members: data.members.length, tasks: tasks.map(task => `${task.id}:${task.state}:${task.tool_calls}`).join(" "), turns: turns.map(turn => `${turn.id}:${turn.status}`).join(" ") });
+        if (mission.states.length % 8 === 0 && shots < 12) { shots += 1; await capture(`mission-${shots}`).catch(() => undefined); }
+      }
+      const open = tasks.filter(task => !["done", "failed", "cancelled", "interrupted", "stopped"].includes(task.state));
+      done = tasks.length > 0 && !open.length && !turns.some(turn => ["running", "confirm"].includes(turn.status));
+      if (done && Date.now() - changed > 30_000) break;
+      await pause(3000);
+    }
+    await capture("mission-end");
+    const data = await snapshot();
+    mission.seconds = Math.round((Date.now() - began) / 1000);
+    mission.finished = done;
+    mission.members = data.members.map(row => ({ id: row.id, name: row.name, role: row.role }));
+    mission.tasks = (data.worker_tasks ?? []).map(task => ({ id: task.id, member: task.member_id, state: task.state, reason: task.reason, model_calls: task.model_calls, tool_calls: task.tool_calls, report: (task.report_text ?? "").slice(0, 300) }));
+    mission.turns = data.agent_turns.map(turn => ({ id: turn.id, member: turn.member_id, status: turn.status, text: (turn.text ?? "").slice(0, 600) }));
+    mission.tools = data.tool_audit.reduce((all, row) => ({ ...all, [row.server]: (all[row.server] ?? 0) + 1 }), {});
+    const found = [];
+    const walk = (folder, depth = 0) => {
+      let rows = [];
+      try { rows = readdirSync(folder); } catch { return; }
+      for (const row of rows) {
+        const path = join(folder, row);
+        let info;
+        try { info = statSync(path); } catch { continue; }
+        if (info.isDirectory()) { if (depth < 6 && !["node_modules", ".cache", ".config", ".mozilla", ".local", "Desktop"].includes(row)) walk(path, depth + 1); }
+        else if (/\.(html|js|md)$/i.test(row)) found.push({ path, bytes: info.size });
+      }
+    };
+    walk(join(result.data, "vm-shared")); walk(join(result.data, "vm-homes"));
+    mission.files = found.slice(0, 40);
+    if (!done) throw new Error("The mission did not finish in 90 minutes");
+    if (!found.some(file => /\.html$/i.test(file.path) && file.bytes > 500)) throw new Error("No page came of the mission");
     return;
   }
   if (name === "member-job") {
