@@ -93,6 +93,16 @@ async def test_invalid_result_limits_do_not_create_servers(rpc, vault, limit):
     assert (await rpc.call("toolsets.list"))["groups"] == [] and vault.names() == []
 
 
+async def test_the_old_default_result_limit_no_longer_cuts_long_pages_and_a_chosen_one_stays(rpc, vault):
+    from raphael_core.integrations.config import DEFAULT_RESULT_SIZE
+    added = (await rpc.call("integrations.add", {"name": "Old", "transport": "stdio", "command": "npx", "result_size_limit": 8000}))["server"]
+    assert added["result_size_limit"] == DEFAULT_RESULT_SIZE
+    plain = (await rpc.call("integrations.add", {"name": "Plain", "transport": "stdio", "command": "npx"}))["server"]
+    assert plain["result_size_limit"] == DEFAULT_RESULT_SIZE
+    chosen = (await rpc.call("integrations.add", {"name": "Chosen", "transport": "stdio", "command": "npx", "result_size_limit": 2500}))["server"]
+    assert chosen["result_size_limit"] == 2500
+
+
 def test_result_size_limit_is_used_for_rendered_tool_output():
     from types import SimpleNamespace
     from raphael_core.integrations.client import render_result

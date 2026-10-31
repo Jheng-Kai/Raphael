@@ -101,6 +101,8 @@ from ..agent.speaker import MAX_DEPTH, RAPHAEL, Speaker
 from ..agent.steps import REFUSED_REASONS
 from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools
+from ..brain.catalog import CatalogEntry, context_window
+from ..brain.pricing import builtin_catalog
 from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore, api_model
 from ..brain.spend import SpendTracker
@@ -354,8 +356,10 @@ class BackgroundService:
         tz: tzinfo | None = None,
         clock: Callable[[], float] = time.monotonic,
         model_observer: Callable[..., None] | None = None,
+        known_models: Callable[[], Sequence[CatalogEntry] | None] = lambda: None,
     ) -> None:
         self._client = client
+        self._known_models = known_models  # the catalog, for the window of a task's model
         self._model_observer = model_observer  # told each CLI turn's actual model (Guardian verifies it)
         self._picker = ToolPicker(client)
         self._gate = gate
@@ -1099,6 +1103,7 @@ class BackgroundService:
                 "tool_calls": self._limits.tool_calls,
                 "seconds": self._limits.seconds,
             },
+            "context_window": self._context_window(model),
         }
         if recovered:
             results = self._child_results(task.id)
@@ -1125,6 +1130,15 @@ class BackgroundService:
             await self._carry_cli(task, run, spec)
             return
         await self._carry(task, run, spec, self._limits.seconds)
+
+    def _context_window(self, model: str) -> int | None:
+        """The window of `model`, for the worker to keep the task inside. The catalog is a convenience
+        here: a task whose model it cannot tell starts from a small window."""
+        try:
+            return context_window(self._known_models() or builtin_catalog(), model)
+        except Exception as exc:
+            logger.warning("Could not read the catalog of models: %s", type(exc).__name__)
+            return None
 
     async def _resume(self, task: Task, paused: _Paused) -> None:
         """Go on with a task the owner answered: the call it waited on is made with the yes (or not,
@@ -1160,6 +1174,7 @@ class BackgroundService:
                 "tool_calls": max(limits.tool_calls - run.tool_calls, 1),
                 "seconds": max(paused.remaining_s, 1.0),
             },
+            "context_window": self._context_window(run.model),
         }
 
         async def prepare() -> list[dict]:

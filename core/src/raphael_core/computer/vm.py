@@ -25,7 +25,7 @@ DRIVER = "/usr/local/libexec/raphael/cua-driver"
 SOCKET = "/run/user/1000/raphael-cua.sock"
 LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "1"}
-MAX_OUTPUT = 20_000
+MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.guards`)
 
 
 class VmError(Exception):

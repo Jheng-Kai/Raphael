@@ -4,19 +4,20 @@ It speaks JSON-RPC with the core that started it, on stdin and stdout, and ends 
 a core that is gone leaves it nothing to do. The core calls:
 
 - `worker.hello {}`: answered with the protocol version and the process id (the start-up handshake);
-- `task.run {task_id, system, user, tools, limits}`: carry the task out (`loop.run_task`) and answer
-  with how it ended. One task at a time. A task that goes on after the owner answered its question
-  is given `messages` (the whole conversation, as it was given back) in place of `system` and
-  `user`; a task that pauses for a question answers with the conversation as it stands
-  (`messages`) and the id of the call that waits (`waiting_call`);
+- `task.run {task_id, system, user, tools, limits, context_window}`: carry the task out
+  (`loop.run_task`) and answer with how it ended. One task at a time. A task that goes on after the
+  owner answered its question is given `messages` (the whole conversation, as it was given back) in
+  place of `system` and `user`; a task that pauses for a question answers with the conversation as it
+  stands (`messages`) and the id of the call that waits (`waiting_call`);
 - `task.cancel {task_id}` (a notification): stop the task at once.
 
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
 reply of the model (with `room`, how many times the usual limit on a reply, when it asks again for a
-call that the limit cut off; the reply says `finish_reason: "length"` when it was cut off) and
-`host.tool {task_id, call_id, name, arguments}` for the result of a tool. A refusal of either comes as
-an error whose data says `stop`, and the loop ends with it. A task here has nobody in it to read a
-note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
+call that the limit cut off; the reply says `finish_reason: "length"` when it was cut off),
+`host.tool {task_id, call_id, name, arguments}` for the result of a tool and
+`host.summarize {task_id, system, user, max_tokens}` for the checkpoint of a long task. A refusal of
+any comes as an error whose data says `stop`, and the loop ends with it. A task here has nobody in it
+to read a note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
 
 stdout is claimed for the protocol before anything else is done (`stdio_server.claim_stdout`). This
 module imports the loop and the channel and nothing of the core's other side: no keys, no database,
@@ -56,8 +57,9 @@ class CoreHost:
         except RpcError as error:
             data = error.data if isinstance(error.data, dict) else {}
             if error.code == WORKER_STOPPED and isinstance(data.get("stop"), str):
-                detail = data.get("detail")
-                raise Stop(data["stop"], detail if isinstance(detail, str) else None) from None
+                detail, window = data.get("detail"), data.get("window")
+                raise Stop(data["stop"], detail if isinstance(detail, str) else None,
+                           window=window if type(window) is int else None) from None
             raise
 
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn:
@@ -74,10 +76,15 @@ class CoreHost:
             for call in reply.get("calls", [])
             if isinstance(call, dict)
         ]
-        content = reply.get("content")
+        content, prompt_tokens = reply.get("content"), reply.get("prompt_tokens")
         return Turn(content if isinstance(content, str) else "", calls,
                     responses_output=reply.get("responses_output", []),
-                    finish_reason=LENGTH if reply.get("finish_reason") == LENGTH else "")
+                    finish_reason=LENGTH if reply.get("finish_reason") == LENGTH else "",
+                    prompt_tokens=prompt_tokens if type(prompt_tokens) is int else 0)
+
+    async def summarize(self, system: str, user: str, max_tokens: int) -> str:
+        reply = await self._ask("host.summarize", {"system": system, "user": user, "max_tokens": max_tokens})
+        return reply["text"]
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         reply = await self._ask(
@@ -165,6 +172,7 @@ class Worker:
             raise RpcError(BUSY, "A task is running")
         self._task_id = task_id
         self._cancelled = asyncio.Event()
+        window = params.get("context_window")
         try:
             outcome = await run_task(
                 CoreHost(self._peer, task_id),
@@ -175,6 +183,7 @@ class Worker:
                 limits=_limits(params.get("limits")),
                 cancelled=self._cancelled,
                 guardrails=ToolGuardrails(hard_stop=True),  # nobody is in a background task to read a note
+                context_window=window if type(window) is int else None,
             )
         finally:
             self._task_id = None

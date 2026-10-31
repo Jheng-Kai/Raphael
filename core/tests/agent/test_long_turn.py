@@ -89,6 +89,28 @@ async def test_a_failed_call_after_work_is_made_again_and_the_work_goes_on(make_
     assert client.chat_calls[1]["messages"] == client.chat_calls[3]["messages"]
 
 
+async def test_a_turn_is_kept_inside_the_window_the_catalog_gives_its_model(make_rig, client):
+    from dataclasses import replace
+
+    from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, TextCompletion
+    from .test_plugin_model import llm
+
+    entry = replace(llm("openai/small"), context_length=8_000)
+    rig = make_rig(models=lambda: [entry])
+    rig.settings.set("agent_model", entry.id)
+    client.decisions.append(decision("answer"))
+    checkpoint = "## Goal\nThe time.\n## Completed actions\n1. READ the time — ten o'clock"
+    client.texts.extend(TextCompletion(checkpoint, entry.id, 0.01, 10, 10, 1, []) for _ in range(3))
+    rounds = [ChatTurn("I will go on.", [ChatToolCall(f"c{n}", "local_time", {"step": n}, json.dumps({"step": n}))], entry.id, 0.0, 7_000, 10, 1)
+              for n in range(6)]
+    client.chats = [*rounds, chat(FINAL)]
+    result = await typed(rig)
+    assert result["text"] == "Done."
+    last = client.chat_calls[-1]["messages"]
+    assert last[1]["content"].endswith("</context_summary>") and "READ the time" in last[1]["content"]
+    assert client.text_calls[0]["model"] == entry.id
+
+
 async def test_work_under_way_keeps_trying_for_as_long_as_it_takes_and_says_so_once(make_rig, client, no_waits):
     rig = make_rig()
     client.decisions.append(decision("answer"))

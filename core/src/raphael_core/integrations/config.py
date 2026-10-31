@@ -47,12 +47,22 @@ MAX_DESCRIPTION_CHARS = 1000
 MAX_SCHEMA_CHARS = 16000
 # What is kept of the title a server gives a tool (for the screen only).
 MAX_TITLE_CHARS = 80
+# What a server's tool may return, in characters, unless the owner says otherwise. The task cuts it
+# again to what its model's window holds, so this is what a task may be shown at most (`worker.guards`).
+DEFAULT_RESULT_SIZE = 50_000
+# The default it replaces, which every server added so far, and the form on the screen, wrote down
+# without anybody choosing it: it cut every long page a task read.
+_OLD_DEFAULT_RESULT_SIZE = 8000
 
 _TOOL_NAME = re.compile(r"[A-Za-z0-9_.\-]{1,128}")
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}")
 _HEADER_NAME = re.compile(r"[A-Za-z0-9\-]{1,64}")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _OPEN_SCHEMA: dict[str, Any] = {"type": "object", "additionalProperties": True}
+
+
+def _current_size(limit: int) -> int:
+    return DEFAULT_RESULT_SIZE if limit == _OLD_DEFAULT_RESULT_SIZE else limit
 
 
 @dataclass
@@ -88,7 +98,7 @@ class ServerConfig:
     auth: str = "none"  # "oauth": a login in the browser, "device": a code typed at the service; tokens are in the vault
     catalog_id: str = ""  # the entry of the store this was added from, if it was
     revocation_url: str = ""  # where the login's token is revoked when the server is disconnected
-    result_size_limit: int = 8000
+    result_size_limit: int = DEFAULT_RESULT_SIZE
     managed_by: str = ""
     header_refs: dict[str, str] = field(default_factory=dict)
 
@@ -235,10 +245,10 @@ def parse_new_server(params: dict, taken_names: list[str]) -> NewServer:
     transport = params.get("transport")
     if transport not in TRANSPORTS:
         raise ValueError("transport must be stdio or http")
-    limit = params.get("result_size_limit", 8000)
+    limit = params.get("result_size_limit", DEFAULT_RESULT_SIZE)
     if type(limit) is not int or not 100 <= limit <= 100000:
         raise ValueError("result_size_limit must be between 100 and 100000")
-    config = ServerConfig(id=secrets.token_hex(6), name=name, transport=transport, enabled=False, result_size_limit=limit)
+    config = ServerConfig(id=secrets.token_hex(6), name=name, transport=transport, enabled=False, result_size_limit=_current_size(limit))
     env: dict[str, str] = {}
     headers: dict[str, str] = {}
     if transport == "stdio":
@@ -329,8 +339,8 @@ def _server_from_json(raw: Any) -> ServerConfig | None:
         header_refs={"x-api-key": "connectors:composio:key"} if raw.get("managed_by") == "composio" else {},
     )
     checked = raw.get("tools_checked_at_ms")
-    limit = raw.get("result_size_limit", 8000)
-    server.result_size_limit = limit if type(limit) is int and 100 <= limit <= 100000 else 8000
+    limit = raw.get("result_size_limit", DEFAULT_RESULT_SIZE)
+    server.result_size_limit = _current_size(limit) if type(limit) is int and 100 <= limit <= 100000 else DEFAULT_RESULT_SIZE
     server.tools_checked_at_ms = checked if type(checked) is int else None
     for item in raw.get("tools", []) if isinstance(raw.get("tools"), list) else []:
         if not isinstance(item, dict):

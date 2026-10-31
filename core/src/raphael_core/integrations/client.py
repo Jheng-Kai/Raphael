@@ -69,8 +69,8 @@ REFRESH_TOTAL_S = 30.0
 CALL_TOTAL_S = 15.0
 # How long a person is given to finish a login in the browser.
 LOGIN_TIMEOUT_S = 300.0
-# What of a tool's result is passed on, in characters.
-MAX_RESULT_CHARS = 8000
+# What of a tool's result is passed on, in characters: what a task may be shown of it at most (`worker.guards`).
+MAX_RESULT_CHARS = 50_000
 # The most tools read from one server, and the most pages of the list that are asked for.
 MAX_TOOLS = 200
 MAX_PAGES = 10

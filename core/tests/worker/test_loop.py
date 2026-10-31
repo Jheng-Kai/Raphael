@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from raphael_core.worker.guards import OMITTED
 from raphael_core.worker.loop import (
     BAD_ARGUMENTS,
     TOO_LONG,
@@ -185,14 +184,13 @@ async def test_a_result_that_tries_to_give_orders_stays_inside_its_wrapper():
     assert result.count("</tool_result>") == 1 and "<task>" not in result
 
 
-async def test_the_results_of_old_rounds_are_dropped_as_the_task_goes_on():
+async def test_the_results_of_old_rounds_stay_while_they_fit():
     turns = [Turn("", [ask("Notes__look", {"topic": f"t{n}"}, f"c{n}")]) for n in range(6)]
     host = FakeHost([*turns, report()])
     await run(host, limits=Limits(model_calls=15, tool_calls=25, seconds=60))
     last = host.conversations[-1]
     results = [m["content"] for m in last if m["role"] == "tool"]
-    assert results[:3] == [OMITTED] * 3
-    assert all("result of Notes__look" in text for text in results[3:])
+    assert len(results) == 6 and all("result of Notes__look" in text for text in results)
 
 
 async def test_the_model_call_limit_stops_the_task_without_another_call():

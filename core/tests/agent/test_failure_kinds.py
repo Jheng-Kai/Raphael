@@ -9,7 +9,7 @@ import pytest
 
 from raphael_core.agent.failure import AgentFailure
 from raphael_core.brain.openrouter import OpenRouterClient, OpenRouterError
-from raphael_core.failures import KINDS, TRANSIENT, Failure, _OWNER_MESSAGES, classify, is_context_overflow
+from raphael_core.failures import KINDS, TRANSIENT, Failure, _OWNER_MESSAGES, classify
 
 OVERFLOW = [
     "This model's maximum context length is 128000 tokens. However, your messages resulted in 150000 tokens. Please reduce the length of the messages.",
@@ -38,13 +38,12 @@ async def failing(status, body, headers=None):
 async def test_a_context_that_does_not_fit_is_neither_a_bad_request_nor_a_refusal(message):
     error = await failing(400, {"error": {"message": message}})
     assert error.kind == "context_overflow"
-    assert classify(error).kind == "context_overflow" and is_context_overflow(error)
+    assert classify(error).kind == "context_overflow"
     assert not classify(error).transient
 
 
 async def test_the_code_a_provider_gives_is_enough():
     assert classify({"error": {"code": "context_length_exceeded", "message": "x"}}).kind == "context_overflow"
-    assert is_context_overflow({"error": {"code": "context_length_exceeded"}})
 
 
 @pytest.mark.parametrize(
@@ -57,7 +56,7 @@ async def test_the_code_a_provider_gives_is_enough():
     ],
 )
 def test_other_failures_that_name_tokens_are_not_an_overflow(value):
-    assert not is_context_overflow(value) and not is_context_overflow(OpenRouterError(429, "rate_limit", value))
+    assert classify(value).kind != "context_overflow" and classify(OpenRouterError(429, "rate_limit", value)).kind != "context_overflow"
 
 
 async def test_a_request_too_big_to_send_is_its_own_kind():

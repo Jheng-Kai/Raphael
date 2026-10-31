@@ -13,7 +13,7 @@ Reading a page (`read`) is the `web_read_service` setting's: "builtin" fetches i
 computer (`fetch.PageFetcher`, which goes only to public addresses) and turns its HTML into text
 here (`html.html_to_text`), at no cost; a PDF it is led to is read as a PDF (`pdf`); Jina, Firecrawl
 and Tavily read it on their own servers. It gives back `{title, text, truncated}`, the text held to
-the budget of a tool's text (`common.fit`).
+PAGE_BUDGET (`common.fit`): a task is shown as much of it as its model's window can hold.
 
 The services' own addresses and the shapes of their answers are theirs (as of 2026-10); a key is
 sent the way each documents, in a header. What comes back is untrusted: it is data for the model,
@@ -40,6 +40,7 @@ from .html import html_to_text
 SEARCH_RESULTS = 5
 SNIPPET_CHARS = 400
 TITLE_CHARS = 200
+PAGE_BUDGET = 50_000
 # A service's answer may take this long, each stage of the request.
 SERVICE_TIMEOUT_S = 12.0
 # Include the queue and retries in the existing tool budget. Brave's one request per
@@ -272,7 +273,7 @@ async def _search(service: str, query: str, *, http: httpx.AsyncClient, key: str
 def _page(title: Any, text: Any) -> dict:
     if not isinstance(text, str) or not text.strip():
         raise ServiceError("bad_response")
-    kept, cut = fit(text.strip())
+    kept, cut = fit(text.strip(), PAGE_BUDGET)
     return {"title": _plain(title, TITLE_CHARS), "text": kept, "truncated": cut}
 
 

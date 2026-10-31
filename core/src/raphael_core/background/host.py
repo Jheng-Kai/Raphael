@@ -351,6 +351,7 @@ class WorkerHost:
             raise WorkerStopped
         link.peer.register("host.chat", self._chat)
         link.peer.register("host.tool", self._tool)
+        link.peer.register("host.summarize", self._summarize)
         self._pending = link
         try:
             hello = await asyncio.wait_for(
@@ -409,6 +410,9 @@ class WorkerHost:
 
     async def _tool(self, params: dict) -> dict:
         return await self._run_for(params).tool(params)
+
+    async def _summarize(self, params: dict) -> dict:
+        return await self._run_for(params).summarize(params)
 
     # --- carrying a task out --------------------------------------------------------------------
 

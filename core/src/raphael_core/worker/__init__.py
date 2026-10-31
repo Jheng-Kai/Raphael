@@ -17,7 +17,8 @@ module here, and nothing they import, reaches `keyring`, `raphael_core.brain.sec
 Modules: `channel` (JSON-RPC both ways over lines), `guards` (what a tool result is wrapped in, how
 it is cut), `tool_guardrails` (notes for repeated or failing calls, and the stop for a task nobody is
 in), `stall_guards` and `repetition_guard` (a model that stops short, is cut off or goes round in
-circles), `loop` (the loop itself), `runner` (the process).
+circles), `context` (a long conversation kept inside the model's window), `loop` (the loop itself),
+`runner` (the process).
 
 Nothing here logs the task, a prompt, an argument or a result.
 """

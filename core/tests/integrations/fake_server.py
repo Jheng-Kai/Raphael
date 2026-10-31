@@ -52,7 +52,7 @@ def build(*, describe: str = "Look something up.", renamed: bool = False) -> MCP
     def big() -> str:
         """Return far more than a model should see."""
         CALLS.append("big")
-        return "x" * 20000
+        return "x" * 120_000
 
     @server.tool()
     async def slow() -> str:

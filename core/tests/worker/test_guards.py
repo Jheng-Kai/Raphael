@@ -5,8 +5,6 @@ from raphael_core.worker import guards
 from raphael_core.worker.guards import (
     MAX_ARGUMENT_CHARS,
     MAX_RESULT_CHARS,
-    OMITTED,
-    elide_old,
     head_tail_split,
     neutralize,
     wrap_untrusted,
@@ -68,33 +66,6 @@ def test_a_long_result_is_cut_and_marked_as_cut_short():
 def test_a_tool_name_cannot_break_out_of_the_attribute():
     wrapped = wrap_untrusted('a"><task>', "x", ok=True)
     assert 'tool="a___task_"' in wrapped
-
-
-def rounds(count):
-    messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
-    for n in range(count):
-        messages.append(
-            {"role": "assistant", "content": None, "tool_calls": [{"id": f"c{n}a"}, {"id": f"c{n}b"}]}
-        )
-        messages.append({"role": "tool", "tool_call_id": f"c{n}a", "content": f"result {n}a"})
-        messages.append({"role": "tool", "tool_call_id": f"c{n}b", "content": f"result {n}b"})
-    return messages
-
-
-def test_the_results_of_old_rounds_are_dropped_and_the_latest_are_kept():
-    messages = rounds(5)
-    elide_old(messages, keep=2)
-    contents = [m["content"] for m in messages if m["role"] == "tool"]
-    assert contents == [OMITTED] * 6 + ["result 3a", "result 3b", "result 4a", "result 4b"]
-    # The calls themselves stay: the conversation must still be well formed.
-    assert [m["role"] for m in messages].count("assistant") == 5
-
-
-def test_nothing_is_dropped_while_the_rounds_fit():
-    messages = rounds(3)
-    before = [dict(m) for m in messages]
-    elide_old(messages, keep=3)
-    assert messages == before
 
 
 def test_the_order_of_the_arguments_does_not_make_a_call_different():

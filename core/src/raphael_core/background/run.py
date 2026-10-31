@@ -65,8 +65,9 @@ from ..agent.team import description as team_description
 from ..agent.tools import ToolResult, Tools
 from ..brain.catalog import LLM, find
 from ..brain.model_ref import short_name
-from ..brain.openrouter import OpenRouterError
+from ..brain.openrouter import OpenRouterError, TextCompletion
 from ..brain.providers.base import ModelProvider
+from ..brain.providers.registry import for_purpose
 from ..brain.textnorm import public_line
 from ..brain.pricing import builtin_catalog
 from ..brain.spend import SpendTracker
@@ -75,6 +76,7 @@ from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
+from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
@@ -87,13 +89,11 @@ T = TypeVar("T")
 # One model reply may be this long. How long it may take is up to the model: the call ends when its connection has been
 # silent for `MODEL_SILENCE_S` (or the task's own time is up), not at a clock of its own.
 CHAT_MAX_TOKENS = REPLY_TOKENS
-# The conversation the worker sends is bounded: a worker that sent more is not doing a task.
-MAX_MESSAGES = 200
-MAX_CHAT_CHARS = 600_000
-# The most of a tool's result that goes to the worker, in characters (it cuts it further).
-MAX_RESULT_CHARS = 12_000
-# A page read, or a file's text, is longer: the budget of a tool's text, and its footer.
-MAX_TEXT_RESULT_CHARS = 16_000
+# A long task's checkpoint: longer than a reply, as it reads a long conversation (`worker.context`).
+SUMMARY_TIMEOUT_S = 120.0
+# The most of a tool's result that goes to the worker, in characters. It cuts it to what the model's
+# window holds, keeping both ends (`worker.guards.result_limit`), so this only bounds the message.
+MAX_RESULT_CHARS = 200_000
 # The tools whose call is paid: the search (by a model, or a service), the reading of a file, and
 # asking another member (who answers with model calls of its own, on this task's ledger).
 _PAID_TOOLS = ("web_search", "read_attachment", ASK_MEMBER)
@@ -133,10 +133,26 @@ class RunLimits:
     cost_usd: float = 0.20
 
 
-def stopped(kind: str, detail: str | None = None) -> RpcError:
+def stopped(kind: str, detail: str | None = None, *, window: int | None = None) -> RpcError:
     """The answer to a call the task may not make: it ends the task. `kind` is one of
     `worker.loop.Stop`'s kinds."""
-    return RpcError(WORKER_STOPPED, "The task may not go on", {"stop": kind, "detail": detail})
+    data = {"stop": kind, "detail": detail, **({"window": window} if window is not None else {})}
+    return RpcError(WORKER_STOPPED, "The task may not go on", data)
+
+
+async def summary_reply(client: ModelProvider, model: str, *, system: str, user: str, max_tokens: int) -> TextCompletion:
+    """A model's reply for a long task's checkpoint: on the memory's model, as a conversation's summary
+    is (the task's own, unless the owner chose another). One chosen for it that cannot answer, for want
+    of a key say, gets no more tries than this: the task's own model is asked once."""
+    call = dict(model=model, system=system, user=user, timeout_s=SUMMARY_TIMEOUT_S,
+                max_tokens=max_tokens, reasoning_effort="none")
+    memory = for_purpose(client, "memory")
+    try:
+        return await memory.chat_text(**call)
+    except OpenRouterError:
+        if memory is client or memory.model_for(model) == client.model_for(model):
+            raise
+    return await client.chat_text(**call)
 
 
 def _outcome_of(result: PluginResult) -> str:
@@ -255,6 +271,7 @@ class TaskRun:
         self.limits = limits
         self.snapshot = snapshot
         self.ledger = ledger
+        self._max_tokens = CHAT_MAX_TOKENS
         self.model_calls = 0
         self.tool_calls = 0
         self.cancelled = False
@@ -413,10 +430,25 @@ class TaskRun:
             else:
                 request_chars += len(json.dumps(message, ensure_ascii=False))
         async with self._turn:
-            # A conversation grown past what is sent is a task that has used what it was given.
-            if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS or image_chars > 14_000_000:
+            # A conversation's length is the worker's to keep to the window (`worker.context`), and the provider's
+            # to refuse: it is no reason to stop a job. Screenshots have no window to answer to.
+            if image_chars > 14_000_000:
                 raise stopped("limit_model")
             return await self._chat(messages, request_chars, room)
+
+    async def summarize(self, params: dict) -> dict:
+        """A long task's checkpoint, on the task's ledger. It is the run's upkeep: no model call of
+        the limits, and no step. A model that fails is the worker's to deal with (`worker.context`)."""
+        system, user, max_tokens = params.get("system"), params.get("user"), params.get("max_tokens")
+        if not isinstance(system, str) or not isinstance(user, str) or type(max_tokens) is not int or max_tokens <= 0:
+            raise invalid_params("system and user must be strings and max_tokens a positive whole number")
+        async with self._turn:
+            self._check(paid=True)
+            began = time.perf_counter()
+            reply = await self._guarded(summary_reply(self._client, self.model, system=system, user=user, max_tokens=max_tokens))
+            self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+                            completion_tokens=reply.completion_tokens, ms=_ms(began))
+            return {"text": reply.text}
 
     async def _chat(self, messages: list[dict], request_chars: int, room: int = 1) -> dict:
         self._check(model=True, paid=True)
@@ -439,13 +471,18 @@ class TaskRun:
                         # The snapshot's tools, whatever the worker sent.
                         tools=self.snapshot.definitions,
                         timeout_s=min(MODEL_SILENCE_S, remaining),
-                        max_tokens=CHAT_MAX_TOKENS * room,
+                        max_tokens=self._max_tokens * room,
                         reasoning_effort="none",
                     ), remaining))
                     break
                 except RpcError:
                     raise
                 except Exception as error:
+                    if (smaller := smaller_output(error, self._max_tokens * room)) is not None:
+                        self._max_tokens, room = smaller, 1
+                        continue
+                    if is_context_overflow(error):
+                        raise
                     failure = classify(error)
                     wait = outage.wait(failure.retry_after) if failure.transient else None
                     if wait is None or wait >= self._remaining_s():
@@ -456,6 +493,8 @@ class TaskRun:
                         self._progress(failure.waiting(short_name(self.model), self.language, wait))
                     await self._guarded(asyncio.sleep(wait))
         except OpenRouterError as error:
+            if is_context_overflow(error):  # refused unread: no cost and no failed step, as the worker sends it again
+                raise stopped("failed", CONTEXT_OVERFLOW, window=provider_window(error)) from None
             logger.warning(
                 "The task's model failed: kind=%s status=%s", error.kind, error.status
             )
@@ -500,6 +539,7 @@ class TaskRun:
             **({"responses_output": turn.responses_output} if getattr(turn, "responses_output", None) else {}),
             # Only a reply the output limit cut off is reported as such.
             **({"finish_reason": "length"} if getattr(turn, "finish_reason", "") == "length" else {}),
+            **({"prompt_tokens": turn.prompt_tokens} if turn.prompt_tokens else {}),
             "calls": [
                 {"id": c.id, "name": c.name, "arguments": c.arguments, "raw": c.raw_arguments}
                 for c in turn.calls
@@ -797,8 +837,7 @@ class TaskRun:
             outcome = "ok" if result.ok else ("timeout" if result.error == "timeout" else "error")
         gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
         if result.ok:
-            limit = (2 * 128 * 1024 + 1000 if ref.name == "skill_read" else
-                     MAX_TEXT_RESULT_CHARS if ref.name in ("web_read", "read_attachment") else None)
+            limit = 2 * 128 * 1024 + 1000 if ref.name == "skill_read" else None
             text, cut = _cut(json.dumps(result.data, ensure_ascii=False), limit)
             reply = {"ok": True, "kind": None, "content": text, "truncated": cut}
         else:

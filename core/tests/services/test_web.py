@@ -317,12 +317,12 @@ async def test_the_builtin_reader_turns_a_page_into_its_title_and_text():
 
 
 async def test_the_builtin_reader_holds_a_long_page_to_the_budget():
-    body = "<p>" + "word " * 10_000 + "</p>"
+    body = "<p>" + "word " * 20_000 + "</p>"
     fetcher = page_fetcher({"/": httpx.Response(200, html=body)})
     found = await web.read(
         "builtin", "https://example.com/", http=Api({}).http, fetcher=fetcher, read_pdf=pdf.read_pdf
     )
-    assert found["truncated"] and len(found["text"]) < TEXT_BUDGET + 200
+    assert found["truncated"] and len(found["text"]) < web.PAGE_BUDGET + 200
     assert found["text"].endswith("were left out.]")
 
 

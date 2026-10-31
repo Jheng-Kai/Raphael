@@ -118,7 +118,7 @@ class Rig:
             if self.model_error:
                 return httpx.Response(self.model_error[0], json=self.model_error[1], headers={"x-request-id": "req_synthetic"})
             return httpx.Response(200, json={"models": [
-                {"slug": "chosen-model", "display_name": "Chosen Model", "visibility": "list",
+                {"slug": "chosen-model", "display_name": "Chosen Model", "visibility": "list", "context_window": 272_000,
                  "default_reasoning_level": "medium", "supported_reasoning_levels": [
                      {"effort": "low", "description": "Fast"}, {"effort": "medium", "description": "Balanced"},
                      {"effort": "high", "description": "Deep"}, {"effort": "unheard-of", "description": "Future"}]},
@@ -154,10 +154,10 @@ async def rig(conn, signing_key):
     await value.http.aclose()
 
 
-def sse(output=(), *, event="response.completed", code=None, closing_output=False):
+def sse(output=(), *, event="response.completed", code=None, closing_output=False, input_tokens=10):
     """The stream as the plan endpoint really sends it (seen live 2026-10-31): the items, then an empty `output`."""
     response = {"status": "completed", "model": "chosen-model", "output": list(output) if closing_output else [],
-                "usage": {"input_tokens": 10, "output_tokens": 3}}
+                "usage": {"input_tokens": input_tokens, "output_tokens": 3}}
     if code:
         response["error"] = {"code": code, "message": "secret-provider-text"}
     packets = [{"type": "response.output_text.delta", "delta": "Unconfirmed text"},
@@ -462,6 +462,85 @@ async def test_streamed_tool_round_trip_through_real_narrated_loop(rig):
                for item in rig.body_checks[1]["input"])
     assert rig.body_checks[0]["tools"][0]["type"] == "namespace"
     assert turn.ledger.model == "@chatgpt:chosen-model" and turn.ledger.total == 0
+
+
+async def test_a_long_job_on_the_plan_shrinks_on_the_plan_with_no_other_key_and_stays_well_formed(rig):
+    """The summary goes to the owner's sign-in, not to OpenRouter. Reasoning goes with the rounds it belongs to,
+    and what is left is what the API takes: no call without its output, no item id bound to a reasoning item
+    that is gone. The stream is scripted: nothing here has met the real API."""
+    await rig.sign_in()
+    size = 14
+
+    def round_of(n, tokens):
+        return sse([{"type": "reasoning", "id": f"rs_{n}", "summary": [], "encrypted_content": "E" * 4000},
+                    {"type": "message", "id": f"msg_{n}", "role": "assistant", "status": "completed",
+                     "content": [{"type": "output_text", "text": f"Reading part {n}."}]},
+                    {"type": "function_call", "id": f"fc_{n}", "call_id": f"call-{n}", "name": "read_part",
+                     "namespace": "raphael", "arguments": json.dumps({"part": n})}], input_tokens=tokens)
+
+    summary = "## Goal\nRead it all.\n## Completed actions\n1. READ part 0 — fine"
+    answers = {"rounds": 0, "summaries": 0}
+    plain = rig.answer
+
+    def answer(request):
+        if request.url.path != "/v1/responses":
+            return plain(request)
+        body = json.loads(request.content)
+        rig.body_checks.append(body)
+        rig.requests.append(request)
+        if "tools" not in body:  # the summary call: no tools, the same sign-in
+            answers["summaries"] += 1
+            return sse([message(summary)])
+        answers["rounds"] += 1
+        if answers["rounds"] >= size:
+            return sse([message('{"text":"Done.","detail":""}')])
+        return round_of(answers["rounds"], len(request.content) // 4)
+
+    rig.answer = answer
+
+    async def execute(call_id, name, arguments):
+        return ToolOutcome(True, content="the text of a part " * 500)
+
+    tools = [{"type": "function", "function": {"name": "read_part", "parameters": {"type": "object"}}}]
+    turn = NarratedLoop(client=rig.client, model="@chatgpt:chosen-model", ledger=Ledger(SpendTracker(rig.conn)),
+        language="en", plain=True, system="Answer safely.", user="Read it all.", tools=tools,
+        progress=lambda text: None, execute=execute, context_window=6_000)
+    outcome = await turn.run()
+    assert outcome.status == "done" and turn.reply(outcome).text == "Done."
+    assert answers["summaries"] >= 1
+    assert all(request.url.host in ("auth.openai.com", "api.openai.com") for request in rig.requests)
+    requests = [body for body in rig.body_checks if "tools" in body]
+    for body in requests:
+        items = body["input"]
+        made = [item["call_id"] for item in items if item.get("type") == "function_call"]
+        assert made == [item["call_id"] for item in items if item.get("type") == "function_call_output"]
+        reasoned = {item["id"][3:] for item in items if item.get("type") == "reasoning"}
+        assert all(item["id"].split("_")[1] in reasoned for item in items if item.get("id") and item.get("type") != "reasoning")
+    last = requests[-1]["input"]
+    assert any(item.get("type") == "reasoning" for item in last)
+    assert sum(item.get("type") == "reasoning" for item in last) < size - 1
+    assert "READ part 0" in json.dumps(last[0])
+
+
+async def test_a_prompt_over_the_window_on_the_plan_is_shrunk_and_sent_again_never_refused(rig):
+    await rig.sign_in()
+    rig.responses = [sse([{"type": "function_call", "call_id": "call-1", "name": "read_part", "namespace": "raphael", "arguments": "{}"}]),
+                     sse(event="response.failed", code="context_length_exceeded"),
+                     sse([message('{"text":"Done.","detail":""}')])]
+    async def execute(call_id, name, arguments):
+        return ToolOutcome(True, content="the text of a part " * 500)
+    turn = loop(rig, execute, tools=[{"type": "function", "function": {"name": "read_part", "parameters": {"type": "object"}}}])
+    outcome = await turn.run()
+    assert outcome.status == "done" and turn.reply(outcome).text == "Done."
+    assert len(rig.body_checks) == 3
+
+
+async def test_the_window_of_a_plan_model_comes_from_its_listing(rig):
+    await rig.sign_in()
+    await rig.registry.chatgpt.models()
+    assert rig.auth.model_rows[0]["context"] == 272_000
+    entry = next(entry for entry in rig.registry.catalog_entries() if entry.id == "@chatgpt:chosen-model")
+    assert entry.context_length == 272_000
 
 
 @pytest.mark.parametrize("closing_output", [False, True])
