@@ -67,6 +67,43 @@ Upstream: https://github.com/notofonts/noto-cjk
 The image installs the pinned Noto Sans CJK JP Regular font. Its pinned OFL-1.1
 license is installed at `/usr/local/share/licenses/noto-cjk/OFL.txt` in the image.
 
+## Hermes Agent: retries and failure kinds (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
+
+- `core/src/raphael_core/retry_utils.py`: adapted from `agent/retry_utils.py`
+  (`parse_retry_after_seconds`, the "resets in" / "retry after" grammar behind
+  `reset_delay_from_message`, `jittered_backoff`, `provider_retry_after_seconds`).
+  Its Z.AI schedule is left out.
+- `core/src/raphael_core/failures.py`: the words that tell a spent quota from a throttle, a
+  context that does not fit and a filtered prompt come from the pattern tables of
+  `agent/error_classifier.py`, narrowed to the general kinds.
+- `core/src/raphael_core/brain/streams.py`: how long a silent stream may stay silent follows
+  the stale-stream timeouts of `agent/chat_completion_helpers.py` and
+  `agent/reasoning_timeouts.py`.
+
+MIT License
+
+Copyright (c) 2025 Nous Research
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 # Rich content dependency notices
 
 Mermaid 11.12.2 is MIT; highlight.js 11.11.1 is BSD-3-Clause. Both load lazily.

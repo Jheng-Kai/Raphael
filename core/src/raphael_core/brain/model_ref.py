@@ -15,3 +15,8 @@ def split_api_ref(reference: str) -> tuple[str, str | None]:
 def api_ref(reference: str) -> str:
     model, effort = split_api_ref(reference)
     return model + (f"?effort={effort}" if effort is not None else "")
+
+
+def short_name(reference: str) -> str:
+    """The model as a person would name it in a sentence: "gpt-6-sol" for "@chatgpt:gpt-6-sol?effort=max"."""
+    return reference.split("?", 1)[0].rsplit(":", 1)[-1].rsplit("/", 1)[-1]

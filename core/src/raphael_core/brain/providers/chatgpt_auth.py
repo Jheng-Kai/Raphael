@@ -40,8 +40,9 @@ OUTCOME_WAIT_S = 30
 logger = logging.getLogger(__name__)
 
 
-def failure(status, body, request_id=None):
-    """Allowlist error codes, never carry remote messages or credentials into diagnostics."""
+def failure(status, body, request_id=None, retry_after=None):
+    """Allowlist error codes, never carry remote messages or credentials into diagnostics. `retry_after` is the wait the
+    response asked for; a plan's own `resets_in_seconds` is a number, so it may be kept too."""
     error = body.get("error", {}) if isinstance(body, dict) else {}
     code = error.get("code") if isinstance(error, dict) else error
     kinds = {
@@ -54,12 +55,21 @@ def failure(status, body, request_id=None):
         "chatpass_v2_scope_not_authorized": "chatgpt_scope",
         "chatpass_v2_invalid_authorization_context": "chatgpt_scope",
         "subscription_sharing_invalid_user": "auth_expired",
+        "usage_limit_reached": "usage_limit",
+        "context_length_exceeded": "context_overflow",
+        "insufficient_quota": "credits",
+        "content_policy_violation": "content_policy",
     }
-    kind = kinds.get(code) if isinstance(code, str) else None
+    # The plan endpoint names its usage limit as the error's type.
+    kind = next((kinds[word] for word in (code, error.get("type") if isinstance(error, dict) else None)
+                 if isinstance(word, str) and word in kinds), None)
     kind = kind or ("auth_expired" if (isinstance(code, str) and code in TERMINAL_REFRESH) or status == 401 else
-        "permission_denied" if status == 403 else "rate_limit" if status == 429 else
+        "permission_denied" if status == 403 else "payload_too_large" if status == 413 else
+        "rate_limit" if status == 429 else
         "chatgpt_unavailable" if status == 503 else "server" if status >= 500 else "invalid_request")
     result = OpenRouterError(status, kind, "ChatGPT request failed: " + kind)
+    resets = error.get("resets_in_seconds") if isinstance(error, dict) else None
+    result.retry_after = next((float(wait) for wait in (retry_after, resets) if type(wait) in (int, float) and wait > 0), None)
     # Preserve useful protocol metadata without carrying arbitrary remote text.
     result.details = {"kind": kind, "http_status": status,
         "code": code if isinstance(code, str) and code in (*kinds, *TERMINAL_REFRESH, "invalid_client") else None,

@@ -7,7 +7,7 @@ import time
 
 import httpx
 
-from ..openrouter import OpenRouterError
+from ..openrouter import OpenRouterError, request_timeout
 from .clients import CompatibleProvider, model_info
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -49,7 +49,7 @@ class VertexProvider(CompatibleProvider):
                 # Never trust a token_uri from pasted JSON: a private assertion goes only to Google.
                 response = await self._client().post(TOKEN_URL, data={
                     "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion.decode()},
-                    timeout=timeout_s, follow_redirects=False)
+                    timeout=request_timeout(timeout_s), follow_redirects=False)
             except httpx.TimeoutException:
                 raise OpenRouterError(0, "timeout", "Vertex authentication timed out") from None
             except httpx.TransportError:

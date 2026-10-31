@@ -646,3 +646,69 @@ async def test_rpc_errors_preserve_safe_protocol_metadata_and_credentials(rig, c
     assert error.value.data["body_shape"] == shape and error.value.data["request_id"] == "req_synthetic"
     assert "secret-provider-text" not in str(error.value) + caplog.text + json.dumps(error.value.data)
     assert (await rig.auth.status({}))["signed_in"]
+
+
+def slow_sse(*parts):
+    """A plan stream whose body arrives in parts; a number is a wait, in seconds, before the next part."""
+    async def body():
+        for part in parts:
+            if isinstance(part, (int, float)):
+                await asyncio.sleep(part)
+            else:
+                yield part
+    return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=body())
+
+
+def delta(text="Part."):
+    return ("data: " + json.dumps({"type": "response.output_text.delta", "delta": text}) + "\n\n").encode()
+
+
+def completed(*output):
+    packet = {"type": "response.completed", "response": {"status": "completed", "model": "chosen-model", "output": list(output),
+                                                           "usage": {"input_tokens": 10, "output_tokens": 3}}}
+    return ("data: " + json.dumps(packet) + "\n\n").encode()
+
+
+async def test_a_plan_model_that_thinks_in_silence_is_waited_for(rig):
+    await rig.sign_in()
+    rig.responses = [slow_sse(0.3, completed(message("Done.")))]
+    turn = await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+    assert turn.content == "Done."
+
+
+async def test_a_plan_stream_that_has_begun_to_answer_and_goes_quiet_is_a_dead_connection(rig, monkeypatch):
+    from raphael_core import retry_utils
+    monkeypatch.setattr(retry_utils, "STREAM_STALL_S", 0.2)
+    await rig.sign_in()
+    rig.responses = [slow_sse(delta(), 5, completed(message("Late.")))]
+    with pytest.raises(OpenRouterError) as error:
+        await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=3, max_tokens=50)
+    assert error.value.kind == "timeout" and classify(error.value).transient
+
+
+async def test_a_plan_usage_limit_carries_when_it_resets_and_nothing_the_provider_wrote(rig, caplog):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(429, json={"error": {"type": "usage_limit_reached", "message": "secret-provider-text",
+                                                          "plan_type": "plus", "resets_in_seconds": 30995}})]
+    with pytest.raises(OpenRouterError) as error:
+        await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+    failure = classify(error.value)
+    assert (error.value.kind, failure.kind) == ("usage_limit", "usage_limit") and 30990 <= failure.retry_after <= 30995
+    assert "secret-provider-text" not in str(error.value) + failure.reason + caplog.text
+
+
+async def test_a_plan_throttle_carries_the_wait_it_asks_for(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(429, json={"error": {"message": "x"}}, headers={"Retry-After": "30"})]
+    with pytest.raises(OpenRouterError) as error:
+        await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+    failure = classify(error.value)
+    assert failure.kind == "rate_limit" and failure.transient and 29 <= failure.retry_after <= 30
+
+
+async def test_a_plan_conversation_that_does_not_fit_is_told_apart(rig):
+    await rig.sign_in()
+    rig.responses = [httpx.Response(400, json={"error": {"code": "context_length_exceeded", "message": "secret-provider-text"}})]
+    with pytest.raises(OpenRouterError) as error:
+        await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+    assert error.value.kind == "context_overflow"

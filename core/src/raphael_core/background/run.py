@@ -64,6 +64,7 @@ from ..agent.team import ASK_MEMBER, CREATE_MEMBER, TEAM_TOOLS
 from ..agent.team import description as team_description
 from ..agent.tools import ToolResult, Tools
 from ..brain.catalog import LLM, find
+from ..brain.model_ref import short_name
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
@@ -71,6 +72,7 @@ from ..brain.pricing import builtin_catalog
 from ..brain.spend import SpendTracker
 from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
+from ..retry_utils import MODEL_SILENCE_S, Outage
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
 from ..worker.loop import WAITING, ToolOutcome, result_text
@@ -82,8 +84,8 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
-# One model reply may take this long, and may be this long.
-CHAT_TIMEOUT_S = 60.0
+# One model reply may be this long. How long it may take is up to the model: the call ends when its connection has been
+# silent for `MODEL_SILENCE_S` (or the task's own time is up), not at a clock of its own.
 CHAT_MAX_TOKENS = 2000
 # The conversation the worker sends is bounded: a worker that sent more is not doing a task.
 MAX_MESSAGES = 200
@@ -417,14 +419,13 @@ class TaskRun:
         self._check(model=True, paid=True)
         self.model_calls += 1
         began = time.perf_counter()
-        remaining = self._remaining_s()
-        timeout = min(CHAT_TIMEOUT_S, remaining)
         try:
-            from ..failures import RETRY_WAITS, classify
-            waits = iter(RETRY_WAITS)
+            from ..failures import PATIENT_WAITS, RETRY_WAITS, classify
+            # Asking again repeats nothing, since the tools run only after a reply: a task that has done something rides
+            # a failed call out for as long as its time lasts. Before that it fails in seconds, as a question does.
+            outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=bool(self.tool_calls))
             while True:
                 remaining = self._remaining_s()
-                timeout = min(CHAT_TIMEOUT_S, remaining)
                 try:
                     turn = await self._guarded(asyncio.wait_for(self._client.chat_tools(
                         model=self.model,
@@ -434,20 +435,22 @@ class TaskRun:
                         messages=messages,
                         # The snapshot's tools, whatever the worker sent.
                         tools=self.snapshot.definitions,
-                        timeout_s=timeout,
+                        timeout_s=min(MODEL_SILENCE_S, remaining),
                         max_tokens=CHAT_MAX_TOKENS,
                         reasoning_effort="none",
-                    ), timeout))
+                    ), remaining))
                     break
                 except RpcError:
                     raise
                 except Exception as error:
                     failure = classify(error)
-                    wait = next(waits, None)
-                    if self.tool_calls or not failure.transient or wait is None or wait >= self._remaining_s():
+                    wait = outage.wait(failure.retry_after) if failure.transient else None
+                    if wait is None or wait >= self._remaining_s():
                         raise
-                    if isinstance(error, TimeoutError):
-                        self._charge_estimate(request_chars)
+                    if failure.kind == "timeout":
+                        self._charge_estimate(request_chars)  # the provider may bill what was given up on
+                    if outage.announce(wait):
+                        self._progress(failure.waiting(short_name(self.model), self.language, wait))
                     await self._guarded(asyncio.sleep(wait))
         except OpenRouterError as error:
             logger.warning(
@@ -455,17 +458,17 @@ class TaskRun:
             )
             # With every parameter required, "no endpoint found" is a model that takes no tools.
             detail = "tools" if error.status == HTTPStatus.NOT_FOUND else failure_kind(error)
+            if error.kind == "timeout":
+                self._charge_estimate(request_chars)
             self._step(kind="model", outcome="error", ms=_ms(began), reason=reason_of("error", detail))
             raise stopped("failed", detail) from None
         except TimeoutError:
             logger.warning("The task's model timed out")
             self._charge_estimate(request_chars)  # the provider may bill what was given up on
             self._step(kind="model", outcome="timeout", ms=_ms(began), reason="timeout")
-            # The wait that ended was the task's time when that was the shorter bound: not the
-            # clock, which a timer that fires a tick early leaves just short of the deadline.
-            if remaining <= CHAT_TIMEOUT_S or self._clock() >= self.deadline:
-                raise stopped("limit_time") from None
-            raise stopped("failed", "timeout") from None
+            # The only clock a call has is the task's time: not the monotonic clock, which a timer that fires a
+            # tick early leaves just short of the deadline.
+            raise stopped("limit_time") from None
         except RpcError:
             self._charge_estimate(request_chars)  # cancelled while the provider was working
             raise

@@ -23,6 +23,7 @@ from .drivers import Driver
 from .process import secure_directory
 from .native_diagnostics import capture as native_capture, directory as native_directory
 from ...failures import Failure, KINDS, TRANSIENT, RETRY_WAITS, RepeatFailures, REPEAT_NOTE, classify, tool_failure
+from ...retry_utils import Outage
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +312,7 @@ class CliLoop:
         return self._handoff_pending
 
     def _rate_limit_wait(self, name, seconds):
-        seconds = f"{seconds:g}"
+        seconds = f"{round(seconds):g}"
         if str(self.language).startswith("ja"):
             return f"{name} はレート制限中です。{seconds} 秒後に再試行します。"
         if self.language != "zh-TW":
@@ -344,7 +345,7 @@ class CliLoop:
                 await secure_directory(workspace)
                 async with RaphaelMcp(lambda: self.tools, self._tool) as server:
                     session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
-                    waits = list(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
+                    outage = Outage(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits, (), patient_ok=False)
                     failure = await self._attempt(name, command, model, server, session, workspace)
                     while failure == "tools_changed":
                         self.catalog_changed = False
@@ -352,11 +353,16 @@ class CliLoop:
                         self.user = ("The computer tool catalog changed. Reload the computer MCP catalog and continue "
                                      "the original task. Do not repeat completed actions.\n" + self.user)
                         failure = await self._attempt(name, command, model, server, session, workspace)
-                    # Running the request again is safe only while nothing of it has happened yet.
-                    while failure in TRANSIENT and waits and not (self._acted or self._calls):
-                        wait = waits.pop(0)
-                        self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
-                                      Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
+                    # Running the request again is safe only while nothing of it has happened yet. The owner is told once.
+                    told = False
+                    while failure in TRANSIENT and not (self._acted or self._calls):
+                        wait = outage.wait(self.failure_reason.retry_after if self.failure_reason else None)
+                        if wait is None:
+                            break
+                        if not told:
+                            told = True
+                            self.progress(self._rate_limit_wait(NAMES[name], wait) if failure == "rate_limit" else
+                                          Failure(failure, self.failure_reason.reason if self.failure_reason else failure).sentence(NAMES[name], self.language))
                         await asyncio.sleep(wait)
                         failure = await self._attempt(name, command, model, server, session, workspace)
                 if failure:
@@ -424,7 +430,8 @@ class CliLoop:
                     native_capture("normalized-error", event.text)
                     if self._handed_off():
                         return None
-                    self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text)})
+                    self.failure_reason = classify({"kind": event.text, "message": event.data.get("reason", event.text),
+                                                    "resets_at": event.data.get("resets_at")})
                     return self.failure_reason.kind
                 elif event.kind == "final":
                     if self._handed_off():

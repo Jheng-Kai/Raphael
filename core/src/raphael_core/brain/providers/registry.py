@@ -544,8 +544,10 @@ class ProviderRouter:
                 self.registry.record_result(pid, error)
             except OpenRouterError as caught:
                 error = caught
+            # A 429 that says one provider's quota is spent is still a reason to ask the next one.
             retryable = error.kind in ("offline", "network", "timeout", "rate_limit", "server") or (
-                error.kind == "error" and error.status >= 500)
+                error.kind == "error" and error.status >= 500) or (
+                error.kind in ("credits", "usage_limit") and error.status == 429)
             # An auth failure may cross a provider boundary only with an explicitly
             # listed fallback. Content refusals and malformed requests never retry.
             if index + 1 == len(chain) or not (retryable or (error.kind == "auth" and explicit)):

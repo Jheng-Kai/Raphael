@@ -102,6 +102,22 @@ async def test_registry_ignores_implicit_conversation_chain_and_keeps_full_budge
     assert provider.calls[0]["fallbacks"] == []
 
 
+async def test_cleanup_still_asks_the_next_model_when_a_429_says_the_quota_of_one_provider_is_spent(conn, monkeypatch):
+    class Spent(Provider):
+        async def complete_json(self, **kwargs):
+            self.calls.append(kwargs)
+            if kwargs["model"] == "chosen":
+                raise OpenRouterError(429, "credits", "You exceeded your current quota")
+            return Completion({}, kwargs["model"], 0.1, 1, 1, 1)
+
+    provider = Spent()
+    registry, router = routed(conn, monkeypatch, provider)
+    registry.settings.set("cleanup_fallbacks", ["saved-backup"])
+    result = await router.for_purpose("cleanup").complete_json(model="chosen", fallbacks=[], timeout_s=60,
+        system="s", user="u", schema={}, schema_name="reply", max_tokens=20)
+    assert [call["model"] for call in provider.calls] == ["chosen", "saved-backup"] and result.model == "saved-backup"
+
+
 async def test_cleanup_explicit_fallback_keeps_each_full_budget_and_actual_model(conn, monkeypatch):
     provider = Provider()
     registry, router = routed(conn, monkeypatch, provider)
