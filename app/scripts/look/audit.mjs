@@ -72,6 +72,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
+    if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');
+    if (element.matches('.main') && scrollbar > 1 && element.querySelector(':scope > .page-agent:not([hidden])')) violation('R-UI-62', 'A conversation never scrolls the main area, so it keeps no strip for a scrollbar');
     if (element.matches('.mb-av-slime') && style.overflow !== 'visible') violation('R-UI-54', 'A crop cuts the horns and wings of a slime');
     if (element.matches('.shimmer') && new Set(style.backgroundImage.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     if (element.matches('button.btn.icon')) {

@@ -163,6 +163,18 @@ describe("rendered look checks", () => {
     window.document.querySelector('.shimmer').style.backgroundImage = 'linear-gradient(90deg,rgba(9,9,9,0.4),rgb(9,9,9))';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-55')).toEqual([]);
   });
+  it("rejects a scrollbar outside a wide page (R-UI-62)", () => {
+    const { window, audit } = productAudit('<div class="mb-det-scroll" style="overflow-y:auto">x</div><div class="main" style="overflow-y:auto">y</div>');
+    for (const element of window.document.querySelectorAll('.mb-det-scroll, .main')) {
+      Object.defineProperty(element, 'offsetWidth', { value: 200 });
+      Object.defineProperty(element, 'clientWidth', { value: 190, configurable: true });
+    }
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.class)).toEqual(['mb-det-scroll']);
+    Object.defineProperty(window.document.querySelector('.mb-det-scroll'), 'clientWidth', { value: 200 });
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62')).toEqual([]);
+    window.document.querySelector('.main').innerHTML = '<section class="page-agent">x</section>';
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-62').map(item => item.class)).toEqual(['main']);
+  });
   it("rejects a crop on a slime (R-UI-54)", () => {
     const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:hidden"><svg></svg></span>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toHaveLength(1);

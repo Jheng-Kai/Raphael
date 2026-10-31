@@ -102,8 +102,10 @@ button { cursor: pointer; }
 :where(:root[data-keys]) :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-sm); }
 button:active:not(:disabled) { filter: brightness(0.97); }
 button:disabled { cursor: default; }
-* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+/* A scrollbar shows only on a wide page, where it costs nothing. Everywhere else the room belongs to the content, and everyone knows a list scrolls (R-UI-62). */
+* { scrollbar-width: none; scrollbar-color: var(--scroll-thumb) transparent; }
 *:hover { scrollbar-color: var(--scroll-hover) transparent; }
+.main, .modal-body, .cs-results { scrollbar-width: thin; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border: 2px solid transparent; background-clip: padding-box; border-radius: var(--r-lg); }
@@ -171,6 +173,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .usage-num { font-size: var(--fs-xs); color: var(--text-2); }
 .side-foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
 .main { position: relative; overflow-x: hidden; overflow-y: auto; background: var(--content); border-top-left-radius: var(--r-lg); border-left: 0; border-top: 0; min-height: 0; container: main / inline-size; scrollbar-gutter: stable; }
+/* A conversation scrolls inside itself, so the main area keeps no empty strip beside its details panel. */
+.main:has(> .page-agent:not([hidden])) { scrollbar-gutter: auto; }
 /* Each page is a column centred in the window: wide windows get margins, nothing stretches edge to edge. */
 .page { width: 100%; max-width: var(--layout-page-max); margin: 0 auto; padding: calc(var(--window-controls-height) + 8px) 32px 40px; }
 .page h1 { font: 600 var(--fs-h1)/1.3 var(--display); margin: 0; letter-spacing: -0.015em; }
@@ -472,6 +476,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu button:focus-visible { background: var(--hover); outline: none; }
 :where(:root[data-keys]) .menu button:focus-visible { box-shadow: inset 0 0 0 2px var(--focus); }
 .menu .ck { width: 16px; height: 16px; flex: none; color: var(--accent-text); }
+/* The check stands at the end of a choice, so that the names line up. An action's icon leads; without one it needs no room. */
+.menu .menu-action .ck:empty { display: none; }
 .menu .ck svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .menu .mt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A face or a mark before the label (mentions): one 20px column, and the item's state quieter on the right. */
@@ -490,7 +496,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu.described { min-width: 260px; max-width: min(340px, calc(100vw - 16px)); }
 .menu.described button { min-height: 32px; padding: var(--sp-2) var(--sp-2); align-items: flex-start; }
 .menu.described .ck { margin-top: var(--sp-1); }
-.menu .mtd { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.menu .mtd { display: flex; flex: 1; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .menu .mtd .mt { white-space: normal; }
 .menu .mdesc { font-size: var(--fs-xs); line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
 .menu-head { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); text-align: left; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-1); }

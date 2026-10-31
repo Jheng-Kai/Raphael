@@ -42,7 +42,7 @@
 .mc-tools { display: flex; gap: var(--sp-2); padding: 0 var(--sp-5) var(--sp-3); flex: none; }
 .mc-tools input { width: 0; min-width: 80px; flex: 1; height: var(--h-ctl); border: 1px solid var(--btn-edge); border-radius: var(--r-sm); background: var(--btn); padding: 0 var(--sp-2); color: var(--text); font-size: var(--fs-sm); }
 .mc-tools .sel { max-width: 150px; min-width: 0; flex: 0 1 auto; }
-.mc-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 0 var(--sp-4) var(--sp-4); scrollbar-gutter: stable; }
+.mc-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 0 var(--sp-4) var(--sp-4); }
 .mc-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .mc-list h4 { padding: var(--sp-3) var(--sp-2) var(--sp-1); margin: 0; color: var(--text-3); font-size: var(--fs-xs); font-weight: 500; }
 .mc-item { position: relative; min-width: 0; }

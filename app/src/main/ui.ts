@@ -677,13 +677,13 @@ export function openMenu(
         (o) =>
           `<button type="button" role="menuitemradio" tabindex="-1" data-value="${esc(o.value)}" aria-checked="${o.value === current}"` +
           `${o.title ? ` title="${esc(o.title)}"` : ""}>` +
-          (placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
           (o.lead ? `<span class="mlead" aria-hidden="true">${o.lead}</span>` : "") +
           (o.desc
             ? `<span class="mtd"><span class="mt">${esc(o.label)}</span><span class="mdesc">${esc(o.desc)}</span></span>`
             : `<span class="mt">${esc(o.label)}</span>`) +
           (o.tag ? `<span class="mtag">${esc(o.tag)}</span>` : "") +
           (o.detail ? `<span class="md num">${esc(o.detail)}</span>` : "") +
+          (placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
           `</button>`,
       )
       .join("") +

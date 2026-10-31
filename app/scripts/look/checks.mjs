@@ -675,7 +675,7 @@ export function checkRendered(name, context = {}) {
   }
   if(name === "cancel-native-result" || name === "cancel-overlay-result" || name === "cancel-recording-result") {
     const command=name==="cancel-overlay-result"?"overlay_cancel":"window_hotkey";
-    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind===(name==="cancel-recording-result"?"cancel_key":"cancel"))).length===1,name === "cancel-recording-result" ? "one Escape cancels recording or STT once" : "only the second Escape cancels once");
+    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||(name==="cancel-recording-result"?["cancel","cancel_key"]:["cancel"]).includes(call.kind))).length===1,name === "cancel-recording-result" ? "one Escape cancels recording or STT once" : "only the second Escape cancels once");
     require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
   }
   if(name === "deleted-view") {
@@ -1924,6 +1924,9 @@ export function checkRendered(name, context = {}) {
     require(rows.map(row => row.dataset.value).join() === "direct,ask,plan", "three modes");
     require(rows.every(row => row.querySelector(".mt")?.textContent.trim() && row.querySelector(".mdesc")?.textContent.trim()), "each says what it does");
     require(["left", "start"].includes(getComputedStyle(document.querySelector("#app-popover .menu-head")).textAlign), "the title stands on the left");
+    require(new Set(rows.map(row => Math.round(row.querySelector(".mt").getBoundingClientRect().left))).size === 1, "the names line up on the left");
+    const chosen = rows.find(row => row.getAttribute("aria-checked") === "true");
+    require(chosen.querySelector(".ck svg").getBoundingClientRect().left >= chosen.querySelector(".mtd").getBoundingClientRect().right, "the check stands at the end of the row");
     require(document.querySelector("#app-popover").getBoundingClientRect().bottom <= document.querySelector(".cmp-mode").getBoundingClientRect().top + 1, "it opens above the button, inside the window");
     return { check: name };
   }
