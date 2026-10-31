@@ -5,6 +5,7 @@ Lease/file contracts adapted from OpenMausBot (Apache-2.0); see THIRD_PARTY_NOTI
 
 import asyncio
 import base64
+import itertools
 import json
 import mimetypes
 import re
@@ -21,7 +22,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_SESSION, DRIVER_TOOLS, FOREGROUND, NOTICES, READS, without_session
+from .vm_catalog import DRIVER_TOOLS, NOTICES, PAGE_TOOLS, READS, without_session
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -98,6 +99,7 @@ class VmTools:
         self.scope_busy = lambda scope: scope[0] == "async" and not scope[1].done()
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
         self.listed = set()
+        self.connections, self.labels = {}, itertools.count(1)
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -351,9 +353,15 @@ class VmTools:
                     if not Draft202012Validator(self.schemas[key]).is_valid(arguments):
                         result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
                         return result
-                    async with self.bridge(self.vm, target) as client:
-                        sent = {**({"delivery_mode": "foreground"} if tool.name in FOREGROUND else {}), **arguments, "session": DRIVER_SESSION}
+                    client, session = await self._connection(target)
+                    # The screen is the member's own, and Chromium refuses input addressed to it in the background.
+                    foreground = {"delivery_mode": "foreground"} if "delivery_mode" in self.schemas[key].get("properties", {}) else {}
+                    sent = {**foreground, **arguments, "session": session}
+                    try:
                         data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
+                    except (VmError, ConnectionError):
+                        await self._disconnect(target.key)
+                        raise
                     blocks, text = [], []
                     for block in data.get("content", []):
                         if block.get("type") == "text":
@@ -366,9 +374,13 @@ class VmTools:
                             blocks.append({key: block[key] for key in ("type", "data", "mimeType")})
                             if len(blocks) > 4 or sum(len(item["data"]) for item in blocks) > 14_000_000:
                                 raise VmError("image_limit")
+                    # A page tool says its tabs, refs and what came of a gesture only here; its text is one line about them.
+                    if tool.name.startswith(PAGE_TOOLS) and data.get("structuredContent"):
+                        text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
                     combined = "\n".join(text)
+                    limit = 60_000 if tool.name.startswith(PAGE_TOOLS) else 20_000
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
-                        combined[:20_000], len(combined) > 20_000, blocks=blocks)
+                        combined[:limit], len(combined) > limit, blocks=blocks)
                 if work and result.ok and tool.name == "get_desktop_state":
                     work.check_required = False
                 if screen and result.ok and tool.name == "get_desktop_state":
@@ -396,6 +408,30 @@ class VmTools:
             return result
         finally:
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
+
+    # --- the driver connection -------------------------------------------------------------------
+
+    async def _connection(self, target):
+        """A computer's one connection to its driver, and its session label. The driver ends a session with the connection
+        that used it, and with it the browser it opened, the tab it bound and the screenshot a gesture needs. A new
+        connection takes a new label: the driver refuses one that has ended."""
+        held = self.connections.get(target.key)
+        if held is not None and held[0].alive:
+            return held
+        await self._disconnect(target.key)
+        client = self.bridge(self.vm, target)
+        await client.__aenter__()
+        self.connections[target.key] = client, f"raphael-{next(self.labels)}"
+        return self.connections[target.key]
+
+    async def _disconnect(self, key):
+        held = self.connections.pop(key, None)
+        if held is not None:
+            await held[0].__aexit__(None, None, None)
+
+    async def aclose(self):
+        for key in list(self.connections):
+            await self._disconnect(key)
 
     # --- sharing the screen ---------------------------------------------------------------------
 

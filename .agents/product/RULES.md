@@ -179,6 +179,27 @@ with Browser, Files and Terminal. No browser starts with the desktop. Task teach
 is outside scope. AT-SPI and websockify stay until real driver/viewer compatibility
 can be established.
 
+## A job handed out goes on until it is done (2026-11-01)
+
+R-TEAM-ONWARD: a conversation turn that handed out work comes back with the results and
+compares them with the request and with what it told the owner. What is left is handed on,
+round after round, up to 24 pieces for one task. It speaks to the owner when nothing is
+left or only the owner can settle what stops it, and then says where the result is, what
+each did, what was checked and what was not. A consultation only answers with what it heard.
+R-TEAM-WHOLE: Raphael's report in a conversation reads whole, with its paragraphs; the
+overlay says one line of it. The office-mission journey fails unless every member it made
+finished work and the last reply on the page names the file and every member.
+
+## A member's page tools (2026-11-01)
+
+R-COMP-PAGE: the prompt never sends a member to a tool that does not work. A member's
+computer has a root-owned system Chromium and a writable driver state, and every driver call
+of one computer carries one session label, because each call has its own connection and the
+driver ends what a connection's session made. Page input is foreground on a member's own
+screen. Sign-ins stay in the named profile in the workspace. The core's IMAGE_LABELS and the
+Dockerfile's labels are tested equal. A worker is told it does not operate the owner's own PC;
+a computer whose tools it is offered is its own.
+
 ## Durable owner questions (2026-11-01)
 
 | ID | Date | Rule | Check | Severity | Evidence |

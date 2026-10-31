@@ -44,6 +44,7 @@ class Desktop:
 
     release = None
     log = []
+    alive = True
 
     def __init__(self, vm, target):
         pass

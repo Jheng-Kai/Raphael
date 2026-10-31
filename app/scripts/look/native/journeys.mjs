@@ -21,6 +21,7 @@ export const journeys = [
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
   { name: "bot-homes", description: "Migrate three copied notes and an imported skill, then answer with an offline Codex child" },
+  { name: "upgrade", description: "A copy of an older data folder (RAPHAEL_NATIVE_UPGRADE_FROM) opens on this build with the fake brain: its people, conversations and every settings pane" },
   { name: "member-computer", description: "Docker desktop with fake brain, real MCP screenshot, exec, attachment and noVNC; no host desktop actions" },
   { name: "readable-layout", description: "Inspect the shared sidebar, aligned details and compact drawer in the real WebView" },
   { name: "slime-sharp", description: "Twelve slimes in the real sidebar: moving, each paints the pixels of its pose held still, and what they cost while idle" },
@@ -1061,6 +1062,30 @@ export async function drive(name, context) {
     result.turns = (await snapshot()).agent_turns.filter(row => row.member_id === colleague.id);
     if (result.turns.length !== 25 || result.turns.some(row => row.cost_usd !== 0)) throw new Error("Native memory journey did not complete exactly 25 free turns");
     await capture("turn-twenty-five-recalled");
+  } else if (name === "upgrade") {
+    const data = await snapshot();
+    result.upgraded = { members: data.members.length, turns: data.agent_turns.length, conversations: data.conversations.length };
+    if (!data.members.length || !data.agent_turns.length) throw new Error("The older data did not come through");
+    await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 60000 });
+    await pause(1500);
+    await capture("home");
+    await chat(page); await pause(1000);
+    await capture("chief");
+    for (const member of data.members.slice(0, 6)) {
+      await perform(page, { action: "member", id: member.id });
+      await wait(page, ".composer .cmp-input");
+      await pause(800);
+      await capture(`member-${member.id}`);
+    }
+    await click(page, '#nav [data-go="settings"]');
+    await wait(page, ".modal-scrim [data-pane]");
+    const panes = await page.$$eval(".modal-scrim [data-pane]", rows => rows.map(row => row.dataset.pane));
+    result.upgraded.panes = panes;
+    for (const pane of panes) {
+      await click(page, `.modal-scrim [data-pane="${pane}"]`);
+      await pause(700);
+      await capture(`settings-${pane}`);
+    }
   } else if (name === "bot-homes") {
     const initial = await context.homes();
     if (!initial.verified || Object.keys(initial.files).length !== 4) throw new Error("Migration lost copied memories or skills");

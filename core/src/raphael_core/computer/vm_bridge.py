@@ -48,6 +48,10 @@ class CuaBridge:
         self.sequence = 0
         self.lock = asyncio.Lock()
 
+    @property
+    def alive(self):
+        return self.process is not None and self.process.returncode is None
+
     async def __aenter__(self):
         self.process = await asyncio.create_subprocess_exec(
             *self.vm.command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),

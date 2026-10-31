@@ -19,7 +19,6 @@ from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.settings import SettingsStore, checked
 from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
-from raphael_core.computer.vm_catalog import DRIVER_SESSION
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
 from raphael_core.worker.loop import Call, Turn, ToolOutcome, run_task, without_computer_images
@@ -422,6 +421,7 @@ class EmptyHub:
 
 
 class Bridge:
+    alive = True
     calls = []
     def __init__(self, vm, target): self.vm, self.target = vm, target
     async def __aenter__(self): return self
@@ -499,27 +499,55 @@ def test_the_image_carries_the_labels_the_core_checks():
         assert f'{key}="{value}"' in dockerfile
 
 
-async def test_every_driver_call_of_a_computer_is_one_session_and_page_input_is_foreground(desktop, tmp_path):
-    # Each call has its own connection, and the driver ends what a connection's session made with it: live, the browser
-    # that browser_prepare opened was gone by the next call, and a drag never found the screenshot read before it.
+async def test_a_computer_keeps_one_driver_connection_and_session_until_it_breaks(desktop, tmp_path):
+    # The driver ends a session with the connection that used it: live, the browser browser_prepare opened was gone by the
+    # next call, every later call was refused as "session has ended", and a drag never found the screenshot read before it.
     vm, target, runtime = desktop
     class Recording(CatalogBridge):
-        calls = []
+        calls, opened, closed = [], [], []
+        async def __aenter__(self):
+            self.opened.append(self)
+            return self
+        async def __aexit__(self, *args):
+            self.closed.append(self)
+        async def request(self, method, params=None):
+            result = await super().request(method, params)
+            if method == "tools/list":
+                for item in result["tools"]:
+                    if item["name"] in ("browser_pointer", "click", "browser_click"):
+                        item["inputSchema"] = {"type": "object", "properties": {"delivery_mode": {"type": "string"}, "action": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}}
+            elif params and params["name"] == "get_browser_state":
+                self.calls.append((method, params))
+                return {"content": [{"type": "text", "text": "bound target with 1 tab(s)"}], "structuredContent": {"target_id": "bt-1", "tabs": [{"tab_id": "tab-1"}]}}
+            return result
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Recording)
     await hub.prepare()
     tool = lambda name: next(item for item in hub.offered() if item.name == name)
     assert (await hub.call(tool("get_desktop_state").key, {}, approver="auto")).ok
+    used = len(Recording.opened)
     assert (await hub.call(tool("browser_pointer").key, {"action": "drag"}, approver="auto")).ok
     assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background"}, approver="auto")).ok
     assert (await hub.call(tool("click").key, {"x": 1, "y": 2}, approver="auto")).ok
     sent = {params["name"]: params["arguments"] for method, params in Recording.calls if method == "tools/call"}
-    assert {name: arguments["session"] for name, arguments in sent.items()} == dict.fromkeys(
-        ("get_desktop_state", "browser_pointer", "browser_click", "click"), DRIVER_SESSION)
-    assert sent["browser_pointer"]["delivery_mode"] == "foreground"
+    assert len({arguments["session"] for arguments in sent.values()}) == 1 and len(Recording.opened) == used
+    # On a screen that is the member's own, input need not stay in the background: Chromium refuses it.
+    assert sent["browser_pointer"]["delivery_mode"] == sent["click"]["delivery_mode"] == "foreground"
     assert sent["browser_click"]["delivery_mode"] == "background"  # what the model chose stays
-    assert "delivery_mode" not in sent["click"] and "delivery_mode" not in sent["get_desktop_state"]
+    assert "delivery_mode" not in sent["get_desktop_state"]
+    # The page tools say what a model needs only in their structured result; their text is a one-line summary.
+    state = await hub.call(tool("get_browser_state").key, {}, approver="auto")
+    assert "tab-1" in state.text and "bt-1" in state.text and "bound target" in state.text
+    desktop_shot = await hub.call(tool("get_desktop_state").key, {}, approver="auto")
+    assert "structuredContent" not in (desktop_shot.text or "")
     # The label is Raphael's: the model cannot choose one.
     assert not (await hub.call(tool("click").key, {"session": "other"}, approver="auto")).ok
+    # A connection that broke (the computer stopped) is replaced, and the driver refuses an ended label.
+    first = sent["click"]["session"]
+    Recording.opened[-1].alive = False
+    assert (await hub.call(tool("click").key, {"x": 3, "y": 4}, approver="auto")).ok
+    assert Recording.calls[-1][1]["arguments"]["session"] != first and len(Recording.opened) == used + 1
+    await hub.aclose()
+    assert Recording.opened[-1] in Recording.closed
 
 
 async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_path):
@@ -706,6 +734,10 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
     monkeypatch.setattr(vm, "execute", execute)
     monkeypatch.setattr(vm, "read_file", read_file)
     monkeypatch.setattr(vm_tools, "VmTools", lambda *args, **kwargs: VmTools(*args, bridge=SmokeBridge, **kwargs))
+    import raphael_core.native_journeys as journeys  # the page's own tools need a real computer: the native journey runs them
+    async def no_page(*args):
+        return {}
+    monkeypatch.setattr(journeys, "_page_tools", no_page)
     directory = tmp_path / "journey"
     directory.mkdir()
     report = await vm_smoke(directory)

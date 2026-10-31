@@ -104,6 +104,7 @@ async def vm_smoke(directory):
 
         outcome = await run_task(FakeBrain(), system="Deterministic fake brain; use only the specified test tools.", user="Test the optional desktop", tools=snapshot.definitions)
         assert outcome.status == "done" and completed == [name for name, _ in calls]
+        page_tools = await _page_tools(snapshot, gate)
         before = len(docker_commands)
         await hub.prepare()
         assert len(docker_commands) == before, "The next turn must reuse the catalog without Docker"
@@ -121,11 +122,50 @@ async def vm_smoke(directory):
         return {"state": state, "completed": completed, "brain": "fake", "paid_requests": 0,
                 "prepare_docker_commands": 0, "next_turn_docker_commands": 0,
                 "without_approval": completed, "owner_held_refused": refused,
-                "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments),
+                "control_gate": "refused while held", "attachment_id": attachment_id(hub.attachments), "page_tools": page_tools,
                 "preparation": preparation}
     finally:
         await vm.aclose()
         conn.close()
+
+
+async def _page_tools(snapshot, gate):
+    """A page opens and takes real gestures, through the tools as a member has them."""
+    page = ("<!doctype html><title>page</title><canvas id=c width=800 height=400 style='display:block'></canvas><script>"
+            "let d=0,m=0;c.onpointerdown=e=>{d=1;c.setPointerCapture(e.pointerId)};c.onpointermove=e=>{if(d)m++};"
+            "c.onpointerup=()=>{d=0;document.title='dragged '+m}</script>")
+
+    async def use(name, **arguments):
+        result = await gate.call_plugin(snapshot.refs["computer__" + name].key, arguments)
+        assert result.ok, f"{name}: {result.kind} {str(result.text)[:300]}"
+        return result.text
+
+    def structured(text):
+        return json.loads(text.split("\n", 1)[1])
+
+    async def chromium():
+        return re.search(r'window_id=(\d+) pid=(\d+) "([^"]*)"[^\n]*app=Chromium', await use("list_windows"))
+
+    await use("vm_exec", command=f"mkdir -p page && cat > page/index.html <<'EOF'\n{page}\nEOF\ncd page && (nohup python3 -m http.server 8766 >/dev/null 2>&1 &)")
+    prepared = await use("browser_prepare", allow_launch=True, profile={"mode": "isolated_named", "name": "main"})
+    assert "endpoint available" in prepared, prepared[:300]
+    await asyncio.sleep(3)
+    window = await chromium()
+    assert window, "The browser browser_prepare opened has no window"
+    bound = structured(await use("get_browser_state", pid=int(window[2]), window_id=int(window[1])))
+    place = {"target_id": bound["target_id"], "tab_id": bound["tabs"][0]["tab_id"]}
+    await use("browser_navigate", **place, url="http://127.0.0.1:8766/")
+    await asyncio.sleep(1)
+    seen = structured(await use("get_browser_state", **place, snapshot_format="semantic_v2"))
+    assert seen["page"]["title"] == "page", seen["page"]
+    await use("browser_pointer", **place, action="drag", x=200, y=200, to_x=500, to_y=300)
+    await asyncio.sleep(1)
+    window = await chromium()
+    assert window and window[3].startswith("dragged"), window and window[3]
+    # A desktop gesture finds the screenshot read the call before.
+    await use("get_window_state", pid=int(window[2]), window_id=int(window[1]))
+    await use("drag", pid=int(window[2]), window_id=int(window[1]), from_x=300, from_y=300, to_x=500, to_y=400)
+    return {"page_title": window[3]}
 
 
 def vm_signin_fixture(directory, member_id):

@@ -1197,6 +1197,7 @@ class App(Router):
             ("end the computer cards' runs", self.handbacks.aclose),
             ("end the assistant's requests", self.agent.aclose),
             ("end local command jobs", self.tool_hub.aclose),
+            ("close the computers' driver connections", self.vm_tools.aclose),
             ("close desktop viewers", self.desktop_viewer.aclose),
             ("stop the computer idle monitor", self.vm.aclose),
             ("end Raphael's voice", self.speaker.aclose),

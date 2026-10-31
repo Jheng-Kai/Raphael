@@ -21,8 +21,9 @@ export function desktopWorkText(work: DesktopWork): string {
   }
   if (work.state === "done") return t("desktop.finished");
   if (work.state === "stopped" || work.state === "expired") return t("desktop.ended");
-  const actions = { click: "agent.computer.click", double_click: "agent.computer.click", type_text: "agent.computer.type",
-    press_key: "agent.computer.keys", scroll: "agent.computer.scroll", get_desktop_state: "agent.computer.look" } as const;
+  // The line already says whose computer it is.
+  const actions = { click: "desktop.doing.click", double_click: "desktop.doing.click", type_text: "desktop.doing.type",
+    press_key: "desktop.doing.keys", scroll: "desktop.doing.scroll", get_desktop_state: "desktop.doing.look" } as const;
   return work.tool in actions ? t(actions[work.tool as keyof typeof actions]) : t("desktop.working");
 }
 

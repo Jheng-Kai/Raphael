@@ -74,7 +74,10 @@ async function run(options) {
       if (["store-finder", "catalog-connect"].includes(journey.name)) env.RAPHAEL_TEST_NATIVE_CATALOG = "1";
       const database = async (...args) => JSON.parse((await execute(python, [join(import.meta.dirname, "database.py"), data, ...args], { cwd: root, env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 })).stdout);
       try {
-        await database("init", journey.name);
+        if (journey.name === "upgrade") {
+          if (!process.env.RAPHAEL_NATIVE_UPGRADE_FROM) throw new Error("Set RAPHAEL_NATIVE_UPGRADE_FROM to a copy of an older data folder");
+          await cp(process.env.RAPHAEL_NATIVE_UPGRADE_FROM, data, { recursive: true });
+        } else await database("init", journey.name);
         if (journey.name === "member-computer") {
           result.computer = await database("vm-smoke");
           const image = "member-computer-tool.png";
