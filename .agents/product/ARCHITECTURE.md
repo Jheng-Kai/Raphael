@@ -1,5 +1,24 @@
 # Raphael architecture and checked boundaries
 
+## Connected-app event routines (2026-11-01)
+
+Migration 49 extends routines with a mutually exclusive when specification and
+poll state, plus routine_receipts for baseline ids and pending/fired receipts.
+members/events.py runs on MembersService's existing scheduler, without a model.
+It resolves current offered tools, connection association and read classification
+through the shared hub, then invokes ToolGate.call_plugin. Managed Composio reads
+must contain exactly one enabled tool belonging to the selected connection;
+another linked app's grant cannot satisfy that association. No RPC is added.
+The existing routine tools, history, task engine and worker safety state carry
+matches as untrusted external data. A deterministic per-item task session recovers
+the interval between committed task submission and its receipt write without
+submitting a second task. Baseline and pending item data persist in SQLite.
+Event routines have no clock occurrences in Home or Calendar.
+Tests: core/tests/members/test_events.py, test_event_harness.py (API/CLI),
+core/tests/brain/test_db.py and the existing member/routine suites.
+Offline tests and fixture scenes do not prove real provider result shapes, remote
+pagination completeness, native persistence or live model choices.
+
 ## Owner-PC command boundary (2026-11-01)
 
 `computer/local_tools.py` wraps the existing `VmTools` hub with two pinned tools:

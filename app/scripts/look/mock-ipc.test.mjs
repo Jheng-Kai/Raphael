@@ -5,6 +5,17 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("keeps event routines exclusive of schedules and resets their baseline only when the condition changes", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const when = { app: "gmail", event: { tool: "mcp:gmail/messages", arguments: {}, items: "", id: "id" }, filter: { field: "sender", equals: "client@example.com" } };
+    const { routine } = await call("routines.create", { member_id: 1, title: "Client mail", prompt: "Draft a reply", when });
+    expect(routine).toMatchObject({ when, schedule: null, last_checked: null, last_error: "" });
+    const updated = (await call("routines.update", { id: routine.id, when: { ...when, filter: { ...when.filter, equals: "owner@example.com" } } })).routine;
+    expect(updated).toMatchObject({ schedule: null, last_checked: null, last_error: "", when: { filter: { equals: "owner@example.com" } } });
+    const schedule = { kind: "daily", time: "09:00" };
+    expect((await call("routines.update", { id: routine.id, schedule })).routine).toMatchObject({ when: null, schedule });
+  });
   it("adds an own calendar event without replacing Google, then updates and deletes only that event", async () => {
     const target = {}, state = installMock(fixture, {}, target);
     const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });

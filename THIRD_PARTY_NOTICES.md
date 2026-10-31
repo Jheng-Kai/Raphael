@@ -24,6 +24,15 @@ Upstream: https://github.com/milind-soni/OpenMausBot, revision
 
 Modified ports and adaptations, with upstream file names:
 
+- The event routine contract in `members/events.py` and `agent/harness_tools.py`
+  was informed by the app/event trigger separation in
+  `server/drivers/agents-call-triggers.ts`. Raphael's poller, durable receipts and
+  task dispatch are its own implementation; no webhook server or enterprise code
+  was copied. Design comparison also used OpenBot's MIT-licensed
+  `server/src/responsibilities/trigger-tools.ts` (narrow source filters) and
+  Hermes' MIT-licensed `gateway/hooks.py` (isolated handler failures). These two
+  files were reviewed, not copied or ported.
+
 - `core/src/raphael_core/agent/pages.py`: Python adaptation of the HTML limits,
   bounded revision history, CDN CSP allowlist and document preamble handling from
   `shared/app.ts`, `shared/app-frame/csp.ts`, `shared/app-frame/document.ts`

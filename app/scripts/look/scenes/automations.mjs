@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick, member } from "./steps.mjs";
 
 const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
@@ -9,7 +9,18 @@ const ownChip = '.cal-chip.is-own[data-entry="own:1"]', slotAt = (day, hour) => 
 const today = "2026-10-24";
 const more = [...dialog, click('[data-dlg="more"]')];
 const tools = [...calendar, { action: "calendar-tools" }, check("calendar-tools")];
+const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt: "整理來信，準備草稿交給我。", schedule: null, enabled: true, last_run: 1792803600000, next_run: 1792807380000, last_checked: 1792807200000,
+  when: { app: "Gmail", event: { tool: "mcp:Gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } } };
+const eventDetails = [member(1), { action: "open-details" }, click('[data-det="tab"][data-tab="routines"]'), wait('[data-routine="90"]')];
+const eventDialog = [...eventDetails, hover('[data-routine="90"]'), check("routine-event-menu"), click('[data-det="routine-menu"][data-id="90"]'), click('#app-popover [data-pick="edit"]'), wait('#au-filter')];
 export default [
+  scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),
+  scene("routine-event-edit", "A readable event filter in the shared routine editor", [...eventDialog, check("routine-event-edit")], { routines: [eventRoutine] }),
+  scene("routine-event-saved", "A changed event filter is saved and shown in the same list", [...eventDialog, type("#au-filter", "owner@example.com"), click('[data-dlg="save"]'), waitGone('.au-routine-dialog'), check("routine-event-saved")], { routines: [eventRoutine] }),
+  scene("routine-event-missing", "A stopped trigger names its connection and offers the existing connection settings", [...eventDialog, check("routine-event-missing")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
+  scene("routine-event-reconnect", "The stopped trigger opens the existing Connections pane", [...eventDialog, click('[data-missing-repair="connections"]'), wait('.modal-scrim [data-pane="connections"][aria-current="page"]'), check("settings-shell")], { routines: [{ ...eventRoutine, enabled: false, last_error: "Gmail 連接無法使用。請到設定 › 連接重新連接。" }] }),
+  scene("routine-event-profile", "The member profile shares readable event rows and switches", [member(1), { action: "open-details" }, click('[data-det="edit"]'), wait('#mp-tab-routines'), click('#mp-tab-routines'), wait('.mp-routine-list .tg'), check("routine-event-profile")], { routines: [eventRoutine] }),
+
   scene("room-workflow-blocked", "Missing artifact has a named incomplete reason", [room(1),click('[data-handoff] summary'),check('p04-blocked')], {p04Blocked:true}),
   scene("room-final-owner", "Chief is last after delivered work", [room(1),check('room-wrapup'),check('p04-chief-last')], {p03Handoff:'done',roomWrapup:true}),
   scene("room-progress-status-only", "Work progress stays in its status row", [room(1),check('room-thinking'),check('p04-status-only')], {roomThinking:true}),

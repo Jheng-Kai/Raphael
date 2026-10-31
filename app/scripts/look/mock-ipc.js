@@ -606,8 +606,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "safety.rules.list": return { rules: data.safetyRules };
       case "routines.list": if (variant.missingRoutines) throw new Error("Synthetic routines read failure"); return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
-      case "routines.create": { const routine = { ...p, id: nextId(data.routines), enabled: true, last_run: null, next_run: data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
-      case "routines.update": { const routine = update(data.routines, p.id, p); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
+      case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
+      case "routines.update": {
+        const previous = data.routines.find(item => item.id === p.id);
+        const reset = p.when && JSON.stringify(previous?.when) !== JSON.stringify(p.when);
+        const routine = update(data.routines, p.id, { ...p, ...(p.when ? { schedule: null } : p.schedule ? { when: null } : {}), ...(reset ? { last_checked: null, last_error: "", next_run: data.now } : {}) });
+        notify("RoutinesChanged", { member_id: routine.member_id }); return { routine };
+      }
       case "routines.delete": data.routines = data.routines.filter(item => item.id !== p.id); notify("RoutinesChanged", { member_id: 0 }); return { deleted: true };
       case "calendar.add": case "calendar.update": {
         const current = method === "calendar.update" ? data.home.calendar_events.find(item => item.kind === "own" && item.event_id === p.id) : undefined;

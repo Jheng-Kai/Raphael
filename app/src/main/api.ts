@@ -245,11 +245,11 @@ export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core(
 
 export const routinesList = (memberId?: number): Promise<{ routines: Routine[] }> => core("routines.list", memberId === undefined ? {} : { member_id: memberId });
 export const routinesCreate = (
-  routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule"> & { enabled?: boolean },
+  routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
 export const routinesUpdate = (
   id: number,
-  patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "enabled">>,
+  patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */

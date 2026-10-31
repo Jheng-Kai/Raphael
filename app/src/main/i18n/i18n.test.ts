@@ -44,6 +44,14 @@ function cjkLiterals(files: string[]): string[] {
 }
 
 describe("main window translations", () => {
+  test("catalogues reject replacement characters and repeated question marks from damaged encoding", () => {
+    for (const [locale, messages] of Object.entries(catalogs)) {
+      for (const [key, value] of Object.entries(messages)) {
+        expect(value, `${locale}:${key}`).not.toMatch(/\uFFFD|\?{2,}/);
+      }
+    }
+  });
+
   test("all locales have exactly the same keys and interpolation parameters", () => {
     const keys = Object.keys(catalogs["zh-TW"]).sort();
     for (const messages of Object.values(catalogs)) {

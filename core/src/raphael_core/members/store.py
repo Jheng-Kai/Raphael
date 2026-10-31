@@ -136,11 +136,17 @@ class Routine:
     member_id: int
     title: str
     prompt: str
-    schedule: Schedule
+    schedule: Schedule | None
     enabled: bool
     last_run_ms: int | None
     next_run_ms: int | None
     created_at_ms: int
+    when: dict | None = None
+    last_checked_ms: int | None = None
+    last_error: str = ""
+    poll_initialized: bool = False
+    poll_failures: int = 0
+    app_name: str = ""
 
 
 # --- checking what the owner wrote -----------------------------------------------------------------
@@ -323,7 +329,8 @@ _MEMBER_COLUMNS = (
     " blurb, reply_style, voice, read_aloud, notify, ask_before_members, pinned, hidden, draft_first"
 )
 _ROUTINE_COLUMNS = (
-    "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms"
+    "id, member_id, title, prompt, schedule, enabled, last_run_ms, next_run_ms, created_at_ms,"
+    "when_json,last_checked_ms,last_error,poll_initialized,poll_failures,app_name"
 )
 # What `update_member` changes, and how each is checked.
 _MEMBER_FIELDS: dict[str, Callable[[Any], Any]] = {
@@ -347,7 +354,9 @@ def _member(row: sqlite3.Row) -> Member:
 def _routine(row: sqlite3.Row) -> Routine | None:
     data = dict(row)
     try:
-        data["schedule"] = parse_schedule(json.loads(data["schedule"]))
+        raw_when = data.pop("when_json")
+        data["when"] = json.loads(raw_when) if raw_when else None
+        data["schedule"] = None if data["when"] else parse_schedule(json.loads(data["schedule"]))
     except (ValueError, ScheduleError):
         return None
     data["enabled"] = bool(data["enabled"])
@@ -660,7 +669,9 @@ class MemberStore:
         member_id: int,
         title: Any,
         prompt: Any,
-        schedule: Any,
+        schedule: Any = None,
+        when: Any = None,
+        app_name: str = "",
         enabled: Any = True,
         next_run_ms: int | None,
     ) -> Routine:
@@ -668,21 +679,27 @@ class MemberStore:
             raise MemberError("not_found", "there is no such member")
         if type(enabled) is not bool:
             raise MemberError("enabled", "enabled must be true or false")
-        values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule))
+        from .events import clean_when
+        if (schedule is None) == (when is None):
+            raise MemberError("when", "Choose either a schedule or when")
+        trigger = clean_when(when) if when is not None else None
+        values = (clean_title(title), clean_prompt(prompt), clean_schedule(schedule) if trigger is None else None)
         if len(self.routines(member_id)) >= MAX_ROUTINES:
             raise MemberError("full", f"a member has at most {MAX_ROUTINES} routines")
         with self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO routines (member_id, title, prompt, schedule, enabled, next_run_ms,"
-                " created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " created_at_ms,when_json,app_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     member_id,
                     values[0],
                     values[1],
-                    json.dumps(values[2].to_json()),
+                    json.dumps(values[2].to_json() if values[2] else None),
                     int(enabled),
                     next_run_ms if enabled else None,
                     self._now_ms(),
+                    json.dumps(trigger) if trigger else None,
+                    app_name if trigger else "",
                 ),
             )
         routine = self.routine(int(cursor.lastrowid or 0))
@@ -696,6 +713,8 @@ class MemberStore:
         title: Any = None,
         prompt: Any = None,
         schedule: Any = None,
+        when: Any = None,
+        app_name: str | None = None,
         enabled: Any = None,
         next_run: Callable[[Schedule], int | None],
     ) -> Routine:
@@ -709,8 +728,17 @@ class MemberStore:
             changes["title"] = clean_title(title)
         if prompt is not None:
             changes["prompt"] = clean_prompt(prompt)
-        plan = routine.schedule
+        from .events import clean_when
+        if schedule is not None and when is not None:
+            raise MemberError("when", "Choose either a schedule or when")
+        plan, trigger = routine.schedule, routine.when
+        if when is not None:
+            trigger = clean_when(when)
+            plan = None
+            changes.update(when_json=json.dumps(trigger), schedule="null")
         if schedule is not None:
+            trigger = None
+            changes["when_json"] = None
             plan = clean_schedule(schedule)
             changes["schedule"] = json.dumps(plan.to_json())
         on = routine.enabled
@@ -721,11 +749,16 @@ class MemberStore:
             changes["enabled"] = int(on)
         if not on:
             changes["next_run_ms"] = None
-        elif schedule is not None or not routine.enabled or routine.next_run_ms is None:
-            changes["next_run_ms"] = next_run(plan)
+        elif schedule is not None or when is not None or not routine.enabled or routine.next_run_ms is None:
+            changes["next_run_ms"] = next_run(plan) if plan else self._now_ms()
+        if trigger != routine.when:
+            changes.update(poll_initialized=0, poll_failures=0, last_checked_ms=None, last_error="")
+            changes["app_name"] = (app_name or trigger["app"]) if trigger else ""
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
             with self._conn:
+                if trigger != routine.when:
+                    self._conn.execute("DELETE FROM routine_receipts WHERE routine_id=?", (routine_id,))
                 self._conn.execute(
                     f"UPDATE routines SET {assignments} WHERE id = ?", [*changes.values(), routine_id]
                 )
@@ -743,7 +776,7 @@ class MemberStore:
         """The routines that are on and due at `now_ms` (or were, and have not been dealt with)."""
         rows = self._conn.execute(
             f"SELECT {_ROUTINE_COLUMNS} FROM routines WHERE enabled = 1"
-            " AND next_run_ms IS NOT NULL AND next_run_ms <= ? ORDER BY next_run_ms, id",
+            " AND when_json IS NULL AND next_run_ms IS NOT NULL AND next_run_ms <= ? ORDER BY next_run_ms, id",
             (now_ms,),
         ).fetchall()
         return [routine for routine in map(_routine, rows) if routine is not None]

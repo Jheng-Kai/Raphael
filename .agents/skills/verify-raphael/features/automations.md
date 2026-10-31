@@ -1,5 +1,48 @@
 # Calendar and automations
 
+## Connected-app event routines (2026-11-01)
+
+A routine has exactly one of schedule or when. In conversation, the existing
+routine_create/update tools accept a connection id, its observed read tool and
+arguments, an array/id path and a narrow exact field/value filter. A member must
+ask the owner for a sender/channel when the request is too broad. The first poll
+records old items without running them. Checks use the production tool gate with
+no model, every three minutes, exponential failure backoff up to one hour, and at
+most five new tasks per successful poll. Pending matches survive restart even if
+the next tool result no longer contains them. A missing/revoked connection or read
+permission stops the routine and names Settings > Connections in its conversation
+and row. The shared editor offers the existing connection repair entry.
+
+The member's existing routine list shows scheduled and event work together, with
+the same switch/menu. Event rows and their shared editor show the readable filter,
+last checked and last fired; editing the exact filter establishes a fresh baseline.
+Event row details wrap so that the exact match and both times remain readable;
+last checked and last fired each start on a separate line, including in the editor.
+the additional lines justify their greater height compared with a clock row.
+The event editor shows its one fixed member and uses the shared centered dialog
+placement: it has no schedule chips or expandable schedule fields. The clock
+editor retains its existing top placement for those expanding fields. Both use
+the same dialog width, typography, fields and footer actions.
+The read tool and arguments are selected by the member, never edited as raw JSON
+in the window. The baseline note is essential to explain why old mail does not run.
+Events do not invent future calendar times. Each matched item enters the existing
+background engine, attributed to its routine in the member's thread, wrapped and
+marked as untrusted external data. Polling itself cannot write or send anything.
+A dedicated inbox address needs a mail service and remains out of scope (W21).
+
+```powershell
+npm run look -- routine-event-row routine-event-edit routine-event-saved routine-event-missing routine-event-reconnect routine-event-profile details-routines automation-edit --theme both --width 1120,720,1920x1080
+```
+
+Inspect all contact sheets and event full-size images, comparing row switches and
+editor actions with details-routines and automation-edit at the same width/theme.
+Core contracts: core/tests/members/test_events.py,
+core/tests/members/test_event_harness.py (API and CLI create/list/update),
+core/tests/brain/test_db.py (migration 49 schema parity). Frontend edit contract:
+app/src/main/member-profile.test.ts::an event routine edits a readable filter without losing its read tool arguments.
+This brief prohibits network, native journeys, cargo and npm run judge. Report
+those boundaries as SKIP/unverified, not live or design acceptance.
+
 ## Sub-features
 
 The app's own calendar, modelled on Google Calendar in the app's own look: week (default),

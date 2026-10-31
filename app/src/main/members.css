@@ -150,6 +150,7 @@
 .mb-rt-main { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .mb-rt-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-rt-t); font-weight: 600; }
 .mb-rt-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pa-rt-s); color: var(--text-3); }
+.mb-rt.is-event .mb-rt-main span { white-space: pre-line; overflow-wrap: anywhere; }
 .mb-rt-ctl { display: flex; align-items: center; gap: 0; }
 .mb-rt-ctl .btn.icon { display: none; }
 .page-agent .mb-rt-ctl .btn.icon.row { width: calc(28px + 8 * var(--pa-u)); min-height: calc(28px + 8 * var(--pa-u)); border-radius: var(--r-pill); }

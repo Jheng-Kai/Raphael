@@ -800,6 +800,24 @@ class IntegrationsService:
         server, tool = usable
         return self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool)
 
+    def event_tool_belongs(self, app: str, key: str, arguments: dict) -> bool:
+        """A router's read must belong to the named connection, not another linked account."""
+        parsed = _parse_key(key)
+        if parsed is None:
+            return False
+        server, name = parsed
+        if self.managed is not None:
+            from ..connectors.service import COMPOSIO_SERVER, GOOGLE_SERVER, META_EXECUTE
+            entry = self.managed.store.connectors.get(app)
+            if entry is not None:
+                ready = self.managed.ready_tools_of(entry)
+                if entry.kind == "google":
+                    return server == GOOGLE_SERVER and name in ready
+                calls = arguments.get("tools", [])
+                return (server == COMPOSIO_SERVER and name == META_EXECUTE and len(calls) == 1
+                        and isinstance(calls[0], dict) and calls[0].get("tool_slug") in ready)
+        return server == app
+
     def tier_for_call(self, key: str, arguments: Mapping[str, Any]) -> Tier | None:
         usable = self._usable(key)
         if usable is None:

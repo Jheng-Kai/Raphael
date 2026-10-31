@@ -110,7 +110,7 @@ export function createAutomationsPage(app: AppContext): Page {
   /** Everything the calendar holds in a period, whatever the rail hides. */
   function entriesIn(start: Date, end: Date): CalendarEntry[] {
     const now = Date.now();
-    const future = routines.flatMap(r => occurrences(r, start, end, r.schedule.max_runs ? Math.max(0, r.schedule.max_runs - (runCounts.get(r.id) ?? 0)) : Infinity));
+    const future = routines.flatMap(r => occurrences(r, start, end, r.schedule?.max_runs ? Math.max(0, r.schedule?.max_runs - (runCounts.get(r.id) ?? 0)) : Infinity));
     const history = routines.flatMap(routine => (logs.get(routine.id) ?? []).map(run => ({ routine, run, at: run.scheduled ?? run.started })).filter(o => o.at >= start.getTime() && o.at < end.getTime() && o.at <= now));
     const runs: { routine: Routine; at: number; run?: RoutineRun }[] = [...history, ...future.filter(o => !history.some(h => h.routine.id === o.routine.id && h.at === o.at))];
     const scheduled = runs.map((o): CalendarEntry => ({

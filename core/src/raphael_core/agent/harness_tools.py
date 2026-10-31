@@ -26,7 +26,14 @@ SCHEDULE = {
     "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"},
                    "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "until": {"type": "string", "description": "YYYY-MM-DD"}, "max_runs": {"type": "integer"}}, "required": ["kind"],
 }
-ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "enabled": {"type": "boolean"}}
+WHEN = {
+    "type": "object", "description": "Poll a connected app through its read tool, without model calls while idle. First poll only records old items. Ask the owner for a narrow sender/channel filter before creating. app is the connection id. event.tool is its exact mcp:server/tool key. For a Composio connection (composio:toolkit), use mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL with exactly one enabled read tool_slug and its arguments. items is the dot path to the result array (empty for a top-level array); id is the stable item id path. Choose these from an observed read result, never guess. Only bounded complete results (up to 1000 items) are accepted; use tool arguments to request a bounded recent window that covers every poll.",
+    "properties": {"app": {"type": "string"}, "event": {"type": "object", "properties": {
+        "tool": {"type": "string"}, "arguments": {"type": "object"}, "items": {"type": "string"}, "id": {"type": "string"}}, "required": ["tool", "arguments", "items", "id"]},
+        "filter": {"type": "object", "properties": {"field": {"type": "string"}, "equals": {"type": "string"}}, "required": ["field", "equals"]}},
+    "required": ["app", "event", "filter"],
+}
+ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "when": WHEN, "enabled": {"type": "boolean"}}
 
 
 def definition(description, properties=None, required=()):
@@ -77,7 +84,7 @@ DEFINITIONS = {
     "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in and reported quota/credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
     "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
-    "routine_create": definition("Create a routine for the current speaker from the owner's request. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt", "schedule"]),
+    "routine_create": definition("Create a routine for the current speaker from the owner's request. Supply exactly one of schedule or when. For an event, ask for a narrow filter if the owner has not named one. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt"]),
     "routine_list": definition("List only the current speaker's routines."),
     "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),
@@ -161,11 +168,15 @@ def tool(name: str) -> PluginTool:
 
 def routine_event(name: str, data: dict, language: str) -> str:
     routine = data.get("routine", {})
-    schedule = routine.get("schedule", {})
+    schedule = routine.get("schedule") or {}
     words = {"zh-TW": ("已建立例行任務", "已更新例行任務", "已刪除例行任務", "每天", "每週", "每小時"), "en": ("Routine created", "Routine updated", "Routine deleted", "Daily", "Weekly", "Every hour"), "ja": ("定期タスクを作成しました", "定期タスクを更新しました", "定期タスクを削除しました", "毎日", "毎週", "毎時")}[language]
     action = words[0 if name == "routine_create" else 1 if name == "routine_update" else 2]
     kind = schedule.get("kind")
-    if kind == "weekly":
+    if when := routine.get("when"):
+        app = routine.get("app_name") or when["app"]
+        condition = f"{when['filter']['field']} = {when['filter']['equals']}"
+        timing = {"zh-TW": f"當 {app} 有符合 {condition} 的新項目", "en": f"When {app} has a new item matching {condition}", "ja": f"{app} に {condition} と一致する新しい項目があるとき"}[language]
+    elif kind == "weekly":
         days = schedule.get("days", [])
         names = {"zh-TW": "日一二三四五六", "ja": "日月火水木金土", "en": ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")}[language]
         timing = words[4] + " " + ",".join(names[day] for day in days) + " " + str(schedule.get("time", ""))

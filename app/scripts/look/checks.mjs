@@ -2,6 +2,47 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("routine-event-")) {
+    if (name === "routine-event-profile") {
+      const list = document.querySelector('.mp-routine-list');
+      require(visible(list) && list.textContent.includes('Gmail') && list.textContent.includes('client@example.com') && list.textContent.includes('上次檢查'), 'the profile shares readable trigger rows');
+      require(visible(list.querySelector('[role="switch"]')), 'the profile keeps the existing switch');
+      return { check: name };
+    }
+    const row = document.querySelector('[data-routine="90"]');
+    require(visible(row), 'the event uses the existing routine list');
+    require(row.textContent.includes('Gmail') && row.textContent.includes('上次檢查') && row.textContent.includes('上次觸發'), 'the row names the app, filter and both times');
+    require(visible(row.querySelector('[role="switch"]')), 'the event has the existing routine switch');
+    require([...row.querySelectorAll('.mb-rt-main span')].every(text => text.scrollWidth <= text.clientWidth + 1 && text.scrollHeight <= text.clientHeight + 1), 'the exact filter and both times remain readable without truncation');
+    const status = row.querySelector('.mb-rt-main span:last-child');
+    const timeLabels = ['上次檢查', '上次觸發'].map(label => {
+      const start = status.textContent.indexOf(label), range = document.createRange();
+      require(start >= 0, 'both time labels are present');
+      range.setStart(status.firstChild, start); range.setEnd(status.firstChild, start + label.length);
+      require(range.getClientRects().length === 1, 'each time label stays together');
+      return range.getBoundingClientRect();
+    });
+    require(timeLabels[1].top > timeLabels[0].top, 'checked and fired times begin on separate lines');
+    if (name === "routine-event-menu") {
+      require(visible(row.querySelector('[data-det="routine-menu"]')), 'hover reveals the real routine menu before editing');
+      return { check: name };
+    }
+    if (name === "routine-event-saved") {
+      const call = window.__look.calls.find(call => call.method === 'routines.update' && call.params.id === 90);
+      require(call?.params.when?.filter.equals === 'owner@example.com' && !call.params.schedule, 'save preserves when instead of adding a schedule');
+      require(row.textContent.includes('owner@example.com'), 'the list shows the saved filter');
+      require(row.textContent.includes('尚未'), 'changing the filter resets its checked baseline');
+    } else if (name !== "routine-event-row") {
+      const form = document.querySelector('.au-routine-dialog');
+      require(visible(form?.querySelector('#au-filter')), 'the narrow filter is an ordinary labelled field');
+      require(!form.querySelector('#au-time') && !form.textContent.includes('"arguments"'), 'the editor contains readable event words');
+      require(visible(form.querySelector('[data-dlg="save"]')), 'the shared save button is visible');
+      const fields = form.querySelector('.mb-dlg-body');
+      require(fields.scrollHeight <= fields.clientHeight + 1, 'event fields have no inner scroll');
+      if (name === "routine-event-missing") require(visible(form.querySelector('[data-missing-repair="connections"]')), 'missing connection offers the existing settings entry');
+    }
+    return { check: name };
+  }
   if (name.startsWith("missing-")) {
     const note = [...document.querySelectorAll('.missing-note')].find(visible);
     if (name === 'missing-onboarding-repair') {

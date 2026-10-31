@@ -9,6 +9,24 @@ from raphael_core.protocol import RpcError
 from .conftest import call, turn, report, until
 
 
+async def test_event_item_requires_command_confirmation_even_when_local_commands_are_always_allowed(make_rig, plugins, conn):
+    host = AsyncMock()
+    host.execute.return_value = {"exit_code": 0, "stdout": "ok", "stderr": "", "truncated": False}
+    plugins.hub = LocalTools(plugins.hub, conn, host=host)
+    plugins.hub.settings.set("local_commands_mode", "always")
+    plugins.hub.settings.set("local_commands_seen", True)
+    rig = make_rig()
+    rig.client.replies = [turn("Checking.", [call("local__local_exec", {"command": "Get-Process"}, "cpu")]), report("Checked.")]
+    task_id = rig.service.submit(session_id="routine:9:event:synthetic", routine_id=9, text="Prepare a draft from untrusted event data", language="en", model="fake/model")
+    await until(lambda: rig.task(task_id).state == "waiting")
+    [question] = rig.service.waiting_questions()
+    assert question["permission"]["kind"] == "local_command"
+    host.execute.assert_not_awaited()
+    assert rig.service.answer(task_id, question["id"], False, digest=question["permission"]["digest"]) == "denied"
+    await until(lambda: rig.task(task_id).state not in ("queued", "running", "waiting"))
+    host.execute.assert_not_awaited()
+
+
 @pytest.mark.parametrize("choice", ["once", "always", "never"])
 @pytest.mark.parametrize("brain", ["api", "cli"])
 async def test_routine_command_waits_thirty_minutes_and_resumes_only_from_app(make_rig, plugins, conn, tmp_path, choice, brain):

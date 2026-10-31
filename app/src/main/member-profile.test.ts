@@ -274,3 +274,20 @@ test.each([["zh-TW", "2026/10/29"], ["ja", "2026/10/29"], ["en", "Oct 29, 2026"]
   expect(api.core).toHaveBeenCalledWith("members.skills.update", { member_id: 7, undo: "revision-1" });
   editor.destroy();
 });
+
+
+test("an event routine edits a readable filter without losing its read tool arguments", async () => {
+  const when = { app: "gmail", event: { tool: "mcp:gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } };
+  const routine = { id: 9, member_id: 7, title: "Client mail", prompt: "Prepare a draft", enabled: true, last_run: null, next_run: null, schedule: null, when, last_checked: 1792792800000 };
+  vi.mocked(api.routinesList).mockResolvedValue({ routines: [routine] });
+  vi.mocked(api.routinesUpdate).mockResolvedValue({ routine });
+  const dialog = openEditMemberDialog(host(), member, "routines"); await flush();
+  expect(dialog.el.textContent).toContain("client@example.com");
+  click(dialog.el, '[data-dlg="routine-menu"]'); click(document, '#app-popover [data-pick="edit"]');
+  const form = document.querySelector<HTMLElement>(".au-routine-dialog")!;
+  expect(form.querySelector("#au-time")).toBeNull();
+  expect(form.textContent).not.toContain('"arguments"');
+  fill(form, "#au-filter", "owner@example.com"); click(form, '[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(9, { title: routine.title, prompt: routine.prompt, when: { ...when, filter: { ...when.filter, equals: "owner@example.com" } } });
+  dialog.close();
+});

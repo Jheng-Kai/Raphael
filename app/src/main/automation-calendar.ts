@@ -3,7 +3,7 @@ import type { Routine } from "./types";
 import { dateKey, localDay, shiftDay } from "./schedule-picker";
 export interface Occurrence { routine: Routine; at: number; }
 export function occurrences(routine: Routine, from: Date, to: Date, remaining = Infinity): Occurrence[] {
-  if (!routine.enabled || routine.next_run === null || remaining <= 0) return [];
+  if (!routine.schedule || !routine.enabled || routine.next_run === null || remaining <= 0) return [];
   const s = routine.schedule, result: Occurrence[] = [];
   let used = 0;
   const add = (at: number): void => {
