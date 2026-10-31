@@ -58,8 +58,11 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
         let end = middle + 2, level = 1;
         for (; end < text.length && level; end++) { if (text[end] === "(") level++; if (text[end] === ")") level--; }
         if (!level) {
-          const html = link(text.slice(middle + 2, end - 1), text.slice(at + 1, middle));
+          const target = text.slice(middle + 2, end - 1);
+          const html = link(target, text.slice(at + 1, middle));
           if (html) { flush(); out += html; at = end; continue; }
+          // A file on a computer has no address to open: its path is what the owner can use, not the markdown around it.
+          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += `<code>${highlightHTML(target, query)}</code>`; at = end; continue; }
         }
       }
     }

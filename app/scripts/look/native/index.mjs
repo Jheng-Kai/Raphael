@@ -170,7 +170,7 @@ async function run(options) {
         browser = null;
         try { await stopOwned(owned); result.cleanup = owned ? "Owned app/core/WebView2 process tree closed by PID" : "No app process was launched"; } catch (error) { result.failures.push(`Process cleanup: ${error.message}`); }
         owned = null;
-        if (journey.name === "member-computer") {
+        if (["member-computer", "office-mission"].includes(journey.name)) {
           try { await database("vm-stop"); result.vmCleanup = "Journey-owned containers removed; workspaces retained"; }
           catch (error) { result.failures.push(`VM cleanup: ${error.message}`); }
         }

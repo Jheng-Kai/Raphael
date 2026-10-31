@@ -586,8 +586,9 @@ class BackgroundService:
             return refused('worker_disabled')
         parents = self._store.for_turns([source.id])
         parent = parents.get(source.id)
-        if parent is None and mode == 'consult' and source.scope == 'private' and source.status == 'running':
-            # The conversation turn waits for the answer as a task, to come back once with it.
+        if parent is None and source.scope == 'private' and source.status == 'running':
+            # The conversation turn waits for what it handed on as a task, to come back with it and go on. Live, a chief
+            # that handed out work in a chat was never told how it went, and the rest of the job stayed undone.
             parent = self._store.asker(source, language=language, model=getattr(self._speaker(source.member_id), 'model', None)
                                        or self._settings.get('agent_model') or DEFAULTS['agent_model'])
         # Bound durable task chains independently from conversational @ reply hops.

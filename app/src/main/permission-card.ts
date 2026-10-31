@@ -82,6 +82,6 @@ export function permissionCardHTML(card: PermissionCard, answerable = true): str
 }
 
 /** The cards a turn shows, below what it said. `answerable` says whether the window can answer a question by its id now. */
-export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true): string {
-  return (turn.permissions ?? []).map((card) => permissionCardHTML(card, card.source === "run" || answerable(card.id))).join("");
+export function permissionCardsHTML(turn: AgentTurn, answerable: (id: string) => boolean = () => true, settled = false): string {
+  return (turn.permissions ?? []).filter((card) => waitsForYes(card) !== settled).map((card) => permissionCardHTML(card, card.source === "run" || answerable(card.id))).join("");
 }

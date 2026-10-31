@@ -377,6 +377,27 @@ async def test_a_conversation_turn_that_consults_comes_back_once_with_the_answer
     assert rig.client.replies==[]
 
 
+async def test_a_chat_that_handed_out_work_is_told_how_it_went_and_goes_on(make_rig,tmp_path):
+    rig=make_rig()
+    target,source=setup(rig,room=False)
+    seen={}
+    def resumed(**kwargs):
+        seen['chief']=json.dumps(kwargs['messages'],ensure_ascii=False)
+        return report('設計完成，全部做好了。')
+    design='設計規格：'+'四張桌子圍著中央走道，每張桌子有一隻史萊姆。'*12
+    rig.client.replies.extend([report(design),resumed])
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='design',request='寫設計規格',done_when='A written design.'),
+                                source_turn_id=source.id,language='zh-TW')
+    child=rig.task(receipt.data['task_id'])
+    asker=rig.task(child.parent_task_id)
+    AgentHistory(rig.conn,rig.wall).resolve(source.id,prefix='答',text='設計師接手了。',status='done')
+    rig.service.settle_asker(source.id,answered=True)
+    await until(lambda:rig.task(asker.id).state in ('done','failed'))
+    assert rig.task(child.id).state=='done' and rig.task(asker.id).state=='done'
+    assert '四張桌子' in seen['chief'] and 'handoff_results' in seen['chief']
+    assert '全部做好了' in AgentHistory(rig.conn).get(source.id).text
+
+
 async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig,room=False)

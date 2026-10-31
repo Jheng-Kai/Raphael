@@ -17,6 +17,14 @@ test("URLs stop at CJK punctuation and retain complete targets behind short labe
   expect(el.textContent).toContain("（颱風警報）。");
 });
 
+test("a link to a file on a computer shows its path, not the markdown around it", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("檔案在 [index.html](/home/cua/team/office/index.html)，也可以用 [報告](C:\\Users\\me\\report.pdf)。", "", true);
+  expect(el.textContent).toBe("檔案在 /home/cua/team/office/index.html，也可以用 C:\\Users\\me\\report.pdf。");
+  expect(el.querySelectorAll("code")).toHaveLength(2);
+  expect(el.querySelector("a")).toBeNull();
+});
+
 test("visible URL labels contain only host and path, capped at 32 characters, while copying retains the complete URL", () => {
   expect(shortUrl("https://example.com/forecast?city=Taipei#today")).toBe("example.com/forecast");
   expect(shortUrl("https://example.com/?city=Taipei#today")).toBe("example.com");
