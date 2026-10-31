@@ -166,12 +166,11 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   }
 
   function click(event: Event): void {
-    const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-effort], [data-cb-act]");
+    const target = (event.target as Element).closest<HTMLElement>("[data-cb-source], [data-model], [data-cb-act]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     if (target.dataset.cbAct === "sources") { closeMenu(); host.openSources?.(); return; }
     if (target.dataset.cbAct === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
     if (target.dataset.cbSource !== undefined) { source = target.dataset.cbSource; query = ""; modelTries = 0; paintMenu(); return; }
-    if (target.dataset.effort) { saveDepth(target.dataset.effort); return; }
     if (target.dataset.model === undefined) return;
     if (target.dataset.model === look().lead?.id) { save(target.dataset.model); return; }
     const row = pickerModelsFor(look()).find(item => item.id === target.dataset.model);

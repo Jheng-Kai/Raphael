@@ -23,10 +23,10 @@ export default [
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
-    click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), wait('.model-chooser .mc-effort [data-effort="low"][aria-pressed="true"]'), check("model-effort-order")]),
+    click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), wait('.model-chooser .mc-effort [data-effort="low"][data-on="true"]'), check("model-effort-order")]),
   scene("quick-model-selection", "Quick questions take a subscription model and its own effort while Raphael's answer model stays", [
     ...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),
-    click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), click('.model-chooser .mc-effort [data-effort="high"]'), click('.model-chooser [data-dlg="use"]'),
+    click('.model-chooser [data-model="cli:codex:gpt-6.1"]'), { action: "slider-stop", selector: ".model-chooser .mc-range", level: "high" }, click('.model-chooser [data-dlg="use"]'),
     wait('[data-k="quick-model"][aria-label*="GPT-6.1"]'), check("quick-model-row"), check("quick-model-selection")]),
   ...["answer", "cleanup", "stt"].map(role => scene(`model-choices-${role}`, `Spaced ${role} choices with separate metadata and actions`, [...modelChooser(role), check("model-choice-layout"), ...(role === "answer" ? [check("model-effort-order")] : role === "cleanup" ? [check("cleanup-no-effort")] : [])])),
   scene("model-choices-local", "Local speech choices keep subtle borders, spacing and readable metadata", [...localChooser, scroll('.lm-row:last-child'), check("model-choice-scroll"), scroll('.lm-row:first-child'), check("model-choice-layout")]),

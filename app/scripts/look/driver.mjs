@@ -246,6 +246,18 @@ export async function perform(page, step) {
       break;
     }
     case "check": return page.evaluate(checkRendered, step.name);
+    case "slider-stop": {
+      // A real press along the track, where the browser puts the thumb's centre for that stop.
+      const element = await visible(step.selector);
+      const { at, stops } = await element.evaluate((range, level) => {
+        const levels = range.dataset.levels.split(",");
+        return { at: level === "last" ? levels.length - 1 : levels.indexOf(level), stops: levels.length };
+      }, step.level);
+      const box = await element.boundingBox();
+      await page.mouse.click(box.x + 8 + (box.width - 16) * (at / (stops - 1)), box.y + box.height / 2);
+      await element.dispose();
+      break;
+    }
     case "click-position": {
       const element = await visible(step.selector);
       try {

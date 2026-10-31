@@ -575,12 +575,12 @@ export const modelRefWith = (model: CatalogModel, effort: string): string =>
 
 const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (count - 1)) * 100 : 0);
 
-/** The depth of thought as something to drag; each stop is also a button, for a press or for keys. */
+/** The depth of thought as something to drag or press along, or to move with the arrow keys; the stops are its scale. */
 export function effortSliderHTML(levels: readonly string[], value: string): string {
   const at = Math.max(0, levels.indexOf(value));
   return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
     (levels.length > 1 ? `<input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` : "") +
-    `<div class="mc-stops" role="group" aria-label="${esc(t("chooser.effort"))}">${levels.map((level, index) => `<button type="button" class="btn mc-stop" data-effort="${esc(level)}" aria-pressed="${index === at}">${esc(effortText(level))}</button>`).join("")}</div></div>`;
+    `<div class="mc-stops" aria-hidden="true">${levels.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${index === at}">${esc(effortText(level))}</span>`).join("")}</div></div>`;
 }
 
 /** The slider where the pointer has it, and the level that is. */
@@ -588,7 +588,7 @@ export function moveEffortSlider(range: HTMLInputElement): string {
   const levels = (range.dataset.levels ?? "").split(","), at = Number(range.value), level = levels[at] ?? "";
   range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
   range.setAttribute("aria-valuetext", effortText(level));
-  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort]") ?? []) stop.setAttribute("aria-pressed", String(stop.dataset.effort === level));
+  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort]") ?? []) stop.dataset.on = String(stop.dataset.effort === level);
   return level;
 }
 
@@ -816,7 +816,7 @@ class MountedPicker implements ModelPicker {
       });
       return;
     }
-    const target = (event.target as Element).closest<HTMLElement>("[data-source], [data-model], [data-effort], [data-act], [data-star]");
+    const target = (event.target as Element).closest<HTMLElement>("[data-source], [data-model], [data-act], [data-star]");
     if (!target || (target as HTMLButtonElement).disabled) return;
     if (target.dataset.source !== undefined) {
       this.source = target.dataset.source; this.query = ""; this.maker = ""; this.confirm = null; this.paint();
@@ -828,7 +828,6 @@ class MountedPicker implements ModelPicker {
       this.dialog?.el.querySelector(".mc-inherit")?.setAttribute("aria-pressed", String(this.draft === this.o.lead?.id));
       this.paintRows(); this.paintFooter();
     }
-    if (target.dataset.effort) { this.effort = target.dataset.effort; this.paintRows(); }
     if (target.dataset.star) {
       const id = target.dataset.star, on = !this.o.favorites?.includes(id);
       this.o.favorites = withFavorite(this.o.favorites ?? [], id, on);

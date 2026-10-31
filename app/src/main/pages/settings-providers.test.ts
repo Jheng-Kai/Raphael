@@ -18,6 +18,12 @@ const api = vi.hoisted(() => ({
 vi.mock("../api", () => api);
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "test" }));
 import { createSettings } from "./settings";
+const slideTo = (level: string): void => {
+  const range = document.querySelector<HTMLInputElement>(".mc-range")!;
+  range.value = String(range.dataset.levels!.split(",").indexOf(level));
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  range.dispatchEvent(new Event("change", { bubbles: true }));
+};
 
 const empty: ModelCatalog = { llm: [], stt: [], source: "builtin", fetched_at_ms: null, replaced: [] };
 const direct: ModelCatalog = { ...empty, llm: [{
@@ -59,16 +65,16 @@ test("快速提問 picks its effort inside the model list, as the answer model d
   click('[data-k="quick-model"]');
   expect(document.querySelector('.model-chooser .mc-inherit')!.getAttribute("aria-pressed")).toBe("true");
   expect([...document.querySelectorAll<HTMLElement>('.model-chooser [data-effort]')].map(b => b.dataset.effort)).toEqual(["low", "medium"]);
-  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("aria-pressed")).toBe("true");
-  click('.model-chooser [data-effort="medium"]'); click('.model-chooser [data-dlg="use"]'); await flush();
+  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("data-on")).toBe("true");
+  slideTo("medium"); click('.model-chooser [data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "");
   expect(api.settingsSet).toHaveBeenLastCalledWith("quick_effort", "medium");
   // a model of its own starts quick (low) and takes its effort in the same list
   click('[data-k="quick-model"]'); click('[data-source="cli:codex"]');
   expect(document.querySelector('.model-chooser [data-dlg="sources"]')!.classList.contains("ghost")).toBe(false);
   click('.model-chooser [data-model="cli:codex:fast"]');
-  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("aria-pressed")).toBe("true");
-  click('.model-chooser [data-effort="medium"]'); click('.model-chooser [data-dlg="use"]'); await flush();
+  expect(document.querySelector('.model-chooser [data-effort="low"]')!.getAttribute("data-on")).toBe("true");
+  slideTo("medium"); click('.model-chooser [data-dlg="use"]'); await flush();
   expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "cli:codex:fast");
   expect(api.settingsSet).toHaveBeenLastCalledWith("quick_effort", "medium");
   expect(page.el.querySelector('select')).toBeNull();

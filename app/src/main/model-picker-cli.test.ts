@@ -3,6 +3,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { mountModelPicker, modelPickerHTML, type ModelPicker, type PickerRole } from "./model-picker";
 import type { CatalogModel, CliBrain } from "./types";
 import { t } from "./i18n";
+const slideTo = (level: string): void => {
+  const range = document.querySelector<HTMLInputElement>(".mc-range")!;
+  range.value = String(range.dataset.levels!.split(",").indexOf(level));
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  range.dispatchEvent(new Event("change", { bubbles: true }));
+};
 const clis: CliBrain[] = [
   { id: "claude", name: "Claude Code", disconnected: false, installed: true, logged_in: true, available: true, login_command: "claude auth login", models: [
     { id: "cli:claude:sonnet", name: "Claude Sonnet 5.5", is_default: true, reasoning_efforts: ["low", "high"], default_effort: "high" },
@@ -28,7 +34,7 @@ test("subscriptions are separate; bare refs show the concrete default and source
   expect(document.querySelector('.mc-default')).toBeNull(); expect(document.querySelector(".mc-tools")).toBeNull();
 });
 test("selection is staged and effort is saved with the concrete model only on confirmation", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   expect(choose).not.toHaveBeenCalled(); expect(document.querySelector(".mc-selection")?.textContent).toContain("Claude Opus 5.5");
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:claude:opus?effort=low");
   expect(document.querySelector('[role="dialog"]')).toBeNull(); expect(document.activeElement).toBe(picker.button);
@@ -60,24 +66,24 @@ test("Antigravity shows mixed makers and saves the full effort-suffixed model re
       { id: "cli:gemini:claude-opus-5-5", name: "Claude Opus 5.5", provider: "Anthropic", reasoning_efforts: ["high"], effort_models: { high: "cli:gemini:claude-opus-5-5-high" } },
     ] }] });
   expect(picker.button.textContent).toContain("Gemini Argon"); expect(picker.button.textContent).toContain("Antigravity");
-  picker.open(); expect(document.querySelector('[data-effort="low"]')?.getAttribute("aria-pressed")).toBe("true");
+  picker.open(); expect(document.querySelector('[data-effort="low"]')?.getAttribute("data-on")).toBe("true");
   expect(document.querySelectorAll(".mc-row")).toHaveLength(2);
-  click('[data-effort="high"]'); expect(choose).not.toHaveBeenCalled();
+  slideTo("high"); expect(choose).not.toHaveBeenCalled();
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:gemini:gemini-4-argon-high");
   picker.open(); click('[data-model="cli:gemini:claude-opus-5-5"]');
   click('[data-dlg="use"]'); expect(choose).toHaveBeenLastCalledWith("cli:gemini:claude-opus-5-5-high");
 });
 
 test("switching sources preserves the staged effort and never changes the saved-source dot", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   click('[data-source="cli:codex"]'); click('[data-source="cli:claude"]');
-  expect(document.querySelector('[data-effort="low"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[data-effort="low"]')?.getAttribute("data-on")).toBe("true");
   expect(document.querySelector(".mc-current")?.closest("[data-source]")?.getAttribute("data-source")).toBe("cli:claude");
   click('[data-dlg="use"]'); expect(choose).toHaveBeenCalledWith("cli:claude:opus?effort=low");
 });
 
 test("a dialog handed to a replacement settings row keeps its draft and returns focus to the new trigger", () => {
-  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); click('[data-effort="low"]');
+  const { choose } = mount(); click('[data-model="cli:claude:opus"]'); slideTo("low");
   picker.button.parentElement!.remove();
   const slot = document.createElement("div"); document.body.append(slot);
   picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", onChoose: choose });
@@ -141,15 +147,15 @@ test("a high-first API catalog displays shallow-to-deep efforts and keeps unknow
   const before = [...apiModel.reasoning_efforts!];
   const choose = mountApi("answer", "openai/test?effort=xhigh");
   expect(displayedEfforts()).toEqual(["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-b", "future-a"]);
-  expect(document.querySelector('[data-effort="xhigh"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[data-effort="xhigh"]')?.getAttribute("data-on")).toBe("true");
   expect(apiModel.reasoning_efforts).toEqual(before);
-  click('[data-effort="minimal"]'); click('[data-dlg="use"]');
+  slideTo("minimal"); click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("openai/test?effort=minimal");
 });
 
 test("display order does not replace a model's default effort", () => {
   mountApi("answer", "openai/test");
-  expect(document.querySelector('[data-effort="high"]')?.getAttribute("aria-pressed")).toBe("true");
+  expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
 });
 
 test("a high-first subscription catalog uses the same display order and keeps its effort model mapping", () => {
@@ -161,8 +167,8 @@ test("a high-first subscription catalog uses the same display order and keeps it
         effort_models: { high: "cli:gemini:test-high", minimal: "cli:gemini:test-minimal", low: "cli:gemini:test-low" } },
     ] }] });
   picker.open(); expect(displayedEfforts()).toEqual(["minimal", "low", "high"]);
-  expect(document.querySelector('[data-effort="high"]')?.getAttribute("aria-pressed")).toBe("true");
-  click('[data-effort="low"]'); click('[data-dlg="use"]');
+  expect(document.querySelector('[data-effort="high"]')?.getAttribute("data-on")).toBe("true");
+  slideTo("low"); click('[data-dlg="use"]');
   expect(choose).toHaveBeenCalledWith("cli:gemini:test-low");
 });
 

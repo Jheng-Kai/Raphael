@@ -126,11 +126,15 @@ test("a depth is saved with its model, and the button says it", async () => {
   await flush();
   open();
   await flush();
-  q('[data-effort="high"]')!.click();
+  const range = q<HTMLInputElement>(".mc-range")!;
+  range.value = "1";
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  range.dispatchEvent(new Event("change", { bubbles: true }));
   await flush();
   expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:global?effort=high");
   expect(slot.querySelector(".cb-depth")!.textContent).toBe("高");
-  expect(q('[data-effort="high"]')!.getAttribute("aria-pressed")).toBe("true");
+  expect(q('[data-effort="high"]')!.getAttribute("data-on")).toBe("true");
 });
 
 test("a model without depths has no slider", async () => {
