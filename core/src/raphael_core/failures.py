@@ -165,7 +165,7 @@ def scrub(text: str) -> str:
     """`text` without what looks like a credential, and otherwise as it was: addresses, paths and
     long ids stay, for a text that has to keep them (a run's summary), unlike `redact`."""
     text = re.sub(r"(?i)\b(?:bearer\s+)[^\s,;\"']+", "[redacted]", text)
-    text = re.sub(r"(?i)([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
+    text = re.sub(r"(?i)(?<![\w-])([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
     text = re.sub(r"(?i)\b(?:sk[-_]|ak_|lt_|gh[pousr]_|eyJ)[A-Za-z0-9_.-]+", "[redacted]", text)
     return re.sub(r"(?i)\b(?:refresh_token|access_token|id_token)\b", "[credential]", text)
 
@@ -247,7 +247,7 @@ def missing_for(kind, tool, detail=None):
         return Missing("audio", detail, "missing" if detail != "audio_decode" else "broken", None)
     if tool == "read_attachment" and kind in ("encrypted", "bad_pdf", "no_text"):
         return Missing("pdf", kind, "broken", "vision" if kind == "no_text" else None)
-    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "tts": "voice", "computer": "computer"}.get(tool)
+    repair = {"web_search": "search", "web_read": "read", "read_attachment": "pdf" if detail == "pdf" else "vision", "tts": "voice", "generate_audio": "voice", "computer": "computer"}.get(tool)
     if not repair or kind not in ("not_configured", "missing_secret", "no_key", "disabled", "vision_unsupported", "unavailable"):
         return None
     resource = detail if detail in ("searxng", "tavily", "brave", "exa", "jina", "firecrawl", "openrouter", "fish") else repair

@@ -116,6 +116,8 @@ class CliLoop:
         # a Codex model offered it called it itself to ask for permission: a question about no action at all.
         if structured is not None:
             self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
+        from ...worker.owner_input import OwnerInput
+        self.owner_input = OwnerInput()
         self.user = user
         self.tools = list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
         self.images = [attachment for attachment in attachments if attachment.is_image]
@@ -314,6 +316,8 @@ class CliLoop:
         """Whether the turn handed work off. If so, the task now waits for that work, however the turn ended:
         live, a turn cut at its first hand-off could start only one of a meeting's action items."""
         if self._handoff_pending:
+            self.tool_messages.extend(self.owner_input.drain())
+            self.owner_input.closed = True
             self._queue.put_nowait(Outcome('stopped', kind='handoff'))
         return self._handoff_pending
 
@@ -354,10 +358,10 @@ class CliLoop:
                     session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
                     outage = Outage(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits, (), patient_ok=False)
                     failure = await self._attempt(name, command, model, server, session, workspace)
-                    while failure == "tools_changed":
+                    while failure in ("tools_changed", "owner_input"):
                         self.catalog_changed = False
                         session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
-                        if not self.user.startswith(self.reload_note):
+                        if failure == "tools_changed" and not self.user.startswith(self.reload_note):
                             self.user = self.reload_note + "\n" + self.user
                         failure = await self._attempt(name, command, model, server, session, workspace)
                     # Running the request again is safe only while nothing of it has happened yet. The owner is told once.
@@ -446,6 +450,11 @@ class CliLoop:
                         return None
                     final = event.text.strip()
                     if final:
+                        pending = self.owner_input.drain(finishing=True)
+                        if pending:
+                            self.tool_messages.extend(pending)
+                            self.user = "\n\n".join(message["content"] for message in pending)
+                            return "owner_input"
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()

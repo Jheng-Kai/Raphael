@@ -137,6 +137,8 @@ class NarratedLoop:
         self.acted = False
         # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
         self.live: list[dict] = []
+        from ..worker.owner_input import OwnerInput
+        self.owner_input = OwnerInput()
 
     def go_on(self, note: str) -> None:
         """Take the conversation up again after the turn was over, with one more message from the user:
@@ -230,6 +232,7 @@ class NarratedLoop:
             messages=self.messages,
             guardrails=self.guardrails,
             corrective_rounds=1,
+            owner_input=self.owner_input,
             context_window=self.context_window,
         )
         self.model_calls += outcome.model_calls
@@ -262,7 +265,8 @@ class NarratedLoop:
                     arguments = None
                 if isinstance(arguments, dict) and (note := self.guardrails.after_call(name, arguments, outcome).note):
                     content += "\n\n" + note
-            self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
+            insert = next((i for i in range(batch + 1, len(self.messages)) if self.messages[i].get("role") == "user"), len(self.messages))
+            self.messages.insert(insert, {"role": "tool", "tool_call_id": call["id"], "content": content})
         if images := image_parts(result):
             self.messages.append({"role": "user", "content": [{"type": "text", "text": "Untrusted computer screenshot."}, *images]})
         self.response = None

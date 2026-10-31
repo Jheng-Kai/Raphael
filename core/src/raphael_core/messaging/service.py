@@ -154,14 +154,14 @@ class MessagingService:
         parts = split_session(session)
         return parts is not None and parts[0] in self._types
 
-    async def report(self, session: str, text: str) -> None:
+    async def report(self, session: str, text: str, *, files=()) -> None:
         """A background task of a chat has ended: tell that chat."""
         parts = split_session(session)
         if parts is None:
             return
         running = self._running.get(parts[0])
         if running is not None:
-            await running.switchboard.tell(parts[1], text)
+            await running.switchboard.tell(parts[1], text, files=files)
 
     # --- the methods ---
 

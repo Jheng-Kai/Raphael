@@ -6,6 +6,9 @@ messages (`getUpdates` with a long timeout), so no public address is needed.
 Besides text, a message may hold a voice message, a photo (Raphael takes its largest size) or a
 document; an image or a PDF among them is fetched for the switchboard to hand the assistant.
 
+Outgoing media routing follows Hermes plugins/platforms/telegram/adapter.py
+(MIT, c419cf7c); see THIRD_PARTY_NOTICES.md.
+
 What goes in the log: counts and kinds. Never a message, a caption, a name, a file's name or id, a
 token, or the address of a request (it contains the token): this module silences the log lines of
 httpx that would show one.
@@ -95,11 +98,12 @@ class TelegramApi:
         self._token = token
         self._http = http
 
-    async def _call(self, method: str, payload: dict | None = None, *, wait: float = 0) -> Any:
+    async def _call(self, method: str, payload: dict | None = None, *, wait: float = 0, files=None) -> Any:
         url = f"{API_ROOT}/bot{self._token}/{method}"
         try:
             response = await self._http.post(
-                url, json=payload or {}, timeout=httpx.Timeout(10.0 + wait, connect=10.0)
+                url, **({"data": payload or {}, "files": files} if files else {"json": payload or {}}),
+                timeout=httpx.Timeout(60.0 if files else 10.0 + wait, connect=10.0)
             )
         except httpx.HTTPError:
             # The exception text holds the address, and the address holds the token.
@@ -138,6 +142,17 @@ class TelegramApi:
 
     async def send_message(self, chat_id: int, text: str) -> None:
         await self._call("sendMessage", {"chat_id": chat_id, "text": text})
+
+    async def send_file(self, chat_id: int, file) -> bool:
+        if len(file.data) > 50 * 1024 * 1024:
+            return False
+        field, method = "document", "sendDocument"
+        if file.mime in ("image/png", "image/jpeg") and len(file.data) <= 10 * 1024 * 1024:
+            field, method = "photo", "sendPhoto"
+        elif file.mime in ("audio/mpeg", "audio/mp4"):
+            field, method = "audio", "sendAudio"
+        await self._call(method, {"chat_id": str(chat_id)}, files={field: (file.name, file.data, file.mime)})
+        return True
 
     async def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
         await self._call("sendChatAction", {"chat_id": chat_id, "action": action})
@@ -318,6 +333,9 @@ class TelegramChannel:
         for piece in pieces:
             await self._api.send_message(int(chat), piece)
         logger.info("Telegram: sent %d message(s)", len(pieces))
+
+    async def send_attachment(self, chat: str, file) -> bool:
+        return await self._api.send_file(int(chat), file)
 
     @contextlib.asynccontextmanager
     async def busy(self, chat: str) -> AsyncIterator[None]:

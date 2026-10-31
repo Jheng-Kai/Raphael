@@ -145,6 +145,8 @@ class Worker:
     def __init__(self, peer: Peer) -> None:
         self._peer = peer
         self._cancelled: dict[int, asyncio.Event] = {}
+        self._owner_inputs = {}
+        peer.register("task.steer", self._steer)
         peer.register("worker.hello", self._hello)
         peer.register("task.run", self._run)
         peer.register("task.cancel", self._cancel)
@@ -171,10 +173,13 @@ class Worker:
         if task_id in self._cancelled:
             raise RpcError(BUSY, "That task is running")
         cancelled = self._cancelled[task_id] = asyncio.Event()
+        from .owner_input import OwnerInput
+        inbox = self._owner_inputs[task_id] = OwnerInput()
         window = params.get("context_window")
         try:
             outcome = await run_task(
                 CoreHost(self._peer, task_id),
+                owner_input=inbox,
                 system=system if isinstance(system, str) else "",
                 user=user if isinstance(user, str) else "",
                 tools=tools,
@@ -185,6 +190,7 @@ class Worker:
                 context_window=window if type(window) is int else None,
             )
         finally:
+            self._owner_inputs.pop(task_id, None)
             del self._cancelled[task_id]
         logger.info(
             "Task ended: status=%s kind=%s model_calls=%d tool_calls=%d",
@@ -194,6 +200,13 @@ class Worker:
             outcome.tool_calls,
         )
         return _result(outcome)
+
+    async def _steer(self, params: dict) -> dict:
+        task_id, text = params.get("task_id"), params.get("text")
+        if type(task_id) is not int or not isinstance(text, str) or not text.strip() or len(text) > 12000:
+            raise invalid_params("invalid owner input")
+        inbox = self._owner_inputs.get(task_id)
+        return {"accepted": bool(inbox and inbox.add(text))}
 
     async def _cancel(self, params: dict) -> dict:
         task_id = params.get("task_id")

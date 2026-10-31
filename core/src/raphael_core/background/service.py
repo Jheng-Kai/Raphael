@@ -281,7 +281,8 @@ def continued(messages: Sequence[dict], waiting_call: str, content: str) -> list
             if call_id == waiting_call
             else wrap_untrusted(name, NOT_MADE_WHILE_WAITING, ok=False)
         )
-        out.append({"role": "tool", "tool_call_id": call_id, "content": text})
+        insert = next((i for i in range(last + 1, len(out)) if out[i].get("role") == "user"), len(out))
+        out.insert(insert, {"role": "tool", "tool_call_id": call_id, "content": text})
     return out
 
 
@@ -467,6 +468,42 @@ class BackgroundService:
 
     def use_owner_tools(self, execute) -> None:
         self._owner_tools = execute
+
+    def _artifact(self, task, payload):
+        if task.turn_id:
+            self._history.add_message(task.turn_id, "media", json.dumps(payload, ensure_ascii=False))
+            self._changed(task.id, RUNNING)
+
+    async def steer(self, member_id, conversation_id, text):
+        for task_id, run in list(self._runs.items()):
+            task = self._store.get(task_id)
+            origin = self._history.get(task.turn_id) if task and task.turn_id else None
+            if not task or task.state != RUNNING or task.member_id != member_id or task.room_id is not None:
+                continue
+            if origin is None or origin.conversation_id != conversation_id:
+                continue
+            if await self._steer_run(run, text):
+                return True
+        return False
+
+    async def _steer_run(self, run, text):
+        loop = self._cli_loops.get(run.task_id)
+        if loop is not None:
+            return loop.owner_input.add(text)
+        steer = getattr(self._host, "steer", None)
+        return bool(steer is not None and await steer(run, text))
+
+    async def steer_room(self, room_id, thread_id, text, recipients):
+        candidates = []
+        for task_id, run in list(self._runs.items()):
+            task = self._store.get(task_id)
+            if (task and task.state == RUNNING and task.room_id == room_id and task.thread_id == thread_id
+                    and (not recipients or task.member_id in recipients)):
+                candidates.append((task, run))
+        # A message with several addressees is a new room turn; never partly admit it.
+        if len(candidates) != 1 or recipients and set(recipients) != {candidates[0][0].member_id}:
+            return False
+        return await self._steer_run(candidates[0][1], text)
 
     def use_attachment_store(self, store) -> None:
         self._attachment_store = store
@@ -1243,6 +1280,8 @@ class BackgroundService:
             cost_cap=self._cost_cap,
             calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
             owner_tool=lambda name, arguments: self._owner_tool(task, name, arguments),
+            attachment_store=self._attachment_store,
+            artifact=lambda payload: self._artifact(task, payload),
         )
         if task.routine_id is not None and task.session_id.startswith(f"routine:{task.routine_id}:event:"):
             run._memory_untrusted = True

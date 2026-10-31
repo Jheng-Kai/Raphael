@@ -105,7 +105,7 @@ SUMMARY_TIMEOUT_S = 120.0
 MAX_RESULT_CHARS = 200_000
 # The tools whose call is paid: the search (by a model, or a service), the reading of a file, and
 # asking another member (who answers with model calls of its own, on this task's ledger).
-_PAID_TOOLS = ("web_search", "read_attachment", ASK_MEMBER)
+_PAID_TOOLS = ("web_search", "read_attachment", "generate_audio", ASK_MEMBER)
 
 
 # A model call whose cost is not known, and whose model has no price we know, is charged this.
@@ -256,7 +256,10 @@ class TaskRun:
         cost_cap: Callable[[], float] | None = None,
         calendar: "Callable[[str, dict], Awaitable[dict]] | None" = None,
         owner_tool=None,
+        attachment_store=None,
+        artifact=lambda payload: None,
     ) -> None:
+        self._attachment_store, self._artifact = attachment_store, artifact
         self.activity = current()
         # The most this task may spend, as the owner's setting says now; None for none.
         self._cost_cap = cost_cap
@@ -684,6 +687,11 @@ class TaskRun:
             self._end_step(sent, **fields)  # the step written when the call was sent
         else:
             self._step(kind="tool", **fields)
+        if reply.get("ok") and (name == "generate_audio" or ref is not None and ref.server == "computer" and ref.name == "attach_file"):
+            from ..services.artifacts import artifact_payload
+            payload = artifact_payload(reply.get("content", ""), self._attachment_store)
+            if payload:
+                self._artifact(payload)
         if reply.get("kind") == "computer_permission_required":
             raise stopped("failed", "computer_permission_required")
         return reply
@@ -981,6 +989,11 @@ class TaskRun:
                 except CalendarError as error:
                     return ToolResult(name, False, None, error.kind, instruction=error.instruction)
                 return ToolResult(name, True, data, untrusted=name == CALENDAR_LIST)
+            if name == "generate_audio":
+                result = await self._guarded(self._tools.generate_audio(arguments, self._attachment_store))
+                if not result.ok and isinstance(result.data, dict) and result.data.get("missing"):
+                    self._artifact({"missing": result.data["missing"]})
+                return result
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()

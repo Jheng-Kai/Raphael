@@ -466,6 +466,15 @@ export function installMock(fixture, config = {}, target = window) {
         desktopSessions.delete(p.session); return {};
       }
       case "settings.get": return { settings: data.settings };
+      case "attachments.get": {
+        if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
+        const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);
+        const word = (offset, text) => [...text].forEach((letter, index) => { bytes[offset + index] = letter.charCodeAt(0); });
+        word(0, "RIFF"); view.setUint32(4, 16036, true); word(8, "WAVEfmt "); view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true); word(36, "data"); view.setUint32(40, 16000, true);
+        return {mime: "audio/wav", data: btoa(String.fromCharCode(...bytes))};
+      }
       case "settings.set": data.settings[p.key] = p.value; notify("SettingsChanged"); return { settings: data.settings };
       case "status.get": return data.status;
       case "home.overview": {
@@ -971,6 +980,13 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "agent_ask_text") {
+        if (variant.ownerAddition) {
+          const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
+          if (!active) throw new Error("No running member turn");
+          data.turns.push({...active, id: 901, session_id: args.requestId, question: args.text, route: "owner_input", text: "", status: "done", steps: [], messages: [], created_at_ms: data.now});
+          notify("AgentTurn", {turn_id: 901, member_id: active.member_id});
+          return null;
+        }
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));
         return null;

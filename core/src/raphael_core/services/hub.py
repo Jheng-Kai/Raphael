@@ -260,6 +260,30 @@ class ServiceHub:
             model=self._text("tts_fish_model"),
         )
 
+    async def audio_file(self, text: str, *, voice: str | None = None) -> Attachment:
+        import io
+        import wave
+        from contextlib import aclosing
+        from .attachments import MAX_FILE_BYTES
+
+        if not self.enabled("voice"):
+            raise ServiceError("disabled")
+        pcm = bytearray()
+        async with aclosing(self.speech(text, voice=voice)) as stream:
+            async for chunk in stream:
+                pcm.extend(chunk)
+                if len(pcm) > MAX_FILE_BYTES - 44:
+                    raise ServiceError("size")
+        if not pcm or len(pcm) % 2:
+            raise ServiceError("bad_response")
+        output = io.BytesIO()
+        with wave.open(output, "wb") as audio:
+            audio.setnchannels(1)
+            audio.setsampwidth(2)
+            audio.setframerate(tts.PCM_RATE)
+            audio.writeframes(pcm)
+        return Attachment("speech.wav", "audio/wav", output.getvalue())
+
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger
     ) -> tuple[str, dict]:

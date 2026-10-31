@@ -51,6 +51,7 @@ const BUILTIN_TITLES: Record<string, MessageKey> = {
   local_time: "agent.tool.time",
   find_tools: "agent.tool.findTools",
   ask_member: "agent.tool.askMember",
+  generate_audio: "agent.tool.generateAudio",
 };
 const COMMAND_TITLES: Record<string, MessageKey> = {
   open: "agent.cmd.open",
@@ -348,7 +349,8 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
 /** The same conversation cards and controls are used in private and room replies. */
 export function conversationCardsHTML(turn: AgentTurn): string {
   return connectorCardsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn) +
-    mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn);
+    mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
+    (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
 }
 
 /** The words of a summary: how many things were done, how long it took, how many failed; or that a task is under way. */
@@ -659,6 +661,21 @@ export function safeYoutubeEmbedUrl(embed: unknown, fallbackUrl?: unknown): stri
   return null;
 }
 
+function artifactHTML(text: string, seq: number): string {
+  try {
+    const payload = JSON.parse(text);
+    const prerequisite = payload?.missing;
+    if (prerequisite && typeof prerequisite.resource === "string" && typeof prerequisite.requirement === "string" && ["missing", "broken", "unknown", "off"].includes(prerequisite.state) && (prerequisite.repair === null || typeof prerequisite.repair === "string")) {
+      return `<div class="chat-message" data-message="${seq}">${missingHTML(prerequisite)}</div>`;
+    }
+    const file = payload?.attachment as TurnAttachment | undefined;
+    if (file && typeof file.id === "string" && /^[a-f0-9]{32}\.[a-z0-9]{1,12}$/.test(file.id) && typeof file.name === "string" && typeof file.mime === "string") {
+      return `<div class="chat-message" data-message="${seq}">${sentFileHTML({ id: file.id, name: file.name, mime: file.mime, size: typeof file.size === "number" && Number.isFinite(file.size) && file.size >= 0 ? file.size : undefined })}</div>`;
+    }
+  } catch { /* Older media messages use the URL payload below. */ }
+  return "";
+}
+
 /** Parses a `media` message's JSON string; returns null when malformed. */
 export function parseMediaPayload(raw: string): MediaPayload | null {
   try {
@@ -792,6 +809,8 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
+      const artifact = artifactHTML(text, message.seq);
+      if (artifact) return artifact;
       const media = parseMediaPayload(text);
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
@@ -853,7 +872,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
-    `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
+    (turn.route === "owner_input" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
     (isBotRename(turn) ? "" : `<span class="ra-face"${meta ? ` title="${meta}"` : ""}>${look.face(live || revealing)}</span>`) + `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
@@ -868,7 +887,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +
     taskActionsHTML(turn, state) +
-    `</div></div>` +
+    `</div></div>`) +
     (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null)
       .map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + `</li>`
   );

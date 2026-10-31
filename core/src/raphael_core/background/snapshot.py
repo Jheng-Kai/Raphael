@@ -72,6 +72,10 @@ FIND = "find"  # the tool that looks for more tools in the snapshot
 BUILTIN_SERVER = "Raphael"
 
 _DEFINITIONS: dict[str, dict[str, Any]] = {
+    "generate_audio": {
+        "description": "Generate a downloadable WAV audio file from the owner's script using the configured voice service. Returns an attachment shown in the conversation. Never claim MP3 output. An optional voice selects a voice on that same service.",
+        "parameters": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 1000}, "voice": {"type": "string"}}, "required": ["text"]},
+    },
     "weather": {
         "description": (
             "[Raphael] The weather now, today and tomorrow in a city. Leave the city out for the "
@@ -267,6 +271,8 @@ def take_snapshot(
     for name in builtin:
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, Tier.T0)
         definitions.append({"type": "function", "function": {"name": name, **_DEFINITIONS[name]}})
+    refs["generate_audio"] = ToolRef(BUILTIN, "generate_audio", BUILTIN_SERVER, "generate_audio", Tier.T1)
+    definitions.append({"type": "function", "function": {"name": "generate_audio", **_DEFINITIONS["generate_audio"]}})
     for name in team:
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
@@ -310,7 +316,7 @@ def take_snapshot(
             | set(MEMORY_READ_TOOLS)
             | set(ATTACHMENT_TOOLS)
             | set(TEAM_TOOLS)
-            | {"find_tools"}
+            | {"find_tools", "generate_audio"}
             | PRESENCE_TOOLS
             | set(HARNESS_DEFINITIONS)
         )
