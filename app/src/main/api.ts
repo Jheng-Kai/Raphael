@@ -63,6 +63,9 @@ export function core<T>(method: string, params: object = {}): Promise<T> {
   return invoke<T>("core_call", { method, params });
 }
 
+export const ownerQuestionAnswer = (id: string, answer: string | null): Promise<{ status: string }> =>
+  core("owner_questions.answer", { id, answer });
+
 // ---------- status ----------
 
 export const statusGet = (): Promise<Status> => core("status.get");

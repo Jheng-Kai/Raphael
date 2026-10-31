@@ -98,24 +98,29 @@ export function secretResumedLineHTML(turn: AgentTurn): string {
  */
 export function carryTyped(before: Element, after: Element): () => void {
   const kept: { id: string; value: string; focused: boolean; start: number | null; end: number | null }[] = [];
-  for (const old of before.querySelectorAll<HTMLInputElement>("input[data-secret-input]")) {
+  const focus: { field: HTMLInputElement | HTMLTextAreaElement; start: number | null; end: number | null }[] = [];
+  const resized: HTMLTextAreaElement[] = [];
+  const fields = "input[data-secret-input], textarea[data-owner-answer-input]";
+  for (const old of before.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)) {
     if (!old.value) continue;
-    kept.push({ id: old.dataset.secretInput ?? "", value: old.value, focused: old === document.activeElement, start: old.selectionStart, end: old.selectionEnd });
+    kept.push({ id: old.dataset.secretInput ?? old.dataset.ownerAnswerInput ?? "", value: old.value, focused: old === document.activeElement, start: old.selectionStart, end: old.selectionEnd });
   }
   for (const item of kept) {
-    const fresh = [...after.querySelectorAll<HTMLInputElement>("input[data-secret-input]")].find((input) => input.dataset.secretInput === item.id);
+    const fresh = [...after.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)].find(input => (input.dataset.secretInput ?? input.dataset.ownerAnswerInput) === item.id);
     if (!fresh) continue;
     fresh.value = item.value;
     const save = fresh.closest(".secret-card")?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
     if (save) save.disabled = false;
+    const submit = fresh.closest("[data-owner-question]")?.querySelector<HTMLButtonElement>('[data-owner-answer="text"]');
+    if (submit) submit.disabled = false;
+    if (fresh instanceof HTMLTextAreaElement) resized.push(fresh);
+    if (item.focused) focus.push({ field: fresh, start: item.start, end: item.end });
   }
   return () => {
-    for (const item of kept) {
-      if (!item.focused) continue;
-      const fresh = [...after.querySelectorAll<HTMLInputElement>("input[data-secret-input]")].find((input) => input.dataset.secretInput === item.id);
-      if (!fresh) continue;
-      fresh.focus({ preventScroll: true });
-      if (item.start !== null && item.end !== null) fresh.setSelectionRange(item.start, item.end);
+    for (const field of resized) { field.style.height = "auto"; field.style.height = `${field.scrollHeight}px`; }
+    for (const item of focus) {
+      item.field.focus({ preventScroll: true });
+      if (item.start !== null && item.end !== null) item.field.setSelectionRange(item.start, item.end);
     }
   };
 }

@@ -1,4 +1,5 @@
 import sidebar from "./sidebar.mjs";
+import ownerQuestions from "./owner-questions.mjs";
 import slime from "./slime.mjs";
 import pages from "./pages.mjs";
 import richContent from "./rich-content.mjs";
@@ -19,5 +20,5 @@ import ownerRound10 from "./owner-round10.mjs";
 import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
-export const scenes = withOwnerRound4([...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+export const scenes = withOwnerRound4([...ownerQuestions, ...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

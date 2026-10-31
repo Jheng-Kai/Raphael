@@ -2,6 +2,47 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("owner-card-room-")) {
+    const kind = name.slice("owner-card-room-".length);
+    const selector = { connect: "[data-connector]", secret: "[data-secret-card]", mail: "[data-mail-card]", page: ".pg-card" }[kind];
+    const card = document.querySelector(`.au-room-thread ${selector}`);
+    require(visible(card), "the existing card is visible inside the room conversation");
+    require(kind === "page" ? !!card.querySelector("iframe") : !!card.querySelector("button"), "the shared card retains its real controls");
+    if (kind === "connect") require(window.__look.calls.some(call => call.method === "integrations.card_connect"), "room sign-in uses the existing card service");
+    if (kind === "secret") require(card.querySelector("input").type === "password" && card.querySelector("input").value === "synthetic-room-key", "the room keeps the shared masked key field");
+    if (kind === "mail") require(card.dataset.version === "2" && card.querySelector('[data-mail-field="subject"]').value === "Room report for review", "room edits persist through the existing draft service");
+    if (kind === "page") {
+      require(window.__look.calls.filter(call => call.method === "owner_questions.answer").length === 1, "the page answers its waiting task once");
+      require(!window.__look.calls.some(call => call.method === "rooms.send"), "the page result continues the existing task without another room request");
+    }
+    return { check: name, kind };
+  }
+  if (name.startsWith("owner-question-")) {
+    const card = document.querySelector('[data-owner-question="owner-choice"]');
+    require(visible(card) && card.classList.contains("permission-card"), "the shared card is visible");
+    const waiting = ["owner-question-asked", "owner-question-background", "owner-question-room"].includes(name);
+    require(card.dataset.cardState === (waiting ? "asked" : name === "owner-question-cancelled" ? "cancelled" : "answered"), "the persisted state is shown");
+    require(card.querySelectorAll("[data-owner-option]").length === (waiting ? 4 : 0), "choices are real buttons only while waiting");
+    require(!card.querySelector("select"), "a short list needs no dropdown");
+    const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
+    require(box.left >= column.left - 1 && box.right <= column.right + 1, "the question fits its reply column");
+    for (const control of card.querySelectorAll("button,textarea")) {
+      const bounds = control.getBoundingClientRect();
+      require(bounds.left >= box.left && bounds.right <= box.right + 1 && bounds.bottom <= box.bottom + 1, "every answer control fits the card");
+    }
+    const field = card.querySelector("textarea");
+    if (field) {
+      require(field.classList.contains("mb-fin") && field.classList.contains("mb-ta"), "the answer uses the shared form field");
+      require(field.scrollHeight <= field.clientHeight + 2, "the answer field has no inner scroll");
+    }
+    if (!waiting) require(window.__look.calls.filter(call => call.method === "owner_questions.answer").length === 1, "the original card was answered exactly once");
+    if (name === "owner-question-background") {
+      const summary = document.querySelector(".task-actions");
+      require(visible(summary) && summary.textContent.includes("等待你回答 · 1 項"), "the visible task summary reports the waiting count");
+      require(!card.closest(".tn").querySelector(".work-section.is-live,[data-work-start]"), "waiting for the owner never keeps thinking or ticking");
+    }
+    return { check: name, state: card.dataset.cardState };
+  }
   if (name.startsWith("local-command-setting") || name === "local-command-menu") {
     const picker = document.querySelector('[data-k="local-commands"]');
     require(visible(picker) && picker.classList.contains('sel'), 'local commands use the shared settings dropdown');

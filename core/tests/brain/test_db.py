@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 48
+LATEST = 49
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -489,6 +489,11 @@ SCHEMA_V48 = {**SCHEMA_V46, "calendar_events": [
     "start_date TEXT", "end_date TEXT", "notes TEXT NOT NULL DEFAULT ''", "added_by INTEGER",
     "created_at_ms INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
 
+SCHEMA_V49 = {**SCHEMA_V48, "owner_questions": [
+    "id TEXT PK", "task_id INTEGER NOT NULL", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL",
+    "kind TEXT NOT NULL", "card_id TEXT NOT NULL DEFAULT ''", "payload TEXT NOT NULL", "result TEXT",
+    "created_at_ms INTEGER NOT NULL"]}
+
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
     path = tmp_path / "v47.db"
     raw = sqlite3.connect(path)
@@ -643,7 +648,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V48) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V49) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -657,9 +662,11 @@ def test_connect_creates_the_latest_schema(conn):
         "worker_questions_task",
         "calendar_events_timed",
         "calendar_events_all_day",
+        "owner_question_wait",
+        "owner_question_turn",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V48.items():
+    for table, columns in SCHEMA_V49.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

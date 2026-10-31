@@ -14,7 +14,12 @@ import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { roomWrapupHTML } from "./room-wrapup";
-import { filesHTML, messageActionsHTML } from "./timeline";
+import { conversationCardsHTML, filesHTML, messageActionsHTML } from "./timeline";
+import { mountConversationCardActions } from "./conversation-card-actions";
+import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
+import { mountPages } from "./page-card";
+import { carryTyped } from "./secret-card";
+import { carryMail } from "./mail-card";
 import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffLineHTML } from "./handoff-line";
@@ -39,7 +44,7 @@ export function configureRooms(app: AppContext): void {
     const link = (event.target as Element).closest<HTMLElement>("[data-meeting-room]");
     if (link) void openGroupChat(Number(link.dataset.meetingRoom));
   });
-  app.onEvent(event => { if (["RoomsChanged", "MembersChanged", "ConnectionsChanged", "WorkerChanged", "CoreReady"].includes(event.type)) for (const listener of listeners) listener(); });
+  app.onEvent(event => { if (["RoomsChanged", "MembersChanged", "ConnectionsChanged", "WorkerChanged", "AgentTurn", "CoreReady"].includes(event.type)) for (const listener of listeners) listener(); });
 }
 let selectedRoom: number | null = null;
 export const currentRoomId = (): number | null => selectedRoom;
@@ -211,6 +216,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const expandedMessages = new Set<number>();
   mountConversationScroll(scroll);
   mountRichContent(scroll);
+  mountOwnerQuestions(thread, () => { void refresh(); });
+  mountConversationCardActions(thread, () => _app.go("settings", "connections"));
+  const pagesHost = mountPages(thread, { send: text => {
+    if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(refresh);
+  }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread)) : null;
   messageResize?.observe(thread);
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
@@ -241,7 +251,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
-    preserveRichScroll(scroll, () => { thread.innerHTML=entries.length?entries.map(entry=>{
+    preserveRichScroll(scroll, () => { const nextThread = document.createElement("ol"); nextThread.innerHTML=entries.length?entries.map(entry=>{
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
@@ -251,7 +261,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn handoff-row">${handoffLineHTML(entry.task,faceOf(entry.task.member_id,entry.task.member_name),source&&{author:person(source.member_id)?.name??"",text:source.text})}</li>`;
       }
       const m=entry.message;
-      if(m.member_id!==null&&m.status==="running"&&!m.text.trim()) {
+      if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&!m.turn?.owner_questions?.length) {
         if(m!==thinking)return "";
         const member=person(m.member_id);
         return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><span class="ra-face">${member?faceHTML(member,30):""}</span><span>${esc(t("rooms.speaking",{p0:member?.name??t("members.title")}))}</span></li>`;
@@ -261,8 +271,18 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn) : ""}</div></div>`}</li>`;
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
+    const restorePages = pagesHost.carry(thread, nextThread);
+    const restoreTyped = carryTyped(thread, nextThread);
+    const restoreMail = carryMail(thread, nextThread);
+    const previousNodes = [...thread.childNodes];
+    thread.append(...nextThread.childNodes);
+    restorePages();
+    previousNodes.forEach(node => node.remove());
+    restoreTyped();
+    restoreMail();
+    pagesHost.sync();
     measureMessagePreviews(thread);
     composer.draw(); mentions.refresh(); });
     if(follow)scroll.scrollTop=scroll.scrollHeight;onRender();

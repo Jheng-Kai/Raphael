@@ -131,6 +131,15 @@ export function installMock(fixture, config = {}, target = window) {
   // received by `integrations.card_save` and forgotten (`resumeFails`: the task does not continue; `signedIn`:
   // the page no longer asks for the sign-in when the owner presses 我完成了).
   if (variant.secretCard) data.turns.push(structuredClone(data.secretTurns[variant.secretCard]));
+  if (variant.ownerQuestion) {
+    const question = structuredClone(data.ownerQuestionCard);
+    const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
+      id: question.turn_id, session_id: "owner-question", question: "請幫我整理並寄出報告。", route: "delegate", source: variant.ownerQuestion === "background" ? "routine" : "app",
+      text: "報告已整理完成，需要你決定寄出的日期。", detail: null, messages: [], steps: [], owner_questions: [question], status: variant.ownerQuestion === "background" ? "running" : "done",
+      task: { id: question.task_id, state: "waiting", waiting_owner: 1, started_at_ms: data.now - 20000, created_at_ms: data.now - 20000, finished_at_ms: null } };
+    data.turns = [turn];
+    if (variant.ownerQuestion === "room") data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+  }
   if (variant.computerCard) data.turns.push(structuredClone(data.computerTurns[variant.computerCard]));
   // A step that needs the owner's yes shows its permission card, and the question it follows is the one the window holds
   // (`agent_question_open`), answered with `agent_question_answer`; the card follows the answer as the core reports it.
@@ -169,6 +178,18 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
       pages: [{ id: "page-product", title: "輕量後背包", rev: 1, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
+  }
+  if (variant.roomOwnerCard) {
+    const kind = variant.roomOwnerCard;
+    const base = kind === "connect" ? data.connectorTurns.gmail : kind === "secret" ? data.secretTurns.notion : kind === "mail" ? data.mailTurns.draft : data.turns.at(-1);
+    const turn = { ...structuredClone(base), id: 950, member_id: 1, scope: "room", room_id: 1, conversation_id: null, steps: [] };
+    if (kind === "page") {
+      turn.owner_questions = [{ ...structuredClone(data.ownerQuestionCard), id: "room-page-q", task_id: 950, turn_id: turn.id,
+        kind: "show_page", card_id: "page-product", question: "請在頁面選擇商品。", options: [] }];
+      turn.task = { id: 950, state: "waiting", waiting_owner: 1 };
+    }
+    data.turns = [turn];
+    data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 950, room_id: 1, member_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn }];
   }
   if (variant.colleagues) {
     // 小森 asked 小晴 from its own chat; 小晴's main chat shows each question where it came.
@@ -553,6 +574,17 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;
       case "background.questions.list": return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
+      case "owner_questions.answer": {
+        const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
+        const question = turn?.owner_questions.find(question => question.id === p.id);
+        if (!question) throw new Error("Unknown owner question");
+        if (question.state !== "asked") return { status: question.state };
+        question.state = p.answer === null ? "cancelled" : "answered";
+        question.result = p.answer === null ? { state: "cancelled" } : { state: "answered", answer: p.answer };
+        turn.task = { ...turn.task, state: "done", waiting_owner: 0, finished_at_ms: data.now };
+        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        return { status: question.state };
+      }
       case "background.answer": {
         if (!localQuestion || p.question_id !== localQuestion.id || p.digest !== localQuestion.permission.digest) throw new Error("Unknown local question");
         if (p.always) data.settings.local_commands_mode = "always";

@@ -21,7 +21,7 @@ export function handoffLineHTML(task: HandoffView, face: string, request?: Messa
   const reason = REASONS[task.reason as keyof typeof REASONS];
   const files = task.evidence.filter(item => item.kind === "artifact" && item.uri).map(item => `<li>${ico("file")}<span>${esc(item.uri!.split("/").pop()!)}</span></li>`);
   return `<details class="handoff-event" data-handoff="${task.task_id ?? `x${task.work_turn_id}`}" data-state="${esc(task.state)}">` +
-    `<summary>${eventLineHTML(t(task.mode === "consult" ? "handoff.asked" : "handoff.forwarded", { p0: NAME }), face, name, t(state))}</summary>` +
+    `<summary>${eventLineHTML(t(task.mode === "consult" ? "handoff.asked" : "handoff.forwarded", { p0: NAME }), face, name, task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t(state))}</summary>` +
     `<div class="handoff-detail">` +
     (request?.text.trim() ? quoteHTML(request) : "") +
     (reason ? `<span class="handoff-reason" role="status">${esc(t(reason))}</span>` : "") +

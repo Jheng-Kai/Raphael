@@ -348,6 +348,13 @@ export interface AgentTurn {
   drafts?: MailDraft[];
   /** The pages this turn shows in the conversation (`agent.pages`). */
   pages?: PageCard[];
+  owner_questions?: OwnerQuestion[];
+}
+
+export interface OwnerQuestion {
+  id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
+  question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
+  result: { state: string; answer?: string } | null;
 }
 
 /** A page a member made or a plugin brought, as a turn carries it; `pages.open` gives its address. */
@@ -534,6 +541,7 @@ export interface AgentStep {
 
 /** A background task as the conversations show it: how it stands, without what was said. */
 export interface AgentTask {
+  waiting_owner?: number;
   id: number;
   /** `queued`, `running`, `done`, `failed`, `limit`, `cancelled` or `interrupted`. */
   state: string;
@@ -964,6 +972,7 @@ export interface Room {
   roles?: Record<string, string>;
 }
 export interface RoomMessage {
+  turn?: AgentTurn;
   id: number; room_id: number; member_id: number | null; text: string; created: number;
   request_id: string | null; reply_to: number | null; turn_id: number | null;
   reply_to_member?: number | null; origin_message_id?: number | null; kind?: "message" | "wrapup";
@@ -973,6 +982,7 @@ export interface RoomMessage {
 }
 
 export interface HandoffView {
+  waiting_owner?: number;
   /** Null for a quick question (`ask_member`), which has no task: `work_turn_id` is its record. */
   task_id: number | null; source_turn_id: number; work_turn_id: number; member_id: number;
   member_name: string; from_member_id: number; stage_id: string; mode: "work" | "consult";

@@ -143,7 +143,7 @@ export default [
       click('.mb-dialog [data-dlg="cancel"]'), click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'),
       wait(permCard("perm-rule")), check("draft-preference-ask-first")], { permissionCard: "ask-first", memberDraftFirst: false }),
   scene("email-draft-edit", "The owner edits the copy and the subject of a member's email draft: each edit is a new version, the card holds the newest digest and nothing is sent",
-    [member(1), wait(mailCard), type(mailField("cc"), "boss@example.com"), type(mailField("subject"), "回覆：週四下午三點的會議（改期確認）"),
+    [member(1), wait(mailCard), type(mailField("cc"), "boss@example.com"), wait(`${mailCard}[data-version="2"]`), type(mailField("subject"), "回覆：週四下午三點的會議（改期確認）"),
       wait(`${mailCard}[data-version="3"]`), check("email-draft-edit")], { mailDraft: "draft" }),
   scene("email-draft-discard", "捨棄 drops the draft: one quiet line, and nothing is saved or sent",
     [member(1), wait(mailCard), click(`${mailCard} [data-act="mail-discard"]`), wait(`${mailCard}[data-mail-state="discarded"]`), check("email-draft-discard")], { mailDraft: "draft" }),

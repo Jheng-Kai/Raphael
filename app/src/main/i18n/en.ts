@@ -3,6 +3,13 @@ import { homeEn } from "./home-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "ownerQuestion.title": "Your answer is needed",
+  "ownerQuestion.page": "Continue after using the page",
+  "ownerQuestion.answer": "Enter your answer",
+  "ownerQuestion.submit": "Submit answer",
+  "ownerQuestion.answered": "Answered",
+  "ownerQuestion.cancelled": "Cancelled",
+  "ownerQuestion.waiting": "Waiting for you · {p0}",
   "desktop.open": "Live desktop",
   "desktop.expand": "Expand",
   "desktop.done": "I'm done",

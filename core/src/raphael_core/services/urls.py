@@ -93,3 +93,6 @@ class SeenUrls:
 
     def __len__(self) -> int:
         return len(self._exact)
+
+    def snapshot(self) -> list[str]:
+        return sorted(self._exact)

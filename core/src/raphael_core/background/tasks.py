@@ -286,6 +286,9 @@ class TaskStore:
 
     def resume_from_inbox(self, parent_id):
         """Consume each result once and wake one waiting parent only after every child is terminal."""
+        task = self.get(parent_id)
+        if task and task.continuation and json.loads(task.continuation).get("owner_wait"):
+            return False
         with self._conn:
             pending = self._conn.execute("SELECT 1 FROM worker_tasks WHERE parent_task_id=? AND state IN ('queued','running','waiting')", (parent_id,)).fetchone()
             if pending:

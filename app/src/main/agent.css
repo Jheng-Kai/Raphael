@@ -614,3 +614,6 @@
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--r-pill); }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice:disabled { opacity: .6; }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice .i { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+.owner-question-form { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.owner-question-form textarea { width: 100%; min-height: 72px; resize: vertical; overflow: hidden; }
+.owner-question-form .cc-actions { flex-wrap: wrap; gap: var(--sp-2); }

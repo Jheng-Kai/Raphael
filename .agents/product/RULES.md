@@ -170,3 +170,11 @@ with Browser, Files and Terminal. No browser starts with the desktop. Task teach
 is outside scope. AT-SPI and websockify stay until real driver/viewer compatibility
 can be established. The owner explicitly prohibits judge, network, native journeys,
 real Docker operations and image builds for this handoff; none is claimed as PASS.
+
+
+## Durable owner questions (2026-11-01)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-OWNER-01 | 2026-11-01 | API, CLI/MCP, background and routine questions share ask_owner, one durable waiting question per task, real choice buttons and optional text. Answers and cancellation continue the same turn exactly once. Questions grant no approval. | pytest, vitest, look | hard | core/tests/agent/test_owner_questions.py::test_api_question_ends_turn_and_answer_continues_same_turn; core/tests/agent/test_owner_questions.py::test_cli_mcp_question_releases_process_and_continues_with_answer; app/src/main/owner-questions.test.ts; features/conversation.md |
+| R-OWNER-02 | 2026-11-01 | Background cards use the conversation's existing card services. Owner waits hold no worker or CLI process, survive restart, and return completion metadata without secrets. Background desktop/presence actions remain closed, routines stay with their member, and room work reads no private history or memory. | pytest | hard | core/tests/background/test_owner_cards.py; core/tests/agent/test_owner_questions.py::test_real_background_cards_reach_history_and_return_only_the_outcome |

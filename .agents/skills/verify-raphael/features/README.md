@@ -466,3 +466,9 @@ through the existing shared menu/input; `desktop-frame` now guards a dark frame
 and top-right collapse in both themes. The owner's unit brief prohibits judge,
 native, real Docker, image builds, cargo and network for this handoff. Their absence
 must remain explicit in CODEX_REPORT.md.
+
+
+## Durable owner questions (2026-11-01)
+
+See [Conversation](conversation.md#durable-owner-questions-and-background-cards-2026-11-01)
+for ask_owner, background card completion and the selected question-card matrix.

@@ -481,6 +481,9 @@ class _Ask:
     # paused for the owner: one kind of card waits in a turn.
     waiting_secrets: list[str] = field(default_factory=list)
     waiting_computer: bool = False
+    background_owner: bool = False
+    owner_question: tuple | None = None
+    owner_card_ids: list[str] = field(default_factory=list)
     # The digest of the computer request under way: kept with the card, so that a resume never makes it again.
     computer_digest: str = ""
     resumption: "Resumption | None" = None
@@ -1836,6 +1839,18 @@ class AgentService:
                 ref = snapshot.refs.get(name)
                 if ref is None:
                     return ToolOutcome(False, "unknown_tool")
+                if name == "ask_owner":
+                    from .owner_questions import question_input
+                    try:
+                        question_input(args)
+                    except ValueError:
+                        return ToolOutcome(False, "bad_arguments")
+                    if ask.nested:
+                        return ToolOutcome(False, "conversation_required")
+                    ask.owner_question = (call_id, args)
+                    if isinstance(loop, CliLoop):
+                        loop.approval_wait_s = float("inf")
+                    raise Stop(WAITING)
                 # Include results supplied after a permission pause, as well as ordinary rounds.
                 if loop.seen:
                     urls.add_from(json.dumps(loop.seen[-1].data, ensure_ascii=False))
@@ -2023,6 +2038,7 @@ class AgentService:
                     loop.reload_note, loop.catalog_changed = COMPUTER_CHANGED, True
                 return True
             loop.refresh_computer = refresh_computer
+            loop.owner_seen_urls = urls
         try:
             outcome = await loop.run()
             if isinstance(loop, CliLoop) and self._model_observer is not None:
@@ -2032,6 +2048,13 @@ class AgentService:
                 self._cli_loops.discard(loop)
         if loop.response is not None:
             return loop.response
+        if ask.owner_question:
+            call_id, arguments = ask.owner_question
+            self._background.park_owner_turn(ask, settings.model, loop, call_id, arguments, loop.owner_seen_urls.snapshot())
+            ask.owner_question = None
+            if isinstance(loop, CliLoop):
+                await loop.aclose()
+            return self._finish(ask, "delegate", "question", arguments["question"], ledger)
         reply = loop.reply(outcome)
         if isinstance(loop, CliLoop) and loop.failure:
             return self._finish(ask, "answer", "negative", reply.text, ledger, status="error")
@@ -2401,7 +2424,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
+            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2620,7 +2643,7 @@ class AgentService:
         return result
 
     def _show_page(self, ask: _Ask, name: str, args: Mapping[str, Any]) -> dict:
-        if not ask.turn_id or ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER:
+        if not ask.turn_id or (not ask.background_owner and (ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER)):
             raise PageError("private_only", "Pages need the owner's private chat at this computer; answer in text here")
         if name == "show_page":
             page = self.pages.store.write(turn_id=ask.turn_id, member_id=ask.speaker.id,
@@ -2685,7 +2708,7 @@ class AgentService:
         the request already did. The turn then waits for it; its connection resumes the request."""
         if self._cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
             raise HarnessToolError("private_chat_only")
         app = await self._cards.resolve(args.get("app"))
         if app is None:
@@ -2697,6 +2720,7 @@ class AgentService:
         if card is None:
             return {"app": app.name, "connected": True, "note": f"{app.name} is connected already: use its tools."}
         ask.waiting_apps.append(app.name)
+        ask.owner_card_ids = [card.id]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         needs = self._cards.view(card)["needs"]
         asks = {"key": f" {app.name} signs in with the owner's own key, which the card asks for (Composio keeps it; you never see it): say so.",
@@ -2715,7 +2739,7 @@ class AgentService:
             raise ValueError("unknown connection")
         if self._secret_cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
             raise HarnessToolError("private_chat_only")
         try:
             cards = self._secret_cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
@@ -2728,6 +2752,7 @@ class AgentService:
         if not cards:
             return {"connection": connection, "missing": 0, "note": "Nothing is missing: use the connection's tools."}
         ask.waiting_secrets.extend(card.name for card in cards)
+        ask.owner_card_ids = [card.id for card in cards]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         names = ", ".join(sorted({card.secret for card in cards}))
         return {"connection": cards[0].name, "card": "shown", "secrets": names, "note": (
@@ -2742,7 +2767,7 @@ class AgentService:
         a room, an exchange between members, a quick question or a spoken or phone request."""
         if self._drafts is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
             raise HarnessToolError("private_chat_only")
         try:
             fields = {name: clean_field(name, args.get(name) or "") for name in ("to", "cc", "subject", "body")}
@@ -2757,7 +2782,7 @@ class AgentService:
         try:
             draft, offered = self._drafts.write(
                 author_id=ask.speaker.id, turn_id=ask.turn_id, conversation_id=ask.conversation_id, language=ask.language,
-                via=text("via"), hand_to=text("hand_to"), revise=args.get("revise") is True, **fields)
+                via=text("via"), hand_to=None if ask.scope == "room" else text("hand_to"), revise=args.get("revise") is True, **fields)
         except DraftError:
             raise HarnessToolError("unknown_member") from None
         self._turn_changed(ask.turn_id, ask.speaker.id)
@@ -2790,6 +2815,82 @@ class AgentService:
         found = self._team.find(name) if self._team is not None else None
         return None if found is None else found.id
 
+    async def background_owner_tool(self, task, name, arguments):
+        """Use the conversation's existing card services without granting desktop presence."""
+        from .owner_questions import BACKGROUND_TOOLS
+        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS or not task.turn_id:
+            return ToolResult(name, False, None, "blocked")
+        origin = self._history.get(task.turn_id)
+        speaker = self._speaker(task.member_id)
+        if origin is None or speaker is None:
+            return ToolResult(name, False, None, "conversation_required")
+        if name in ROUTINE_TOOLS and arguments.get("member_id", task.member_id) != task.member_id:
+            return ToolResult(name, False, None, "own_routines_only")
+        ask = _Ask(task.session_id, task.text, task.language, conversation_id=origin.conversation_id,
+            turn_id=task.turn_id, speaker=speaker, scope=task.scope, room_id=task.room_id,
+            source=RESUMED, background_owner=True)
+        result = await self._harness_call(ask, PlannedCall(harness_tool(name), arguments), None, None)
+        if not result.ok:
+            return result
+        card = None
+        if name in (CONNECT_APP, REQUEST_SECRET) and ask.owner_card_ids:
+            card = {"kind": name, "id": ask.owner_card_ids[0], "ids": ask.owner_card_ids}
+        elif name == EMAIL_DRAFT:
+            drafts = self._drafts.store.shown_in([task.turn_id]).get(task.turn_id, [])
+            card = {"kind": name, "id": drafts[-1].id}
+        elif name == "show_page":
+            card = {"kind": name, "id": result.data["page_id"], "question": result.data.get("note", "")}
+        if card:
+            result.data = {**result.data, "owner_card": card}
+        return result
+
+    async def cancel_owner_card(self, question):
+        kind, identifier = question["kind"], question["card_id"]
+        if kind == CONNECT_APP and self._cards:
+            await self._cards._cancel({"id": identifier})
+            card = self._cards.store.get(identifier)
+            if card:
+                self._cards.store.move(identifier, "cancelled" if card.state == "authorizing" else "expired")
+        elif kind == REQUEST_SECRET and self._secret_cards:
+            for card_id in question.get("card_ids", [identifier]):
+                self._secret_cards.store.move(card_id, "cancelled")
+        elif kind == EMAIL_DRAFT and self._drafts:
+            self._drafts.store.discard(identifier)
+
+    def sync_owner_cards(self):
+        """Only completion metadata crosses back to the model; secret values never do."""
+        questions = getattr(self._background, "owner_questions", None)
+        if questions is None:
+            return
+        for question in questions.pending():
+            kind, identifier = question["kind"], question["card_id"]
+            if kind == CONNECT_APP and self._cards:
+                cards = [card] if (card := self._cards.store.get(identifier)) else []
+                if not cards:
+                    state = "cancelled"
+                elif all(card.state == "connected" for card in cards):
+                    state = "connected"
+                elif any(card.state in ("cancelled", "expired") for card in cards):
+                    state = "cancelled"
+                else:
+                    continue
+            elif kind == REQUEST_SECRET and self._secret_cards:
+                cards = [card for card_id in question.get("card_ids", [identifier]) if (card := self._secret_cards.store.get(card_id))]
+                if not cards or any(card.state in ("cancelled", "expired") for card in cards):
+                    state = "cancelled"
+                elif all(card.state in ("saved", "resuming", "resumed") for card in cards):
+                    state = "saved"
+                else:
+                    continue
+            elif kind == EMAIL_DRAFT and self._drafts:
+                draft = self._drafts.store.get(identifier)
+                state = draft.state if draft else "cancelled"
+                if state not in ("sent", "discarded", "cancelled"):
+                    continue
+            else:
+                continue
+            questions.settle(question["id"], {"state": "cancelled" if state in ("discarded", "expired") else state})
+
     async def failure_turn(self, turn_id: int, failure: Failure) -> Resumed:
         return await self.resume_turn(turn_id, failure=failure)
 
@@ -2799,6 +2900,10 @@ class AgentService:
         connected, the keys saved, the computer task ended after the owner's turn): the same request in
         the same thread, which now has what it needs. Whether it went on, and what it did, so that a
         retry after a failure repeats nothing."""
+        questions = getattr(self._background, "owner_questions", None)
+        if questions is not None and any(q["state"] == "asked" for q in questions.for_turn(turn_id)):
+            self.sync_owner_cards()
+            return Resumed(True)
         origin = self._history.get(turn_id)
         apps = self._cards.cards_of(turn_id) if self._cards is not None else []
         keys = self._secret_cards.cards_of(turn_id) if self._secret_cards is not None else []
@@ -4288,6 +4393,8 @@ class AgentService:
                     **({"permissions": permitted[turn.id or 0]} if permitted.get(turn.id or 0) else {}),
                     **({"drafts": drafted[turn.id or 0]} if drafted.get(turn.id or 0) else {}),
                     "pages": pages.get(turn.id or 0, []),
+                    **({"owner_questions": owner_questions} if (owner_questions := self._background.owner_questions.for_turn(turn.id)
+                        if hasattr(self._background, "owner_questions") else []) else {}),
                     "messages": messages.get(turn.id or 0, []),
                 }
             )

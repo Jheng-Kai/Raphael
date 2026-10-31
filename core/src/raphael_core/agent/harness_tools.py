@@ -6,6 +6,7 @@ from .policy import Tier
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, TIERS as ADMIN_TIERS
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS, WRITE_TOOLS as GROWTH_WRITES
 from ..members.schedule import KINDS
+from .owner_questions import ASK_OWNER
 
 CONNECT_APP = "connect_app"
 FIND_APP = "find_app"
@@ -114,6 +115,15 @@ DEFINITIONS = {
          "revise": {"type": "boolean"}},
         ["to", "subject", "body"]),
 }
+DEFINITIONS[ASK_OWNER] = definition(
+    "Ask the owner a question that truly blocks this job and only the owner can answer. Prefer deciding routine details yourself. "
+    "Give one question, up to four options with short labels, and free_text (default true) for an optional written answer. "
+    "The durable card ends this turn until answered or cancelled; the same task continues with the outcome. "
+    "Never use this for permission: the tool gate handles approvals. Never request passwords or keys here; use request_secret.",
+    {"question": {"type": "string", "maxLength": 2000},
+     "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 80}},
+     "free_text": {"type": "boolean"}}, ["question"])
+
 for name, command in COMMANDS.items():
     if name == "open":
         properties = {"target_kind": {"type": "string", "enum": ["url", "app", "settings"]}, "target": {"type": "string", "description": "A public http(s) URL, installed app name, or Windows settings page name."}}
@@ -125,7 +135,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)

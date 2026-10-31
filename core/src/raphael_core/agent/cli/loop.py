@@ -121,6 +121,7 @@ class CliLoop:
         self.images = [attachment for attachment in attachments if attachment.is_image]
         self.progress, self.thinking, self.event, self.execute = progress, thinking, event, execute
         self.seen, self.batch_calls = [], []
+        self.tool_messages = []
         self.response = None
         self.permission_always = False
         # Why the turn failed ("missing", "login", "busy", "error", "quota", "rate_limited"), else None.
@@ -189,6 +190,11 @@ class CliLoop:
             if result.ok and result.kind == 'handoff':
                 self._handoff_pending = True
             shown = wrap_untrusted(name, result.instruction or result.content or result.kind or "", ok=result.ok)
+            self.tool_messages.extend([
+                {"role": "assistant", "content": None, "tool_calls": [{"id": identifier, "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(args, ensure_ascii=False)}}]},
+                {"role": "tool", "tool_call_id": identifier, "content": shown},
+            ])
             return ToolOutcome(result.ok, result.kind, shown + ("\n\n" + note if note else ""), blocks=result.blocks,
                                tools=result.tools, replace_tools=result.replace_tools)
 

@@ -2,7 +2,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, Member } from "./types";
 import * as chatComposer from "./chat-composer";
-const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn()}));
+const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn()}));
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { setLocale } from "./i18n";
@@ -346,4 +346,39 @@ test("authored room reply messages render separate full bubbles without splittin
  expect(bubbles[1].querySelectorAll('li')).toHaveLength(2);
  expect(bubbles[2].querySelector('pre')).not.toBeNull();
  expect(document.querySelector('.ra [data-expandable]')).toBeNull();
+});
+
+
+test("a room question uses the shared card and preserves text and cursor through refresh", async () => {
+ const question = { id: "room-q", task_id: 7, turn_id: 2, member_id: 1, kind: "ask_owner", card_id: "", question: "Which day?", options: ["Tuesday"], free_text: true, state: "asked", result: null };
+ api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:"Choose a day.",created:2,status:"done",turn_id:2,turn:{id:2,owner_questions:[question]}}]});
+ const view = await pane();
+ const input = view.el.querySelector<HTMLTextAreaElement>('[data-owner-answer-input]')!;
+ expect(input.closest('.connector-card')).not.toBeNull();
+ input.value = "Next Tuesday"; input.focus(); input.setSelectionRange(4, 8);
+ await view.refresh();
+ const fresh = view.el.querySelector<HTMLTextAreaElement>('[data-owner-answer-input]')!;
+ expect(fresh.value).toBe("Next Tuesday");
+ expect(document.activeElement).toBe(fresh);
+ expect([fresh.selectionStart, fresh.selectionEnd]).toEqual([4, 8]);
+ expect(view.el.querySelector<HTMLButtonElement>('[data-owner-answer="text"]')!.disabled).toBe(false);
+});
+
+test("a room redraw moves its live page before removing the previous message", async () => {
+ api.pagesOpen.mockResolvedValue({url:"about:blank",title:"Chooser",rev:1,height:80,source:"html"});
+ api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:"Choose.",created:2,status:"done",turn_id:2,turn:{id:2,pages:[{id:"room-page",title:"Chooser",rev:1,height:80,source:"html"}]}}]});
+ const view=await pane(); await flush();
+ const frame=view.el.querySelector("iframe")!;
+ const opens=api.pagesOpen.mock.calls.length;
+ const previous=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"moveBefore");
+ const move=vi.fn(function(this:HTMLElement,node:Node){expect(node.isConnected&&this.isConnected).toBe(true);this.appendChild(node);});
+ Object.defineProperty(HTMLElement.prototype,"moveBefore",{value:move,configurable:true});
+ try {
+  await view.refresh();
+  expect(move).toHaveBeenCalledOnce();
+  expect(view.el.querySelector("iframe")).toBe(frame);
+  expect(api.pagesOpen).toHaveBeenCalledTimes(opens);
+ } finally {
+  if(previous)Object.defineProperty(HTMLElement.prototype,"moveBefore",previous);else Reflect.deleteProperty(HTMLElement.prototype,"moveBefore");
+ }
 });
