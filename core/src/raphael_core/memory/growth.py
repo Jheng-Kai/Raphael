@@ -1,18 +1,16 @@
-"""Shared memory tools and permission-scoped, silent FTS recall.
+"""The tools a model edits its memory by, and permission-scoped, silent FTS recall.
 
-The caller identity is supplied by the host, never by tool arguments. Pending
-changes live outside bot homes and can only be resolved by the owner's RPC path.
+The caller identity is supplied by the host, never by tool arguments. `memory_update` is one tool for
+both files: `target` names the file and `operations` what to do to it. Reads never notify.
 """
 
 import json
-import re
-import secrets
 import sqlite3
 from datetime import datetime
 
 from ..agent.tools import ToolResult
-from ..bots.homes import HomeError, atomic, digest, redact_secrets
-from .store import MemoryRefused, TYPES, valid_name
+from ..bots.homes import HomeError, digest, redact_secrets
+from .store import UNCONFIRMED
 from .terms import tokens
 
 WRITE_TOOLS = frozenset(("memory_update", "memory_log"))
@@ -27,40 +25,42 @@ def definition(description, properties, required):
                                                        "required": required, "additionalProperties": False}}
 
 
+# Adapted from NousResearch/hermes-agent tools/memory_tool.py MEMORY_SCHEMA @ c419cf7c (MIT).
 DEFINITIONS = {
     "memory_update": definition(
-        "Keep a useful fact, preference, decision or work outcome without waiting for a remember phrase. "
-        "Private turns write only your own home. Shared writes require an explicit owner sharing request or room context. "
-        "After external content, changes wait for owner approval. Read before replacing; use expected_hash from session_read.",
-        {"op": {"type": "string", "enum": ["add", "replace", "supersede", "remove"]},
-         "name": {"type": "string", "description": "Type-prefixed ASCII slug, e.g. reference-build."},
-         "body": {"type": "string", "maxLength": MAX_CHARS},
-         "description": {"type": "string", "maxLength": 80},
-         "type": {"type": "string", "enum": list(TYPES)},
-         "until": {"type": "string", "description": "Optional expiry, YYYY-MM-DD."},
-         "space": {"type": "string", "enum": ["own", "shared"]},
-         "expected_hash": {"type": "string"}}, ["op", "name"]),
-    "memory_log": definition("Append a work outcome to your own daily log (at most 1000 characters). Logs are searchable but never in the system prompt. External-content turns wait for owner approval.",
+        "Edit your persistent memory, two living files you read at the start of every turn. Keep entries compact: "
+        "they are in every later prompt.\n\n"
+        "HOW: make ALL your changes to one target in ONE call via 'operations' (each item: {action, content?, old_text?}). "
+        "The batch is atomic and the char limit is checked only on the final result, so one call can remove or shorten stale "
+        "entries AND add new ones. The result reports the usage and confirms completion: one call finishes the update, so "
+        "do not repeat it.\n\n"
+        "TARGETS: 'user' = USER.md, who the owner is (name, role, languages, where they live, stable preferences, how they "
+        "like to be spoken to). Every one of the owner's assistants reads it, so what one learns all know. 'memory' = "
+        "MEMORY.md, your own notes (your work, decisions, how things are set up, lessons), which no other assistant reads. "
+        "One fact goes to ONE file. A plan, an event or anything the owner tells you in confidence goes to 'memory'.\n\n"
+        "UPDATE IN PLACE: when a fact changes, 'replace' it; never add a second entry beside it. The same fact said twice "
+        "stays one line, and another wording of an entry is refused with the entry to replace.\n\n"
+        "WHEN: without waiting to be asked, for what will still help weeks from now. Write declarative facts ('The owner "
+        "prefers short answers'), never orders ('Always answer shortly'). A plan carries its date in its words. Skip trivia, "
+        "what is easily found again, task progress and logs of completed work (memory_log and session_search are for those).\n\n"
+        "IF FULL: the write is refused with the entries shown. Reissue ONE batch that removes or shortens enough of them and "
+        "makes the change. Never store a password, key, token, code or card number. After outside content your new entries "
+        "are marked as unconfirmed, and you may not change the ones that are not.",
+        {"target": {"type": "string", "enum": ["memory", "user"], "description": "'memory' for your own MEMORY.md, 'user' for the shared USER.md."},
+         "operations": {"type": "array", "description": "Changes applied atomically; a single change is a one-item list.", "items": {
+             "type": "object", "properties": {
+                 "action": {"type": "string", "enum": ["add", "replace", "remove"]},
+                 "content": {"type": "string", "description": "For 'add', the new entry. For 'replace', the text that takes the place of old_text; the rest of the entry stays."},
+                 "old_text": {"type": "string", "description": "For 'replace' and 'remove': text from one entry. 'replace' changes exactly this span (to rewrite an entry, give its whole text); 'remove' deletes the whole entry."}},
+             "required": ["action"], "additionalProperties": False}}},
+        ["target", "operations"]),
+    "memory_log": definition("Append a work outcome to your own daily log (at most 1000 characters). Logs are searchable but never in the system prompt.",
                              {"body": {"type": "string", "maxLength": MAX_CHARS}}, ["body"]),
-    "session_search": definition("Search only your own conversations, rooms you currently belong to, your own memory topics/logs/archive, and shared owner/team notes. Other members' private content is inaccessible; ask_member is the way to ask them.",
+    "session_search": definition("Search only your own conversations, rooms you currently belong to and your own daily logs. Other members' private content is inaccessible; ask_member is the way to ask them.",
                                  {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 8}}, ["query"]),
-    "session_read": definition("Read a permitted search hit by its opaque id. Membership and privacy are checked again. Returns at most 6000 characters and a hash for memory replacement.",
+    "session_read": definition("Read a permitted search hit by its opaque id. Membership and privacy are checked again. Returns at most 6000 characters.",
                                {"id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["id"]),
 }
-
-
-def prompt_document(store):
-    """Newest facts in MEMORY.md; overflow stays searchable in the archive/topics."""
-    notes = sorted((note for note in store.all() if not note.expired(store.today())),
-                   key=lambda note: (note.updated, note.created, note.name), reverse=True)
-    kept = []
-    for note in notes:
-        from .store import _index_line
-        block = f"## {note.name}\n{_index_line(note)}\n{note.body}\n"
-        proposed = "\n".join([*kept, block])
-        if len(proposed.splitlines()) <= 200 and len(proposed.encode("utf-8")) <= 24000:
-            kept.append(block)
-    return "\n".join(kept)
 
 
 def tainted_turn(turn, steps=()):
@@ -70,17 +70,6 @@ def tainted_turn(turn, steps=()):
         or step.detail == "external_content"
         or step.server not in (None, "", "Raphael") for step in steps
     ))
-
-
-def archive_document(store):
-    """A bounded overflow view; canonical topics retain every fact."""
-    document = prompt_document(store)
-    overflow = [note for note in store.all() if not note.expired(store.today()) and f"## {note.name}\n" not in document]
-    archive = "\n\n".join(f"## {note.name}\n{note.description}\n{note.body}" for note in overflow)
-    if len(archive.encode("utf-8")) > 120000:
-        archive = "\n".join(f"memory/{note.name}.md: {note.description}" for note in overflow)
-        archive = archive.encode("utf-8")[:120000].decode("utf-8", errors="ignore")
-    return archive
 
 
 class Growth:
@@ -97,113 +86,23 @@ class Growth:
             return self.log_memory(member_id, args, untrusted=untrusted)
         return ToolResult(name, False, None, "unknown_tool")
 
-    def _pending_path(self, member_id, name):
-        if not isinstance(name, str) or not re.fullmatch(r"reference-pending-[a-f0-9]{24}", name):
-            raise ValueError("invalid pending id")
-        return self.homes.safe(self.homes.state(member_id) / "pending" / (name + ".json"))
-
-    def pending(self, member_id):
-        folder = self.homes.safe(self.homes.state(member_id) / "pending")
-        found = []
-        for path in sorted(folder.glob("reference-pending-*.json")):
-            try:
-                found.append(json.loads(self.homes.safe(path).read_text(encoding="utf-8")))
-            except (OSError, ValueError):
-                continue
-        return found
-
-    def _pending_view(self, item):
-        args = item["arguments"]
-        before = item["before"] or {}
-        proposal = (before.get("body") if args.get("op") == "remove" else args.get("body")) or before.get("body") or args.get("name", "")
-        return {"name": item["name"], "description": args.get("description") or before.get("description") or args.get("name") or "Daily log",
-                "type": args.get("type") or before.get("type") or "reference", "origin": "pending", "body": proposal,
-                "operation": args.get("op", "log"), "target": args.get("name", ""),
-                "space": args.get("space", "own") if item["share"] else "own",
-                "created": str(item["created"]), "updated": "", "expires": args.get("until"), "member": None, "turns": []}
-
-    def _capture_pending(self, member_id, actions):
-        from .reflection import Applied
-        applied = Applied()
-        for action in actions:
-            op = "remove" if action.op == "DELETE" else "replace" if self.store_for(member_id).get(action.name) else "add"
-            result = self.update_memory(member_id, {"op": op, "name": action.name, "body": action.body,
-                "type": action.type, "description": action.description, "until": action.expires}, untrusted=True)
-            if not result.ok:
-                applied.refused.append(result.error)
-        return applied
-
-    def _stage(self, member_id, tool, args, share):
-        name = "reference-pending-" + secrets.token_hex(12)
-        store = self.shared if share and args.get("space") == "shared" else self.store_for(member_id)
-        target = store.get(args.get("name", ""))
-        item = {"name": name, "tool": tool, "arguments": args, "share": share,
-                "before": None if target is None else target.view(), "created": self._now_ms()}
-        atomic(self._pending_path(member_id, name), json.dumps(item, ensure_ascii=False).encode("utf-8"))
-        self._changed(member_id)
-        return ToolResult(tool, True, {"pending": name, "applied": False})
-
-    def resolve_pending(self, member_id, name, *, approve):
-        try:
-            path = self._pending_path(member_id, name)
-            item = json.loads(path.read_text(encoding="utf-8"))
-            if approve:
-                args = item["arguments"]
-                store = self.shared if item["share"] and args.get("space") == "shared" else self.store_for(member_id)
-                target = store.get(args.get("name", ""))
-                if (None if target is None else target.view()) != item["before"]:
-                    return ToolResult(item["tool"], False, None, "changed")
-                result = (self.log_memory(member_id, args) if item["tool"] == "memory_log" else
-                          self.update_memory(member_id, args, share=item["share"]))
-                if not result.ok:
-                    return result
-            path.unlink()
-            self._changed(member_id)
-            return ToolResult("memory_pending", True, {"approved": approve})
-        except (OSError, ValueError, KeyError):
-            return ToolResult("memory_pending", False, None, "not_found")
-
-    def update_memory(self, member_id, args, *, untrusted=False, share=False):
+    def update_memory(self, member_id, args, *, untrusted=False, share=False, private_request=False):
+        """`memory_update`: the model's edits of a file. `share` is an owner's request to tell everyone, or
+        a room's turn; `private_request` an owner's request to keep this from the others. What a refusal
+        says reaches the model as its instruction: it is how the model learns to consolidate."""
         tool = "memory_update"
-        try:
-            body = args.get("body")
-            if body is not None and (not isinstance(body, str) or len(body) > MAX_CHARS):
-                return ToolResult(tool, False, None, "bad_arguments")
-            name, op = args.get("name"), args.get("op")
-            if not valid_name(name) or op not in ("add", "replace", "supersede", "remove"):
-                return ToolResult(tool, False, None, "bad_arguments")
-            store = self.shared if share and args.get("space") == "shared" else self.store_for(member_id)
-            old = store.get(name)
-            if op != "add" and old is None:
-                return ToolResult(tool, False, None, "not_found")
-            if op == "add" and old is not None:
-                if old.body == str(args.get("body", "")).strip():
-                    return ToolResult(tool, True, {"name": name, "unchanged": True})
-                return ToolResult(tool, False, None, "exists")
-            path = store.root / (name + ".md")
-            expected = args.get("expected_hash")
-            if expected is not None and expected != digest(path.read_bytes() if path.exists() else None):
-                return ToolResult(tool, False, None, "changed")
-            clean = {key: value for key, value in args.items() if key in
-                     ("op", "name", "body", "type", "description", "until", "space", "expected_hash")}
-            if op != "remove":
-                body = clean.get("body")
-                if not isinstance(body, str) or not body.strip() or len(body) > MAX_CHARS:
-                    return ToolResult(tool, False, None, "bad_arguments")
-                clean["body"] = redact_secrets(body)
-                clean["type"] = clean.get("type") or (old.type if old else name.split("-", 1)[0])
-                clean["description"] = redact_secrets(clean.get("description") or " ".join(clean["body"].split())[:80])
-                store.check(name=name, type=clean["type"], description=clean["description"], body=clean["body"], expires=clean.get("until"))
-            if untrusted:
-                return self._stage(member_id, tool, clean, share)
-            if op == "remove":
-                store.delete(name)
-            else:
-                store.write(name, type=clean["type"], description=clean["description"], body=clean["body"],
-                            expires=clean.get("until"), origin="inferred")
-            return ToolResult(tool, True, {"name": name, "applied": True})
-        except (MemoryRefused, HomeError, OSError, TypeError, ValueError) as exc:
-            return ToolResult(tool, False, None, exc.kind if isinstance(exc, MemoryRefused) else "bad_arguments")
+        operations = args.get("operations")
+        if not operations and args.get("action"):  # models drift to the single-operation shape
+            operations = [{key: args[key] for key in ("action", "content", "old_text", "new_text") if key in args}]
+        target = args.get("target", "memory")
+        if target not in ("memory", "user") or not isinstance(operations, list) or not operations:
+            return ToolResult(tool, False, None, "bad_arguments", instruction=(
+                "Give target ('memory' or 'user') and operations, a list of {action: add/replace/remove, content?, "
+                "old_text?}; a single change is a one-item list."))
+        result = self.edit_memory(member_id, target, operations, untrusted=untrusted, share=share, private_request=private_request)
+        if not result["success"]:
+            return ToolResult(tool, False, None, result["kind"], instruction=result["error"])
+        return ToolResult(tool, True, {key: result[key] for key in ("target", "changed", "usage", "entry_count", "message", "note") if key in result})
 
     def log_memory(self, member_id, args, *, untrusted=False):
         body = args.get("body")
@@ -211,7 +110,7 @@ class Growth:
             return ToolResult("memory_log", False, None, "bad_arguments")
         body = redact_secrets(body.strip())
         if untrusted:
-            return self._stage(member_id, "memory_log", {"body": body}, False)
+            body = self._mark() + body
         day = datetime.fromtimestamp(self._now_ms() / 1000).date().isoformat()
         relative = f"memory/log/{day}.md"
         try:
@@ -225,32 +124,13 @@ class Growth:
             return ToolResult("memory_log", False, None, "full")
 
     def _documents(self, member_id, *, private=True, conversation_id=None, include_rooms=True):
-        """Enumerate only authorized sources; never enumerate another member's home."""
-        stores = [("shared", self.shared)]
+        """Enumerate only authorized sources; never enumerate another member's home. The memory files
+        are not among them: every turn reads them whole."""
         if private:
-            stores.append(("own", self.store_for(member_id)))
-        for prefix, store in stores:
-            for note in store.all():
-                if not note.expired(store.today()):
-                    yield f"{prefix}:memory/{note.name}.md", note.description + "\n" + note.body, "memory"
-        relatives = []
-        if private:
-            archive = archive_document(self.store_for(member_id))
-            if archive:
-                yield "own:memory/archive.md", archive, "memory"
-            relatives = ["memory/log/" + p.name for p in
-                         self.homes.safe(self.homes.home(member_id) / "memory/log").glob("*.md")]
-        for relative in relatives:
-            path = self.homes.path(member_id, relative)
-            if path.exists():
-                yield "own:" + relative, path.read_text(encoding="utf-8"), "memory"
-        # Reconstruct derived views silently so a file written yesterday cannot
-        # reintroduce a topic that expired today.
-        active = [note for note in self.shared.all() if not note.expired(self.shared.today())]
-        for name, ongoing in (("USER.md", False), ("team.md", True)):
-            text = "\n\n".join(f"## {note.name}\n{note.description}\n{note.body}" for note in active if (note.type == "ongoing") == ongoing)
-            if text:
-                yield "shared:" + name, text, "memory"
+            for path in self.homes.safe(self.homes.home(member_id) / "memory/log").glob("*.md"):
+                relative = "memory/log/" + path.name
+                text = self.homes.path(member_id, relative).read_text(encoding="utf-8")
+                yield "own:" + relative, text, "memory"
         for row in self._conn.execute(
             "SELECT id, question, text, detail FROM agent_turns WHERE member_id=? AND scope='private' AND status='done' AND (? IS NULL OR conversation_id=?) ORDER BY id DESC",
             (member_id if private else -1, conversation_id, conversation_id),
@@ -277,18 +157,19 @@ class Growth:
             rows = index.execute("SELECT id,body,kind FROM docs WHERE docs MATCH ? ORDER BY bm25(docs) LIMIT ?", (match, limit))
             return [{"id": row[0], "text": row[1][:1200], "kind": row[2]} for row in rows]
 
-    def _source_untrusted(self, identifier):
+    def _source_untrusted(self, identifier, text=""):
         if identifier.startswith("room:"):
             return True
         if identifier.startswith("turn:"):
             turn = self._history.get(int(identifier.partition(":")[2]))
             return turn is not None and tainted_turn(turn, self._history.steps([turn.id]).get(turn.id, ()))
-        return False
+        # A log line written after outside content carries its mark, as a memory entry does.
+        return any(mark in text for mark in UNCONFIRMED.values())
 
     def session_search(self, member_id, query, limit=8, *, private=True):
         limit = max(1, min(limit, 8)) if type(limit) is int else 8
         hits = self._search_hits(member_id, query, limit, private=private)
-        return ToolResult("session_search", True, {"hits": hits}, untrusted=any(self._source_untrusted(hit["id"]) for hit in hits))
+        return ToolResult("session_search", True, {"hits": hits}, untrusted=any(self._source_untrusted(hit["id"], hit["text"]) for hit in hits))
 
     def session_read(self, member_id, identifier, offset=0, *, private=True):
         if type(offset) is not int or offset < 0:
@@ -296,12 +177,7 @@ class Growth:
         for name, body, _ in self._documents(member_id, private=private):
             if name == identifier:
                 result = {"id": name, "text": body[offset:offset + RECALL_CHARS], "more": len(body) > offset + RECALL_CHARS}
-                if name.startswith("own:memory/") or name.startswith("shared:memory/"):
-                    prefix, relative = name.split(":", 1)
-                    path = (self.homes.path(member_id, relative) if prefix == "own" else
-                            self.homes.safe(self.homes.root / "shared" / relative))
-                    result["hash"] = digest(path.read_bytes())
-                return ToolResult("session_read", True, result, untrusted=self._source_untrusted(name))
+                return ToolResult("session_read", True, result, untrusted=self._source_untrusted(name, body))
         return ToolResult("session_read", False, None, "not_found")
 
     def recall(self, member_id, query):
@@ -318,4 +194,4 @@ class Growth:
         text = "\n".join(json.dumps(hit, ensure_ascii=False) for hit in hits)
         # The cap includes wrappers. This block belongs before the user's question,
         # never in a system prompt; content remains untrusted retrieval data.
-        return wrap_untrusted("auto_recall", text[:RECALL_CHARS - 300], ok=True)[:RECALL_CHARS], any(self._source_untrusted(hit["id"]) for hit in hits)
+        return wrap_untrusted("auto_recall", text[:RECALL_CHARS - 300], ok=True)[:RECALL_CHARS], any(self._source_untrusted(hit["id"], hit["text"]) for hit in hits)

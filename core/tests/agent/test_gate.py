@@ -74,7 +74,7 @@ def test_a_recorded_step_changed_something_unless_it_only_read():
     assert not gate.step_changes(step("look"))  # its server says it only reads
     assert gate.step_changes(step("note"))
     assert not gate.step_changes(step("web_search", BUILTIN_SERVER))  # Raphael's own lookups are T0
-    assert gate.step_changes(step("memory_write", BUILTIN_SERVER))
+    assert gate.step_changes(step("memory_update", BUILTIN_SERVER))
     assert not gate.step_changes(step("some_recall", BUILTIN_SERVER))  # no tier: it never passed the door
     assert gate.step_changes(step("open", None, "command"))
     assert gate.step_changes(step("whatever", "Chrome", "computer"))

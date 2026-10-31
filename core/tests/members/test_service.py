@@ -244,8 +244,8 @@ async def test_deleting_a_member_takes_its_conversation_memory_and_routines(rig,
     history.add(session_id="s", question="q", route="chat", prefix="", text="a", status="done", member_id=member_id)
     history.add(session_id="s", question="r", route="exchange", prefix="", text="b", status="done", member_id=0, peer_id=member_id)
     kept = history.add(session_id="s", question="mine", route="chat", prefix="", text="c", status="done")
-    rig.memory.store_for(member_id).write("preference-format", type="preference", description="用條列", body="用條列")
-    folder = rig.memory.store_for(member_id).root
+    rig.memory.own(member_id).edit_document("用條列\n", None)
+    folder = rig.memory.homes.home(member_id)
     assert folder.exists()
     await rig.call("members.delete", {"id": member_id})
     assert [t.id for t in history.list(member_id=0)] == [kept]  # the exchange with it went too

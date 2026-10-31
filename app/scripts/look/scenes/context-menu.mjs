@@ -15,7 +15,6 @@ const memoryTab = [...details, click('[data-det="tab"][data-tab="memory"]'), wai
 const ownTitleMore = '.mb-det [data-mem-space="own"] [data-mem="section-more"]';
 const ownSummaryMore = '.mb-det [data-mem-space="own"] [data-mem="summary-more"]';
 const withSummary = { memorySummary: { text: "進行中：規劃週末", updated_at_ms: 1792807200000 } };
-const withShared = { sharedMemories: [{ name: "user-brand-color", description: "品牌主色是金色，色號 BC-2026", type: "user", origin: "said", updated: "2026-10-27T00:44:52+08:00", expires: null, member: 0 }] };
 const dataMore = '[data-act="data-menu"][data-what="dictation"]';
 const usageKey = [...settings("models"), click('[data-models-tab="usage"]'), wait('[data-act="key-menu"]')];
 const paired = { messaging: { connected: true, enabled: true, running: true, error: null, bot: { username: "raph_bot" }, allowed: [{ user_id: "42", name: "小晴" }], pending: [] } };
@@ -37,8 +36,8 @@ export default [
   scene("context-menu-memory-summary", "A right click on the summary's row opens the menu of its ⋯, which holds 清除", rightClicked('.mb-det [data-mem-space="own"] .mem-summary', memoryTab), withSummary),
   scene("context-menu-data", "A right click on a row of 資料 opens the menu of its ⋯, which holds its clear", rightClicked('.data-row:has([data-what="dictation"])', settings("data"))),
   scene("context-menu-api-key", "A right click on the key's row opens the menu of its ⋯, which holds 移除金鑰", rightClicked('.row-key', usageKey)),
-  scene("memory-clear-menu", "全部清除 waits in the title's ⋯; its first press asks once more", [...memoryTab, ...asked(ownTitleMore)], withShared),
-  scene("memory-clear-done", "The second press of 全部清除 clears this section's notes and leaves the other section alone", [...memoryTab, ...confirmed(ownTitleMore), wait('.mb-det [data-mem-space="own"] .mem-head .val:not(.num)'), check("memory-clear-done")], withShared),
+  scene("memory-clear-menu", "全部清除 waits in the title's ⋯; its first press asks once more", [...memoryTab, ...asked(ownTitleMore)]),
+  scene("memory-clear-done", "The second press of 全部清除 clears this file and leaves the other alone", [...memoryTab, ...confirmed(ownTitleMore), wait('.mb-det [data-mem-space="own"] .mem-none'), check("memory-clear-done")]),
   scene("memory-summary-menu", "The summary's 清除 waits in its row's ⋯; its first press asks once more", [...memoryTab, ...asked(ownSummaryMore)], withSummary),
   scene("memory-summary-done", "The second press clears the summary and its row goes", [...memoryTab, ...confirmed(ownSummaryMore), waitGone(".mb-det .mem-summary"), check("memory-summary-done")], withSummary),
   scene("data-clear-menu", "Clearing the dictation history waits in the row's ⋯; its first press asks once more", [...settings("data"), ...asked(dataMore)]),

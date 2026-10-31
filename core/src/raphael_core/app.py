@@ -923,6 +923,7 @@ class App(Router):
         self.rooms.register(self)
         self.members.use_speech(self.speaker)
         self.memory.member_exists = self.members.member_exists
+        self.memory.language = lambda: self.agent.language
         self.agent = AgentService(
             self._conn,
             self.client,

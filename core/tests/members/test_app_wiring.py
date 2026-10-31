@@ -8,7 +8,7 @@ MEMBER_METHODS = {
     "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
     "members.read", "members.viewing", "members.tool_choices", "groups.create",
     "groups.update", "groups.delete", "routines.list", "routines.create", "routines.update",
-    "routines.delete", "routines.template", "memory.move",
+    "routines.delete", "routines.template", "memory.update",
 }  # fmt: skip
 
 

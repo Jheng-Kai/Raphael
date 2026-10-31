@@ -327,7 +327,7 @@ export function checkRendered(name, context = {}) {
   if (name === "memory-clear-done") {
     const clears = window.__look.calls.filter(call => call.method === "memory.clear");
     require(clears.length === 1 && clears[0].params.space === "own", "one clear, of the member's own section");
-    require(document.querySelector('.mb-det [data-mem-space="shared"] [data-mem="section-more"]'), "the shared section keeps its notes and its ⋯");
+    require(document.querySelector('.mb-det [data-mem-space="shared"] [data-mem="section-more"]'), "the shared document keeps its text and its ⋯");
     require(!document.querySelector('.mb-det [data-mem-space="own"] [data-mem="section-more"]'), "an empty section has nothing to clear");
     return { check: name };
   }
@@ -360,14 +360,47 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.calls.some(call => call.method === "models.delete"), "nothing is deleted before the answer");
     return { check: name };
   }
-  if (name === "pending-memory") {
-    const editor = document.querySelector('[data-mem-space="own"] [data-mem-editor]');
-    require(visible(editor), "the pending memory opens in the existing memory editor");
-    require(editor.querySelector('textarea')?.readOnly && editor.querySelector('input')?.readOnly, "the exact proposal stays read-only until owner approval");
-    require(editor.querySelector('[data-mem="save"]')?.textContent.includes("確認記憶"), "the primary action explicitly approves the memory");
-    require(editor.textContent.includes("外部內容"), "the owner is told why approval is required");
-    require(editor.textContent.includes("新增記憶") && editor.textContent.includes("私人記憶") && !editor.textContent.includes("????"), "the operation and destination are readable localized words");
-    require(!window.__look.calls.some(call => call.method === "memory.update"), "opening and reading never applies the pending change");
+  if (name === "memory-document") {
+    const own = document.querySelector('.mb-det [data-mem-space="own"]');
+    const entries = [...own.querySelectorAll(".mem-doc .mem-entry")];
+    require(entries.length >= 3 && entries.every(visible), "the memory reads as a document, a paragraph to an entry");
+    require(!document.querySelector('.mb-det .mem-sub, .mb-det .mem-type, .mb-det [data-mem="more"], .mb-det #mb-memory-new'), "no rows, no type labels, no menu on each line");
+    require(own.querySelector(".mem-tag")?.textContent === "待確認" && !own.textContent.includes("（待確認）"), "what nobody confirmed wears a tag");
+    require(visible(own.querySelector('button[data-mem="edit"]')), "編輯 is a real button");
+    const body = own.querySelector(".mem-doc");
+    require(!["auto", "scroll"].includes(getComputedStyle(body).overflowY) && body.scrollHeight <= body.clientHeight + 1, "the document has no scroll of its own");
+    require(!window.__look.calls.some(call => call.method === "memory.update"), "reading writes nothing");
+    return { check: name };
+  }
+  if (name === "memory-editor") {
+    const box = document.querySelector('.mb-det [data-mem-space="own"] textarea.mem-body');
+    require(visible(box) && document.activeElement === box, "the box is open and has the focus");
+    require(box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the whole document, as the file has it");
+    require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
+    const editor = box.closest("[data-mem-editor]");
+    require(visible(editor.querySelector('[data-mem="save"]')) && visible(editor.querySelector('[data-mem="cancel"]')), "取消 and 儲存 are on screen");
+    require(/\/ 2,200/.test(editor.querySelector(".mem-count")?.textContent ?? ""), "the box says how full the file is");
+    return { check: name };
+  }
+  if (name === "member-edit-memory") {
+    const box = document.querySelector("#mp-memory");
+    require(visible(box) && box.value.includes("專案每週三檢查原型") && box.value.includes("（待確認）"), "the box holds the member's whole document");
+    require(box.scrollHeight <= box.clientHeight + 1, "the box grows with its text and never scrolls");
+    require(document.querySelectorAll('.mb-dialog [data-dlg="save"]').length === 1 && !document.querySelector('.mp-page:not([hidden]) .btn.sm'), "one 儲存, the dialog's own");
+    return { check: name };
+  }
+  if (name === "settings-memory") {
+    const shared = document.querySelector('[data-mem-space="shared"]'), own = document.querySelector('[data-mem-space="own"]');
+    require(visible(shared) && visible(own) && shared.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING, "共同記憶, then Raphael's own");
+    require(own.querySelectorAll(".mem-entry").length >= 2 && !own.querySelector(".mem-sub, .mem-type"), "the memory reads as a document");
+    require(shared.querySelector(".mem-from")?.textContent.startsWith("拉斐爾 · "), "a shared entry says whom the owner told");
+    return { check: name };
+  }
+  if (name === "memory-saved") {
+    const saved = window.__look.calls.filter(call => call.method === "memory.update");
+    require(saved.length === 1 && saved[0].params.space === "own" && saved[0].params.member_id === 1 && typeof saved[0].params.revision === "string", "one write, of this member's file, from the copy it was opened on");
+    const own = document.querySelector('.mb-det [data-mem-space="own"]');
+    require(own.textContent.includes("使用者改過的一段") && !own.textContent.includes("上一輪檢查"), "the document reads as saved");
     return { check: name };
   }
 
@@ -2589,8 +2622,8 @@ export function checkRendered(name, context = {}) {
   if (name === "global-private-memory") {
     const shared = document.querySelector('.mb-det [data-mem-space="shared"]'), own = document.querySelector('.mb-det [data-mem-space="own"]');
     require(visible(shared) && visible(own), "the shared and the member's own memory are both on screen");
-    require(shared.textContent.includes("品牌主色是金色") && shared.querySelector('.mem-from')?.textContent === "拉斐爾 · 2026/10/27", "the shared note says whom the owner told it to and when in the UI date format");
-    require(own.textContent.includes("專案每週三檢查原型") && !shared.textContent.includes("專案每週三檢查原型"), "the member's own note stays in its own memory");
+    require(shared.textContent.includes("品牌主色是金色") && shared.querySelector('.mem-from')?.textContent === "拉斐爾 · 2026/10/27", "the shared entry says whom the owner told it to and when in the UI date format");
+    require(own.textContent.includes("專案每週三檢查原型") && !shared.textContent.includes("專案每週三檢查原型"), "the member's own entry stays in its own file");
     return { check: name };
   }
   if (name.startsWith("connector-")) {

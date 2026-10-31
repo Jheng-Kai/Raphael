@@ -118,6 +118,22 @@ Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
   the stale-stream timeouts of `agent/chat_completion_helpers.py` and
   `agent/reasoning_timeouts.py`.
 
+
+## Hermes Agent, memory files (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
+
+Modified ports, with upstream file names:
+
+- `core/src/raphael_core/memory/store.py`: bounded curated memory files, whole-entry and substring matching,
+  atomic batches checked on their final result, the over-limit note that teaches consolidation and the per-turn
+  retry cap, from `tools/memory_tool_store.py`.
+- `core/src/raphael_core/memory/growth.py`: the `memory_update` tool description, from `MEMORY_SCHEMA` in
+  `tools/memory_tool.py`.
+- `core/src/raphael_core/memory/scan.py`: injection and exfiltration patterns, from `tools/threat_patterns.py`.
+- `core/src/raphael_core/bots/homes.py`: the separate lock file around a read-modify-write, from
+  `tools/memory_tool_store.py`.
+
 MIT License
 
 Copyright (c) 2025 Nous Research

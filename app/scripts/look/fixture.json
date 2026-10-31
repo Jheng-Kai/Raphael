@@ -1221,7 +1221,6 @@
       "updated_at_ms": 1792807140000
     }
   ],
-  "sharedMemories": [],
   "colleagueConversation": {
     "id": 21,
     "member_id": 2,
@@ -2788,33 +2787,11 @@
     }
   ],
   "memorySummary": null,
-  "memories": [
-    {
-      "member_id": 1,
-      "name": "reference-pending-aabbccddeeff001122334455",
-      "description": "研究結果與下一次檢查",
-      "body": "原型已完成第一輪檢查。下一次檢查採用較小的樣本，保留這輪的比較結果。",
-      "type": "reference",
-      "origin": "pending",
-      "operation": "add",
-      "target": "reference-review-outcome",
-      "space": "own",
-      "updated": "",
-      "expires": null
-    },
-    {
-      "id": 1,
-      "member_id": 1,
-      "text": "專案每週三檢查原型，週五回顧結果。",
-      "created_at_ms": 1792720800000,
-      "name": "project-review.md",
-      "description": "專案每週三檢查原型，週五回顧結果。",
-      "type": "project",
-      "origin": "owner",
-      "updated": "2026-10-24",
-      "expires": null
-    }
-  ],
+  "memoryFiles": {
+    "shared": "使用者的名字是 Jack，住在台北。 — 拉斐爾 · 2026-10-20\n\n回答偏好先給結論，再補細節。 — 拉斐爾 · 2026-10-24\n",
+    "0": "週報固定週五下午寄出，寄之前先給使用者看草稿。\n\n設計稿都放在 Figma 的「Orbit」專案，檔名用日期開頭。\n",
+    "1": "專案每週三檢查原型，週五彙整結果。\n\n上一輪檢查發現註冊流程少一步驗證，已寫進下次檢查清單。\n\n報告控制在一頁以內，圖表用黑白兩色，附上原始資料的連結。\n\n（待確認）競品的新版本預計十一月中上線，首頁改成單欄版面。\n"
+  },
   "analytics": {
     "range": "7d",
     "days": [

@@ -10,17 +10,14 @@ import pytest
 from raphael_core.agent.cli.discovery import CliBrains, cli_available, resolve_command
 
 
-def test_a_cli_brain_is_offered_the_note_fields_an_api_brain_is_given():
-    # Live, Codex wrote a team-wide note as type "fact", which no space takes, and both writes were refused.
+def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
     from raphael_core.agent.answers import reply_schema
-    from raphael_core.agent.cli.loop import MEMORY_TOOLS
-    item = reply_schema("en", memory=True, plain=True)["properties"]["memory"]["items"]
-    for tool in MEMORY_TOOLS:
-        offered = tool["function"]["parameters"]
-        assert {key: item["properties"][key] for key in offered["properties"]} == offered["properties"]
-        assert set(offered["required"]) <= set(item["required"])
-    write = next(tool["function"]["parameters"] for tool in MEMORY_TOOLS if tool["function"]["name"] == "memory_write")
-    assert {"type", "space"} <= set(write["required"])
+    from raphael_core.memory.growth import DEFINITIONS
+    item = reply_schema("en", memory=True, plain=True)["properties"]["memory"]["items"]["properties"]
+    tool = DEFINITIONS["memory_update"]["parameters"]["properties"]
+    assert tool["target"]["enum"] == item["target"]["enum"]
+    assert tool["operations"]["items"]["properties"]["action"]["enum"] == item["action"]["enum"]
+    assert {"content", "old_text"} <= set(tool["operations"]["items"]["properties"]) & set(item)
 
 
 async def test_discovery_uses_fake_process_and_auth_existence_only(tmp_path):

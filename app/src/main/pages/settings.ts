@@ -248,12 +248,12 @@ export function createSettings(app: AppContext): SettingsPage {
   /** Telegram, in the 「訊息平台」 tab: it keeps its own state too. */
   const messaging = createMessaging({ visible: () => visible && pane === "messaging", redraw: () => render() });
   /**
-   * The memory, in the 「拉斐爾」 tab: 「共同記憶」, which every agent shares, and Raphael's own (its
-   * notes and the summary of his conversation). Each list reads the other again when a note moves.
+   * The memory, in the 「拉斐爾」 tab: 「共同記憶」, which every agent shares, and Raphael's own (and
+   * the summary of his conversation).
    */
-  const memoryHost = { visible: () => visible && pane === "agent", redraw: () => render(), undo: app.undo };
-  const memoryShared = createMemory({ ...memoryHost, space: "shared", onMoved: () => void memory.load() });
-  const memory = createMemory({ ...memoryHost, space: "own", onMoved: () => void memoryShared.load() });
+  const memoryHost = { visible: () => visible && pane === "agent", redraw: () => render() };
+  const memoryShared = createMemory({ ...memoryHost, space: "shared" });
+  const memory = createMemory({ ...memoryHost, space: "own" });
   const memories = [memoryShared, memory];
   app.onEvent((event) => {
     if (event.type !== "MemoryChanged" || !memoryHost.visible()) return;

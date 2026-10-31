@@ -57,9 +57,9 @@ beforeEach(() => {
   api.routinesCreate.mockResolvedValue({});
   api.routinesUpdate.mockResolvedValue({});
   api.core.mockImplementation(async (method: string, params: { space?: string }) => {
-    if (method === "memory.list") {
-      const name = params?.space === "shared" ? "user-city" : "ongoing-words";
-      return { memories: [{ name, description: params?.space === "shared" ? "主人住台北" : "在背單字", type: "user", origin: "told", updated: "", expires: null }], summary: null };
+    if (method === "memory.get" || method === "memory.update") {
+      const shared = params?.space === "shared";
+      return { text: shared ? "主人住台北\n" : "在背單字\n\n每週三複習\n", revision: "r1", chars: 9, entries: shared ? 1 : 2, limit: shared ? 1375 : 2200, summary: null };
     }
     return {};
   });
@@ -305,30 +305,35 @@ describe("a member's panel", () => {
     await flush();
     panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
     await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.list", { space: "shared" });
-    expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 3 });
+    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "shared" });
+    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 3 });
     const sections = [...panel.el.querySelectorAll<HTMLElement>("[data-mem-section]")];
     expect(sections.map((s) => [s.dataset.memSpace, s.getAttribute("aria-label")])).toEqual([["shared", "共同記憶"], ["own", "日文老師的記憶"]]);
     expect(sections[0].textContent).toContain("主人住台北");
     expect(sections[1].textContent).toContain("在背單字");
   });
 
-  test("a note's more moves it to the other memory, and both lists are read again", async () => {
+  test("the row that opens 記憶 says how many entries the member's own file holds", async () => {
+    const panel = mount();
+    await flush();
+    expect(panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.textContent).toContain("2 則記憶");
+    expect(api.core).toHaveBeenCalledWith("memory.get", { member_id: 3, space: "own" });
+  });
+
+  test("編輯 in one section opens the box of that section alone, and 儲存 writes that file", async () => {
     const panel = mount();
     await flush();
     panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
     await flush();
-    panel.el.querySelector<HTMLElement>('[data-mem-space="own"] [data-mem="more"]')!.click();
-    const item = document.querySelector<HTMLElement>("#app-popover [data-mem-move]")!;
-    expect(item.textContent).toBe("移到共同記憶");
-    api.core.mockClear();
-    item.click();
+    panel.el.querySelector<HTMLElement>('[data-mem-space="own"] [data-mem="edit"]')!.click();
+    const box = panel.el.querySelector<HTMLTextAreaElement>('[data-mem-space="own"] textarea.mem-body')!;
+    expect(box.value).toBe("在背單字\n\n每週三複習");
+    expect(panel.el.querySelector('[data-mem-space="shared"] textarea')).toBeNull();
+    box.value = "在背單字";
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    panel.el.querySelector<HTMLElement>('[data-mem-space="own"] [data-mem="save"]')!.click();
     await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.move", { name: "ongoing-words", to_space: "shared", member_id: 3 });
-    expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 3 });
-    expect(api.core).toHaveBeenCalledWith("memory.list", { space: "shared" });
-    panel.el.querySelector<HTMLElement>('[data-mem-space="shared"] [data-mem="more"]')!.click();
-    expect(document.querySelector("#app-popover [data-mem-move]")!.textContent).toBe("移到日文老師的記憶");
+    expect(api.core).toHaveBeenCalledWith("memory.update", { space: "own", member_id: 3, text: "在背單字", revision: "r1" });
   });
 
   test("× closes it", () => {
@@ -421,7 +426,7 @@ describe("Raphael's panel", () => {
     await flush();
     panel.el.querySelector<HTMLElement>('[data-tab="memory"]')!.click();
     await flush();
-    expect(api.core).toHaveBeenCalledWith("memory.list", { space: "own", member_id: 0 });
+    expect(api.core).toHaveBeenCalledWith("memory.get", { space: "own", member_id: 0 });
     expect([...panel.el.querySelectorAll("[data-mem-section]")].map((s) => s.getAttribute("aria-label"))).toEqual(["共同記憶", "拉斐爾的記憶"]);
   });
 });

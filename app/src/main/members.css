@@ -168,20 +168,13 @@
 .mb-det .slist { --slist-pad: 10px; }
 .mb-det .slist > .row { min-height: calc(44px + 12 * var(--pa-u)); padding: var(--sp-2) 0; }
 .mb-det .slist > .row > .lbl { min-width: 0; }
-.mb-det .slist > .row.mem-sub > .lbl { padding-left: 0; }
-.mb-det .mem-edit { padding: var(--sp-2) 0 var(--sp-2); }
 .mb-det .slist > .row { flex-wrap: nowrap; }
 .mb-det .row .t { font-size: var(--fs-sm); }
-.mb-det .row .d, .mb-det .mem-type, .mb-det .mem-tag { font-size: var(--fs-2xs); }
-.mb-det .mem-body, .mb-det .mem-title { font-size: var(--pa-dfs); }
-.mb-det .mem-line { flex-direction: column; align-items: flex-start; gap: 0; }
-.mb-det .mem-desc { white-space: normal; overflow-wrap: anywhere; }
+.mb-det .row .d, .mb-det .mem-tag, .mb-det .mem-from, .mb-det .mem-count { font-size: var(--fs-2xs); }
+.mb-det .mem-body, .mb-det .mem-entry, .mb-det .mem-none { font-size: var(--pa-dfs); }
 .mb-det .mem .ctl { gap: 0; }
 .mb-det .mem-head .ctl { gap: var(--sp-1); }
 .page-agent .mb-det .mem .btn.icon { width: calc(28px + 8 * var(--pa-u)); min-height: calc(28px + 8 * var(--pa-u)); }
-/* the pencil and the trash of a note show under the pointer, so that its line has the room */
-.mb-det .mem-sub .ctl .btn.icon:not([data-overflow]) { display: none; }
-.mb-det .mem-sub:hover .ctl .btn.icon, .mb-det .mem-sub:focus-within .ctl .btn.icon { display: inline-flex; }
 .mb-det .sgroup + .sgroup { margin-top: var(--sp-3); }
 
 /* ---------- dialogs ---------- */

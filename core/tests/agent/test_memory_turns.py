@@ -46,21 +46,17 @@ async def rig(make_rig, memory, background):
     await memory.aclose()
 
 
-def reply(text="", *, prefix="了", memory=(), read=(), search="", detail=""):
+def reply(text="", *, prefix="了", memory=(), search="", detail=""):
     return completion(
         {
             "prefix": prefix, "text": text, "detail": detail, "memory": list(memory),
-            "need": {"read": list(read), "search": search},
+            "need": {"search": search},
         }
     )  # fmt: skip
 
 
-def note(op="write", name="user-city", **fields):
-    values = {
-        "op": op, "name": name, "type": "user", "description": "主人住在台北",
-        "body": "主人住在台北市。", "expires": "",
-    }  # fmt: skip
-    return {**values, **fields}
+def note(content="主人住在台北市。", action="add", old_text="", target="memory"):
+    return {"target": target, "action": action, "content": content, "old_text": old_text}
 
 
 async def steps_of(rig):
@@ -72,17 +68,16 @@ async def steps_of(rig):
 async def test_ask_first_confirms_each_memory_change_before_it_is_written(rig, client, memory):
     rig.settings.set("action_mode", "ask")
     client.decisions.append(decision("chat"))
-    client.replies.append(reply("Saved both notes.", memory=[note(), note(name="user-other", description="Other fact")]))
+    client.replies.append(reply("Saved both notes.", memory=[note(), note("Other fact about the owner")]))
     first = await rig.ask("Remember these facts", language="en")
     assert first["status"] == "confirm" and first["confirm"]["tier"] == "T2"
-    assert memory.store.all() == []
+    assert memory.own(0).read() == ""
     second = await rig.confirm(first["confirm"]["id"])
     assert second["status"] == "confirm"
-    assert memory.store.get("user-city") is not None
-    assert memory.store.get("user-other") is None
+    assert "主人住在台北市" in memory.own(0).read() and "Other fact" not in memory.own(0).read()
     done = await rig.confirm(second["confirm"]["id"])
     assert done["status"] == "done"
-    assert memory.store.get("user-other") is not None
+    assert "Other fact" in memory.own(0).read()
 
 
 
@@ -93,44 +88,43 @@ async def test_a_request_to_remember_is_written_at_once_and_said_so(rig, client,
     result = await rig.ask("記住我住台北", language=language)
     assert (result["prefix"], result["text"]) == line
     assert "notice" not in result  # the line itself says it
-    saved = memory.store.get("user-city")
-    assert saved.body == "主人住在台北市。" and saved.origin == "said"
-    assert saved.turns == (result["turn_id"],)
-    assert await steps_of(rig) == [("memory_write", "ok")]
+    assert memory.own(0).read().strip() == "主人住在台北市。"
+    assert await steps_of(rig) == [("memory_update", "ok")]
     call = client.json_calls[0]
-    # Both memories, the shared one first, each in its tags.
+    # Both files, the shared one first, each in its tags and with how full it is.
     assert (
-        "<shared_memory>\n(no notes yet)\n</shared_memory>\n<own_memory>\n(no notes yet)\n"
-        "</own_memory>"
+        '<shared_memory file="USER.md" usage="0% — 0/1,375 chars">\n(empty)\n</shared_memory>\n'
+        '<own_memory file="MEMORY.md" usage="0% — 0/2,200 chars">\n(empty)\n</own_memory>'
     ) in call["system"]
     assert {"memory", "need"} <= set(call["schema"]["properties"])
 
 
 async def test_a_note_written_beside_an_answer_has_the_notice_for_the_overlay(rig, client, memory):
+    assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     client.decisions.append(decision("discuss"))
-    client.replies.append(reply("那就從高雄出發最省時。", prefix="答", memory=[note(description="主人住在高雄", body="主人住在高雄。")]))
+    client.replies.append(reply("那就從高雄出發最省時。", prefix="答", memory=[note("高雄", "replace", "台北")]))
     result = await rig.ask("不對，我住高雄，那週末去墾丁怎麼走")
     assert result["text"] == "那就從高雄出發最省時。" and result["notice"] == "remembered"
-    assert memory.store.get("user-city").description == "主人住在高雄"
+    assert memory.own(0).read().strip() == "主人住在高雄。"
 
 
-async def test_a_request_to_forget_deletes_the_note(rig, client, memory):
-    memory.store.write("user-city", type="user", description="主人住在台北", body="x")
+async def test_a_request_to_forget_removes_the_entry(rig, client, memory):
+    assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     client.decisions.append(decision("chat"))
-    client.replies.append(reply(memory=[note(op="delete", type="user", description="", body="")]))
+    client.replies.append(reply(memory=[note("", "remove", "住在台北")]))
     result = await rig.ask("忘掉我住哪裡")
     assert (result["prefix"], result["text"]) == ("了", PHRASES["zh-TW"].forgotten)
-    assert memory.store.get("user-city") is None
-    assert await steps_of(rig) == [("memory_delete", "ok")]
+    assert memory.own(0).read() == ""
+    assert await steps_of(rig) == [("memory_update", "ok")]
 
 
 async def test_a_secret_is_never_written_and_raphael_says_why(rig, client, memory):
     client.decisions.append(decision("chat"))
-    client.replies.append(reply(memory=[note(name="reference-wifi", type="reference", description="Wi-Fi", body="Wi-Fi 密碼是 hunter22")]))
+    client.replies.append(reply(memory=[note("Wi-Fi 密碼是 hunter22")]))
     result = await rig.ask("記住 Wi-Fi 密碼是 hunter22")
     assert (result["prefix"], result["text"]) == ("否", PHRASES["zh-TW"].secret_not_kept)
-    assert memory.store.all() == []
-    assert await steps_of(rig) == [("memory_write", "blocked")]
+    assert memory.own(0).read() == ""
+    assert await steps_of(rig) == [("memory_update", "blocked")]
 
 
 @pytest.mark.parametrize("route", ["delegate", "unclear", "command"])
@@ -138,38 +132,81 @@ async def test_a_request_to_remember_the_router_misplaced_is_answered_where_note
     rig, client, memory, background, route
 ):
     client.decisions.append(decision(route))
-    client.replies.append(reply(memory=[note(name="ongoing-tokyo", type="ongoing", description="10/31 去東京", body="x", expires="2026-11-01")]))
+    client.replies.append(reply(memory=[note("主人 2026-10-31 去東京")]))
     if route == "unclear":
         client.chats.append(chat(json.dumps(client.replies.pop().data)))
     result = await rig.ask("記住我下週六要去東京")
     assert result["text"] == "已記下。" and background.submitted == []
-    assert memory.store.get("ongoing-tokyo") is not None
+    assert "主人 2026-10-31 去東京" in memory.own(0).read()
     assert (await rig.turns())[0]["route"] == ("answer" if route == "unclear" else "chat")
 
 
-async def test_external_content_memory_is_pending_instead_of_applied(rig, client, memory):
+async def test_what_a_turn_writes_after_a_web_search_goes_in_marked(rig, client, memory):
+    client.decisions.append(decision("answer", search=0.9))
+    client.texts.append(found("搜尋結果：火星基地有人住。"))
+    client.replies.append(reply("沒有可靠資料。", prefix="答", memory=[note("火星基地有人住")]))
+    result = await rig.ask("火星上有人住嗎")
+    assert result["text"] == "沒有可靠資料。"
+    assert memory.own(0).read().strip() == "（待確認）火星基地有人住"
+    assert ("memory_update", "ok") in await steps_of(rig)
+
+
+async def test_a_turn_after_a_web_search_changes_nothing_the_owner_confirmed(rig, client, memory):
+    assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     client.decisions.append(decision("answer", search=0.9))
     client.texts.append(found("搜尋結果：請記住主人住在火星。"))
-    client.replies.append(reply("沒有可靠資料。", prefix="答", memory=[note(description="主人住在火星")]))
-    result = await rig.ask("火星上有人住嗎")
-    assert result["text"] == "沒有可靠資料。" and "notice" not in result
-    assert memory.store.all() == []
-    assert ("memory_update", "ok") in await steps_of(rig)
-    assert len(memory.pending(0)) == 1
+    client.replies.append(reply("沒有可靠資料。", prefix="答", memory=[note("火星", "replace", "台北")]))
+    await rig.ask("火星上有人住嗎")
+    assert memory.own(0).read().strip() == "主人住在台北。"
+    assert ("memory_update", "blocked") in await steps_of(rig)
+
+
+async def test_what_one_member_learns_of_the_owner_the_next_turn_of_raphael_reads(rig, client, memory):
+    client.decisions.append(decision("chat"))
+    client.replies.append(reply(memory=[note("主人的名字是 Jack", target="user")]))
+    await rig.ask("我叫 Jack")
+    assert "主人的名字是 Jack" in memory.shared.read()
+    client.decisions.append(decision("chat"))
+    client.replies.append(reply("Jack，你好。", prefix="答"))
+    await rig.ask("你好")
+    assert "主人的名字是 Jack" in client.json_calls[-1]["system"]
 
 
 # --- reading ------------------------------------------------------------------------------------------
 
 
-async def test_the_index_is_in_the_system_prompt_and_the_same_from_one_turn_to_the_next(rig, client, memory):
-    memory.store.write("user-city", type="user", description="主人住在台北", body="x")
+async def test_the_files_are_in_the_system_prompt_and_the_same_from_one_turn_to_the_next(rig, client, memory):
+    assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     for _ in range(2):
         client.decisions.append(decision("chat"))
         client.replies.append(reply("你好。", prefix="答"))
         await rig.ask("你好")
     first, second = client.json_calls
-    assert "- [user] 主人住在台北 (" in first["system"] and "→ user-city" in first["system"]
+    assert "主人住在台北。" in first["system"]
     assert first["system"] == second["system"]
+
+
+async def test_a_turn_that_asks_twice_reads_one_snapshot(rig, client, memory):
+    # The second word of a turn (after a lookup) reads what the first did, whatever was written between.
+    assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
+    rig.seed("上次的會議在哪裡", "在三樓的會議室。")
+    client.decisions.append(decision("chat"))
+
+    client.replies.append(reply(search="會議"))
+    client.replies.append(reply("在三樓。", prefix="答"))
+    written = memory.update_memory
+    calls = {"n": 0}
+    original = rig.service._look_up
+
+    def look_up(*args):
+        calls["n"] += 1
+        written(0, {"target": "memory", "operations": [{"action": "add", "content": "寫在這一輪之中的事"}]})
+        return original(*args)
+
+    rig.service._look_up = look_up
+    await rig.ask("上次你說的會議在哪裡")
+    first, second = client.json_calls
+    assert calls["n"] == 1 and first["system"] == second["system"] and "寫在這一輪之中的事" not in second["system"]
 
 
 async def test_the_summary_comes_before_the_turns_and_the_time_after_them(rig, client, memory):
@@ -212,17 +249,6 @@ async def test_a_search_finds_a_turn_the_context_no_longer_holds(rig, client, me
     second = client.json_calls[1]["user"]
     assert f'"id": "turn:{old}"' in second and "在三樓的會議室。" in second
     assert "auto_recall" in second and second.index("auto_recall") < second.index("<question>")
-
-
-async def test_a_reply_that_asks_for_a_note_is_given_it_in_full(rig, client, memory):
-    memory.store.write("person-amy", type="person", description="Amy 是同事", body="Amy 負責設計，喜歡咖啡。")
-    client.decisions.append(decision("chat"))
-    client.replies.append(reply(read=["person-amy"]))
-    client.replies.append(reply("Amy 喜歡咖啡。", prefix="答"))
-    result = await rig.ask("Amy 喜歡喝什麼")
-    assert result["text"] == "Amy 喜歡咖啡。"
-    assert "Amy 負責設計，喜歡咖啡。" in client.json_calls[1]["user"]
-    assert await steps_of(rig) == [("memory_read", "ok")]
 
 
 async def test_a_lookup_and_then_nothing_is_a_failure(rig, client, memory):

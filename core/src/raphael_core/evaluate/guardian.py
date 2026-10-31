@@ -22,7 +22,8 @@ from jsonschema import Draft202012Validator
 
 from ..agent.attachment_inputs import text_context
 from ..agent.cli.discovery import CliBrains, brain_ref
-from ..agent.cli.loop import CliLoop, MEMORY_TOOLS, Sessions
+from ..agent.cli.loop import CliLoop, Sessions
+from ..memory.store import MemorySnapshot
 from ..agent.ledger import Ledger
 from ..agent.narration import NarratedLoop
 from ..agent.persona import cli_system_prompt, member_system_prompt, system_prompt
@@ -64,7 +65,7 @@ SCENARIOS = (
     Scenario("text", "請讀取文字附件，逐字引用其計畫名稱。", contains=("晨光計畫",), attachment="text"),
     Scenario("image", "請讀取圖片附件並說明主要顏色。", contains=("紅",), attachment="image"),
     Scenario("pdf", "請讀取 PDF 附件並引用標題。", {"read_attachment": 1}, ("星河筆記",), attachment="pdf"),
-    Scenario("memory", "請記住：我喜歡在早上練習寫作。", {"memory_write": 1}),
+    Scenario("memory", "請記住：我喜歡在早上練習寫作。", {"memory_update": 1}),
     Scenario("open", "請開啟 https://example.com/ 。", {"open": 1}),
     Scenario("search", "請上網搜尋臺北今日的新聞並簡短說明。", {"web_search": 1}),
     Scenario("approval-yes", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, raphael_only=True, approval=True),
@@ -243,8 +244,6 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
                       capabilities=frozenset({"chief"}) if member == 0 else frozenset())
     files = attachments(scenario.attachment)
     tools = take_snapshot(None, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
-    if cli:
-        tools = [*tools, *MEMORY_TOOLS]
     names = {tool["function"]["name"] for tool in tools}
     if member and names & (set(ADMIN_TOOLS) | {"create_member"}):
         result["reason"] = "member_exposed_to_administration"
@@ -255,13 +254,14 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
     if files:
         user += "\nFiles: " + json.dumps([{"index": n, **a.metadata()} for n, a in enumerate(files, 1)], ensure_ascii=False)
         user += "\nUse read_attachment by index for PDFs and images not included natively."
-    index = "No saved memories."
+    files_now = MemorySnapshot(shared_usage="0% — 0/1,375 chars", own_usage="0% — 0/2,200 chars")
     if cli:
-        system = cli_system_prompt("zh-TW", name=None if member == 0 else speaker.name, role=speaker.role, memory_index=index)
+        system = cli_system_prompt("zh-TW", name=None if member == 0 else speaker.name, role=speaker.role, memory=True)
+        user += "\n\n" + str(files_now)
     elif member == 0:
-        system = system_prompt("zh-TW", "answer", index, narrated=True)
+        system = system_prompt("zh-TW", "answer", files_now, narrated=True)
     else:
-        system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_index=index, narrated=True)
+        system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True)
     if member == 0:
         system += LEADERSHIP
     loop = None
@@ -291,7 +291,7 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
             counts = Counter(recorder.calls)
             for name, count in scenario.required.items():
                 # API brains express memory writes in the production reply envelope.
-                actual = sum(item.op == "ADD" for item in reply.memory) if name == "memory_write" and not cli else counts[name]
+                actual = counts[name] + len(reply.memory) if name == "memory_update" and not cli else counts[name]
                 if actual < count:
                     reasons.append("missing_tool:" + name)
             if scenario.name == "members" and counts["member_create"] != 2:

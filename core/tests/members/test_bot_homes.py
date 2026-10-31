@@ -7,7 +7,7 @@ import shutil
 import pytest
 
 from raphael_core.agent.harness_tools import definitions_for
-from raphael_core.memory.reflection import Action
+from raphael_core.memory.reflection import Edit
 
 
 async def test_member_brain_is_used_instead_of_the_global_brain(rig):
@@ -26,15 +26,34 @@ async def test_chief_role_moves_with_the_top_contact_and_revokes_raphael(rig):
         await rig.service.admin_tool(0, "team_overview", {})
 
 
-async def test_private_memory_cannot_be_promoted_by_a_model_space_choice(rig):
+async def test_what_the_owner_keeps_private_is_not_published_by_a_models_choice_of_file(rig):
     member = (await rig.call("members.create", {"name": "Alice"}))["member"]
-    action = Action(op="write", name="preference-private", type="preference",
-                    description="Prefers a private review", body="The owner prefers a private review.", space="shared")
-    result = rig.memory.apply_said([action], 0, member["id"])
+    result = rig.memory.apply_edits([Edit("user", "add", "The owner prefers a private review.")], member["id"], private_request=True)
     assert result.written
-    assert rig.memory.store_for(member["id"]).get(action.name)
-    assert rig.memory.shared.get(action.name) is None
-    assert not rig.memory.read([action.name], 0).data["memories"]
+    assert "private review" in rig.memory.own(member["id"]).read()
+    assert rig.memory.shared.read() == ""
+    assert "private review" not in str(rig.memory.snapshot(0))
+
+
+async def test_a_home_is_plain_files_and_soul_says_who_the_member_is(rig):
+    member = (await rig.call("members.create", {"name": "Alice", "role": "Reviewer", "personality": "Calm and exact.", "instructions": "Review every release."}))["member"]
+    home = rig.local / "bots" / str(member["id"])
+    soul = (home / "SOUL.md").read_text(encoding="utf-8")
+    assert soul.startswith("# Alice\n") and "Reviewer" in soul and "Calm and exact." in soul and "Review every release." in soul
+    assert (home / "MEMORY.md").exists() and (rig.local / "shared/USER.md").exists()
+    assert not (rig.local / "bot-state" / str(member["id"]) / "SOUL.md").exists()
+    await rig.call("members.update", {"id": member["id"], "personality": "Warm."})
+    assert "Warm." in (home / "SOUL.md").read_text(encoding="utf-8")
+    assert "# " in (rig.local / "bots/0/SOUL.md").read_text(encoding="utf-8")
+
+
+def test_no_member_may_rewrite_who_it_is(tmp_path):
+    from raphael_core.bots.homes import BotHomes, HomeError
+    homes = BotHomes(tmp_path)
+    homes.soul(1, "# Alice\n")
+    with pytest.raises(HomeError):
+        homes.write(1, "SOUL.md", "# Mallory\n")
+    assert (tmp_path / "bots/1/SOUL.md").read_text() == "# Alice\n"
 
 
 async def test_raphael_has_the_same_skill_store_and_home(rig):
@@ -59,12 +78,8 @@ async def test_skill_enable_revision_can_be_reverted_without_changing_the_docume
 
 
 async def test_owner_can_explicitly_share_a_team_decision(rig):
-    action = Action(op="write", name="ongoing-team-review", type="ongoing",
-                    description="Team review decision", body="The team will review this plan on Friday.",
-                    expires="2099-12-31", space="shared")
-    assert rig.memory.apply_said([action], 0, 0, share=True).written
-    assert rig.memory.shared.get(action.name)
-    assert "Friday" in (rig.local / "shared/team.md").read_text()
+    assert rig.memory.apply_edits([Edit("user", "add", "We decided the team reviews this plan on Friday.")], 0, share=True).written
+    assert "Friday" in (rig.local / "shared/USER.md").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -82,17 +97,17 @@ def test_sharing_requires_an_affirmative_owner_instruction(text, expected):
 def test_home_paths_hashes_redaction_journal_and_revert(tmp_path):
     from raphael_core.bots.homes import BotHomes, HomeError
     homes = BotHomes(tmp_path)
-    first = homes.write(1, "memory/review.md", "Keep a review.", expected_hash=None)
+    first = homes.write(1, "MEMORY.md", "Keep a review.", expected_hash=None)
     assert first == hashlib.sha256(b"Keep a review.").hexdigest()
-    second = homes.write(1, "memory/review.md", "Changed review.", expected_hash=first)
+    second = homes.write(1, "MEMORY.md", "Changed review.", expected_hash=first)
     with pytest.raises(HomeError):
-        homes.write(1, "memory/review.md", "Stale", expected_hash=first)
+        homes.write(1, "MEMORY.md", "Stale", expected_hash=first)
     entries = homes.journal(1)
     homes.revert(1, entries[-1]["id"], expected_hash=second)
-    assert (tmp_path / "bots/1/memory/review.md").read_text() == "Keep a review."
+    assert (tmp_path / "bots/1/MEMORY.md").read_text() == "Keep a review."
     homes.write(1, "memory/log/2026-10-29.md", "token sk-abcdefghijklmnopqrstuvwx")
     assert "sk-abcdefghijklmnopqrstuvwx" not in (tmp_path / "bots/1/memory/log/2026-10-29.md").read_text()
-    for path in ("../2/MEMORY.md", "SOUL.md", "skills.json", "memory/../../shared/USER.md", "skills/review/run.py", "memory/log/no-date.md"):
+    for path in ("../2/MEMORY.md", "SOUL.md", "skills.json", "memory/../../shared/USER.md", "memory/note.md", "skills/review/run.py", "memory/log/no-date.md"):
         with pytest.raises(HomeError):
             homes.write(1, path, "Denied")
     assert not (tmp_path / "bots/2").exists()
@@ -126,7 +141,7 @@ def test_migration_of_a_realistic_copy_is_lossless_and_idempotent(tmp_path):
     snapshot = {str(p.relative_to(copied)): p.read_bytes() for p in copied.rglob("*") if p.is_file()}
     homes.migrate()
     assert snapshot == {str(p.relative_to(copied)): p.read_bytes() for p in copied.rglob("*") if p.is_file()}
-    assert (copied / "shared/USER.md").exists() and (copied / "shared/team.md").exists()
+    assert (copied / "shared/USER.md").exists() and not (copied / "shared/team.md").exists()
     assert json.loads((copied / "bot-state/migration.json").read_text())["version"] == 1
 
 

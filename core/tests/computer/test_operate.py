@@ -213,16 +213,16 @@ def test_the_worker_is_never_given_or_let_through_a_step_on_the_desktop(conn):
     # with a memory, the worker reads notes and past turns, and still gets no step on the desktop
     remembering = take_snapshot(None, memory=True)
     offered = {d["function"]["name"] for d in remembering.definitions}
-    assert {"memory_read", "history_search"} <= offered
-    assert not {"memory_write", "memory_delete"} & offered
+    assert "history_search" in offered
+    assert not {"memory_read", "memory_write", "memory_delete"} & offered
     assert not PRESENCE_TOOLS & offered
 
 
 class _Notes:
-    """A memory with one note in its index, for the run's prompt."""
+    """A memory with one entry, for the run's prompt."""
 
-    def index(self):
-        return "- [user] 主人住在台北 (10/22) → user-city"
+    def snapshot(self, member_id=0):
+        return "主人住在台北"
 
     def after_turn(self, member_id=0):
         pass

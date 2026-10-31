@@ -174,7 +174,7 @@ async def test_provider_error_is_classified_without_secret_text(conn, tmp_path):
 
 async def test_api_memory_uses_the_production_reply_envelope(conn, tmp_path):
     scenario = next(s for s in SCENARIOS if s.name == "memory")
-    reply = {"text": "已記住你的偏好。", "memory": [{"op": "write", "name": "morning-writing", "type": "user", "description": "寫作時間偏好", "body": "喜歡在早上練習寫作。", "expires": "", "space": "shared"}]}
+    reply = {"text": "已記住你的偏好。", "memory": [{"target": "user", "action": "add", "content": "喜歡在早上練習寫作。", "old_text": ""}]}
     result, _ = await api_cell(conn, tmp_path, scenario, [(json.dumps(reply, ensure_ascii=False), [])])
     assert result["status"] == "PASS", result
     assert "english_sentence_in_zh_TW_reply" in check_reply("已完成。Everything is ready now.", scenario)

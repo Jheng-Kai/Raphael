@@ -125,6 +125,11 @@ def find_secret(text: str) -> str | None:
 
 # --- injection -------------------------------------------------------------------------------------
 
+# Bounded filler between key words (an unbounded one backtracks badly), and an environment variable
+# whose name ends in a word for a secret.
+_FILLER = r"(?:\w+\s+){0,8}"
+_SECRET_VAR = r"\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)S?\b"
+_MODIFY = r"(update|modify|edit|write|change|append|add\s+to)\s+[^\n]{0,2048}"
 _INJECTION = (
     re.compile(
         r"(?i)\b(?:ignore|disregard|forget|override)\b[^.\n]{0,30}"
@@ -134,11 +139,38 @@ _INJECTION = (
     re.compile(r"(?i)(?:^|\n)\s*(?:system|assistant|developer)\s*[:：]"),
     re.compile(r"(?i)\bsystem\s+prompt\b"),
     re.compile(r"(?i)\byou\s+are\s+now\b"),
-    re.compile(r"(?i)</?\s*(?:system|instructions?|script|tool_result|memory_index)\b"),
+    re.compile(r"(?i)</?\s*(?:system|instructions?|script|tool_result|shared_memory|own_memory)\b"),
     re.compile(r"(?:忽略|無視|无视|不要理會|別理)[^。\n]{0,12}(?:指示|指令|規則|规则|提示|設定)"),
     re.compile(r"(?:指示|命令|ルール|プロンプト)[^。\n]{0,10}(?:無視|忘れ)"),
     re.compile(r"!\[[^\]]*\]\("),  # a Markdown image: a way to send what it is given away
     re.compile(r"(?i)\bhttps?://\S+\?\S*="),  # an address with a query string
+    *(re.compile(pattern, re.I) for pattern in (
+        # Adapted from NousResearch/hermes-agent tools/threat_patterns.py @ c419cf7c (MIT). Its names of
+        # offensive tools are left out: they are ordinary words too, and a fact here is about a person.
+        rf"disregard\s+{_FILLER}(your|all|any)\s+{_FILLER}(instructions|rules|guidelines)",
+        rf"act\s+as\s+(if|though)\s+{_FILLER}you\s+{_FILLER}(have\s+no|don't\s+have)\s+{_FILLER}(restrictions|limits|rules)",
+        r"<!--[^>]{0,512}(?:ignore|override|system|secret|hidden)[^>]{0,512}-->",
+        r"<\s*div\s+style\s*=\s*[\"'][^>]{0,2048}display\s*:\s*none",
+        r"translate\s+[^\n]{0,512}\s+into\s+\w+(?:[\s-]+\w+){0,2}\s+and\s+(execute|run|eval)\b",
+        rf"do\s+not\s+{_FILLER}tell\s+{_FILLER}the\s+user",
+        rf"you\s+are\s+{_FILLER}now\s+(?:a|an|the)\s+",
+        rf"pretend\s+{_FILLER}(you\s+are|to\s+be)\s+",
+        rf"output\s+{_FILLER}(system|initial)\s+prompt",
+        rf"(respond|answer|reply)\s+without\s+{_FILLER}(restrictions|limitations|filters|safety)",
+        rf"you\s+have\s+been\s+{_FILLER}(updated|upgraded|patched)\s+to",
+        r"register\s+(as\s+)?a?\s*node",
+        r"(heartbeat|beacon|check[\s\-]?in)\s+(to|with)\s+https?:",
+        r"you\s+must\s+(?:\w+\s+){0,3}(register|connect|report|beacon)\b",
+        r"unset\s+\w*(?:CLAUDE|CODEX|HERMES|RAPHAEL|AGENT|OPENAI|ANTHROPIC)\w*",
+        rf"curl\s+[^\n]{{0,2048}}{_SECRET_VAR}",
+        rf"wget\s+[^\n]{{0,2048}}{_SECRET_VAR}",
+        r"cat\s+[^\n]{0,2048}(\.env|credentials|\.netrc|\.pgpass|\.npmrc|\.pypirc)",
+        r"(send|post|upload|transmit)\s+[^\n]{0,2048}\s+(to|at)\s+https?://",
+        rf"(include|output|print|share)\s+{_FILLER}(conversation|chat\s+history|previous\s+messages|full\s+context|entire\s+context)",
+        r"authorized_keys",
+        r"(?:\b(?:echo|cat|cp|mv|dd|tee|install|printf|rsync|scp|ln|append|add|write|sed|chmod|chown|truncate|rm|touch|curl|wget|git)\b|\bopen\s*\(|>>?)[^\n]{0,512}(?:\$HOME/\.ssh|~/\.ssh)",
+        rf"{_MODIFY}(?:AGENTS\.md|CLAUDE\.md|\.cursorrules|\.clinerules|SOUL\.md)",
+    )),
 )
 # Characters that are not seen: zero-width ones, the bidirectional controls and the tag characters.
 _INVISIBLE = re.compile(

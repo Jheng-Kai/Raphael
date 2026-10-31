@@ -16,6 +16,7 @@ const downloaded = [
 ];
 const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check("dictation-navigation"), ...(tab === "overview" ? [wait('.page-overview .icard'), check("dictation-overview")] : [])];
 export default [
+  scene("settings-memory", "Raphael's tab of Settings shows the same two documents", [...settings("agent"), wait('[data-mem-space="own"] .mem-entry'), scroll('[data-mem-space="shared"]'), check("settings-memory")]),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("model-sync", "A model chosen at the composer shows in Settings, and one chosen in Settings shows at the composer", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),

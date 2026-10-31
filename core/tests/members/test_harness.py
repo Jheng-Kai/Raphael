@@ -119,7 +119,7 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     rig, team = setup
     teacher = member(team, name="紫苑", tools=[])
     rig.service._computer = ComputerRuns(shell.bridge)
-    note = {"op": "write", "name": "user-screen", "type": "user", "description": "Screen data", "body": "Untrusted screen data", "expires": "", "space": "own"}
+    note = {"target": "user", "action": "add", "content": "Untrusted screen data", "old_text": ""}
     client.chats = [chat("確認計算機。", ("computer", {"request": "按七"})), *PRESS_SEVEN, live_said("完成了，接著練習日文數字。", memory=[note])]
     asked = await typed(rig, "在計算機按七", teacher.id)
     assert asked["status"] == "confirm"
@@ -129,6 +129,6 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert turn["id"] == asked["turn_id"] and turn["status"] == "done"
     assert "PRIVATE-INSTRUCTIONS" in str(client.chat_calls[1]["messages"])
-    assert team.memory.store_for(teacher.id).get("user-screen") is None
-    assert len(team.memory.pending(teacher.id)) == 1
+    assert team.memory.own(teacher.id).read().strip() == "（待確認）Untrusted screen data"
+    assert team.memory.shared.read() == ""
     assert any(s["tool"] == "memory_update" and s["outcome"] == "ok" for s in turn["steps"])

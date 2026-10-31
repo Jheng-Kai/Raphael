@@ -81,25 +81,24 @@ async def test_refused_changes_do_not_announce_success(rig):
     assert rig.notes == []
 
 
-async def test_memory_writes_rpc_moves_and_deletes_announce_the_affected_spaces(rig):
+async def test_memory_writes_rpc_edits_and_clears_announce_the_affected_spaces(rig):
     member = (await rig.call("members.create", {"name": "Memory owner"}))["member"]
     member_id = member["id"]
     rig.notes.clear()
-    store = rig.memory.store_for(member_id)
-    store.write("reference-project", type="reference", description="Project", body="We are building an app.")
+    write = lambda target, content: rig.memory.update_memory(member_id, {"target": target, "operations": [{"action": "add", "content": content}]})
+    assert write("memory", "We are building an app.").ok
     own = ("memory.changed", {"member_id": member_id, "space": "own"})
     shared = ("memory.changed", {"member_id": 0, "space": "shared"})
     assert rig.notes == [own]
     rig.notes.clear()
-    await rig.call("memory.update", {"member_id": member_id, "space": "own", "name": "reference-project", "body": "We are testing an app."})
+    await rig.call("memory.update", {"member_id": member_id, "space": "own", "text": "We are testing an app."})
     assert rig.notes == [own]
     rig.notes.clear()
-    await rig.call("memory.move", {"member_id": member_id, "name": "reference-project", "to_space": "shared"})
-    assert own in rig.notes and shared in rig.notes
-    rig.notes.clear()
-    await rig.call("memory.delete", {"space": "shared", "name": "reference-project"})
+    assert write("user", "The owner is called Jack").ok
     assert rig.notes == [shared]
-    store.write("reference-next", type="reference", description="Next", body="Review the app.")
+    rig.notes.clear()
+    await rig.call("memory.clear", {"space": "shared"})
+    assert rig.notes == [shared]
     rig.notes.clear()
     await rig.call("memory.clear", {"member_id": member_id, "space": "own"})
     assert rig.notes == [own]

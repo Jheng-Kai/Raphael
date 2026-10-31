@@ -16,7 +16,7 @@ from functools import wraps
 TOOL_STATES = (
     ("working", ("mcp:computer-access-",), ("request_computer",)),
     ("computer", ("computer__", "mcp:computer-", "mcp__computer__"), ("computer",)),
-    ("searching", (), ("web_search", "web_read", "read_attachment", "memory_read",
+    ("searching", (), ("web_search", "web_read", "read_attachment",
                        "history_search", "search_query", "webSearch", "WebSearch",
                        "WebFetch", "Read", "read_file", "read_document")),
 )

@@ -250,14 +250,14 @@ face where the question came (exchange-line.ts); several in a row from one colle
 never a pasted transcript or a per-line label. Both ways of asking leave the same record, the asked
 member's exchange turn: `ask_member` answers in the asker's turn, a `handoff` in consult mode runs as the
 asked member's task with its own notes and conversation, and a private chat turn that consulted that way
-comes back once with the answer. Shared notes name whom the owner told them to and when, in every memory
-panel and in every member's prompt; what the owner told one member stays its own until a colleague asks.
+comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every
+memory panel and in every member's prompt; what the owner told one member stays its own until a colleague asks.
 
 ```powershell
 npm run look -- bot-ask-centred bot-message-from-centred bot-exchange-count bot-exchange-expanded global-private-memory --theme both --width 1120,720,1920x1080
 ```
 
-The scenes seed 小森 asking 小晴 through the IPC fixture (`colleagues`, `sharedMemories`); the mock lists
+The scenes seed 小森 asking 小晴 through the IPC fixture (`colleagues`, `memoryFiles`); the mock lists
 a member's exchanges in their recorded delivery conversation as the core does. Model behaviour is covered by Guardian
 S04 and S12: offline with honest fake brains on both brain paths and both ways of asking, live on the API
 brain. Rendered fixtures do not prove a live consult.
@@ -594,14 +594,14 @@ on that member's own brain, preserving the opening and recent turns verbatim.
 CLI native sessions remain enabled; the normal context includes the saved summary
 when a native session reopens. Cold context/summary reads never save or notify.
 Auto-recall is permission-scoped FTS5 data before the question (not in system),
-<=6000 characters, <=4 memory and <=4 conversation hits. Search/read recheck room
+<=6000 characters, <=4 log and <=4 conversation hits. Search/read recheck room
 membership and never cross another member's private home or threads. Retrieved
-external provenance remains untrusted for later memory writes.
+external provenance remains untrusted for later memory writes: they go in marked.
 Automatic recall stays in the current conversation; explicit session_search can
 retrieve that member's other conversations and currently joined rooms.
 
-See the phase-2 section of [Members](members.md) for memory tools, owner pending
-review, selected look scenes and the `memory-growth` native journey. Conversation
+See "Memory as living files" in [Members](members.md) for the files and their tool,
+selected look scenes and the `memory-growth` native journey. Conversation
 context contracts live in `core/tests/memory/test_conversation.py`; shared harness
 wiring and recall order in `core/tests/agent/test_memory_turns.py`.
 

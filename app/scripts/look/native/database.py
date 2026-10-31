@@ -114,13 +114,15 @@ elif operation == "init":
     if len(sys.argv) > 3 and sys.argv[3] == "bot-homes":
         import shutil
         from raphael_core.members.store import MemberStore
-        from raphael_core.memory.store import MemoryStore
         member = MemberStore(connection).create_member(name="Alice", role="Reviewer", model="cli:codex")
         seed = directory / "migration-copy"
         for relative, name, text in (("memory", "reference-project", "Project review"),
                                      ("memory/shared", "user-profile", "The owner speaks English"),
                                      (f"memory/members/{member.id}", "reference-private-review", "private-review")):
-            MemoryStore(seed / relative).write(name, type=name.split("-")[0], description=text, body=text)
+            # A note as the store before the living files wrote it: the app moves it into them at its start.
+            note = seed / relative / f"{name}.md"
+            note.parent.mkdir(parents=True, exist_ok=True)
+            note.write_text(f'---\nname: {name}\ndescription: "{text}"\ntype: {name.split("-")[0]}\ncreated: 2026-10-01T10:00:00+08:00\nupdated: 2026-10-01T10:00:00+08:00\norigin: said\nturns: []\n---\n{text}\n', encoding="utf-8")
         skill = "---\nname: Review\ndescription: Review work\n---\nRead carefully.\n"
         with connection:
             identifier = connection.execute("INSERT INTO member_skills(member_id,name,description,source) VALUES (?, 'Review', 'Review work', 'owner')", (member.id,)).lastrowid
@@ -155,20 +157,20 @@ else:
     connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     if operation == "homes":
-        paths = ("bots/0/memory/reference-project.md", "shared/memory/user-profile.md", "bots/1/memory/reference-private-review.md", "bots/1/skills/1/SKILL.md")
+        paths = ("bots/0/MEMORY.md", "shared/USER.md", "bots/1/MEMORY.md", "bots/1/skills/1/SKILL.md")
         import hashlib
         files = {name: (directory / name).read_text(encoding="utf-8") for name in paths}
         manifest = json.loads((directory / "bot-state/migration.json").read_text(encoding="utf-8"))
-        verified = all(hashlib.sha256((directory / item["to"]).read_bytes()).hexdigest() == item["sha256"] for item in manifest["files"] if not item["to"].endswith("MEMORY.md"))
+        verified = all(hashlib.sha256((directory / item["to"]).read_bytes()).hexdigest() == item["sha256"] for item in manifest["files"] if item["to"].endswith("SKILL.md")) and "Project review" in files["bots/0/MEMORY.md"] and "The owner speaks English" in files["shared/USER.md"] and "private-review" in files["bots/1/MEMORY.md"]
         receipt = directory / "native-cli/receipt.json"
         print(json.dumps({"files": files, "verified": verified, "receipt": json.loads(receipt.read_text()) if receipt.exists() else None}))
     elif operation == "memory-home":
         member_id = int(sys.argv[3])
-        relative = f"bots/{member_id}/memory/reference-project-colour.md"
+        relative = f"bots/{member_id}/MEMORY.md"
         path = directory / relative
-        others = [str(found.relative_to(directory)) for found in directory.glob("bots/*/memory/reference-project-colour.md") if found != path]
-        if (directory / "shared/memory/reference-project-colour.md").exists():
-            others.append("shared/memory/reference-project-colour.md")
+        others = [str(found.relative_to(directory)) for found in directory.glob("bots/*/MEMORY.md") if found != path and "heliotrope" in found.read_text(encoding="utf-8")]
+        if (directory / "shared/USER.md").exists() and "heliotrope" in (directory / "shared/USER.md").read_text(encoding="utf-8"):
+            others.append("shared/USER.md")
         print(json.dumps({"path": relative, "exists": path.exists(), "body": path.read_text(encoding="utf-8") if path.exists() else "", "otherHomes": others}))
     elif operation == "snapshot":
         tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")]

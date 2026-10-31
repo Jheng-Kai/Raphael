@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
-from ..agent.cli.loop import APPROVE, MEMORY_TOOLS
+from ..agent.cli.loop import APPROVE
 from ..agent.harness_tools import definitions_for
 from ..agent.mcp_server import RaphaelMcp
 from ..agent.plugins import make_offer, tool_key
@@ -96,7 +96,7 @@ async def inventory(servers=()):
                 continue
             definition = worker_definition(name)["function"]
             register(builtin(name), name, definition["parameters"], role)
-        for definition in MEMORY_TOOLS + [APPROVE]:
+        for definition in [APPROVE]:
             function = definition["function"]
             register(builtin(function["name"]), function["name"], function["parameters"], role)
         for definition in computer_definitions():
@@ -139,7 +139,7 @@ async def inventory(servers=()):
             {"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}}]
         api = [*api, *conditional]
         api = [*api, *computer_definitions()]
-        mcp = RaphaelMcp(lambda: [*snapshot.definitions, *conditional, *MEMORY_TOOLS, APPROVE], None)
+        mcp = RaphaelMcp(lambda: [*snapshot.definitions, *conditional, APPROVE], None)
         listing = (await mcp._dispatch({"method": "tools/list"}))["result"]["tools"]
         for surface, definitions in (("api", [d["function"] for d in api]), ("mcp", listing)):
             for definition in definitions:

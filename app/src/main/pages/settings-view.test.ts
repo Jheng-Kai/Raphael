@@ -119,7 +119,7 @@ test("Telegram is in the 訊息平台 tab, and only there", () => {
 });
 
 test("the memory is in the 拉斐爾 tab, after its settings, and only there", () => {
-  const memory = { ...emptyMemoryView(), status: { memories: [], summary: null } };
+  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
   const agent = tab("agent", { memory });
   expect(agent).toContain("data-mem-section");
   expect(agent.indexOf("data-mem-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));
@@ -127,7 +127,7 @@ test("the memory is in the 拉斐爾 tab, after its settings, and only there", (
 });
 
 test("the safety rules are in the 拉斐爾 tab, after the memory and before 電腦操作, with no switch", () => {
-  const memory = { ...emptyMemoryView(), status: { memories: [], summary: null } };
+  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
   const rules = { ...emptyRulesView(), status: [{ id: 1, action: "付款結帳", verdict: "ask" as const, position: 1 }] };
   const agent = tab("agent", { memory, rules });
   expect(agent).toContain("<h2>安全規則</h2>");
@@ -138,10 +138,10 @@ test("the safety rules are in the 拉斐爾 tab, after the memory and before 電
   for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) expect(tab(id, { rules })).not.toContain("data-rules");
 });
 
-test("the memory is two sections: 共同記憶 first, then Raphael's own, each with its notes' move", () => {
-  const notes = { memories: [{ name: "user-city", description: "主人住台北", type: "user", origin: "told", updated: "", expires: null }], summary: null };
-  const memoryShared = { ...emptyMemoryView(), status: notes, expanded: true, space: "shared" as const, title: "共同記憶", moveTo: "移到 拉斐爾 的記憶" };
-  const memory = { ...emptyMemoryView(), status: notes, expanded: true, space: "own" as const, title: "拉斐爾 的記憶", moveTo: "移到共同記憶" };
+test("the memory is two documents: 共同記憶 first, then Raphael's own, each with its 編輯", () => {
+  const document = { text: "主人住台北\n", revision: "r", chars: 5, entries: 1, limit: 2200, summary: null };
+  const memoryShared = { ...emptyMemoryView(), status: document, space: "shared" as const, title: "共同記憶" };
+  const memory = { ...emptyMemoryView(), status: document, space: "own" as const, title: "拉斐爾 的記憶" };
   const agent = tab("agent", { memory, memoryShared });
   const shared = agent.indexOf('data-mem-space="shared"');
   const own = agent.indexOf('data-mem-space="own"');
@@ -149,13 +149,12 @@ test("the memory is two sections: 共同記憶 first, then Raphael's own, each w
   expect(own).toBeGreaterThan(shared);
   expect(agent).toContain('aria-label="共同記憶"');
   expect(agent).toContain('aria-label="拉斐爾 的記憶"');
-  // each note has its menu, a borderless more; the two lists' open notes have fields of their own
-  expect(agent.match(/data-mem="more"/g)).toHaveLength(2);
-  expect(agent).toContain('class="btn icon" aria-label="「主人住台北」的選項"');
+  expect(agent.match(/data-mem="edit"/g)).toHaveLength(2);
+  expect(agent.match(/class="mem-entry"/g)).toHaveLength(2);
 });
 
 test("服務 is in the 拉斐爾 tab, after its settings and before the memory, as a clean list of five rows", () => {
-  const memory = { ...emptyMemoryView(), status: { memories: [], summary: null } };
+  const memory = { ...emptyMemoryView(), status: { text: "", revision: "r", chars: 0, entries: 0, limit: 2200, summary: null } };
   const agent = tab("agent", { memory, services: emptyServicesView() });
   expect(agent).toContain("<h2>服務</h2>");
   expect(agent.indexOf("data-svc-section")).toBeGreaterThan(agent.indexOf('data-k="worker-cap"'));

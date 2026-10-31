@@ -379,8 +379,7 @@ Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280
 ## Memory growth native acceptance (phase 2, 2026-10-29)
 
 `memory-growth` sends 25 turns in the real isolated app with the fake brain,
-checks turn-one recall on turn 25 and a member-written memory in only that
-member home. Its implementation and selected memory-pane scenes are mapped in
+checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. Its implementation and selected memory-pane scenes are mapped in
 [Members](members.md). This is separate from live provider and design-judge acceptance.
 
 ## Owner round 7 contracts

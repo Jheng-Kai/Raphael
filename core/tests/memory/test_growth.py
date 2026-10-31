@@ -1,4 +1,4 @@
-"""Memory growth contracts: privacy, silent reads, bounded recall and owner review."""
+"""Memory growth contracts: privacy, silent reads and bounded recall."""
 
 import pytest
 
@@ -25,35 +25,30 @@ def test_new_tools_use_the_shared_harness_registry():
     assert {"memory_update", "memory_log", "session_search", "session_read"} <= DEFINITIONS.keys()
 
 
-async def test_autonomous_write_is_private_and_reads_never_notify(growing):
+async def test_a_daily_log_is_private_searchable_and_reads_never_notify(growing):
     memory, events = growing
-    result = memory.update_memory(2, {"op": "add", "name": "reference-review", "body": "Review uses amber.",
-                                      "space": "shared"})
-    assert result.ok
-    assert memory.store_for(2).get("reference-review")
-    assert not memory.shared.all()
+    assert memory.log_memory(2, {"body": "Review uses amber."}).ok
     assert events
     events.clear()
     for _ in range(3):
-        assert "amber" in str(memory.index(2))
+        assert "amber" not in str(memory.snapshot(2))  # a log is never in the prompt
         assert memory.session_search(2, "amber").data["hits"]
         assert "amber" in memory.recall(2, "amber")
-        assert memory.session_read(2, "own:memory/reference-review.md").ok
+        hit = memory.session_search(2, "amber").data["hits"][0]["id"]
+        assert memory.session_read(2, hit).ok
         assert not memory.session_search(3, "amber").data["hits"]
-        assert not memory.session_read(3, "own:memory/reference-review.md").ok
+        assert not memory.session_read(3, hit).ok
     assert events == []
 
 
-async def test_untrusted_write_waits_outside_home_for_owner(growing):
+async def test_a_log_written_after_outside_content_is_marked_and_read_back_as_untrusted(growing):
     memory, _ = growing
-    result = memory.update_memory(2, {"op": "add", "name": "reference-web", "body": "The result is amber."}, untrusted=True)
-    assert result.ok and result.data["pending"]
-    assert memory.store_for(2).all() == []
-    assert "amber" not in str(memory.index(2)) + memory.recall(2, "amber")
-    pending = result.data["pending"]
-    assert not memory.session_read(3, "own:" + pending).ok
-    assert memory.resolve_pending(2, pending, approve=True).ok
-    assert memory.store_for(2).get("reference-web")
+    assert memory.log_memory(2, {"body": "The page says the review passed."}, untrusted=True).ok
+    found = memory.session_search(2, "review")
+    assert found.untrusted and "（待確認）" in found.data["hits"][0]["text"]
+    assert memory.recall_result(2, "review")[1] is True
+    assert memory.log_memory(3, {"body": "The review passed."}).ok
+    assert not memory.session_search(3, "review").untrusted
 
 
 async def test_recall_finds_turn_one_at_turn_twenty_five_without_other_members(growing, history):
@@ -78,50 +73,16 @@ async def test_quick_context_keeps_complete_conversation_below_half_window(growi
     assert len(context.turns) == 24
 
 
-async def test_prompt_keeps_memory_bodies_and_topic_index_is_bounded(growing):
-    memory, _ = growing
-    for n in range(45):
-        assert memory.update_memory(0, {"op": "add", "name": f"reference-topic-{n}", "body": f"Distinct topic {n}." + "\nA useful detail." * 12}).ok
-    index = memory.index(0)
-    assert "Distinct topic 44" in str(index)
-    assert len(index.topics) <= 2000 and len(index.topics.splitlines()) <= 40
-    document = memory.homes.path(0, "MEMORY.md").read_text(encoding="utf-8")
-    assert len(document.splitlines()) <= 200 and len(document.encode("utf-8")) <= 24000
-    assert memory.session_read(0, "own:memory/archive.md").ok
-    assert "Distinct topic 0" in memory.recall(0, "Distinct topic 0")
-
-
-def test_production_capture_requires_reported_confidence():
-    from raphael_core.memory.reflection import parse_actions
-    assert parse_actions({"actions": [{"op": "ADD", "name": "reference-missing", "body": "A fact"}]}, require_confidence=True) == []
-
-
-async def test_replacement_expiry_and_pending_conflicts(growing):
-    memory, _ = growing
-    args = {"op": "add", "name": "reference-state", "body": "First result."}
-    assert memory.update_memory(1, args).ok
-    hashed = memory.session_read(1, "own:memory/reference-state.md").data["hash"]
-    pending = memory.update_memory(1, {**args, "op": "replace", "body": "Second result.", "expected_hash": hashed}, untrusted=True).data["pending"]
-    assert memory.resolve_pending(1, pending, approve=True).ok
-    assert memory.store_for(1).get("reference-state").body == "Second result."
-    pending = memory.update_memory(1, {**args, "op": "remove"}, untrusted=True).data["pending"]
-    proposal = next(item for item in memory.pending(1) if item["name"] == pending)
-    assert memory._pending_view(proposal)["body"] == "Second result."
-    assert memory.update_memory(1, {**args, "op": "supersede", "body": "Third result."}).ok
-    assert memory.resolve_pending(1, pending, approve=True).error == "changed"
-    assert memory.store_for(1).get("reference-state").body == "Third result."
-    assert memory.update_memory(1, {"op": "add", "name": "reference-expired", "body": "Expired fact.", "until": "2020-01-01"}).ok
-    assert "Expired fact" not in str(memory.index(1)) + memory.recall(1, "Expired fact")
-
-
 async def test_room_reads_exclude_own_private_facts_and_tool_body_is_bounded(growing, history):
     memory, events = growing
-    assert not memory.update_memory(1, {"op": "add", "name": "reference-long", "body": "x" * 1001}).ok
-    assert memory.update_memory(1, {"op": "add", "name": "reference-private", "body": "Private heliotrope."}).ok
+    assert not memory.log_memory(1, {"body": "x" * 1001}).ok
+    assert memory.log_memory(1, {"body": "Private heliotrope."}).ok
     history.add(session_id="s", member_id=1, question="Private heliotrope", prefix="", text="Private result", route="chat", status="done")
+    log = memory.session_search(1, "heliotrope").data["hits"]
+    assert any(hit["id"].startswith("own:") for hit in log)
     events.clear()
     assert not memory.session_search(1, "heliotrope", private=False).data["hits"]
-    assert not memory.session_read(1, "own:memory/reference-private.md", private=False).ok
+    assert not memory.session_read(1, next(hit["id"] for hit in log if hit["id"].startswith("own:")), private=False).ok
     assert memory.recall_result(1, "heliotrope", private=False)[0] == ""
     assert not events
 
@@ -159,32 +120,17 @@ async def test_private_capture_uses_member_brain_confidence_and_deduplication(gr
     from raphael_core.members.store import MemberStore
     memory, _ = growing
     member = MemberStore(conn).create_member(name="Alice", model="@local:memory")
-    action = {"op": "ADD", "name": "reference-progress", "type": "reference", "description": "Review result",
-              "body": "The member completed the review.", "origin": "inferred", "space": "shared", "confidence": 0.9}
-    model = FakeModel({"actions": [action, {**action, "name": "reference-low", "confidence": 0.5}]}, {"actions": [action]})
+    action = {"target": "memory", "action": "add", "content": "The member completed the review.", "old_text": "", "confidence": 0.9}
+    model = FakeModel({"actions": [action, {**action, "content": "A guess about something.", "confidence": 0.5}]}, {"actions": [action]})
     memory._base_client = model
     history.add(session_id="s", member_id=member.id, question="Review the project.", prefix="", text="Review complete.", route="chat", status="done")
     applied = await memory.reflect(member.id)
-    assert applied.written == ["reference-progress"]
-    assert memory.store_for(member.id).get("reference-progress") and memory.shared.all() == []
+    assert applied.written == ["memory"]
+    assert memory.own(member.id).read().strip() == "The member completed the review." and memory.shared.read() == ""
     assert model.calls[0]["model"] == "@local:memory" and model.calls[0]["fallbacks"] == []
     history.add(session_id="s", member_id=member.id, question="Review again.", prefix="", text="Same result.", route="chat", status="done")
-    assert not (await memory.reflect(member.id)).written
-
-
-async def test_external_capture_is_pending_and_owner_can_reject_it(growing, history):
-    from raphael_core.agent.history import Step
-    memory, _ = growing
-    memory._base_client = FakeModel({"actions": [{"op": "ADD", "name": "reference-result", "type": "reference",
-        "description": "Review result", "body": "The report is ready.", "origin": "inferred", "confidence": 0.9}]})
-    identifier = add_turn(history, "Read the report.", "The report is ready.")
-    history.add_steps(identifier, [Step(kind="tool", tool="web_read", server="Raphael", outcome="ok", ms=1)])
-    assert not (await memory.reflect()).written
-    assert not memory.store.all()
-    pending = memory.pending(0)
-    assert len(pending) == 1
-    assert memory.resolve_pending(0, pending[0]["name"], approve=False).ok
-    assert memory.pending(0) == [] and memory.store.all() == []
+    await memory.reflect(member.id)
+    assert memory.own(member.id).read().strip() == "The member completed the review."
 
 
 async def test_cli_capture_uses_toolless_subscription_loop(growing, monkeypatch):
@@ -211,24 +157,6 @@ async def test_cli_capture_uses_toolless_subscription_loop(growing, monkeypatch)
     assert calls[0]["brains"] is memory._cli_brains and calls[0]["resume_session"] is False
 
 
-async def test_daily_tidy_can_split_a_single_mixed_topic(growing):
-    from raphael_core.memory.reflection import Reflector
-    memory, _ = growing
-    store = memory.store_for(1)
-    assert memory.update_memory(1, {"op": "add", "name": "reference-mixed", "body": "Build uses amber. Review uses violet."}).ok
-    model = FakeModel({"actions": [
-        {"op": "ADD", "name": "reference-build", "type": "reference", "description": "Build colour",
-         "body": "Build uses amber.", "origin": "inferred", "confidence": 0.9},
-        {"op": "ADD", "name": "reference-review", "type": "reference", "description": "Review colour",
-         "body": "Review uses violet.", "origin": "inferred", "confidence": 0.9},
-        {"op": "DELETE", "name": "reference-mixed", "confidence": 0.9},
-    ]})
-    result = await Reflector(model).consolidate(store, model="fake/brain", ledger=memory.ledger(), split=True)
-    assert set(result.written) == {"reference-build", "reference-review"}
-    assert store.get("reference-mixed") is None
-    assert {note.body for note in store.all()} == {"Build uses amber.", "Review uses violet."}
-
-
 async def test_first_bots_cli_brain_handles_background_consolidation_without_api(growing, monkeypatch):
     from types import SimpleNamespace
     from raphael_core.agent.cli import loop as cli
@@ -236,7 +164,7 @@ async def test_first_bots_cli_brain_handles_background_consolidation_without_api
     memory, _ = growing
     memory._settings.set("agent_model", "cli:codex")
     memory._keys.set("api-key-that-must-not-be-used")
-    memory.update_memory(0, {"op": "add", "name": "reference-build", "body": "Build uses amber."})
+    memory.own(0).edit_document("\n\n".join(f"Build {n} of the project uses the amber pipeline here" for n in range(40)), None)
     calls = []
 
     class Brains:
@@ -284,18 +212,3 @@ async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing,
     monkeypatch.setattr(memory._base_client, "complete_json", forbidden)
     with pytest.raises(MemoryBrainError):
         await MemoryBrain(memory, 1).complete_json(model="cli:codex", system="Tidy", user="Private notes", schema={})
-
-
-async def test_daily_split_keeps_source_when_a_replacement_is_refused(growing):
-    from raphael_core.memory.reflection import Reflector
-    memory, _ = growing
-    store = memory.store_for(1)
-    assert memory.update_memory(1, {"op": "add", "name": "reference-mixed", "body": "Build uses amber. Review uses violet."}).ok
-    model = FakeModel({"actions": [
-        {"op": "ADD", "name": "reference-build", "type": "reference", "description": "Build colour",
-         "body": "x" * 1201, "origin": "inferred", "confidence": 0.9},
-        {"op": "DELETE", "name": "reference-mixed", "confidence": 0.9},
-    ]})
-    result = await Reflector(model).consolidate(store, model="fake/brain", ledger=memory.ledger(), split=True)
-    assert result.refused
-    assert store.get("reference-mixed").body == "Build uses amber. Review uses violet."
