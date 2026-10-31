@@ -924,6 +924,7 @@ class App(Router):
             notify=self.notify,
             connections=self.integrations.connections,
         )
+        self.members.use_event_tools(self.gate)
         self.members.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
                                   notify=self.notify, transcribe=self._transcribe_from_messaging,

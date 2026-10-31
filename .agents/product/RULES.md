@@ -1,5 +1,12 @@
 # Raphael product rules
 
+## Connected-app event routines (2026-11-01)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-EV-01 | 2026-11-01 | A routine has exactly one schedule or connected-app when. Poll only a currently enabled read tool of the named app through the production gate, without a model while idle. The first successful poll only records existing ids; pending and fired receipts survive restart, with at most five tasks dispatched per poll. | pytest | hard | core/tests/members/test_events.py::test_disk_restart_keeps_baseline_and_pending_burst; core/tests/integrations/test_event_routines.py::test_composio_event_uses_named_app_grants_and_never_calls_a_write |
+| R-EV-02 | 2026-11-01 | A match is untrusted external data on the existing member task engine. Revocation during a read prevents dispatch; a missing connection stops with its known name and the existing repair place. Event rows share the routine switch and show condition, last checked and last fired without raw JSON. | pytest, vitest, look | hard | core/tests/members/test_events.py::test_revoked_connection_during_read_cannot_dispatch; core/tests/background/test_local_commands.py::test_event_item_requires_command_confirmation_even_when_local_commands_are_always_allowed; app/src/main/member-profile.test.ts::an event routine edits a readable filter without losing its read tool arguments; features/automations.md (routine-event-row, routine-event-edit, routine-event-saved, routine-event-missing) |
+
 ## Owner-PC commands (2026-11-01)
 
 | ID | Date | Rule | Check | Severity | Evidence |

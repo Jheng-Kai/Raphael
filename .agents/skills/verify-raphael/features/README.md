@@ -1,5 +1,15 @@
 # Raphael feature map
 
+## Connected-app event routines (2026-11-01)
+
+See [Automations](automations.md#connected-app-event-routines-2026-11-01).
+Conversation routine tools accept when instead of schedule; existing member
+routine rows/editors show the condition, check/fire times and existing switch.
+Selected scenes: routine-event-row, routine-event-edit, routine-event-saved,
+routine-event-missing, routine-event-reconnect, routine-event-profile,
+details-routines and automation-edit. Use both themes at
+1120,720,1920x1080. Network, cargo, native and judge are prohibited by the brief.
+
 ## Owner-PC commands (2026-11-01)
 
 See [member-computer.md](member-computer.md#owner-pc-commands-2026-11-01) for the

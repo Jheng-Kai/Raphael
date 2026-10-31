@@ -1116,6 +1116,8 @@ class BackgroundService:
             cost_cap=self._cost_cap,
             calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
         )
+        if task.routine_id is not None and task.session_id.startswith(f"routine:{task.routine_id}:event:"):
+            run._memory_untrusted = True
         from ..computer.vm_tools import vm_scope
         run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), language=language)
         if recovered is not None:

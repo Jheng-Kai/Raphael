@@ -4,6 +4,13 @@ import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
   ...missingZh,
+  "auto.onEvent": "收到新項目時",
+  "auto.triggerSummary": "{p0} 有新項目，且「{p1}」是「{p2}」",
+  "auto.triggerStatus": "上次檢查：{p0}\n上次觸發：{p1}",
+  "auto.notYet": "尚未",
+  "auto.triggerFilter": "只處理符合此條件的項目",
+  "auto.triggerHelp": "成員透過已連接 App 定期檢查；首次只記錄現有項目。變更條件後會重新記錄基準。",
+  "auto.connections": "開啟連接設定",
   "desktop.open": "即時桌面",
   "desktop.expand": "展開",
   "desktop.done": "我完成了",

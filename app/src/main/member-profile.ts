@@ -8,7 +8,7 @@ import { t } from "./i18n";
 import { groupChoices, groupFromValue, groupValue, openAvatarPicker, openDialog, type Dialog } from "./member-dialogs";
 import { mountMemberResources, type ResourceEditor } from "./member-profile-resources";
 import { memberPreset, presetChoices, presetCommand, randomMemberName, type ProfilePreset } from "./member-profile-presets";
-import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, scheduleText } from "./members";
+import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, routineText, routineStatus } from "./members";
 import { MEMORY_MAX, memoryError, type MemoryDocument } from "./memory-view";
 import type { Member, MemberGroup, MemberPatch, Routine } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tabs, tg, toaster } from "./ui";
@@ -205,7 +205,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       routines = (await api.routinesList(member.id)).routines;
       if (!alive) return;
       routinesLoaded = true;
-      list.innerHTML = routines.length ? routines.map(r => `<div class="mp-resource"><div><b>${esc(r.title)}</b><p>${esc(scheduleText(r.schedule))}</p></div>${tg(r.enabled, r.title, ` data-dlg="routine-toggle" data-id="${r.id}"`)}${iconButton("more", t("members.more", { p0: r.title }), ` data-dlg="routine-menu" data-id="${r.id}" aria-haspopup="menu" aria-expanded="false"`)}</div>`).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
+      list.innerHTML = routines.length ? routines.map(r => `<div class="mp-resource"><div><b>${esc(r.title)}</b><p>${esc(routineText(r))}</p>${r.when ? `<p>${esc(routineStatus(r))}</p>` : ""}</div>${tg(r.enabled, r.title, ` data-dlg="routine-toggle" data-id="${r.id}"`)}${iconButton("more", t("members.more", { p0: r.title }), ` data-dlg="routine-menu" data-id="${r.id}" aria-haspopup="menu" aria-expanded="false"`)}</div>`).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
     } catch (error) { if (alive) { list.innerHTML = btn(esc(t("members.profile.retry")), "sm", ' data-dlg="routine-retry"'); toaster.info(describeError(error)); } }
   }
   function routineForm(existing?: Routine): void {

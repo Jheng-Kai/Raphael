@@ -165,7 +165,11 @@ def routine_view(routine: Routine) -> dict[str, Any]:
         "member_id": routine.member_id,
         "title": routine.title,
         "prompt": routine.prompt,
-        "schedule": routine.schedule.to_json(),
+        "schedule": routine.schedule.to_json() if routine.schedule else None,
+        "when": routine.when,
+        "app_name": routine.app_name,
+        "last_checked": routine.last_checked_ms,
+        "last_error": routine.last_error,
         "enabled": routine.enabled,
         "last_run": routine.last_run_ms,
         "next_run": routine.next_run_ms,
@@ -268,6 +272,8 @@ class MembersService:
         self._pictures: dict[Path, _Picture] = {}
         self._viewing: int | None = None
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
+        self._events = None
+        self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
         self.sync_homes()
         if memory is not None:
@@ -1357,17 +1363,25 @@ class MembersService:
         total = self._conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine_id,)).fetchone()[0]
         return {"runs": runs, "total": total}
 
+    def _event_name(self, when) -> str:
+        app = when.get("app") if isinstance(when, dict) else None
+        return next((c.get("name", app) for c in self._connections() if c["id"] == app), app or "")
+
     async def _routine_create(self, params: dict) -> dict:
         member_id = self._routine_member(params)
+        if params.get("schedule") is not None and params.get("when") is not None:
+            raise invalid_params("Choose either a schedule or when")
         try:
-            schedule = clean_schedule(params.get("schedule"))
+            schedule = clean_schedule(params.get("schedule")) if params.get("when") is None else None
             routine = self.store.create_routine(
                 member_id=member_id,
                 title=params.get("title"),
                 prompt=params.get("prompt"),
-                schedule=schedule.to_json(),
+                schedule=params.get("schedule") if schedule else None,
+                when=params.get("when"),
+                app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled", True),
-                next_run_ms=self._next(schedule),
+                next_run_ms=self._next(schedule) if schedule else self._now_ms(),
             )
         except MemberError as error:
             raise _rpc_error(error) from None
@@ -1382,6 +1396,8 @@ class MembersService:
                 title=params.get("title"),
                 prompt=params.get("prompt"),
                 schedule=params.get("schedule"),
+                when=params.get("when"),
+                app_name=self._event_name(params.get("when")),
                 enabled=params.get("enabled"),
                 next_run=self._next,
             )
@@ -1406,6 +1422,17 @@ class MembersService:
 
     # --- the scheduler -------------------------------------------------------------------------------
 
+    def use_event_tools(self, gate) -> None:
+        from .events import EventPoller
+        self._events = EventPoller(self, gate)
+
+    async def poll_events(self) -> None:
+        if self._events is not None:
+            try:
+                await self._events.poll()
+            except Exception as exc:
+                logger.warning("The event routines could not be checked: %s", type(exc).__name__)
+
     def start(self) -> None:
         """Tick from now on, every TICK_S, the first time at once (a routine that was missed while
         the core was not running). Needs the running loop; does nothing without one, or twice."""
@@ -1421,6 +1448,8 @@ class MembersService:
         while True:
             try:
                 self.tick()
+                if self._event_poll_task is None or self._event_poll_task.done():
+                    self._event_poll_task = asyncio.create_task(self.poll_events())
             except Exception as exc:  # one bad tick must not stop the routines for good
                 logger.warning("The routines could not be run: %s", type(exc).__name__)
             await asyncio.sleep(self._tick_s)
@@ -1457,14 +1486,14 @@ class MembersService:
             ran.append(routine.id)
         return ran
 
-    def _run(self, routine: Routine) -> None:
+    def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
         speaker = self.store.speaker(routine.member_id)
         if speaker is None:
             return
         language = normalize_language(self._language())
-        session_id = f"routine:{routine.id}"
+        session_id = session or f"routine:{routine.id}"
         turn_id = self._history.add(
             session_id=session_id,
             question=routine.title,
@@ -1482,10 +1511,11 @@ class MembersService:
                 (routine.id, routine.next_run_ms, self._now_ms(), turn_id),
             )
         model = model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
+        task_id = None
         try:
             task_id = self._background.submit(
                 session_id=session_id,
-                text=routine.prompt,
+                text=routine.prompt if text is None else text,
                 language=language,
                 model=model,
                 member_id=routine.member_id,
@@ -1502,6 +1532,7 @@ class MembersService:
         self.turn_arrived(turn_id)
         if self._notify is not None:
             self._notify("agent.turn", {"turn_id": turn_id, "member_id": routine.member_id})
+        return task_id
 
     async def aclose(self) -> None:
         for task in self._speech_tasks:
@@ -1511,3 +1542,7 @@ class MembersService:
         if ticking is not None and not ticking.done():
             ticking.cancel()
             await asyncio.gather(ticking, return_exceptions=True)
+        polling, self._event_poll_task = self._event_poll_task, None
+        if polling is not None:
+            polling.cancel()
+            await asyncio.gather(polling, return_exceptions=True)

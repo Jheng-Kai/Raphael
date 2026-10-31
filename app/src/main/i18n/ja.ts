@@ -5,6 +5,13 @@ import type { Messages } from './zh-TW';
 
 export const ja = {
   ...missingJa,
+  "auto.onEvent": "新しい項目が届いたとき",
+  "auto.triggerSummary": "{p0} の新しい項目で「{p1}」が「{p2}」",
+  "auto.triggerStatus": "前回の確認：{p0}\n前回の実行：{p1}",
+  "auto.notYet": "未実行",
+  "auto.triggerFilter": "この値に一致する項目のみ",
+  "auto.triggerHelp": "メンバーが接続済みアプリを定期的に確認します。初回は既存の項目を記録します。条件を変えると基準を記録し直します。",
+  "auto.connections": "接続設定を開く",
   "desktop.open": "ライブデスクトップ",
   "desktop.expand": "拡大",
   "desktop.done": "完了しました",

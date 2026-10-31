@@ -5,6 +5,13 @@ import type { Messages } from './zh-TW';
 
 export const en = {
   ...missingEn,
+  "auto.onEvent": "When a new item arrives",
+  "auto.triggerSummary": "New items in {p0} where {p1} is {p2}",
+  "auto.triggerStatus": "Last checked: {p0}\nLast fired: {p1}",
+  "auto.notYet": "Not yet",
+  "auto.triggerFilter": "Only items matching this value",
+  "auto.triggerHelp": "Your member checks the connected app periodically. The first check records existing items. Changing the filter records a new baseline.",
+  "auto.connections": "Open Connections",
   "desktop.open": "Live desktop",
   "desktop.expand": "Expand",
   "desktop.done": "I'm done",

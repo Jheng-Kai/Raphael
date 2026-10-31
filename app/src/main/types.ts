@@ -997,12 +997,22 @@ export interface RoomExchange {
 }
 
 /** A routine of `routines.list`. Times are ms; null for never. */
+export interface RoutineWhen {
+  app: string;
+  event: { tool: string; arguments: Record<string, unknown>; items: string; id: string };
+  filter: { field: string; equals: string };
+}
+
 export interface Routine {
   id: number;
   member_id: number;
   title: string;
   prompt: string;
-  schedule: RoutineSchedule;
+  schedule: RoutineSchedule | null;
+  when?: RoutineWhen | null;
+  app_name?: string;
+  last_checked?: number | null;
+  last_error?: string;
   enabled: boolean;
   last_run: number | null;
   next_run: number | null;

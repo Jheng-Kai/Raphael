@@ -8,6 +8,9 @@
 .au-field { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; margin: 0; }
 .au-field > .sel { width: 100%; max-width: 100%; justify-content: space-between; }
 .au-field h3, .au-label { font-size: var(--fs-xs); font-weight: 600; margin: 0; }
+.au-event p { margin: 0; overflow-wrap: anywhere; }
+.au-event .note { white-space: pre-line; }
+.au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .au-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-xs); }
 .au-time.mb-fin { width: 90px; font-variant-numeric: tabular-nums; }
 .au-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }

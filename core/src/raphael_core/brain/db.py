@@ -1145,6 +1145,28 @@ PRAGMA user_version = 48;
 COMMIT;
 """
 
+_MIGRATIONS[49] = """
+BEGIN;
+ALTER TABLE routines ADD COLUMN when_json TEXT;
+ALTER TABLE routines ADD COLUMN app_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN last_checked_ms INTEGER;
+ALTER TABLE routines ADD COLUMN last_error TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN poll_initialized INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE routines ADD COLUMN poll_failures INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE routine_receipts (
+  routine_id INTEGER NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL,
+  item TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL,
+  PRIMARY KEY(routine_id,item_id)
+);
+CREATE TRIGGER clear_routine_receipts AFTER DELETE ON routines BEGIN
+  DELETE FROM routine_receipts WHERE routine_id=OLD.id;
+END;
+PRAGMA user_version = 49;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

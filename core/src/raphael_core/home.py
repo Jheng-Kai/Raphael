@@ -240,6 +240,8 @@ class HomeOverview:
 
     def _due(self, routine, start: int, end: int, zone: tzinfo | None) -> list[int]:
         """When a routine runs or has run in a period: what its schedule says from then on, and its past runs."""
+        if routine.schedule is None:
+            return []
         completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]
         remaining = CALENDAR_LIMIT if routine.schedule.max_runs is None else max(0, routine.schedule.max_runs - completed)
         due = next_run(routine.schedule, start - 1, tz=zone) if routine.schedule.max_runs is None else routine.next_run_ms
@@ -368,7 +370,7 @@ class HomeOverview:
                 if month_start <= at < month_end:
                     month_day({**value, "at_ms": at, "all_day": True}, day.date().isoformat())
         for routine in self.members.store.routines():
-            if not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
+            if routine.schedule is None or not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
                 continue
             due = routine.next_run_ms
             completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]

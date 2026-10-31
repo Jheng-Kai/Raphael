@@ -10,8 +10,9 @@
 import { slimeFaceHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { catalogs, t } from "./i18n";
+import { formatClock, formatDate } from "./format";
 import type { MessageKey } from "./i18n/zh-TW";
-import type { Member, MemberGroup, MemberSource, MembersList, RoutineSchedule } from "./types";
+import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
 
 /** Raphael's id among the members: member 0 everywhere in the core's API. */
 export const RAPHAEL_ID = 0;
@@ -180,7 +181,8 @@ export const dayName = (n: number): string => tr(DAY_KEYS[((n % 7) + 7) % 7]);
 export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
 
 /** How a routine's schedule is said in a row: 「每天 09:00」, 「每週日 20:00」, 「每 3 小時」. */
-export function scheduleText(schedule: RoutineSchedule): string {
+export function scheduleText(schedule: RoutineSchedule | null): string {
+  if (!schedule) return t("auto.onEvent");
   if (schedule.kind === "once") return t("auto.onceAt", { p0: schedule.start_date ?? "", p1: schedule.time });
   if (schedule.kind === "weekdays") return t("auto.weekdaysAt", { p0: schedule.time });
   if (schedule.kind === "daily") return t("members.dailyAt", { p0: schedule.time });
@@ -189,6 +191,17 @@ export function scheduleText(schedule: RoutineSchedule): string {
     return t("members.weeklyAt", { p0: days, p1: schedule.time });
   }
   return schedule.hours === 1 ? t("members.everyHour") : t("members.everyHours", { p0: schedule.hours });
+}
+
+export function routineText(routine: Routine): string {
+  const when = routine.when;
+  return when ? t("auto.triggerSummary", { p0: routine.app_name || when.app, p1: when.filter.field, p2: when.filter.equals }) : scheduleText(routine.schedule);
+}
+
+export function routineStatus(routine: Routine): string {
+  if (!routine.when) return "";
+  const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
+  return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }
 
 /** The intervals the 每隔幾小時 dropdown offers, in hours. */
