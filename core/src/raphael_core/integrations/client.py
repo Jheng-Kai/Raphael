@@ -30,6 +30,7 @@ not before. Nothing here logs a command, an address, a value, an argument or a r
 """
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -37,6 +38,7 @@ import os
 import weakref
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -73,6 +75,9 @@ MAX_RESULT_CHARS = 8000
 MAX_TOOLS = 200
 MAX_PAGES = 10
 
+# Page-originated calls need a fresh server declaration, even when a model's pool is warm.
+APP_TOOL_CALL = ContextVar("raphael_app_tool_call", default=False)
+
 KINDS = (
     "not_found",
     "timeout",
@@ -82,6 +87,7 @@ KINDS = (
     "missing_secret",
     "denied",
     "gone",
+    "tool_not_visible",
     "cancelled",  # the call was sent and the connection ended: it may have been made
     "error",
 )
@@ -119,6 +125,8 @@ class CallOutcome:
     fresh: ToolRecord | None = None
     # The whole list the connection read for this call, to be compared with the saved one.
     listed: list[ToolRecord] | None = None
+    page: dict | None = None
+    mcp_result: dict | None = None
 
 
 @dataclass
@@ -315,6 +323,7 @@ class McpConnector:
                     getattr(annotations, "read_only_hint", None),
                     getattr(annotations, "destructive_hint", None),
                     getattr(item, "title", None) or getattr(annotations, "title", None),
+                    getattr(item, "meta", None) or getattr(item, "_meta", None),
                 )
                 if record is not None and all(record.name != other.name for other in tools):
                     tools.append(record)
@@ -407,6 +416,8 @@ class McpConnector:
         there is none, with the tool list read then); without one the connection is made for this
         call alone and closed after it."""
         secrets = self._secrets(server)
+        if APP_TOOL_CALL.get():
+            pool = None
         try:
             async with asyncio.timeout(timeout_s):
                 await self._ready()
@@ -425,9 +436,35 @@ class McpConnector:
                         current = next((t for t in listed if t.name == tool), None)
                         if current is None:
                             raise McpFailure("gone")
+                        if APP_TOOL_CALL.get() and "app" not in current.ui.get("visibility", ["model", "app"]):
+                            raise McpFailure("tool_not_visible")
                         result = await client.call_tool(tool, arguments)
         except Exception as exc:
             raise _failure("tool call", exc) from None
+        page = None
+        uri = current.ui.get("resourceUri")
+        if isinstance(uri, str) and uri.startswith("ui://") and len(uri) <= 2048:
+            # A pooled tool connection may be busy; the read still goes to exactly this server.
+            try:
+                async with asyncio.timeout(timeout_s):
+                    async with self._open(server, secrets) as client:
+                        resource = await client.read_resource(uri)
+                contents = getattr(resource, "contents", [])
+                item = next((item for item in contents if str(getattr(item, "uri", "")) == uri), None)
+                if item is not None and getattr(item, "mime_type", getattr(item, "mimeType", None)) == "text/html;profile=mcp-app":
+                    html = getattr(item, "text", None)
+                    blob = getattr(item, "blob", None)
+                    if html is None and isinstance(blob, str) and len(blob) <= 350000:
+                        html = base64.b64decode(blob, validate=True).decode("utf-8")
+                    if isinstance(html, str):
+                        meta = getattr(item, "meta", None) or getattr(item, "_meta", None) or {}
+                        ui = meta.get("ui", {}) if isinstance(meta, dict) else {}
+                        page = {"html": html, "title": (current.title or current.name)[:80], "server": server.id,
+                                "tool": current.name, "tool_input": arguments,
+                                "tool_result": result_payload(result), "network": ui.get("csp", {}) if isinstance(ui, dict) else {}}
+            except Exception as exc:
+                # A missing view must not replace a tool's normal result, or leak its failure message.
+                logger.warning("A plugin page could not be read: %s", type(exc).__name__)
         text, truncated = render_result(result, server.result_size_limit)
         return CallOutcome(
             text=text,
@@ -439,7 +476,29 @@ class McpConnector:
             if listed is not None and expected is not None and current.fingerprint != expected
             else None,
             listed=listed,
+            page=page,
+            mcp_result=result_payload(result),
         )
+
+
+def result_payload(result):
+    """The bounded public MCP result for the window bridge, never diagnostics."""
+    content = []
+    for item in getattr(result, "content", []) or []:
+        if hasattr(item, "model_dump"):
+            content.append(item.model_dump(by_alias=True, exclude_none=True, mode="json"))
+        elif isinstance(item, dict):
+            content.append(item)
+        else:
+            content.append(vars(item))
+    payload = {"content": content, "isError": bool(getattr(result, "is_error", False))}
+    structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        payload["structuredContent"] = structured
+    meta = getattr(result, "meta", None) or getattr(result, "_meta", None)
+    if isinstance(meta, dict):
+        payload["_meta"] = meta
+    return payload
 
 
 def render_result(result: Any, limit: int = MAX_RESULT_CHARS) -> tuple[str, bool]:

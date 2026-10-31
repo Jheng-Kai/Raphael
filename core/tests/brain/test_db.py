@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 45
+LATEST = 46
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -475,6 +475,15 @@ SCHEMA_V44 = {**SCHEMA_V43, "rooms": [*SCHEMA_V43["rooms"], "read_message_id INT
 SCHEMA_V45 = {**SCHEMA_V44, "computer_grants": [
     "member_id INTEGER PK", "granted INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
 
+# Schema v46 keeps conversation pages and at most ten revisions of each.
+SCHEMA_V46 = {**SCHEMA_V45, "pages": [
+    "id TEXT PK", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL", "conversation_id INTEGER",
+    "title TEXT NOT NULL", "html TEXT NOT NULL", "fallback TEXT NOT NULL", "height INTEGER NOT NULL",
+    "rev INTEGER NOT NULL", "source TEXT NOT NULL", "server TEXT", "tool TEXT", "tool_input TEXT NOT NULL",
+    "tool_result TEXT NOT NULL", "network TEXT NOT NULL", "created_at_ms INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"],
+    "page_revisions": ["page_id TEXT PK NOT NULL", "rev INTEGER PK NOT NULL", "title TEXT NOT NULL",
+                       "html TEXT NOT NULL", "at_ms INTEGER NOT NULL"]}
+
 
 
 def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):
@@ -594,7 +603,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V45) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V46) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -608,7 +617,7 @@ def test_connect_creates_the_latest_schema(conn):
         "worker_questions_task",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V45.items():
+    for table, columns in SCHEMA_V46.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

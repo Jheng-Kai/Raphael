@@ -1,7 +1,7 @@
 # Third-party notices
 
 Raphael is MIT licensed. The following separately licensed work is used for the
-optional Docker desktop. No OpenMausBot `enterprise/` code is included.
+optional Docker desktop and conversation pages. No OpenMausBot `enterprise/` code is included.
 
 ## OpenMausBot (Apache-2.0)
 
@@ -14,6 +14,13 @@ Upstream: https://github.com/milind-soni/OpenMausBot, revision
 
 Modified ports and adaptations, with upstream file names:
 
+- `core/src/raphael_core/agent/pages.py`: Python adaptation of the HTML limits,
+  bounded revision history, CDN CSP allowlist and document preamble handling from
+  `shared/app.ts`, `shared/app-frame/csp.ts`, `shared/app-frame/document.ts`
+  and `server/chat-apps.ts`. Helper messages and MCP resource/visibility handling
+  in `integrations/client.py`, `integrations/service.py` and `connectors/mcp.py`
+  follow the contracts in `shared/app-frame/bridge.ts` and `server/chat-apps-mcp.ts`.
+  Raphael uses its own loopback HTTP origin, storage and existing permission gate.
 - `core/src/raphael_core/computer/image/Dockerfile`: port of
   `server/container-computer.ts::managedImageDockerfile()`, including image,
   wheel and font pins, profile preparation and supervisord startup. Paths and

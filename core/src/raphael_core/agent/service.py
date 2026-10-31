@@ -125,6 +125,7 @@ import re
 import sqlite3
 import time
 import unicodedata
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, tzinfo
@@ -179,6 +180,7 @@ from .quota import Quotas
 from .quotes import quote_from_wire
 from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
+from .pages import Pages, PageError
 from .harness_tools import (
     CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, HarnessToolError,
     routine_event, tool as harness_tool,
@@ -443,6 +445,7 @@ class _Ask:
     # ledger, and its turn costs only what was added.
     cost_base: float = 0.0
     turn_id: int = 0
+    page_call: str | None = None
     recorded_cost: float = 0.0
     recorded_steps: int = 0
     replies: list[str] = field(default_factory=list)
@@ -741,6 +744,8 @@ class AgentService:
         self._metrics_conn = conn
         self._spend = SpendTracker(conn, now_ms, tz)
         self._history = AgentHistory(conn, now_ms)
+        self.pages = Pages(conn, notify=notify, now_ms=now_ms)
+        self.pages.tool_call = self._page_tool_call
         self.conversations = Conversations(conn, now_ms)
         self.quotas = Quotas(conn, now_ms, notify)
         self._named_conversations: dict[int, Conversation] = {}
@@ -833,6 +838,7 @@ class AgentService:
         }
         for method, handler in methods.items():
             router.register(method, handler)
+        self.pages.register(router)
 
     async def _allowances(self, params: dict) -> dict:
         from .cli.allowances import cached_allowances, read_allowances
@@ -895,6 +901,7 @@ class AgentService:
     async def aclose(self) -> None:
         """End the requests being thought about and close the HTTP client of the tools. A fold of
         the conversation that runs is ended too (the memory's own, by the memory)."""
+        await self.pages.host.aclose()
         await asyncio.gather(*(loop.aclose() for loop in self._cli_loops))
         await self._cli_brains.aclose()
         if self._memory is None:
@@ -2362,7 +2369,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("routine_list", "team_overview", "show", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
+            if tool.key in ("routine_list", "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2390,6 +2397,13 @@ class AgentService:
         steps: list[Step] | None = None,
     ) -> ToolResult:
         from ..computer.vm_tools import vm_scope
+        if ask.page_call:
+            try:
+                self._page_tool(ask.page_call, call.tool.name, ask.speaker)
+            except RpcError as error:
+                kind = (error.data or {}).get("kind", "blocked")
+                self._gate.record_unrun(call.tool.key, outcome="blocked")
+                return ToolResult(_label(call), False, None, kind)
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id), turn_id=ask.turn_id,
                       private=ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER,
                       task=self._inflight.get(ask.session_id)):
@@ -2468,7 +2482,7 @@ class AgentService:
             return await self._harness_call(ask, call, approval, action, steps=steps)
         if call.tool.key in TEAM_TOOLS:
             return await self._team_call(ask, call, ledger, approval=approval, action=action, steps=steps)
-        return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps)
+        return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps, ask=ask)
 
     def _cli_memory_call(self, ask: _Ask, call: PlannedCall, steps: list[Step] | None, approval: Approval | None, action: Action | None) -> ToolResult:
         from .answers import parse_reply
@@ -2527,6 +2541,8 @@ class AgentService:
                 data = self._show_secret(ask, args)
             elif name == EMAIL_DRAFT:
                 data = self._show_draft(ask, args)
+            elif name in ("show_page", "update_page"):
+                data = self._show_page(ask, name, args)
             elif name in ("self_check", "raphael_help"):
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}
@@ -2556,6 +2572,8 @@ class AgentService:
             else:
                 raise HarnessToolError("unknown_tool")
             result = ToolResult(name, True, data)
+        except PageError as error:
+            result = ToolResult(name, False, None, error.kind, instruction=str(error))
         except HarnessToolError as error:
             result = ToolResult(name, False, None, str(error), instruction=_HARNESS_NOTES.get(str(error)))
         except RpcError as error:
@@ -2569,6 +2587,67 @@ class AgentService:
         self._gate.record_builtin(name, outcome="ok" if result.ok else "error",
                                   approver="auto" if approval is None else "user")
         return result
+
+    def _show_page(self, ask: _Ask, name: str, args: Mapping[str, Any]) -> dict:
+        if not ask.turn_id or ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER:
+            raise PageError("private_only", "Pages need the owner's private chat at this computer; answer in text here")
+        if name == "show_page":
+            page = self.pages.store.write(turn_id=ask.turn_id, member_id=ask.speaker.id,
+                conversation_id=ask.conversation_id, title=args.get("title"), html=args.get("html"),
+                fallback_text=args.get("fallback_text", ""), height=args.get("height", 320))
+        else:
+            page_id = args.get("page_id")
+            page = self.pages.store.get(page_id) if isinstance(page_id, str) else None
+            if page is None or page["member_id"] != ask.speaker.id or page["conversation_id"] != ask.conversation_id:
+                raise PageError("gone", "There is no page with that id in this conversation; use show_page")
+            if page["source"] != "html":
+                raise PageError("not_html", "Plugin pages cannot be replaced; use show_page for your own page")
+            page = self.pages.store.update(page_id, args.get("html"), args.get("title"))
+        self.pages.changed(page)
+        return {"page_id": page["id"], "rev": page["rev"], "note": "The owner can see the page in this conversation."}
+
+    def _page_tool(self, page_id, name, speaker):
+        page = self.pages.of({"id": page_id})
+        speaker = self._speaker(page["member_id"])
+        if speaker is None:
+            raise RpcError(1005, "The page's member is gone", {"kind": "page_gone"})
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", name):
+            raise invalid_params("tool must be an unqualified name on the page's own server")
+        resolve = getattr(self._plugins, "page_tool", None)
+        if resolve is None:
+            raise RpcError(1005, "The page's plugin server is unavailable", {"kind": "server_removed", "server": page["server"]})
+        tool = resolve(page["server"], name)
+        if not speaker.uses_plugin(tool.key):
+            raise RpcError(1005, "This member cannot use this tool", {"kind": "tool_disabled"})
+        return tool
+
+    async def _page_tool_call(self, page, params):
+        speaker = self._speaker(page["member_id"])
+        if speaker is None:
+            raise RpcError(1005, "The page's member is gone", {"kind": "page_gone"})
+        tool = self._page_tool(page["id"], params.get("tool"), speaker)
+        arguments = params.get("arguments", {})
+        if not isinstance(arguments, dict) or len(json.dumps(arguments).encode("utf-8")) > 16000:
+            raise invalid_params("arguments must be an object of at most 16000 bytes")
+        ask = _Ask(session_id="page-" + uuid.uuid4().hex, text=tool.name, language=self._last_language,
+                   conversation_id=page["conversation_id"], source="app", speaker=speaker, page_call=page["id"])
+        ledger = Ledger(self._spend)
+        self._record(ask, "answer", "", "", "running", None, ledger)
+        result = await self._carry_out(ask, [PlannedCall(tool, arguments)], [], ledger)
+        if isinstance(result, dict):
+            return result
+        self._history.add_steps(ask.turn_id, ask.steps)
+        return self._page_result(ask, result[-1])
+
+    def _page_result(self, ask, result):
+        # Finish without asking a brain to narrate the app's RPC response.
+        turn = self._history.get(ask.turn_id)
+        if turn is not None:
+            with self._conn:
+                self._conn.execute("UPDATE agent_turns SET status=? WHERE id=?", ("done" if result.ok else "error", ask.turn_id))
+            self._turn_changed(ask.turn_id, ask.speaker.id)
+        return {"status": "done" if result.ok else "error", "prefix": "", "text": "", "ok": result.ok,
+                "tool_result": result.data, "error": result.error, "turn_id": ask.turn_id}
 
     async def _show_card(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
         """`connect_app`: the card of an app the request needs, in this private chat, holding what
@@ -2712,6 +2791,7 @@ class AgentService:
         action: Action | None = None,
         *,
         steps: list[Step],
+        ask: _Ask | None = None,
     ) -> ToolResult:
         """Make a call of a plugin's tool through the policy's one door, and give its result as
         the answer is shown it. `approval` is the yes for it, if it had to be asked about; a call
@@ -2719,15 +2799,31 @@ class AgentService:
         is added to `steps`, whatever came of it."""
         action = action or Action(call.tool.key, call.arguments)
         began = time.perf_counter()
-        outcome = await self._gate.call_plugin(
-            call.tool.key, call.arguments, approval=approval, action=action, pool=self._pool
-        )
+        from ..integrations.client import APP_TOOL_CALL
+        context = APP_TOOL_CALL.set(bool(ask is not None and ask.page_call))
+        try:
+            outcome = await self._gate.call_plugin(
+                call.tool.key, call.arguments, approval=approval, action=action, pool=self._pool
+            )
+        finally:
+            APP_TOOL_CALL.reset(context)
+        if outcome.page is not None and ask is not None and ask.turn_id and ask.scope == "private" and not ask.nested and not ask.quick and ask.source in _AT_THIS_COMPUTER:
+            try:
+                page = self.pages.store.write(turn_id=ask.turn_id, member_id=ask.speaker.id,
+                    conversation_id=ask.conversation_id, source="mcp", **outcome.page)
+                self.pages.changed(page)
+                outcome.text += "\n[The owner can see this tool's page in the conversation.]"
+            except PageError as error:
+                outcome.text += f"\n[Page refused: {error.kind}. {error}]"
         steps.append(
             self._step(
                 "tool", call.tool.name, call.tool.server, _plugin_outcome(outcome), began, outcome.kind
             )
         )
-        return _tool_result(call, outcome)
+        result = _tool_result(call, outcome)
+        if ask is not None and ask.page_call:
+            result.data = outcome.mcp_result or {"content": [{"type": "text", "text": outcome.text}], "isError": not outcome.ok}
+        return result
 
     def _ask_plugin(
         self,
@@ -3209,6 +3305,8 @@ class AgentService:
                 followup.ask, call, approval, ledger, pending.action, steps=steps
             )
         self._write(lambda: self._history.add_steps(pending.turn_id, steps))
+        if followup.ask.page_call:
+            return self._page_result(followup.ask, result)
         if followup.loop is not None:
             loop = followup.loop
             if result.ok and call.tool.key.startswith("mcp:computer-access-"):
@@ -3991,6 +4089,7 @@ class AgentService:
         hands = self._handbacks.views([*ids, *resumed]) if self._handbacks is not None else {}
         permitted = self._permissions.views(ids) if self._permissions is not None else {}
         drafted = self._drafts.views(ids) if self._drafts is not None else {}
+        pages = self.pages.store.shown_in(ids)
         views = []
         for turn in turns:
             task, task_steps = tasks.get(turn.id or 0, (None, []))
@@ -4043,6 +4142,7 @@ class AgentService:
                     **({"resumed_computers": list(dict.fromkeys(card["app"] for card in given_back))} if given_back else {}),
                     **({"permissions": permitted[turn.id or 0]} if permitted.get(turn.id or 0) else {}),
                     **({"drafts": drafted[turn.id or 0]} if drafted.get(turn.id or 0) else {}),
+                    "pages": pages.get(turn.id or 0, []),
                     "messages": messages.get(turn.id or 0, []),
                 }
             )

@@ -10,6 +10,8 @@ CONNECT_APP = "connect_app"
 FIND_APP = "find_app"
 REQUEST_SECRET = "request_secret"
 EMAIL_DRAFT = "email_draft"
+SHOW_PAGE = "show_page"
+UPDATE_PAGE = "update_page"
 
 
 class HarnessToolError(Exception):
@@ -28,6 +30,24 @@ def definition(description, properties=None, required=()):
 
 
 DEFINITIONS = {
+    SHOW_PAGE: definition(
+        "Show an operable page inside this conversation: a product page, form, interactive comparison or small tool. "
+        "Prefer plain text or a table for a simple answer or static comparison. Supply an HTML fragment or full document, "
+        "at most 256 KB in UTF-8; remove all secrets. Returns page_id. Scripts run in an isolated sandbox: no fetch or forms "
+        "submitted to servers. window.raphael.send(text) asks the owner's next message to be text; "
+        "window.raphael.open(url) asks to open an HTTPS link. Match the theme with CSS variables "
+        "--bg, --fg, --muted, --line, --accent. External scripts/styles/images may use cdnjs.cloudflare.com, "
+        "cdn.jsdelivr.net and unpkg.com; Google Fonts styles/fonts are allowed. Use update_page to replace it in place.",
+        {"title": {"type": "string", "maxLength": 80}, "html": {"type": "string"},
+         "fallback_text": {"type": "string", "maxLength": 1500},
+         "height": {"type": "integer", "minimum": 80, "maximum": 720}}, ["title", "html"]),
+    UPDATE_PAGE: definition(
+        "Replace a page's HTML in place, keeping its page_id and increasing its revision. Only a page in this member's "
+        "current conversation may be updated. At most 256 KB UTF-8; remove secrets. Prefer text or a table for simple "
+        "static answers. window.raphael.send(text) asks for the owner's next message; window.raphael.open(url) asks to "
+        "open HTTPS. Theme variables: --bg, --fg, --muted, --line, --accent. The sandbox has no fetch or server forms.",
+        {"page_id": {"type": "string"}, "html": {"type": "string"}, "title": {"type": "string", "maxLength": 80}},
+        ["page_id", "html"]),
     "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in and reported quota/credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
     "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
@@ -65,7 +85,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
