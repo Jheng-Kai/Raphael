@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   membersUpdate: vi.fn(async () => ({})),
 }));
 vi.mock("./api", () => api);
+import { createCliBrains } from "./cli-brains";
 import { mountComposerBrain } from "./composer-brain";
 import { closeMenu } from "./ui";
 import type { MainEvent, Member } from "./types";
@@ -45,6 +46,14 @@ test("the picker sits in its slot and follows the open conversation's member", a
   brain.draw();
   expect(slot.querySelectorAll(".mp-trigger")).toHaveLength(1);
   expect(slot.querySelector(".mp-trigger")!.textContent).toContain("Mine");
+});
+
+test("Settings know what the composer was told before their own first read, so they never show a bare model id", async () => {
+  state.clis = [CODEX([RUNNABLE])];
+  mount();
+  await flush();
+  const settings = createCliBrains({ visible: () => false, redraw: () => {} });
+  expect(settings.view().clis).toEqual(state.clis);
 });
 
 test("a choice made in Settings reaches the button without a reopen", async () => {
@@ -81,7 +90,7 @@ test("a CLI that stays silent is said to be so, with a way to try again", async 
     open();
     await vi.advanceTimersByTimeAsync(0);
     q('[data-cb-source="cli:codex"]')!.click();
-    await vi.advanceTimersByTimeAsync(13_000);
+    await vi.advanceTimersByTimeAsync(41_000);
     expect(q(".cb-pane")!.textContent).toContain("讀不到模型");
     state.clis = [CODEX([RUNNABLE])];
     q('[data-cb-act="retry"]')!.click();

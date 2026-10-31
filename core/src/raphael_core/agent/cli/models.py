@@ -100,7 +100,8 @@ async def codex_models(command, environ, config_path):
                 return packet.get("result") or {}
 
     try:
-        async with asyncio.timeout(12):
+        # A first start on a busy computer can take this long, and nothing waits on it but the list.
+        async with asyncio.timeout(30):
             await child.start()
             await request("initialize", {"clientInfo": {"name": "raphael", "version": "0.2.0"}, "capabilities": {}})
             await child.send({"jsonrpc": "2.0", "method": "initialized", "params": {}})

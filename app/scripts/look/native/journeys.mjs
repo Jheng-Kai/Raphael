@@ -9,6 +9,7 @@ export const journeys = [
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
+  { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
@@ -175,6 +176,67 @@ export async function drive(name, context) {
     if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
     return;
   }
+  if (name === "model-sync") {
+    const composerName = () => page.$eval(".composer .cmp-model .mp-tname", el => el.textContent);
+    const savedModel = async () => (await context.rpc("settings.get", {})).settings.agent_model;
+    const until = async (check, what) => {
+      for (let i = 0; i < 150; i++) { if (await check()) return; await pause(100); }
+      await capture("model-sync-stuck");
+      throw new Error(`${what}: saved ${await savedModel()}, composer ${await composerName()}`);
+    };
+    await chat(page);
+    await click(page, ".composer .cmp-model .mp-trigger");
+    await wait(page, ".cb-menu");
+    await click(page, '.cb-menu [data-cb-source="cli:codex"]');
+    try { await page.waitForSelector('.cb-menu [data-model^="cli:codex:"]', { timeout: 30000 }); }
+    catch (error) {
+      await capture("composer-codex-missing");
+      const listed = (await context.rpc("brains.cli", {})).clis.map(cli => ({ id: cli.id, installed: cli.installed, logged_in: cli.logged_in, available: cli.available, models: cli.models.length, notes: cli.notes }));
+      result.brains = listed;
+      result.pane = await page.$eval(".cb-menu .cb-pane", el => el.textContent.slice(0, 120));
+      throw new Error(`The real Codex's models never reached the composer: ${JSON.stringify(listed)} / ${result.pane}`, { cause: error });
+    }
+    await capture("composer-codex-models");
+    const models = await page.$$eval('.cb-menu [data-model^="cli:codex:"]', rows => rows.map(row => row.dataset.model));
+    result.codexModels = models;
+    const id = models.find(model => model.endsWith("gpt-5.6-luna")) ?? models.at(-1);
+    await click(page, `.cb-menu [data-model="${id}"]`);
+    await until(async () => (await savedModel()).startsWith(id), "the composer's choice did not reach the core");
+    await wait(page, ".cb-menu .mc-range");
+    await perform(page, { action: "slider-stop", selector: ".cb-menu .mc-range", level: "low" });
+    await until(async () => (await savedModel()) === `${id}?effort=low`, "the slider's depth did not reach the core");
+    await capture("composer-depth");
+    const chosenName = await composerName();
+    result.composer = chosenName;
+    await click(page, ".composer .cmp-model .mp-trigger");
+    await page.waitForSelector(".cb-menu", { hidden: true });
+    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "settle-motion" });
+    await click(page, '.modal-scrim [data-pane="models"]');
+    await wait(page, '.modal-scrim [data-model-picker="answer"] .mp-trigger');
+    const inSettings = await page.$eval('.modal-scrim [data-model-picker="answer"] .mp-tname', el => el.textContent);
+    await capture("settings-shows-it");
+    if (inSettings !== chosenName) throw new Error(`Settings show ${inSettings}, the composer ${chosenName}`);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector(".modal-scrim", { hidden: true });
+    const conversation = await newConversation(context);
+    const text = "Reply with the single word ready.";
+    await type(page, ".composer .cmp-input", text);
+    await click(page, ".cmp-send");
+    let turn;
+    for (let i = 0; i < 600 && !turn; i++) {
+      turn = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation && row.question === text && ["done", "error"].includes(row.status));
+      if (!turn) await pause(200);
+    }
+    if (!turn) throw new Error("The turn on the chosen Codex model did not finish");
+    await capture("turn-on-codex");
+    result.turn = { model: turn.model, status: turn.status, text: turn.text.slice(0, 80) };
+    if (turn.status !== "done" || !turn.model.startsWith("cli:codex") || !turn.text.trim()) throw new Error(`The turn did not answer on Codex: ${JSON.stringify(result.turn)}`);
+    await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:haiku" });
+    await until(async () => (await composerName()).includes("Haiku"), "a change of the setting did not reach the composer");
+    await capture("change-reaches-composer");
+    return;
+  }
   if (name === "model-picker") {
     const catalog = await context.rpc("models.catalog", {});
     const usable = catalog.llm.filter(model => model.provider_id === "openrouter" && model.roles.answer.usable);
@@ -188,7 +250,7 @@ export async function drive(name, context) {
       await click(page, '.model-chooser [data-source="openrouter"]');
       await type(page, '.model-chooser input[type="search"]', model.id);
       await click(page, `.model-chooser [data-model="${model.id}"]`);
-      if (effort) await click(page, `.model-chooser [data-effort="${effort}"]`);
+      if (effort) await perform(page, { action: "slider-stop", selector: ".model-chooser .mc-range", level: effort });
       else if (await page.$('.model-chooser [data-effort]')) throw new Error("A non-reasoning model offered effort controls");
       await capture(`${label}-choice`);
       await click(page, '.model-chooser [data-dlg="use"]');

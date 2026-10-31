@@ -1,4 +1,5 @@
 // Subscription metadata only; authentication is handled by each CLI's own terminal.
+import { knownClis, rememberClis } from "./brain-lists";
 import * as api from "./api";
 import { t } from "./i18n";
 import { providerMark } from "./provider-marks";
@@ -71,6 +72,7 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     try {
       const [{ clis }, chatgpt] = await Promise.all([api.brainsCli(), api.chatgptStatus().catch(() => null)]);
       if (mine !== generation) return;
+      rememberClis(clis);
       value = { ...value, clis, chatgpt, state: "ready" };
     } catch {
       if (mine !== generation) return;
@@ -111,7 +113,8 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     }
   }
   return {
-    view: () => value,
+    // Before its own first read, what another reader was told: a model is never shown by its bare id for a moment.
+    view: () => (value.state === "ready" ? value : { ...value, clis: knownClis() }),
     load,
     start() {
       if (timer) clearInterval(timer);

@@ -14,6 +14,7 @@ import {
   chooserSources, effortOf, effortSliderHTML, modelPickerHTML, modelRefWith, moveEffortSlider, orderedEfforts, pickerModelsFor, buttonFaceHTML,
   sourceMarkHTML, sourceStatus, concreteModel, chooserPrice, usableFor, reasonText, fitFor, effortText, type ChooserSource, type ModelPickerLook,
 } from "./model-picker";
+import { knownCatalog, knownClis, rememberCatalog, rememberClis } from "./brain-lists";
 import { RAPHAEL_ID } from "./members";
 import type { BrainSettings, CatalogModel, CliBrain, MainEvent, Member, ModelCatalog } from "./types";
 import { closeMenu, esc, ico, openPopover, placeMenu, toaster } from "./ui";
@@ -21,7 +22,7 @@ import { describeError } from "./format";
 
 const SEARCH_FROM = 12;
 /** How long a signed-in CLI may be silent about its models while the menu is open before this says so. */
-const MODEL_WAIT_TRIES = 6, MODEL_WAIT_MS = 2000;
+const MODEL_WAIT_TRIES = 20, MODEL_WAIT_MS = 2000;
 const CHANGES: readonly MainEvent["type"][] = ["SettingsChanged", "BrainsChanged", "ProvidersChanged"];
 
 export interface ComposerBrainHost {
@@ -30,7 +31,7 @@ export interface ComposerBrainHost {
 }
 
 export function mountComposerBrain(slot: HTMLElement, member: () => Member, host: ComposerBrainHost = {}): { draw(): void; reload(): void } {
-  let catalog: ModelCatalog | null = null, clis: CliBrain[] = [], answerModel = "", generation = 0;
+  let catalog: ModelCatalog | null = knownCatalog(), clis: CliBrain[] = knownClis(), answerModel = "", generation = 0;
   let menu: HTMLElement | null = null, source = "", query = "";
   let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -219,8 +220,8 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
       api.core<{ settings: BrainSettings }>("settings.get"),
     ]);
     if (mine !== generation) return;
-    if (catalogResult.status === "fulfilled" && Array.isArray(catalogResult.value?.llm)) catalog = catalogResult.value;
-    if (cliResult.status === "fulfilled") clis = cliResult.value?.clis ?? [];
+    if (catalogResult.status === "fulfilled" && Array.isArray(catalogResult.value?.llm)) { catalog = catalogResult.value; rememberCatalog(catalog); }
+    if (cliResult.status === "fulfilled") { clis = cliResult.value?.clis ?? []; rememberClis(clis); }
     if (settingsResult.status === "fulfilled") answerModel = settingsResult.value?.settings?.agent_model ?? "";
     draw();
   }

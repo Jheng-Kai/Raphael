@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
 import { createOwnerControls } from "../owner-settings";
 
@@ -276,7 +277,8 @@ export function createSettings(app: AppContext): SettingsPage {
   const providers = createProviders({ root: el, visible: () => visible && pane === "models" && modelsTab === "models", redraw: () => render() });
   app.onEvent((event) => {
     providers.followEvent(event);
-    if (event.type === "SettingsChanged" && visible) void api.settingsGet().then(result => { brain = result.settings; render(); }, () => {});
+    // Closed too: Settings open at once on what they hold, and a choice made at the composer must already be in it.
+    if (event.type === "SettingsChanged") void api.settingsGet().then(result => { brain = result.settings; if (visible) render(); }, () => {});
     cliBrains.followEvent(event);
     if (event.type === "ProvidersChanged" && visible) void loadCatalog();
     if (event.type === "ProvidersChanged" || event.type === "AgentTurn" || event.type === "QuotaChanged" || event.type === "RoutinesChanged" || event.type === "Dictation" && event.phase === "pasted") refreshUsage();
@@ -286,7 +288,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog, checkingOpenrouter, devices, altgr, version, desktopRequired,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired,
     replacingKey, confirmingKeyRemoval, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), confirmingClear, localModels, localDownload,
   });
@@ -754,6 +756,7 @@ export function createSettings(app: AppContext): SettingsPage {
       // keep a catalog read earlier; else say that the prices cannot be had
       next = typeof catalog === "object" ? catalog : "failed";
     }
+    if (typeof next === "object") rememberCatalog(next);
     if (mine !== loads || request !== catalogLoads || !visible) return;
     catalog = next;
     if (typeof next === "object" && next.replaced.length > 0) {
