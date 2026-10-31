@@ -480,6 +480,7 @@ export async function subscribeMainEvents(handler: (event: MainEvent) => void): 
 
 /** Open only an opaque stored attachment, never a path supplied by a page. */
 export const openAttachment = (id: string): Promise<void> => invoke("open_attachment", { id });
+export const openTeamFile = (path: string): Promise<void> => invoke("open_team_file", { path });
 
 // Retained execution metrics; exporting always requests the entire selected period.
 export async function usageRuns(params: RunRequest): Promise<RunReport> {

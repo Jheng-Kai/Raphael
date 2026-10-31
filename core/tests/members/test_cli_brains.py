@@ -74,7 +74,7 @@ print(json.dumps({"type":"result", "subtype":"success", "result":ANSWER}),flush=
         assert result["text"] == answer and replies == [answer]
     else:
         assert turn["status"] == "error"
-        assert result["text"] == "Claude Code could not complete this task. Check the settings and try once more."
+        assert result["text"] == "The cause of this failure in Claude Code is unknown. Keep this conversation and try once more. Report the problem if it continues."
         assert [message["text"] for message in turn["messages"] if message["kind"] == "progress"] == ["Still checking."]
         assert "Still checking." not in replies
 
@@ -366,7 +366,7 @@ print(json.dumps({"type":"assistant","message":{"content":[{"type":"thinking","t
 sys.exit(1)
 ''')
     result = await typed(rig, "Hello", teacher.id)
-    assert result["text"] == "Claude Code 未能完成這項工作，請檢查設定後再試一次。"
+    assert result["text"] == "目前無法確認 Claude Code 這次失敗的原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。"
     history = await rig.call("agent.history.list", {"member_id": teacher.id})
     assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(history) + caplog.text
     assert "PRIVATE-REASONING" not in json.dumps(history) + caplog.text

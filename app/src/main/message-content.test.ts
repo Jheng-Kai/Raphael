@@ -20,9 +20,19 @@ test("URLs stop at CJK punctuation and retain complete targets behind short labe
 test("a link to a file on a computer shows its path, not the markdown around it", () => {
   const el = document.createElement("div");
   el.innerHTML = messageHTML("檔案在 [index.html](/home/cua/team/office/index.html)，也可以用 [報告](C:\\Users\\me\\report.pdf)。", "", true);
-  expect(el.textContent).toBe("檔案在 /home/cua/team/office/index.html，也可以用 C:\\Users\\me\\report.pdf。");
-  expect(el.querySelectorAll("code")).toHaveLength(2);
+  expect(el.textContent).toBe("檔案在 index.html，也可以用 C:\\Users\\me\\report.pdf。");
+  expect(el.querySelectorAll("code")).toHaveLength(1);
   expect(el.querySelector("a")).toBeNull();
+});
+
+test("a file in the team folder is a real button that opens it, however the reply wrote its path", () => {
+  const el = document.createElement("div");
+  el.innerHTML = messageHTML("看 [頁面](/home/cua/team/office/index.html) 和 `/home/cua/team/office/check.png`，不是 `/home/cua/workspace/a.png`。", "", true);
+  const buttons = [...el.querySelectorAll<HTMLButtonElement>('button[data-act="team-file-open"]')];
+  expect(buttons.map(button => button.dataset.path)).toEqual(["/home/cua/team/office/index.html", "/home/cua/team/office/check.png"]);
+  expect(buttons.map(button => button.textContent)).toEqual(["index.html", "check.png"]);
+  expect(buttons[0].type).toBe("button");
+  expect(el.querySelector("code")!.textContent).toBe("/home/cua/workspace/a.png");
 });
 
 test("visible URL labels contain only host and path, capped at 32 characters, while copying retains the complete URL", () => {

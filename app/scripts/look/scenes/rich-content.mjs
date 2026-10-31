@@ -3,6 +3,7 @@ const table = '.rich-block.message-table';
 const diagram = '.message-diagram[data-diagram-state="rendered"]';
 const ready = [wait(table), scroll('.message-code:not(.message-diagram)'), wait('.message-code[data-highlighted="true"]'), scroll('.message-diagram'), wait(diagram), check("rich-content")];
 export default [
+  scene("team-file-reply", "A file of the team folder is a real button in the reply", [wait('[data-act="team-file-open"]')], { richReply: "teamFile" }),
   scene("rich-chief", "Chief reply has ordered rich cards outside text bubbles", [...ready, scroll(table)], { richReply: true }),
   scene("rich-member", "Member reply shares the same typed rich content", [member(1), ...ready, scroll(table)], { richReply: true }),
   scene("rich-room", "Group reply shares the same rich cards", [room(1), ...ready, scroll(table)], { richReply: true }),

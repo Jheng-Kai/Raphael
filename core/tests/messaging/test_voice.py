@@ -210,7 +210,7 @@ async def test_a_failure_to_hear_gets_a_plain_reply_without_details(files, files
     files.message(OWNER, None, voice={"file_id": "v1", "duration": 1})
     gateway = make_gateway(files, files_http, transcribe=transcriber(RuntimeError("secret detail")))
     await run_until(gateway, lambda: files.sent)
-    assert "secret detail" not in files.sent[0][1] and "did not work" in files.sent[0][1]
+    assert "secret detail" not in files.sent[0][1] and "did not finish" in files.sent[0][1]
 
 
 async def test_an_audio_file_that_is_not_ogg_is_declined(files, files_http):

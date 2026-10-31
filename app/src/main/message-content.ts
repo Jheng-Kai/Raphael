@@ -2,7 +2,14 @@
 import { highlightHTML } from "./conversation";
 import { t } from "./i18n";
 import { mentionsHTML, type MentionTarget } from "./mention-text";
-import { esc, iconBtn } from "./ui";
+import { esc, ico, iconBtn } from "./ui";
+
+// A file of the team folder is one press from opening; any other path is words the owner can use.
+const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
+function pathHTML(path: string, query: string): string {
+  if (!TEAM_FILE.test(path)) return `<code>${highlightHTML(path, query)}</code>`;
+  return `<button type="button" class="team-file" data-act="team-file-open" data-path="${esc(path)}" title="${esc(t("agent.openFile"))}">${ico("file")}<span>${highlightHTML(path.slice(path.lastIndexOf("/") + 1), query)}</span></button>`;
+}
 
 export function messageUrl(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.length > 8192 || /[\u0000-\u0020\u007f]/.test(raw)) return null;
@@ -45,7 +52,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
     if (markdown && text[at] === "`") {
       const marker = /^`+/.exec(text.slice(at))![0];
       const end = text.indexOf(marker, at + marker.length);
-      if (end > at + marker.length) { flush(); out += `<code>${highlightHTML(text.slice(at + marker.length, end), query)}</code>`; at = end + marker.length; continue; }
+      if (end > at + marker.length) { flush(); out += pathHTML(text.slice(at + marker.length, end), query); at = end + marker.length; continue; }
     }
     // An unfinished image must never become an automatic link preview while streaming.
     if (markdown && text.startsWith("![", at)) {
@@ -62,7 +69,7 @@ function inline(text: string, query: string, markdown: boolean, urls: Set<string
           const html = link(target, text.slice(at + 1, middle));
           if (html) { flush(); out += html; at = end; continue; }
           // A file on a computer has no address to open: its path is what the owner can use, not the markdown around it.
-          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += `<code>${highlightHTML(target, query)}</code>`; at = end; continue; }
+          if (/^(?:\/|[A-Za-z]:[\\/])/.test(target)) { flush(); out += pathHTML(target, query); at = end; continue; }
         }
       }
     }

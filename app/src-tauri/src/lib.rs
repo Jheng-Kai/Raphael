@@ -175,6 +175,7 @@ pub fn run() {
             commands::open_link,
             commands::open_external_url,
             commands::open_attachment,
+            commands::open_team_file,
             commands::hotkeys_pause,
             commands::window_hotkey,
             commands::main_window_forward,

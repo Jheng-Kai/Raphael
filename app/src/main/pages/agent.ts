@@ -2051,6 +2051,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "attachment-open":
         void api.openAttachment(act.dataset.id ?? "").catch(() => toaster.info(t("agent.fileUnavailable")));
         break;
+      case "team-file-open":
+        void api.openTeamFile(act.dataset.path ?? "").catch(() => toaster.info(t("agent.fileUnavailable")));
+        break;
       case "lightbox":
         openLightbox(act);
         break;

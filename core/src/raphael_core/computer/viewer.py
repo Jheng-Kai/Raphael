@@ -10,14 +10,17 @@ import json
 import re
 import secrets
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx
 
 from ..protocol import invalid_params
-from .vm import VmError
+from .vm import SHARED, VmError
 from .rfb_input import RfbInputGate
 
 LEASE_SECONDS = 15
+# What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
+READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
 BOOTSTRAP = b'''import RFB from './core/rfb.js';
 let rfb, connecting = false, closed = false, controlAt = 0, revision = 0;
 const screen = document.getElementById('noVNC_container');
@@ -141,6 +144,19 @@ class DesktopViewer:
                               ("control", self.control), ("close", self.close)):
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.revoke", self.revoke)
+        router.register("computer.team_file", self.team_file)
+
+    async def team_file(self, params):
+        """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
+        path = params.get("path")
+        target = self.vm.target(0)
+        if type(path) is not str or not path.startswith(SHARED + "/") or target.remote or target.shared is None:
+            raise invalid_params("not a team file on this computer")
+        root = Path(target.shared).resolve()
+        found = (root / path[len(SHARED) + 1:]).resolve()
+        if not found.is_relative_to(root) or not found.is_file():
+            raise invalid_params("no such team file")
+        return {"path": str(found), "reads": found.suffix.lower() in READABLE}
 
     async def revoke(self, params):
         self.target(params)

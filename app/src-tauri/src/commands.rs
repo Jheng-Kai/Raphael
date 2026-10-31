@@ -1647,6 +1647,45 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
     launch_link(path)
 }
 
+/// Open a file of the team folder at the owner's press. The core says where it is and whether it reads;
+/// anything else is only shown in its folder, so a press never runs a program a member wrote.
+#[tauri::command]
+pub async fn open_team_file(app: AppHandle, webview: Webview, path: String) -> Result<(), String> {
+    require_main(&webview)?;
+    let core = app
+        .try_state::<Arc<CoreProcess>>()
+        .ok_or(CORE_NOT_RUNNING)?;
+    let result = core
+        .call("computer.team_file", json!({"path": path}))
+        .await
+        .map_err(|_| "file unavailable".to_owned())?;
+    let found = result
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or("file unavailable")?;
+    if result.get("reads").and_then(Value::as_bool) == Some(true) {
+        return launch_link(found);
+    }
+    show_in_folder(found)
+}
+
+fn show_in_folder(path: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{path}\""))
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| err.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        Err("showing a file is only available on Windows".to_owned())
+    }
+}
+
 /// Chat links may open only a web address, and only at the main window's request.
 /// A sign-in in the browser has finished: the owner's way back is this window coming to the front.
 #[tauri::command]
@@ -1969,6 +2008,7 @@ mod tests {
                 "open_attachment",
                 "open_external_url",
                 "open_link",
+                "open_team_file",
                 "save_usage_csv",
                 "schedule_keep_awake_get",
                 "schedule_keep_awake_set",
