@@ -1,7 +1,19 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { faceHTML } from "./members";
-import { followSlimeRoster, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG } from "./slime";
+import { followSlimeRoster, isSlimeAvatar, parseSlime, pickSlime, seasonalHat, setSlimeState, slimeFaceHTML, slimePickerHTML, slimeSVG, type SlimeState } from "./slime";
+
+const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
+const keyframes = css.split("@keyframes ").slice(1).map(chunk => {
+  let depth = 0, end = 0;
+  for (; end < chunk.length; end++) {
+    if (chunk[end] === "{") depth++;
+    else if (chunk[end] === "}" && --depth === 0) break;
+  }
+  return { name: chunk.slice(0, chunk.indexOf(" ")), body: chunk.slice(0, end) };
+});
 
 const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement>("svg.slime")?.dataset.state;
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
@@ -149,4 +161,105 @@ test("a long list does not move in step, and a redraw keeps its place in the mot
   vi.spyOn(performance, "now").mockReturnValue(5000);
   expect(delay(1)).toBe(first - 4000);
   vi.restoreAllMocks();
+});
+
+test("only whole-frame idle strips use composited transforms; deforming poses are repainted (R-UI-63)", () => {
+  expect(keyframes.length).toBeGreaterThan(20);
+  const composited = keyframes.filter(({ body }) => /(^|[{;\s])transform:/.test(body));
+  expect(composited.map(({ name }) => name).sort()).toEqual(["slime-idle-body", "slime-idle-eyes"]);
+  for (const { body } of composited) for (const [, value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
+    const frame = Number(value) * 7 / 100;
+    expect(Math.abs(frame - Math.round(frame))).toBeLessThan(0.00001);
+  }
+  expect(css).not.toMatch(/will-change|filter:/);
+  expect(css).not.toMatch(/\.slime-in-between[^{]*\{[^}]*\btransform:/);
+});
+
+test("a slime's box is a whole number of pixels, whatever the window works out", () => {
+  expect(css).toMatch(/\.av\.mb-av\.mb-av-slime \{[^}]*width: round\(var\(--av\), 1px\);[^}]*height: round\(var\(--av\), 1px\);/);
+});
+
+test("every state has its own performance, and the two idle tracks share no beat", () => {
+  const states: SlimeState[] = ["thinking", "working", "searching", "computer", "waiting", "done", "error", "sleeping", "arriving"];
+  for (const state of states) expect(css, state).toMatch(new RegExp(`\\.slime\\[data-state="${state}"\\] \\.slime-motion \\{ animation: slime-${state}-`));
+  const idle = [...css.matchAll(/\.slime-surface\[data-state="idle"\][^{]*\.slime-cels \{([^}]*)\}/g)].flatMap(([, rule]) => [...rule!.matchAll(/calc\(([\d.]+)s \* var\(--slime-tempo\)\)/g)].map(([, seconds]) => Number(seconds) * 10));
+  const distinct = [...new Set(idle)];
+  expect(distinct.length).toBe(2);
+  const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
+  for (const a of distinct) for (const b of distinct) if (a !== b) expect(gcd(Math.round(a), Math.round(b)), `${a} ${b}`).toBeLessThan(3);
+});
+
+test("under reduced motion nothing moves, and a Z does not float", () => {
+  const calm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)![1]!;
+  expect(calm).toMatch(/\.slime-surface \* \{[^}]*animation: none !important;[^}]*transition: none !important;/);
+  expect(calm).toMatch(/\.slime-z \{ display: none !important; \}/);
+});
+
+test("what hangs off a body swings about its own pivot, and what is printed on the skin does not", () => {
+  const shion = document.createElement("div"), souei = document.createElement("div"), bare = document.createElement("div");
+  shion.innerHTML = slimeSVG({ character: "shion" }, plain);
+  souei.innerHTML = slimeSVG({ character: "souei" }, plain);
+  bare.innerHTML = slimeSVG({ color: "sky" }, plain);
+  const horn = shion.querySelector<SVGElement>(".slime-mark")!;
+  expect(horn.getAttribute("style")).toContain("--mark-x:49px;--mark-y:34px");
+  expect(horn.innerHTML).toContain("#363140");
+  expect(souei.querySelector(".slime-mark")!.innerHTML).not.toContain("#F2F2F5");
+  expect(souei.innerHTML).toContain("#F2F2F5");
+  expect(bare.querySelector(".slime-mark")).toBeNull();
+  const hatted = document.createElement("div");
+  hatted.innerHTML = slimeSVG({ color: "sky" }, witch);
+  expect(hatted.querySelector(".slime-mark")!.innerHTML).toContain("#554177");
+});
+
+test("a change of state is marked, and a moment that is drawn again carries on from where it was", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  document.body.innerHTML = slimeFaceHTML({ id: 51 }, 40);
+  const svg = document.querySelector<SVGElement>("svg.slime")!;
+  expect(svg.dataset.moved).toBeUndefined();
+  setSlimeState(51, "done");
+  expect(svg.dataset.state).toBe("done");
+  expect(svg.dataset.moved).toBe("done");
+  expect(svg.style.getPropertyValue("--slime-since")).toBe("0ms");
+  vi.advanceTimersByTime(700);
+  document.body.innerHTML = slimeFaceHTML({ id: 51 }, 40);
+  expect(/--slime-since:(-?\d+)ms/.exec(document.body.innerHTML)![1]).toBe("-700");
+  expect(document.querySelector<SVGElement>("svg.slime")!.dataset.moved).toBeUndefined();
+  vi.advanceTimersByTime(1300);
+});
+
+test("telling a slime what it is already doing changes nothing", () => {
+  document.body.innerHTML = slimeFaceHTML({ id: 52 }, 40);
+  const svg = document.querySelector<SVGElement>("svg.slime")!;
+  setSlimeState(52, "idle");
+  expect(svg.dataset.moved).toBeUndefined();
+  setSlimeState(52, "working");
+  setSlimeState(52, "working");
+  expect(svg.dataset.moved).toBe("working");
+  setSlimeState(52, "idle");
+});
+
+test("a list keeps different paces, and each member keeps its own", () => {
+  const tempo = (id: number): number => Number(/--slime-tempo:([\d.]+)/.exec(slimeFaceHTML({ id }, 40))![1]);
+  const tempos = Array.from({ length: 12 }, (_, id) => tempo(id));
+  expect(new Set(tempos).size).toBeGreaterThanOrEqual(8);
+  for (const value of tempos) { expect(value).toBeGreaterThanOrEqual(0.94); expect(value).toBeLessThanOrEqual(1.06); }
+  expect(tempo(5)).toBe(tempo(5));
+});
+
+test("the pointer wakes a slime once on the way in, and the wiggle ends itself", () => {
+  document.body.innerHTML = `<button class="mb-row" id="row"><i id="inner"></i>${slimeFaceHTML({ id: 61 }, 40)}</button><div id="away"></div>`;
+  const svg = document.querySelector<SVGElement>("svg.slime")!, row = document.getElementById("row")!, inner = document.getElementById("inner")!, away = document.getElementById("away")!;
+  const over = (target: Element, from: Element | null): void => { target.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, relatedTarget: from })); };
+  over(row, away);
+  expect(svg.classList.contains("is-delighted")).toBe(true);
+  svg.classList.remove("is-delighted");
+  over(inner, row);
+  expect(svg.classList.contains("is-delighted")).toBe(false);
+  over(inner, away);
+  expect(svg.classList.contains("is-delighted")).toBe(true);
+  svg.querySelector(".slime-press")!.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-other" }));
+  expect(svg.classList.contains("is-delighted")).toBe(true);
+  svg.querySelector(".slime-press")!.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-delight" }));
+  expect(svg.classList.contains("is-delighted")).toBe(false);
 });
