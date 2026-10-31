@@ -892,6 +892,7 @@ export const ja = {
   "agent.tool.readOnly": "読み取り",
   "agent.tool.changeOnly": "変更",
   "agent.tool.askMember": "同僚に質問",
+  "agent.tool.generateAudio": "音声ファイルを作成",
   "agent.reason.bad_arguments": "引数エラー",
   "agent.reason.auth": "認証の準備ができていません。「設定 › 接続」で該当アプリを開いて接続してください。",
   "agent.reason.missing_secret": "保存した認証情報がありません。「設定 › 接続」でサーバーを編集し、環境変数やヘッダーを設定してください。",

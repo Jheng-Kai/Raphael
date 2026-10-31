@@ -454,6 +454,16 @@ class WorkerHost:
             raise WorkerUnavailable
         return reply
 
+    async def steer(self, run: TaskRun, text: str) -> bool:
+        link = self._link
+        if link is None or self._current.get(run.task_id) is not run:
+            return False
+        try:
+            reply = await link.peer.request("task.steer", {"task_id": run.task_id, "text": text})
+            return isinstance(reply, dict) and reply.get("accepted") is True
+        except (PeerClosed, RpcError):
+            return False
+
     def cancel(self, run: TaskRun) -> None:
         """Stop the task: the worker is told, and ended if it has not stopped in `grace_s`."""
         run.cancel()

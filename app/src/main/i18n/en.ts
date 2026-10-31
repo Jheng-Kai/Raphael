@@ -892,6 +892,7 @@ export const en = {
   "agent.tool.readOnly": "Read",
   "agent.tool.changeOnly": "Change",
   "agent.tool.askMember": "Ask a colleague",
+  "agent.tool.generateAudio": "Generate audio",
   "agent.reason.bad_arguments": "Bad input",
   "agent.reason.auth": "Sign-in or credentials are not ready. Open the app in Settings > Connections and complete its connection.",
   "agent.reason.missing_secret": "A saved credential is missing. Edit the server in Settings > Connections and restore required environment variables or headers.",

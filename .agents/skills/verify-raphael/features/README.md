@@ -483,3 +483,10 @@ See [conversation.md](conversation.md#missing-prerequisites-2026-11-01) for the 
 
 See [Conversation](conversation.md#durable-owner-questions-and-background-cards-2026-11-01)
 for ask_owner, background card completion and the selected question-card matrix.
+
+
+## Owner input, Telegram files and deliverable audio (2026-11-01)
+
+See [Conversation](conversation.md#owner-input-and-deliverable-audio-2026-11-01).
+Selected scenes: generated-audio-chief, generated-audio-member,
+generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition.

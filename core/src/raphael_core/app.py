@@ -1352,7 +1352,10 @@ class App(Router):
             await self.call("agent.confirm", {"id": question["id"], "approved": False})
             asked = compose(question["prefix"], question["text"], None)
             return f"{asked}\n{words(language, 'confirm')}"
-        return compose(reply.get("prefix", ""), reply.get("text", ""), None)
+        from .messaging.core import Answer
+        from .services.artifacts import turn_files
+        return Answer(compose(reply.get("prefix", ""), reply.get("text", ""), None),
+                      list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
 
     async def _transcribe_from_messaging(self, audio: bytes, language: str) -> str:
         """The words of a voice message, heard by the engine that dictation uses (the cloud, with
@@ -1426,7 +1429,9 @@ class App(Router):
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        sent = loop.create_task(self.messaging.report(task.session_id, text))
+        from .services.artifacts import turn_files
+        files = list(turn_files(self.agent._history, task.turn_id or 0, self.attachment_store))
+        sent = loop.create_task(self.messaging.report(task.session_id, text, **({"files": files} if files else {})))
         sent.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _tell_chat_to_answer_here(self, task_id: object) -> None:

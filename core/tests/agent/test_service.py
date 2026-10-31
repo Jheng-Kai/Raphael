@@ -1430,21 +1430,28 @@ async def test_cancelling_the_handler_itself_is_not_mistaken_for_a_cancel_reques
         await asking
 
 
-async def test_a_second_request_of_a_session_replaces_the_first_that_is_still_going(
+async def test_a_request_before_the_loop_exists_waits_without_cancelling_the_first(
     make_rig, client, actions
 ):
     rig = make_rig(decider=Decider(client, jev_total_s=10.0, jev_first_s=10.0))
 
-    async def hang(**kwargs):
-        await asyncio.sleep(30)
+    release = asyncio.Event()
 
-    client.decisions.extend([hang, decision("command", "lock_screen")])
+    async def route(**kwargs):
+        await release.wait()
+        return decision("command", "lock_screen")
+
+    client.decisions.extend([route, decision("command", "lock_screen")])
     first = asyncio.ensure_future(rig.ask("鎖定螢幕"))
     await until(lambda: client.decide_calls)
-    second = await rig.ask("鎖定螢幕")
+    waiting = asyncio.create_task(rig.ask("鎖定螢幕"))
+    await asyncio.sleep(0)
+    assert not first.done() and not waiting.done()
+    release.set()
+    second = await waiting
     assert second["prefix"] == "了"
-    assert (await asyncio.wait_for(first, 2))["turn_id"] == 0
-    assert actions.calls == [("lock_screen",)]  # once
+    assert (await asyncio.wait_for(first, 2))["turn_id"] > 0
+    assert actions.calls == [("lock_screen",), ("lock_screen",)]
 
 
 async def test_a_long_question_is_taken_whole(rig, client):

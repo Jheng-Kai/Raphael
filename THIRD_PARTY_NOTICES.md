@@ -245,6 +245,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Hermes Agent (MIT)
 
+Owner input at loop boundaries in `core/src/raphael_core/worker/owner_input.py`
+and Telegram attachment delivery in `core/src/raphael_core/messaging/channels/telegram.py`
+are adapted from Hermes Agent revision `c419cf7c`, respectively
+`agent/agent_runtime_helpers.py`, `gateway/session_busy_controls.py` and
+`plugins/platforms/telegram/adapter.py`. Copyright (c) Nous Research and contributors.
+The MIT license is retained in `licenses/hermes-agent-MIT.txt`.
+
 Hermes Agent
 Copyright (c) 2025 Nous Research
 

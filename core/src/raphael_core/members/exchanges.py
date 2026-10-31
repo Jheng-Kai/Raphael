@@ -223,11 +223,6 @@ class RoomExchanges:
                             routing=json.dumps(asdict(decision)))
 
     async def start(self, room, origin, language, attachments, recipient=None):
-        if hasattr(self.rooms._background, 'cancel_room'):
-            self.stop(room['id'])
-            # The owner speaking cuts what the members were saying, not the work they were assigned: that is
-            # long, and ends when it is done or the owner stops it (`rooms.stop`).
-            await self.rooms._background.cancel_room(room['id'], work=False)
         # A new owner message takes priority without replaying completed actions.
         with self.conn:
             # Owner interjections take priority, but already accepted explicit addresses survive.

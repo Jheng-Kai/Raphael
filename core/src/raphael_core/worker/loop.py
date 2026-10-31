@@ -247,7 +247,16 @@ def _assistant_message(turn: Turn) -> dict[str, Any]:
     return message
 
 
-async def run_task(
+async def run_task(*args, owner_input=None, **kwargs):
+    outcome = await _run_task(*args, owner_input=owner_input, **kwargs)
+    if owner_input and outcome.messages is not None:
+        outcome.messages.extend(owner_input.drain())
+    if owner_input and outcome.kind != WAITING:
+        owner_input.closed = True
+    return outcome
+
+
+async def _run_task(
     host: Host,
     *,
     system: str,
@@ -259,6 +268,7 @@ async def run_task(
     messages: Sequence[dict] | None = None,
     guardrails: ToolGuardrails | None = None,
     corrective_rounds: int = 0,
+    owner_input=None,
     context_window: int | None = None,
 ) -> Outcome:
     """Carry out a task. `system` and `user` are the first two messages of the conversation (the
@@ -311,6 +321,8 @@ async def run_task(
     try:
         await _until(keeper.fit(messages, tools), cancelled, stall(), clock)  # a task that goes on may be long already
         while True:
+            if owner_input:
+                messages.extend(owner_input.drain())
             try:
                 turn = await ask()
                 if turn.finish_reason == LENGTH and turn.calls:
@@ -346,6 +358,10 @@ async def run_task(
                 if last_failed and not owner_denied and not corrective and corrective_rounds:
                     corrective = True
                     messages.append({"role": "user", "content": CORRECTIVE_NOTE})
+                    continue
+                pending = owner_input.drain(finishing=True) if owner_input else []
+                if pending:
+                    messages.extend(pending)
                     continue
                 return Outcome("done", said, None, None, model_calls, tool_calls)
             last_failed = False

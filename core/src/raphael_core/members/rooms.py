@@ -536,6 +536,11 @@ class RoomsService:
         with self._conn:
             self._conn.execute("UPDATE room_messages SET origin_message_id = ?, reply_to_member = ?, reply_to = ? WHERE id = ?",
                                (owner_id, recipient, reply_to, owner_id))
+        self._changed(room["id"])
+        steer = getattr(self._background, "steer_room", None)
+        targets = [recipient] if recipient is not None else self._targets(room, text)
+        if not attachments and steer is not None and await steer(room["id"], thread_id, text.strip(), targets):
+            return {"message_id":owner_id, "duplicate":False}
         await self._exchanges.start(room, owner_id, language, attachments, recipient)
         self._changed(room["id"])
         return {"message_id":owner_id, "duplicate":False}

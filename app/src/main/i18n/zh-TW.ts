@@ -891,6 +891,7 @@ export const zhTW = {
   "agent.tool.readOnly": "讀取",
   "agent.tool.changeOnly": "修改",
   "agent.tool.askMember": "詢問同事",
+  "agent.tool.generateAudio": "產生語音檔",
   "agent.reason.bad_arguments": "參數錯誤",
   "agent.reason.auth": "登入或金鑰尚未就緒，請到「設定 › 連接」開啟對應應用程式並完成登入設定。",
   "agent.reason.missing_secret": "缺少已儲存的金鑰，請到「設定 › 連接」編輯對應伺服器並補齊環境變數或標頭值。",

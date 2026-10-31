@@ -859,3 +859,48 @@ npm run look -- owner-question-asked owner-question-answered owner-question-canc
 Core contracts: core/tests/background/test_owner_cards.py and
 core/tests/agent/test_owner_questions.py. The shell allowlist and its existing
 allowlist test include owner_questions.answer.
+
+
+## Owner input and deliverable audio (2026-11-01)
+
+```powershell
+npm run look -- generated-audio-chief generated-audio-member generated-audio-room generated-audio-missing generated-audio-repair owner-addition missing-voice --theme both --width 1120,720,1920x1080
+```
+
+An owner message in an active private conversation is an ordinary owner bubble and
+enters the same loop as a user-role message at its next step, after the complete
+tool batch. Stop alone cancels the work. The inbox seals atomically at the final
+reply; a later message starts a new turn. CLI brains finish their current turn and
+resume the existing native session with the addition. Background tasks use the same
+inbox inside the worker process, through internal task.steer admission.
+Accepted owner-only history rows use owner_input and render no empty member reply.
+CLI handoffs preserve accepted input in their saved continuation.
+Room messages use that inbox for a single active recipient in the same room and
+thread. Several addressees, files or a sealed inbox start a new room turn without
+cancelling running tools. Only rooms.stop cancels room work.
+
+generate_audio is offered by the shared snapshot to API/CLI conversations,
+background work and routines. It consumes ServiceHub.speech and the configured
+voice, key, model and enabled state. It stores bounded mono PCM as a WAV attachment,
+using the existing audio card; it does not claim MP3 encoding. A missing voice
+service yields the existing localized missing notice and voice settings repair.
+Tool receipts from attach_file and generate_audio are checked against AttachmentStore
+before publishing media messages. Room cards share the same attachment renderer.
+
+Telegram returns only attachments from the completed turn's stored tool receipts
+to the paired chat. PNG/JPEG up to 10 MiB use sendPhoto; MP3/M4A use sendAudio;
+other files use sendDocument, with a 50 MiB maximum. An oversized file names the
+original Raphael conversation as the place to open it. Revocation is checked again
+before delivery. Paths supplied by a model are never uploaded.
+
+Offline contracts: core/tests/agent/test_steering.py,
+core/tests/agent/test_cli_steering.py, core/tests/worker/test_owner_input.py,
+core/tests/background/test_steering.py, core/tests/messaging/test_outgoing_files.py,
+core/tests/services/test_audio_file.py, core/tests/agent/test_audio_file.py,
+core/tests/background/test_audio_file.py, core/tests/agent/test_scrub.py,
+app/src/main/generated-audio.test.ts.
+Selected real-entry scenes: generated-audio-chief, generated-audio-member,
+generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition. Both themes,
+1120, 720 and 1920x1080. Compare the incoming and generated audio cards in each
+audio scene and compare the repair notice with the existing missing-voice scene.
+Fake Telegram, fake CLI and fixture audio are not live or native acceptance.

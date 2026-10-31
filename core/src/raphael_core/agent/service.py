@@ -799,6 +799,7 @@ class AgentService:
         self._inflight: dict[str, asyncio.Task[dict]] = {}
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
+        self._owner_loops = {}
         self._clock = clock
         # session id -> when agent.cancel named it (the monotonic clock).
         self._cancelled: dict[str, float] = {}
@@ -1086,6 +1087,22 @@ class AgentService:
             )
         if self._attachment_store and ask.attachments:
             ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
+        scope = (ask.speaker.id, ask.conversation_id)
+        active = self._owner_loops.get(scope)
+        if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
+            self._owner_loops.pop(scope, None)
+            active = None
+        if active and not ask.attachments and active.owner_input.add(ask.text):
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+        steer = getattr(self._background, "steer", None)
+        if not ask.attachments and steer is not None and await steer(ask.speaker.id, ask.conversation_id, ask.text):
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+        earlier_scope = next((task for session, task in self._inflight.items()
+                              if self._inflight_scopes.get(session) == scope and not task.done()), None)
+        if earlier_scope is not None:
+            await asyncio.gather(asyncio.shield(earlier_scope), return_exceptions=True)
         ask.voiced = self._voiced(ask.source, ask.speaker.id)
         # The questions that ran out are expired, and a new request replaces those that still wait
         # in its conversation: a quick question leaves a formal one waiting, and the other way round.
@@ -1946,6 +1963,8 @@ class AgentService:
                         result = await self._tool(ask, operation, name)
                         if name == "show" and result.ok:
                             self._message(ask, "media", json.dumps(result.data, ensure_ascii=False))
+                    elif name == "generate_audio":
+                        result = await self._tool(ask, self._tools.generate_audio(args, self._attachment_store), name)
                     elif name == "read_attachment":
                         number = args.get("index")
                         if type(number) is not int or not 1 <= number <= len(ask.attachments):
@@ -1977,6 +1996,16 @@ class AgentService:
                     return ToolOutcome(False, "already_done", instruction=(
                         "This exact action was already done before the pause. Do not do it again."))
                 result = await execute(call_id, name, args)
+                if result.ok and (name == "generate_audio" or ref is not None and ref.server == "computer" and ref.name == "attach_file"):
+                    from ..services.artifacts import artifact_payload
+                    payload = artifact_payload(result.content, self._attachment_store)
+                    if payload:
+                        self._message(ask, "media", json.dumps(payload, ensure_ascii=False))
+                elif name == "generate_audio":
+                    from ..failures import missing_for
+                    missing = missing_for(result.kind, name)
+                    if missing:
+                        self._message(ask, "media", json.dumps({"missing": missing.wire()}, ensure_ascii=False))
                 if ref is not None and ref.server == "computer" and loop.refresh_computer():
                     result.tools = list(loop.tools)
                     result.replace_tools = True
@@ -2026,11 +2055,20 @@ class AgentService:
                 return True
             loop.refresh_computer = refresh_computer
             loop.owner_seen_urls = urls
+        scope = (ask.speaker.id, ask.conversation_id)
+        if not ask.nested:
+            loop.owner_turn_id = ask.turn_id
+            self._owner_loops[scope] = loop
+        outcome = None
         try:
             outcome = await loop.run()
             if isinstance(loop, CliLoop) and self._model_observer is not None:
                 self._model_observer(loop.actual_model)
         finally:
+            if outcome is None or outcome.kind != WAITING:
+                loop.owner_input.closed = True
+                if self._owner_loops.get(scope) is loop:
+                    self._owner_loops.pop(scope, None)
             if isinstance(loop, CliLoop) and loop.task and loop.task.done():
                 self._cli_loops.discard(loop)
         if loop.response is not None:

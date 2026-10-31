@@ -78,6 +78,13 @@ Stop = Callable[[str], Awaitable[bool]]
 Transcribe = Callable[[bytes, str], Awaitable[str]]
 
 
+class Answer(str):
+    def __new__(cls, text: str, files: Sequence[File] = ()):
+        value = super().__new__(cls, text)
+        value.text, value.files = text, list(files)
+        return value
+
+
 @dataclass
 class _Album:
     """The messages of one album received so far: their attachments, the first caption among
@@ -322,7 +329,10 @@ class Switchboard:
             except Exception as exc:
                 logger.warning("%s: the assistant failed (%s)", self._channel.kind, type(exc).__name__)
                 prefix, answer = "", words(language, "failed")
-            await self._reply(chat, prefix + answer)
+            if isinstance(answer, Answer):
+                await self.tell(chat, prefix + answer.text, files=answer.files)
+            else:
+                await self._reply(chat, prefix + answer)
 
     async def _hear(self, voice: Attachment, language: str) -> str:
         """The words of a voice message, however long it is. Declined before it is downloaded when
@@ -379,13 +389,23 @@ class Switchboard:
 
     # --- what the app and the worker ask for ---
 
-    async def tell(self, chat: str, text: str) -> None:
+    async def tell(self, chat: str, text: str, *, files: Sequence[File] = ()) -> None:
         """Send `text` to a chat that is allowed (a background report). A chat that is not
         allowed, or a failure, sends nothing."""
         if not self._chat_allowed(chat):
             return
         try:
-            await self._reply(chat, text)
+            if text.strip():
+                await self._reply(chat, text)
+            for file in files:
+                if not self._chat_allowed(chat):
+                    break
+                if not await self._channel.send_attachment(chat, file):
+                    language = self._language()
+                    note = {"zh-TW": f"「{file.name}」超過 Telegram 的檔案大小限制，請在 Raphael 的原對話中開啟附件。",
+                            "ja": f"「{file.name}」は Telegram のサイズ制限を超えています。Raphael の元の会話で添付ファイルを開いてください。",
+                            "en": f'"{file.name}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.'}
+                    await self._reply(chat, note.get(language, note["en"]))
         except ChannelError as error:
             logger.warning("%s: could not send a report (%s)", self._channel.kind, error.kind)
 
