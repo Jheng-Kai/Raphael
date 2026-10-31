@@ -8,6 +8,7 @@ import asyncio
 import json
 
 from .vm import DRIVER, SOCKET, VmError, exec_args
+from .desktop_host import NO_WINDOW
 
 
 def normalize_schema(value):
@@ -49,9 +50,9 @@ class CuaBridge:
 
     async def __aenter__(self):
         self.process = await asyncio.create_subprocess_exec(
-            "docker", *exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True),
+            *self.vm.command(self.target, exec_args(self.target, [DRIVER, "mcp", "--socket", SOCKET], interactive=True)),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, limit=16 * 1024 * 1024,
+            stderr=asyncio.subprocess.DEVNULL, limit=16 * 1024 * 1024, creationflags=NO_WINDOW,
         )
         try:
             await self.request("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},

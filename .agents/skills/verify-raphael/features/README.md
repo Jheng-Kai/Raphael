@@ -445,3 +445,13 @@ provider, worker and architecture consumers, then `npm run verify -- --core`.
 No UI/look/judge scope applies. Real sign-in, OS vault/browser, plan inference and
 live tool round trips require separately authorized acceptance; fake HTTP is not
 live proof. Never run the owner probe or borrow another application's credentials.
+
+## Member computer hosts (2026-11-01)
+
+[Member computer](member-computer.md) maps the per-member default, shared team
+folder, local/SSH selection and resource policy. Local UI scope is its 17 listed
+scenes in both themes at 1120,720,1920x1080. `computer-host-remote` verifies settings
+through the existing shared menu/input; `desktop-frame` now guards a dark frame
+and top-right collapse in both themes. The owner's unit brief prohibits judge,
+native, real Docker, image builds, cargo and network for this handoff. Their absence
+must remain explicit in CODEX_REPORT.md.

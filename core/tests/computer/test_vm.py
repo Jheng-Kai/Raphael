@@ -30,6 +30,8 @@ class Runtime:
         self.up, self.built = True, True
 
     async def __call__(self, args, **kwargs):
+        if args[:1] == ["--host"]:
+            args = args[2:]
         self.calls.append((args, kwargs))
         if args[0] == "info":
             return Result(0, "linux") if self.up else Result(1)
@@ -55,20 +57,32 @@ class Runtime:
 
 
 def container(vm, target, runtime):
-    return {"Name": "/" + target.name, "Image": runtime.image_id,
+    raw = {"Name": "/" + target.name, "Image": runtime.image_id,
         "Config": {"Labels": {**IMAGE_LABELS, f"{LABEL}.owner": vm.owner, f"{LABEL}.target": target.key}, "Env": ["VNC_PW=private"]},
         "State": {"Running": True}, "HostConfig": {"Privileged": False, "CapDrop": ["ALL"], "CapAdd": ["SETUID", "SETGID"],
             "IpcMode": "private", "CgroupnsMode": "private", "NetworkMode": "bridge", "RestartPolicy": {"Name": "no"},
-            "Memory": 4 * 1024**3, "MemorySwap": 4 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
+            "Memory": 2 * 1024**3, "MemorySwap": 2 * 1024**3, "NanoCpus": 2_000_000_000, "PidsLimit": 4096,
             "ShmSize": 512 * 1024**2, "PortBindings": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}},
         "Mounts": [{"Type": "bind", "Source": str(target.workspace), "Destination": GUEST, "RW": True}],
         "NetworkSettings": {"Ports": {"6901/tcp": [{"HostIp": "127.0.0.1", "HostPort": "6080"}]}}}
+    if target.shared:
+        raw["Mounts"].append({"Type": "bind", "Source": str(target.shared), "Destination": "/home/cua/team", "RW": True})
+    if target.remote:
+        raw["HostConfig"]["PortBindings"] = {}
+        for mount, source in zip(raw["Mounts"], [target.workspace, target.shared]):
+            mount.update(Type="volume", Name=str(source), Source="/engine/volumes/" + str(source))
+        raw["HostConfig"]["Mounts"] = [{"Type": "volume", "Source": m["Name"], "Target": m["Destination"]} for m in raw["Mounts"]]
+        raw["NetworkSettings"] = {"Ports": {}, "Networks": {"bridge": {"IPAddress": "172.18.0.2"}}}
+    return raw
+
 
 
 @pytest.fixture
-def desktop(tmp_path):
+def desktop(tmp_path, conn):
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
-    vm = LocalVm(tmp_path, runner=runtime, clock=lambda: 0)
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: 0)
     vm.grants.set(0, True)
     target = vm.target()
     runtime.raw = container(vm, target, runtime)
@@ -276,12 +290,12 @@ async def test_native_timezone_check_uses_vm_exec_after_home(desktop, tmp_path, 
     assert commands == ["date +%z"]
 
 
-def test_targets_share_by_default_and_are_isolated_per_bot(conn, tmp_path):
+def test_targets_are_isolated_by_default_and_can_explicitly_share(conn, tmp_path):
     settings = SettingsStore(conn)
     vm = LocalVm(tmp_path, settings=settings)
-    assert vm.target(0) == vm.target(17)
-    settings.set("computer_vm_mode", "per-bot")
     assert vm.target(0) != vm.target(17)
+    settings.set("computer_vm_mode", "shared")
+    assert vm.target(0) == vm.target(17)
     assert vm.target("../../escape").workspace.parent == tmp_path / "vm-homes"
 
 
@@ -308,7 +322,7 @@ async def test_status_checks_real_health_and_hides_remote_binding(desktop):
 
 def test_reuse_checks_original_host_mount_without_engine_path_translation(desktop):
     vm, target, runtime = desktop
-    runtime.raw["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": str(target.workspace), "Target": GUEST}]
+    runtime.raw["HostConfig"]["Mounts"] = [{"Type": "bind", "Source": m["Source"], "Target": m["Destination"]} for m in runtime.raw["Mounts"]]
     runtime.raw["Mounts"][0]["Source"] = "/engine/internal/path"
     assert compatible(runtime.raw, target, vm.owner, runtime.image_id)
     runtime.raw["HostConfig"]["Mounts"][0]["Source"] = str(target.workspace.parent)
@@ -686,6 +700,7 @@ async def test_stopped_engine_keeps_offline_tools_without_probing(desktop, tmp_p
 async def test_mode_change_revokes_previously_offered_shared_tools(desktop, conn, tmp_path):
     vm, target, runtime = desktop
     vm.settings = SettingsStore(conn)
+    vm.settings.set("computer_vm_mode", "shared")
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
@@ -816,7 +831,7 @@ for line in sys.stdin:
         assert (await bridge.request("tools/call", {"name": "click"}))["content"] == [{"type": "text", "text": "failed"}]
         vm.hold(target, True)
         assert (await bridge.request("tools/call", {"name": "click"}))["isError"]
-    assert commands[0][0] == "docker" and commands[0][1][:2] == ("exec", "-i")
+    assert Path(commands[0][0]).stem == "docker" and commands[0][1][:2] == ("exec", "-i")
     assert bridge.process is None
 
 

@@ -105,7 +105,7 @@ def embedded_page(content):
     return (f'<!doctype html><html><head><meta charset="utf-8">{notices}'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>Raphael desktop</title><style>'
-            'html,body {height:100%;margin:0;overflow:hidden} '
+            'html,body {height:100%;margin:0;overflow:hidden;background:#171717} '
             '#noVNC_container {width:100%;height:100%}'
             '</style><script type="module" src="bridge.js"></script></head>'
             '<body><div id="noVNC_container"></div></body></html>').encode()
@@ -297,6 +297,8 @@ class DesktopViewer:
             for socket in list(session.sockets):
                 socket.close()
             self.sessions.pop(token, None)
+            if not any(other.target == session.target for other in self.sessions.values()):
+                await self.vm.close_viewer(session.target)
         return {}
 
     async def _monitor(self):

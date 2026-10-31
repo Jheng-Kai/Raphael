@@ -109,7 +109,9 @@ class VmTools:
         if self.vm.desktop and not self.vm.desktop.installed():
             return
         target = self.vm.target(member_id)
-        if target.key not in self.catalogs:
+        keys = self.catalogs.get(target.key, [])
+        if not keys or self.routes[keys[0]] != target:
+            self.listed.discard(target.key)
             # This offer is entirely offline. Driver schemas are learned only
             # after an actual screen call, never by probing Docker at turn start.
             self._catalog(target, {"get_desktop_state": SCREEN})
@@ -163,7 +165,7 @@ class VmTools:
     def offered_for(self, member_id):
         target = self.vm.target(member_id)
         if self.vm.grants.allowed(member_id):
-            native = [self.tools[key] for key in self.catalogs.get(target.key, [])] if self.vm.enabled else []
+            native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
         else:
             key = tool_key(f"computer-access-{member_id}", "request_computer")
             self.requests[key] = member_id
@@ -186,9 +188,9 @@ class VmTools:
         if key in self.requests:
             return Tier.T2
         if key in self.tools:
-            shared = self.vm.settings is None or self.vm.settings.get("computer_vm_mode") == "shared"
+            shared = self.vm.settings is not None and self.vm.settings.get("computer_vm_mode") == "shared"
             matches = (self.routes[key].key == "shared") == shared
-            return self.tools[key].tier if self.vm.enabled and matches and key in self.catalogs.get(self.routes[key].key, []) else None
+            return self.tools[key].tier if self.vm.enabled and matches and self.routes[key].remote == self.vm.remote and key in self.catalogs.get(self.routes[key].key, []) else None
         return self.delegate.tier_of(key)
 
     def tier_for_call(self, key, arguments):

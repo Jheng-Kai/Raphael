@@ -89,7 +89,8 @@ DEFAULTS: dict[str, Any] = {
     "agent_city": "台北",
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
-    "computer_vm_mode": "shared",
+    "computer_vm_mode": "per-bot",
+    "computer_ssh_alias": "",
     "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
     "worker_cost_cap_usd": 0.20,
@@ -334,6 +335,8 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     if value is None and key in _NULLABLE:
         return key, None
     value = _allowed(key, _checked(key, value))
+    if key == "computer_ssh_alias" and value and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", value):
+        raise ValueError("Computer host must be a simple SSH config alias")
     if key == "computer_vm_idle_minutes" and not 5 <= value <= 1440:
         raise ValueError("Computer idle minutes must be between 5 and 1440")
     if key in ("owner_name", "owner_about"):

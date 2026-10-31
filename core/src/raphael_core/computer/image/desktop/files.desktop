@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+Exec=thunar /home/cua/team
+Icon=system-file-manager
+Terminal=false

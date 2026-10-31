@@ -123,3 +123,30 @@ These owner decisions supersede older conflicting preview, learning notice and E
 | R-AG-17 | 2026-10-30 | Automatic dictionary writes share final term acceptance: one term, Latin at most two words or CJK 2-4 segmented characters; no common words, clauses, punctuation or shortening. Undo restores only the exact batch and its evidence. | pytest, native | hard | core/tests/brain/test_dictionary.py::test_automatic_learning_rejects_common_words_clauses_punctuation_and_shortening |
 | R-AG-18 | 2026-10-30 | Every API/CLI brain discovers Composio slugs and schemas then executes through the validated multi-execute envelope. Enabled read slugs run at T1 without a permission card; writes require T2 and disabled slugs remain blocked. | pytest, authorized live | hard | core/tests/agent/test_composio.py::test_agent_search_execute_answer_and_permission_card |
 | R-AG-19 | 2026-10-30 | Conversations use only the owner's chosen model and fallbacks exposed and explicitly saved in the UI. Hidden legacy chains confer no consent. Preserve the complete timeout, name failures plainly and record the actual answering model. Dictation cleanup retains its separate contract. | pytest, authorized live | hard | core/tests/agent/test_model_choice.py::test_timed_out_turn_stays_on_the_chosen_model_and_reports_it |
+
+## Member computer hosts (owner, 2026-11-01)
+
+R-COMP-HOST supersedes the shared-desktop default: every member lazily receives a
+separate computer and browser profile. Grants remain per member. A team folder at
+`/home/cua/team` is shared; members sign in separately. Settings offers one shared
+location dropdown (This computer / Another computer), with an SSH config alias for
+the latter. A configured alias selects the remote engine; otherwise installed local
+Docker is used. With neither, the rest of the app works and the existing computer
+settings explains the missing runtime and offers installation or another host.
+
+Remote Docker uses a validated `ssh://alias`, no published viewer port, named
+workspace/team volumes on that engine, and a temporary random loopback SSH viewer
+forward. It never starts Docker Desktop on this PC. Local idle-stop remains 15
+minutes; remote desktops have no idle-stop. The provisional cap is 2 GiB and two
+CPUs per container. Local starts keep at most two running owned computers, counting
+old incompatible containers without stopping them. Only a compatible, longest-idle
+computer with no work or owner lease may be evicted; otherwise
+report capacity. Remote hosts have no such limit.
+
+The member viewer has one dark neutral frame in both themes, the member's name,
+and a collapse control at the top right. It preserves the current stream and
+handback nonce. The image has a plain wallpaper and one small bottom-centred dock
+with Browser, Files and Terminal. No browser starts with the desktop. Task teaching
+is outside scope. AT-SPI and websockify stay until real driver/viewer compatibility
+can be established. The owner explicitly prohibits judge, network, native journeys,
+real Docker operations and image builds for this handoff; none is claimed as PASS.

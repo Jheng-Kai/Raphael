@@ -5,6 +5,7 @@
 
 /* ---------- tokens ---------- */
 :root {
+  --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
   --sidebar-width: 296px; --window-controls-height: 32px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
@@ -267,6 +268,7 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .spend { display: flex; align-items: center; gap: var(--sp-3); }
 .spend .bar { width: 120px; }
 [data-row="raphael-spend"] .st { white-space: normal; align-items: baseline; }
+.note[data-computer-host-error] .st { white-space: normal; align-items: baseline; }
 
 /* ---------- the stage: the emblem and Raphael's words (home, first run) ---------- */
 .stage { position: relative; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--sp-4); align-items: center; min-height: 132px; color: var(--text); border-bottom: 1px solid var(--line); padding: 0 0 var(--sp-4); }

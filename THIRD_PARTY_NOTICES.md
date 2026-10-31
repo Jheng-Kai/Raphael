@@ -28,7 +28,10 @@ Modified ports and adaptations, with upstream file names:
 - `core/src/raphael_core/computer/vm.py`: adapted Docker lifecycle, hardening,
   health and exec contracts from `server/container-computer.ts` and
   `server/container-limits.ts`; idle/control concepts from
-  `server/computer-idle.ts` and `server/computer-control.ts`.
+  `server/computer-idle.ts` and `server/computer-control.ts`. SSH transport validation
+  and loopback viewer forwards in `computer/vm.py` and `computer/ssh_tunnel.py`
+  adapt `server/vps-computer.ts` and `server/vps-ssh.ts`; Raphael uses the owner's
+  existing SSH configuration and does not read or copy private keys.
 - `core/src/raphael_core/computer/vm_bridge.py`: adapted ping, schema and
   owner-control bridge concepts from `server/container-mcp.ts` and
   `server/mcp-bridge.ts`. Python implementation for Raphael's existing gate.

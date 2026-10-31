@@ -176,3 +176,24 @@ projection and daily counts. Month controls stay outside the animated grid and
 six rows prevent month-to-month height changes. A compact date changes page-local
 selection; full-grid dates and all event links navigate through the existing app.go
 CalendarDate/CalendarEventFocus boundary. Calendar highlights the requested item.
+
+## Computer host transport (2026-11-01)
+
+`computer/vm.py` owns the single Docker argv boundary for local and SSH engines,
+including `vm_bridge.py` MCP stdio. Targets capture their transport so a settings
+change cannot redirect an in-flight operation to another host. New per-member
+remote target keys include the alias; stale tool routes fail closed. SSH aliases
+are validated in settings and before argv construction. Remote workspace and team
+storage are engine-owned named volumes; compatibility checks compare volume names,
+never Windows `Path.resolve()`. Attachments still traverse the bounded guest read.
+`ssh_tunnel.py` forwards only a validated private container address to a random
+IPv4 loopback port, with noninteractive SSH and managed process cleanup. Viewer
+session expiry/close, container stop and VM shutdown dispose of owned forwards.
+
+The earlier long-team-work shared-screen description applies only to explicit
+`computer_vm_mode=shared`; the default is now `per-bot`. The existing lease and
+per-member grant remain authoritative. A serialized local start checks owned
+compatible running containers, retains last-use order, and stops only an idle
+computer to make room; held or active computers yield local_capacity. Remote
+computers skip idle sweep and local capacity limits. Native journey teardown
+removes its own container by exact target after validation, retaining workspace.

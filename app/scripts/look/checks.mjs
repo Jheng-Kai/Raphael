@@ -273,14 +273,44 @@ export function checkRendered(name, context = {}) {
     }else require(visible(frame),'side panel streams the live screen');
     return {check:name};
   }
+  if (name === "host-settings-remote") {
+    const input = document.querySelector('#computer-ssh-alias');
+    require(visible(input) && input.value === 'studio-mini', "remote alias stays in its field");
+    require(window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'computer_ssh_alias' && call.params.value === 'studio-mini'), "the alias is saved through the existing settings boundary");
+    require(!document.querySelector('[data-act="docker-download"]'), "remote hosts never require local Docker Desktop");
+    require(visible(document.querySelector('[data-k="computer-host"]')), "the shared location dropdown stays available");
+    return { check: name };
+  }
+  if (name === "host-panel-collapsed") {
+    require(document.querySelector('.mb-det')?.dataset.detView === 'details', "collapse returns to member details");
+    require(!document.documentElement.hasAttribute('data-desktop-expanded'), "collapse clears expansion");
+    return { check: name };
+  }
+  if (name === "host-settings-invalid") {
+    const input = document.querySelector('#computer-ssh-alias'), error = document.querySelector('[data-computer-host-error]');
+    require(input?.value === '-oBad' && input.getAttribute('aria-invalid') === 'true' && visible(error), "invalid aliases remain in the field with a contextual error");
+    require(getComputedStyle(error.querySelector('.st')).whiteSpace === 'normal' && error.scrollWidth <= error.clientWidth + 1, "the complete alias error wraps inside its settings column");
+    require(!window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'computer_ssh_alias'), "invalid aliases never reach settings storage");
+    return { check: name };
+  }
   if (name === "desktop-install") {
     const buttons = document.querySelectorAll('[data-act="docker-download"]');
     require(buttons.length === 1 && visible(buttons[0]) && !buttons[0].disabled, "one usable Docker download action");
     return { check: name };
   }
   if (name === "desktop-frame") {
+    const shell = document.querySelector('.desktop-shell'), heading = shell?.querySelector('.desktop-heading');
+    // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
+    const embedded = !!document.querySelector('#noVNC_container');
+    if (!embedded) {
+      require(visible(shell) && visible(heading), "the member computer has one frame and heading");
+      const channels = getComputedStyle(shell).backgroundColor.match(/[\d.]+/g).map(Number);
+      require(channels.slice(0, 3).every(value => value <= 40), "the frame stays dark in both themes");
+      require(visible(shell.querySelector('[data-desktop="collapse"]')), "collapse is present in the frame header");
+    }
     const doc = document.querySelector('.desktop-panel iframe')?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
+    require(win.getComputedStyle(doc.body).backgroundColor === (embedded ? 'rgb(23, 23, 23)' : getComputedStyle(shell).backgroundColor), "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
     require(Math.min(Math.abs(box.width - width), Math.abs(box.height - height)) <= 2, "the canvas fills the frame on its limiting axis");

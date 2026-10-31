@@ -6,6 +6,30 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("checks the native cross-origin framebuffer from inside its viewer", () => {
+    const window = new Window();
+    window.innerWidth = 1280; window.innerHeight = 900;
+    window.document.body.innerHTML = '<div id="noVNC_container"><canvas width="1280" height="900"></canvas></div>';
+    window.document.body.style.backgroundColor = 'rgb(23, 23, 23)';
+    const canvas = window.document.querySelector('canvas');
+    canvas.getBoundingClientRect = () => new window.DOMRect(0, 0, 1280, 900);
+    window.document.elementFromPoint = () => canvas;
+    vi.stubGlobal('document', window.document);
+    try {
+      expect(checkRendered('desktop-frame').check).toBe('desktop-frame');
+      window.document.body.style.backgroundColor = 'white';
+      expect(() => checkRendered('desktop-frame')).toThrow('viewer gutters');
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
+  it("checks remote host settings without entering the computer panel contract", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<input id="computer-ssh-alias" value="studio-mini"><button data-k="computer-host"></button>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ width: 100, height: 34 });
+    window.__look = { calls: [{ method: 'settings.set', params: { key: 'computer_ssh_alias', value: 'studio-mini' } }] };
+    vi.stubGlobal('document', window.document); vi.stubGlobal('window', window);
+    try { expect(() => checkRendered('host-settings-remote')).not.toThrow(); }
+    finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
   it("does not mistake a fallback card's action glyph for a rendered Mermaid diagram", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="page-agent"><section class="rich-block message-diagram"><header><button><svg></svg></button></header><div class="diagram-view"></div><pre>unfinished</pre><p class="rich-note">Still writing</p></section></div>';

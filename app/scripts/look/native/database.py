@@ -65,9 +65,12 @@ elif operation == "vm-smoke":
     print(json.dumps(asyncio.run(vm_smoke(directory))))
 elif operation == "vm-stop":
     import asyncio
-    from raphael_core.computer.vm import LocalVm
-    vm = LocalVm(directory)
-    asyncio.run(vm.stop(vm.target()))
+    from raphael_core.native_journeys import vm_cleanup
+    asyncio.run(vm_cleanup(directory))
+    print("{}")
+elif operation == "vm-signin":
+    from raphael_core.native_journeys import vm_signin_fixture
+    vm_signin_fixture(directory, int(sys.argv[3]))
     print("{}")
 elif operation == "vm-offset":
     import asyncio

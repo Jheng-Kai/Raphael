@@ -144,7 +144,7 @@ async function run(options) {
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {
@@ -170,7 +170,7 @@ async function run(options) {
         try { await stopOwned(owned); result.cleanup = owned ? "Owned app/core/WebView2 process tree closed by PID" : "No app process was launched"; } catch (error) { result.failures.push(`Process cleanup: ${error.message}`); }
         owned = null;
         if (journey.name === "member-computer") {
-          try { await database("vm-stop"); result.vmCleanup = "Journey-owned container stopped; workspace retained"; }
+          try { await database("vm-stop"); result.vmCleanup = "Journey-owned containers removed; workspaces retained"; }
           catch (error) { result.failures.push(`VM cleanup: ${error.message}`); }
         }
         const persistedLog = join(data, "logs/raphael.log");

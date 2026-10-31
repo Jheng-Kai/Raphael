@@ -2,6 +2,25 @@
 # See THIRD_PARTY_NOTICES.md and licenses/Apache-2.0.txt.
 FROM docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b
 USER root
+COPY desktop/ /opt/raphael-desktop/
+RUN set -eux; \
+    install -d -o cua -g cua /home/cua/team /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml; \
+    install -o cua -g cua /opt/raphael-desktop/xfce4-panel.xml /opt/raphael-desktop/xfce4-desktop.xml /home/cua/.config/xfce4/xfconf/xfce-perchannel-xml/; \
+    for item in '1 browser' '2 files' '3 terminal'; do \
+      set -- $item; \
+      install -d -o cua -g cua "/home/cua/.config/xfce4/panel/launcher-$1"; \
+      install -o cua -g cua "/opt/raphael-desktop/$2.desktop" "/home/cua/.config/xfce4/panel/launcher-$1/"; \
+    done; \
+    install -m 0755 /opt/raphael-desktop/raphael-browser /usr/local/bin/raphael-browser; \
+    install -m 0755 /opt/raphael-desktop/prepare-desktop /usr/local/bin/prepare-raphael-desktop; \
+    install -d -o cua -g cua /home/cua/.local/share/applications /home/cua/.config/autostart; \
+    install -o cua -g cua /opt/raphael-desktop/browser.desktop /home/cua/.local/share/applications/raphael-browser.desktop; \
+    install -o cua -g cua /opt/raphael-desktop/prepare-desktop.desktop /home/cua/.config/autostart/; \
+    printf '[Default Applications]\nx-scheme-handler/http=raphael-browser.desktop\nx-scheme-handler/https=raphael-browser.desktop\ntext/html=raphael-browser.desktop\n' > /home/cua/.config/mimeapps.list; \
+    chown cua:cua /home/cua/.config/mimeapps.list; \
+    for app in pulseaudio xfce4-pulseaudio-plugin; do \
+      printf '[Desktop Entry]\nType=Application\nName=Disabled audio startup\nHidden=true\n' > "/home/cua/.config/autostart/$app.desktop"; \
+    done
 COPY THIRD_PARTY_NOTICES.txt /usr/local/share/licenses/raphael/THIRD_PARTY_NOTICES.txt
 COPY Apache-2.0.txt /usr/local/share/licenses/raphael/Apache-2.0.txt
 RUN set -eux; \
@@ -91,4 +110,4 @@ RUN printf '%s\n' \
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="1"
+      org.raphael.computer.layer="2"

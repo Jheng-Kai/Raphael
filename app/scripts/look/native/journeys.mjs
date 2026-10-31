@@ -707,6 +707,7 @@ export async function drive(name, context) {
     await capture("handback");
     await click(page, '.mb-det [data-det="close"]');
     const { member: colleague } = await context.rpc("members.create", { name: "Computer tester", role: "Local computer test" });
+    await context.computerSignin(colleague.id);
     await perform(page, { action: "member", id: colleague.id });
     await type(page, ".composer .cmp-input", "Complete the local test sign-in [native-computer:signin]");
     await click(page, ".cmp-send");

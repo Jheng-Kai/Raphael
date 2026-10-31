@@ -12,10 +12,13 @@ from .test_vm import Runtime, container
 
 
 @pytest.fixture
-async def viewer(tmp_path):
+async def viewer(tmp_path, conn):
+    from raphael_core.brain.settings import SettingsStore
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
     clock = [0]
-    vm = LocalVm(tmp_path, runner=runtime, clock=lambda: clock[0])
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime, clock=lambda: clock[0])
     runtime.raw = container(vm, vm.target(), runtime)
     bridge = DesktopViewer(vm, member_exists=lambda member: member in (0, 1))
     try:
@@ -164,6 +167,7 @@ def test_library_embedding_omits_standalone_chrome_and_keeps_upstream_notices():
     assert "Copyright noVNC authors" in page
     assert "base.css" not in page and "control_bar" not in page and "app/ui.js" not in page
     assert 'src="bridge.js"' in page and 'id="noVNC_container"' in page
+    assert 'background:#171717' in page
 
 
 async def test_private_connection_uses_the_current_validated_container_after_restart(viewer):
