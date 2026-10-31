@@ -1,8 +1,12 @@
-import { scene, click, hover, type, wait, page, key, scroll, room, newRoom, check, rightClick } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, page, key, scroll, room, newRoom, check, rightClick } from "./steps.mjs";
 
 const auto = [page("home"), { action: "click-position", selector: ".ho-calendar", x: 0.02, y: 0.02, expect: ".au-toolbar" }, wait(".au-toolbar")];
 const calendar = [...auto, wait(".au-occurrence"), check("calendar-chips"), check("calendar-shell")];
-const dialog = [...auto, click('[data-au="new"]'), wait(".mb-dialog")];
+const view = name => [click('[data-au="view"]'), click(`#app-popover [data-value="${name}"]`)];
+const dialog = [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="routine"]'), wait(".mb-dialog")];
+const routineDetail = [...auto, wait(".au-occurrence"), click('.au-occurrence[data-au="entry"]'), wait('[data-pop="open-routine"]')];
+const ownChip = '.cal-chip.is-own[data-entry="own:1"]', slotAt = (day, hour) => `.au-slot[data-slot="${day}"][data-hour="${hour}"]`;
+const today = "2026-10-24";
 const more = [...dialog, click('[data-dlg="more"]')];
 const tools = [...calendar, { action: "calendar-tools" }, check("calendar-tools")];
 export default [
@@ -30,14 +34,38 @@ export default [
   scene("room-mention-blocked", "Rate-limited and stopped replies stand in the thread where their exchange stopped", [room(1), check("p02-blocked")], { p02Blocked: true }),
   scene("room-wrapup-after-replies", "Chief conclusion follows completed reply intents", [room(1), check("room-wrapup"), check("p02-long-exchange")], { p02LongExchange: true, roomWrapup: true }),
   scene("automations-hover", "Calendar chip hover", [...calendar, hover('.au-occurrence')]),
-  scene("automations-empty", "Calendar without routines or events", [...auto, check("calendar-shell")], { routines: [], homeEmpty: true }),
-  scene("automations-day-empty", "Empty day with compact working hours and a pinned all-day row", [...auto, click('[data-period="day"]'), check("calendar-shell")], { routines: [], homeEmpty: true }),
+  scene("automations-empty", "An empty week stays calm and offers 建立", [...auto, check("calendar-shell"), check("calendar-empty")], { routines: [], homeEmpty: true }),
+  scene("automations-day-empty", "Empty day with compact working hours and a pinned all-day row", [...auto, ...view("day"), check("calendar-shell"), check("calendar-empty")], { routines: [], homeEmpty: true }),
+  scene("automations-month-empty", "An empty month keeps its six weeks and offers 建立", [...auto, ...view("month"), check("calendar-month"), check("calendar-empty")], { routines: [], homeEmpty: true }),
   scene("automations-sparse", "Sparse week keeps working hours in view", [...auto, check("calendar-shell")], { calendarSparse: true }),
-  scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, click('[data-period="day"]'), check("calendar-shell")], { calendarSparse: true }),
+  scene("automations-day-sparse", "Sparse day keeps working hours in view", [...auto, ...view("day"), check("calendar-shell")], { calendarSparse: true }),
   scene("automations-all-day", "A full week retains all-day items above compact timed rows", [...auto, check("calendar-shell"), check("calendar-all-day")], { calendarAllDay: true }),
-  scene("automations-calendar", "Automation week calendar", calendar),
-  scene("automations-day", "Automation day calendar keeps both period controls fixed", [...calendar,
-    click('[data-period="day"]'), click('[data-period="week"]'), click('[data-period="day"]'), check("calendar-shell")]),
+  scene("automations-calendar", "The week: rail on the left, day headers, an hour gutter and the time now", [...calendar, check("calendar-now")]),
+  scene("automations-day", "The day view, and the view dropdown keeps its place", [...calendar, ...view("day"), ...view("week"), ...view("day"), check("calendar-shell"), check("calendar-now")]),
+  scene("automations-view-menu", "The view dropdown is the shared menu", [...auto, click('[data-au="view"]'), wait("#app-popover")]),
+  scene("automations-month", "The month: chips in each day", [...auto, ...view("month"), check("calendar-month")]),
+  scene("automations-month-busy", "A full month day counts what does not fit and opens the day", [...auto, ...view("month"), check("calendar-month"), check("calendar-month-more"), click('[data-month-day="2026-10-28"] .cal-more'), wait('.au-day-col[data-day="2026-10-28"]')], { calendarBusy: true }),
+  scene("automations-busy", "Overlapping events stand side by side, long ones run across the all-day row", [...auto, ...view("week"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-shell"), check("calendar-overlaps")], { calendarBusy: true }),
+  scene("automations-busy-day", "One day's overlaps with room to read them", [...auto, ...view("day"), { action: "calendar-date", date: "2026-10-21" }, check("calendar-overlaps")], { calendarBusy: true }),
+  scene("automations-create-slot", "A click on an empty slot opens the small form beside it", [...auto, click(slotAt(today, 13)), wait(".au-pop-editor"), check("calendar-editor")]),
+  scene("automations-create-drag", "Dragging over a range sets the time", [...auto, { action: "pointer-drag", selector: slotAt(today, 12), dx: 0, dy: 90, y: 0.05 }, wait(".au-pop-editor"), check("calendar-editor"), check("calendar-drag-range")]),
+  scene("automations-create-button", "建立 opens the same form", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), check("calendar-editor")]),
+  scene("automations-create-time-menu", "The time is a choice in the shared menu", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="start-time"]'), wait("#app-popover")]),
+  scene("automations-create-all-day", "An all-day event has dates and no times", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), click('[data-pop="all-day"]'), check("calendar-editor")]),
+  scene("automations-create-saved", "Saving draws it at once", [...auto, click('[data-au="new"]'), wait(".au-pop-editor"), type("#cal-title", "拜訪客戶"), click('.au-pop-editor [data-pop="save"]'), waitGone(".au-pop-editor"), { action: "wait-text", selector: ".cal-chip.is-own b", text: "拜訪客戶" }, check("calendar-saved")]),
+  scene("automations-detail-own", "An own event: its time, notes, who added it, edit and ⋯", [...auto, click(ownChip), wait(".au-pop-detail"), check("calendar-detail-own")]),
+  scene("automations-detail-member", "An event a member added names the member", [...auto, { action: "calendar-date", date: "2026-10-23" }, click('.cal-chip.is-own[data-entry="own:2"]'), wait(".au-pop-detail"), check("calendar-detail-own")]),
+  scene("automations-detail-routine", "A routine is read here, says whose it is and opens its editor", [...routineDetail, check("calendar-detail-read")]),
+  scene("automations-detail-google", "A Google event is read here and says where it comes from", [...auto, click('.au-calendar-event[data-au="entry"]'), wait(".au-pop-detail"), check("calendar-detail-read")]),
+  scene("automations-edit-own", "Edit opens the same form with the event in it", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="edit"]'), wait(".au-pop-editor"), check("calendar-editor")]),
+  scene("automations-delete-own", "Delete waits in the ⋯, asks once more and returns to the calendar", [...auto, click(ownChip), wait(".au-pop-detail"), click('[data-pop="more"]'), wait("#app-popover"), click("#app-popover [data-confirm-item]"), click("#app-popover [data-confirm-item]"), wait(".toast"), check("calendar-deleted")]),
+  scene("automations-right-click", "A right click on an own event opens the same menu at the pointer", [...auto, wait(ownChip), rightClick(ownChip), wait("#app-popover")]),
+  scene("automations-move", "Dragging an own event moves it", [...auto, wait(ownChip), { action: "pointer-drag", selector: ownChip, dx: 0, dy: 54, y: 0.3 }, check("calendar-moved")]),
+  scene("automations-resize", "Dragging its edge changes when it ends", [...auto, wait(ownChip), { action: "pointer-drag", selector: '[data-wrap="own:1"] .au-event-edge', dx: 0, dy: 54 }, check("calendar-resized")]),
+  scene("automations-google-off", "Google not connected: said once, with the place to connect it", [...auto, ...view("week"), { action: "calendar-tools" }, check("calendar-google-off")], { calendarGoogle: "not_connected" }),
+  scene("automations-google-off-closed", "Closed, the offer is not made again and its words stay in the rail", [...auto, { action: "calendar-tools" }, wait("[data-calendar-dismiss]"), click("[data-calendar-dismiss]"), check("calendar-google-closed")], { calendarGoogle: "not_connected" }),
+  scene("automations-google-failed", "Google could not be read: said, with where to check, and own events still show", [...auto, { action: "calendar-tools" }, check("calendar-google-failed")], { calendarGoogle: "unreadable" }),
+  scene("automations-google-members-only", "Connected through a service the calendar cannot read: said plainly", [...auto, { action: "calendar-tools" }, check("calendar-google-members")], { calendarGoogle: "members_only" }),
   scene("automations-tools", "Responsive calendar month, members and keep-awake", tools),
   scene("automations-tools-month", "Calendar tools navigate mini months", [...tools, click('[data-au="month-next"]'), check("calendar-tools")]),
   scene("automations-tools-date", "Calendar tools select a date and return to the grid", [...tools, click('[data-mini-date="2026-10-28"]'), wait('.au-day-col[data-day="2026-10-28"]'), check("calendar-shell")]),
@@ -48,8 +76,8 @@ export default [
   scene("automation-end-menu", "Automation end menu", [...more, click('[data-dlg="end"]')]),
   scene("automation-max-runs", "Automation maximum run count", [...more, click('[data-dlg="end"]'), click('[data-value="after"]')]),
   scene("automation-until", "Automation end date picker", [...more, click('[data-dlg="end"]'), click('[data-value="until"]'), click('[data-dlg="until"]')]),
-  scene("automation-edit", "Edit an automation", [...auto, click('[data-au="edit"]')]),
-  scene("automation-delete", "Deleting an edited routine returns to the calendar with a success notice", [...auto, click('[data-au="edit"]'), click('[data-dlg="delete"]'), check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),wait(".toast"),check("deleted-view")]),
+  scene("automation-edit", "Edit an automation", [...routineDetail, click('[data-pop="open-routine"]'), wait(".au-routine-dialog")]),
+  scene("automation-delete", "Deleting an edited routine returns to the calendar with a success notice", [...routineDetail, click('[data-pop="open-routine"]'), click('[data-dlg="delete"]'), check("delete-confirmation"),click('.mb-confirm [data-dlg="delete"]'),wait(".toast"),check("deleted-view")]),
   scene("automation-drag-prefill", "Calendar drop opens a prefilled automation", [...tools, { action: "drag-start", selector: '[data-drag-member="2"]' }, { action: "drop", selector: '[data-slot][data-hour="9"]', memberId: 2 }]),
   scene("automation-more-bottom", "Scrollable automation advanced fields", [...more, click('[data-dlg="end"]'), click('[data-value="after"]'), scroll(".au-more")]),
   scene("primary-room-picker", "Room choices require the current chief after the display swap", [newRoom(), check("primary-room-picker"), click('[data-dlg="member"][data-member="0"]'), check("primary-room-picker"), click('[data-dlg="responder"]'), check("room-responder")], { primaryMember: 1 }),

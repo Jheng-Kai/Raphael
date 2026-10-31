@@ -174,8 +174,21 @@ Home month navigation keeps its visible month in page state, requests month-scop
 home.overview data, and uses the shared monthDays local-date grid. It sends a
 CalendarDate through the existing app.go boundary to the full day calendar. The
 projection retains the bounded seven-day preview and adds compact month date marks
-and connected events; it creates no calendar database or owner store. Horizontal
-wheel/touch navigation uses a finite 160ms slide and respects reduced motion.
+and connected events. Horizontal wheel/touch navigation uses a finite 160ms slide
+and respects reduced motion.
+
+## The app's own calendar (owner, 2026-10-31)
+
+`own_calendar.py` holds the one thing in the app that can be changed by hand: one-time
+events in the `calendar_events` table, a timed one as two instants and an all-day one as
+two local dates. The window's `calendar.*` RPCs and the `calendar_*` tools share its one
+check. `home.overview` stays the sole projection for Home and the Calendar page, and adds
+own events to what it computes; `HomeOverview.between` serves a member's `calendar_list`
+from the same sources. Tools are offered on every path through `take_snapshot`; the API
+and CLI turns reach them through `_harness_call`, a background task through
+`TaskRun._lookup`, with the same screening at T1. `calendar_google` says what Google is
+(connected, not connected, unreadable, members only) so that none of them reads as an
+empty calendar. Everything else the app shows is computed and gets no tools.
 
 The final Home calendar uses a size container: 900px width plus 460px height selects
 the full event-chip month; smaller containers use mini month plus selected-day

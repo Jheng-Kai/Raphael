@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 47
+LATEST = 48
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -484,6 +484,32 @@ SCHEMA_V46 = {**SCHEMA_V45, "pages": [
     "page_revisions": ["page_id TEXT PK NOT NULL", "rev INTEGER PK NOT NULL", "title TEXT NOT NULL",
                        "html TEXT NOT NULL", "at_ms INTEGER NOT NULL"]}
 
+SCHEMA_V48 = {**SCHEMA_V46, "calendar_events": [
+    "id INTEGER PK", "title TEXT NOT NULL", "all_day INTEGER NOT NULL DEFAULT 0", "start_ms INTEGER", "end_ms INTEGER",
+    "start_date TEXT", "end_date TEXT", "notes TEXT NOT NULL DEFAULT ''", "added_by INTEGER",
+    "created_at_ms INTEGER NOT NULL", "updated_at_ms INTEGER NOT NULL"]}
+
+def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
+    path = tmp_path / "v47.db"
+    raw = sqlite3.connect(path)
+    for version in range(1, 48):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    raw.execute("INSERT INTO members (id,name,model,position,created_at_ms) VALUES (5,'Kept','kept-model',5,1)")
+    raw.commit()
+    raw.close()
+    migrated = db.connect(path)
+    assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "kept-model")
+    assert describe_columns(migrated, "calendar_events") == SCHEMA_V48["calendar_events"]
+    assert {"calendar_events_timed", "calendar_events_all_day"} <= schema_names(migrated, "index")
+    assert migrated.execute("SELECT COUNT(*) FROM calendar_events").fetchone()[0] == 0
+    migrated.execute("INSERT INTO calendar_events (title,start_ms,end_ms,added_by,created_at_ms,updated_at_ms) VALUES ('Kept event',100,200,5,1,1)")
+    migrated.commit()
+    migrated.close()
+    reopened = db.connect(path)
+    assert tuple(reopened.execute("SELECT title,start_ms,end_ms,added_by FROM calendar_events").fetchone()) == ("Kept event", 100, 200, 5)
+    reopened.close()
 
 
 def test_v47_gives_every_member_the_one_model(tmp_path):
@@ -617,7 +643,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V46) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V48) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -629,9 +655,11 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_turns_member",
         "routines_member",
         "worker_questions_task",
+        "calendar_events_timed",
+        "calendar_events_all_day",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V46.items():
+    for table, columns in SCHEMA_V48.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

@@ -1,8 +1,5 @@
 /* Shared team and automation surfaces use the app's theme tokens in both appearances. */
-.au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-page-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
-.au-segment { display: flex; padding: var(--sp-1); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--surface-2); gap: var(--sp-1); }
-.au-segment .btn { border-color: transparent; background: transparent; }
-.au-segment .btn[aria-pressed="true"] { background: var(--panel); border-color: var(--edge); box-shadow: var(--tab-shadow); }
+.au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-workspace-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
 .au-routine-dialog.mb-dialog { width: min(690px, calc(100vw - 40px)); }
@@ -31,53 +28,6 @@
 .au-month-grid .btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-radius: var(--r-pill); }
 .au-month-grid .btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
 .au-month-grid .btn:hover:not([aria-pressed="true"]) { background: var(--hover); }
-.au-spacer { flex: 1; }
-.au-calendar { display: flex; min-height: 0; flex: 1; }
-.au-toolbar { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-5); border-bottom: 1px solid var(--line); flex-shrink: 0; }
-.au-toolbar h1 { margin: 0; font-size: var(--fs-lg); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.au-toolbar .btn.au-tools-toggle { display: none; }
-.au-calendar-tools { position: fixed; z-index: 130; width: 280px; max-width: calc(100vw - 16px); overflow-y: auto; overflow-x: hidden; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--panel); box-shadow: var(--pop); }
-.au-calendar-tools .au-calendar-side { width: 100%; border: 0; }
-.au-step { display: flex; gap: var(--sp-1); }
-.au-calendar-side { width: 232px; flex-shrink: 0; display: flex; flex-direction: column; padding: var(--sp-4); border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; overflow-x: hidden; }
-.au-awake { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-top: auto; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--fs-xs); color: var(--text-2); }
-.au-calendar-side h3 { border-top: 1px solid var(--line); padding-top: var(--sp-4); margin: var(--sp-4) 0 var(--sp-3); font-size: var(--fs-xs); }
-.au-calendar-side p { font-size: var(--fs-2xs); color: var(--text-3); line-height: 1.7; }
-.au-drag-members { display: flex; flex-direction: column; gap: var(--sp-1); }
-.au-drag-members .btn { border: 0; background: transparent; justify-content: flex-start; gap: var(--sp-2); height: auto; min-height: 36px; padding: var(--sp-1) var(--sp-2); cursor: grab; white-space: normal; text-align: left; font-size: var(--fs-sm); }
-.au-drag-members .btn:hover { background: var(--hover); }
-.au-calendar-scroll { --au-hour: inherit; flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; }
-.au-grid { display: grid; grid-template-columns: 46px repeat(var(--au-days), minmax(0, 1fr)); min-width: 0; position: relative; }
-.au-grid-head { grid-column: 1 / -1; position: sticky; top: 0; z-index: 3; background: var(--content); display: grid; grid-template-columns: 46px repeat(var(--au-days), minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
-.au-grid-head > span { font-size: var(--fs-2xs); color: var(--text-3); padding-top: var(--sp-4); text-align: center; }
-.au-grid-head > b { text-align: center; font-size: var(--fs-2xs); padding: var(--sp-2) var(--sp-1); font-weight: 500; color: var(--text-2); overflow: hidden; }
-.au-grid-head strong { display: block; margin: var(--sp-1) auto 0; font-size: var(--fs-lg); color: var(--text); width: 32px; height: 32px; line-height: 32px; border-radius: var(--r-pill); }
-.au-grid-head .is-today strong { background: var(--accent); color: var(--on-accent); }
-.au-hours { color: var(--text-3); font-size: var(--fs-2xs); text-align: right; }
-.au-hours > div { height: var(--au-hour, 48px); padding: var(--sp-1) var(--sp-1) 0 0; }
-.au-day-col { position: relative; min-width: 0; border-left: 1px solid var(--line); container: calendar-day / inline-size; }
-.au-slot { height: var(--au-hour, 48px); border-bottom: 1px solid var(--line); }
-.au-slot:hover { background: var(--hover); }
-.au-occurrence.btn { position: absolute; display: block; height: calc(var(--au-hour, 54px) - 2px); min-height: 0; min-width: 0; padding: calc(var(--sp-1) / 2) var(--sp-1); background: var(--selected); border: 0; border-left: 3px solid var(--accent-icon); border-radius: var(--r-sm); z-index: 1; overflow: hidden; }
-.au-all-day-label, .au-all-day { min-height: 28px; padding: var(--sp-1); border-top: 1px solid var(--line); font-size: var(--fs-2xs); color: var(--text-3); }
-.au-all-day-label { align-self: end; text-align: right; }
-.au-all-day { border-left: 1px solid var(--line); }
-.au-all-day-event { display: block; padding: 2px var(--sp-1); border-radius: var(--r-sm); background: var(--selected); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.au-calendar-event { position: absolute; left: 2px; right: 2px; padding: var(--sp-1); border-left: 3px solid var(--ok); border-radius: var(--r-sm); background: var(--panel); font-size: var(--fs-2xs); line-height: 1.4; overflow-wrap: anywhere; }
-.au-calendar-event time, .au-calendar-event b { display: block; }
-.au-calendar-event b { font-weight: 500; }
-.au-occurrence > .au-occurrence-copy { min-width: 0; flex: 1; text-align: left; }
-.au-occurrence b { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--fs-xs); font-weight: 500; line-height: 1.15; overflow: hidden; white-space: normal; overflow-wrap: anywhere; }
-.au-occurrence time { display: block; min-height: 18px; line-height: 18px; padding-right: 20px; font-size: var(--fs-2xs); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); }
-.au-history-mark[data-status="done"] { background: var(--ok); }
-.au-history-mark[data-status="skipped"] { background: var(--text-3); }
-.au-occurrence.btn > .av { position: absolute; top: calc(var(--sp-1) / 2); right: var(--sp-1); width: 20px; height: 20px; --av: 20px !important; }
-@container calendar-day (max-width: 96px) {
-  .au-occurrence.btn { padding-inline: calc(var(--sp-1) / 2); }
-  .au-occurrence.btn > .av { right: calc(var(--sp-1) / 2); }
-}
-.au-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--err); pointer-events: none; z-index: 2; }
 .au-room-members { max-height: 280px; overflow-y: auto; overflow-x: hidden; }
 .au-group-dialog .mb-dlg-body { display: flex; flex-direction: column; gap: var(--sp-4); }
 .au-room-pane.mb-chat { grid-template-rows: auto minmax(0, 1fr); }
@@ -93,7 +43,6 @@
 .au-room-thread .ra { align-items: flex-start; }
 .au-room-thread .room-turn { white-space: nowrap; }
 .au-room-row [aria-current="true"] { background: var(--accent-soft) !important; color: var(--text); }
-.au-occurrence.is-past { opacity: 0.65; background: var(--surface-2); }
 .au-rooms-section { border-top: 1px solid var(--line); margin-top: var(--sp-4); padding: var(--sp-2) 0; }
 /* The ⋯ sits inside the row on its right, as on member rows, and shows on hover, keyboard focus or while its menu is open. */
 .au-room-row { position: relative; display: flex; align-items: center; margin: var(--sp-1) 0; }
@@ -115,14 +64,6 @@
 .au-room-wrapup .message-text .au-room-wrapup-owner { color: var(--accent-text); font-weight: 600; }
 .au-room-controls { display: flex; justify-content: flex-end; max-width: var(--pa-colw); margin-inline: auto; margin-bottom: var(--sp-2); }
 .au-room-controls:empty { display: none; }
-@container calendar (max-width: 760px) {
-  .au-calendar > .au-calendar-side { display: none; }
-  .au-toolbar .btn.au-tools-toggle { display: inline-flex; }
-  .au-toolbar { gap: var(--sp-2); padding-inline: var(--sp-4); }
-  .au-toolbar > .btn, .au-step, .au-segment { flex-shrink: 0; }
-  .au-toolbar h1 { flex: 1; font-size: var(--fs-sm); }
-  .au-toolbar .au-spacer { display: none; }
-}
 /* Wide boards use the workspace while keeping names and roles readable. */
 @media (min-width: 1400px) {
 }
@@ -157,4 +98,130 @@
 .room-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .room-picked span { padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); }
 
-.au-all-day-event.is-home-focus, .au-calendar-event.is-home-focus, .au-occurrence[aria-current="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The calendar: the rail on the left, the period on the right, in the app's own black and white. */
+.au-toolbar { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4) var(--sp-3); flex-shrink: 0; }
+.au-toolbar h1 { margin: 0 0 0 var(--sp-2); font-size: var(--fs-h1); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.au-toolbar .sel { flex: none; min-width: 88px; justify-content: space-between; }
+.au-toolbar .btn.au-tools-toggle, .au-toolbar .btn.au-toolbar-new { display: none; }
+.au-toolbar > .btn, .au-step { flex-shrink: 0; }
+.au-spacer { flex: 1; }
+.au-step { display: flex; }
+.au-calendar { display: flex; min-height: 0; flex: 1; }
+.au-calendar-side { width: 216px; flex-shrink: 0; display: flex; flex-direction: column; padding: 0 var(--sp-3) var(--sp-3) var(--sp-4); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.au-calendar-side::-webkit-scrollbar { display: none; }
+.btn.au-create { align-self: flex-start; flex: none; gap: var(--sp-2); min-height: 40px; padding-inline: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-4); border-radius: var(--r-md); }
+.au-calendar-side .au-month-head { padding: 0 0 var(--sp-1) var(--sp-1); }
+.au-calendar-side .au-month-head b { flex: 1; text-align: left; font-size: var(--fs-sm); font-weight: 600; }
+.au-calendar-side .au-month-head .btn.icon { width: 24px; min-height: 24px; }
+.au-calendar-side .au-month-grid { flex: none; gap: 0; }
+.au-calendar-side .au-month-grid .btn { width: 26px; height: 26px; min-height: 26px; justify-self: center; border-radius: var(--r-pill); }
+.au-calendar-side .au-month-grid .btn[aria-pressed="true"], .au-calendar-side .au-month-grid .btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--selected); color: var(--text); }
+.au-calendar-side .au-month-grid .btn[aria-current="date"], .au-calendar-side .au-month-grid .btn[aria-current="date"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.au-calendar-side h3 { margin: var(--sp-4) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.au-drag-members { display: flex; flex-direction: column; flex: none; gap: 1px; margin-inline: calc(-1 * var(--sp-2)); }
+.btn.au-source { flex: none; justify-content: flex-start; gap: var(--sp-2); min-height: 30px; padding: 3px var(--sp-2); border: 0; background: transparent; font-size: var(--fs-xs); text-align: left; }
+.btn.au-source:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.au-source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.au-source-mark { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--text-2); }
+.au-source > .cal-mark { width: 20px; height: 20px; }
+.au-check { display: grid; place-items: center; flex: none; width: 18px; height: 18px; box-sizing: border-box; border-radius: var(--r-sm); border: 1.5px solid var(--chip, var(--accent)); background: var(--chip, var(--accent)); color: var(--on-accent); }
+.au-source[style*="--chip"] .au-check { color: var(--on-slime); }
+.au-source[aria-checked="false"] .au-check { background: transparent; border-color: var(--text-3); }
+.au-source[aria-checked="false"] .au-check .i { visibility: hidden; }
+.au-source[aria-checked="false"] .au-source-name { color: var(--text-3); }
+.au-calendar-side > .cal-notice { flex: none; flex-wrap: wrap; margin-top: var(--sp-3); }
+.au-calendar-side > .cal-notice .cal-notice-words { flex: 1 1 calc(100% - 56px); }
+.au-awake { display: flex; flex: none; justify-content: space-between; align-items: center; gap: var(--sp-3); margin-top: auto; padding-top: var(--sp-4); font-size: var(--fs-xs); color: var(--text-2); }
+
+.au-calendar-main { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; margin: 0 var(--sp-4) var(--sp-3) 0; border: 1px solid var(--edge); border-radius: var(--r-lg); overflow: hidden; background: var(--content); }
+.au-calendar-scroll { --au-hour: inherit; flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; user-select: none; }
+.au-calendar-scroll::-webkit-scrollbar { display: none; }
+.au-grid { position: relative; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); min-width: 0; }
+.au-grid-head { grid-column: 1 / -1; position: sticky; top: 0; z-index: 4; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); background: var(--content); border-bottom: 1px solid var(--line); }
+.au-day-head { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: var(--sp-2) 0 var(--sp-1); font-size: var(--fs-2xs); color: var(--text-2); }
+.au-day-head.is-today > span { color: var(--text); font-weight: 600; }
+.is-one-day .au-day-head { align-items: flex-start; padding-left: var(--sp-3); }
+.btn.au-day-num { width: 38px; height: 38px; min-height: 38px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-h1); font-weight: 400; font-variant-numeric: tabular-nums; }
+.btn.au-day-num:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.is-today > .btn.au-day-num, .is-today > .btn.au-day-num:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+.au-all-day-row { grid-column: 1 / -1; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); grid-template-rows: repeat(var(--au-rows), 22px); row-gap: 2px; padding-bottom: var(--sp-1); }
+.au-all-day-label { grid-column: 1; grid-row: 1 / -1; padding-top: 2px; font-size: var(--fs-2xs); line-height: 18px; color: var(--text-3); text-align: center; white-space: nowrap; }
+.au-all-day { grid-row: 1 / -1; min-width: 0; margin-bottom: calc(-1 * var(--sp-1)); border-left: 1px solid var(--line); }
+.au-event { z-index: 1; min-width: 0; }
+.au-day-col > .au-event { position: absolute; }
+.au-bar { position: relative; margin: 0 3px 0 2px; }
+.au-bar.starts-before .cal-chip.btn { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.au-bar.ends-after .cal-chip.btn { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.is-movable .cal-chip.btn, .au-bar .cal-chip.is-own.btn { cursor: grab; }
+.btn.au-event-more { display: none; }
+.au-event.is-tight .cal-chip > .av, .au-event.is-tight .cal-chip > .cal-mark { display: none; }
+.au-event-edge { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.au-bar-edge { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.au-event.is-dragging { z-index: 5; opacity: 0.88; }
+.au-event.is-dragging .cal-chip.btn { box-shadow: var(--pop); cursor: grabbing; }
+.au-draft { z-index: 3; pointer-events: none; }
+.au-draft .cal-chip.btn { box-shadow: var(--pop); cursor: default; }
+.cal-chip.btn.is-past { opacity: 0.6; }
+.cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
+.cal-chip.is-home-focus, .cal-chip[aria-current="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
+.au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
+.au-history-mark[data-status="done"] { background: var(--ok); }
+.au-history-mark[data-status="skipped"] { background: var(--text-3); }
+.au-hours > div { position: relative; height: var(--au-hour, 48px); }
+.au-hours span { position: absolute; top: 0; right: 6px; transform: translateY(-50%); font-size: var(--fs-2xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.au-day-col { position: relative; min-width: 0; border-left: 1px solid var(--line); }
+.au-slot { height: var(--au-hour, 48px); box-sizing: border-box; border-bottom: 1px solid var(--line); }
+.au-day-col > .au-slot:last-of-type { border-bottom: 0; }
+.au-now { position: absolute; left: 0; right: 0; z-index: 2; height: 2px; margin-top: -1px; background: var(--err); pointer-events: none; }
+.au-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--err); }
+.btn.cal-more { justify-content: flex-start; min-height: 20px; height: 20px; padding: 0 6px; border: 0; background: transparent; font-size: var(--fs-2xs); color: var(--text-2); }
+.btn.cal-more:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.btn.cal-more[hidden] { display: none; }
+
+.au-month-view { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 26px repeat(6, minmax(0, 1fr)); user-select: none; }
+.au-month-weekday { font-size: var(--fs-2xs); line-height: 26px; color: var(--text-2); text-align: center; }
+.au-month-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; min-height: 0; padding: 2px var(--sp-1) var(--sp-1); border-top: 1px solid var(--line); border-left: 1px solid var(--line); overflow: hidden; }
+.au-month-cell:nth-child(7n + 1) { border-left: 0; }
+.au-month-cell .btn.au-day-num { flex: none; align-self: center; width: 24px; height: 24px; min-height: 24px; font-size: var(--fs-xs); font-weight: 500; }
+.au-month-cell.is-other .btn.au-day-num { color: var(--text-3); }
+.au-month-chips { flex: 1; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
+.au-month-chips > .au-event { flex: none; position: relative; height: 20px; }
+.au-month-chips > .au-event[hidden] { display: none; }
+.is-drop { background: var(--selected); }
+
+.au-empty-hint { position: absolute; left: 52px; right: 0; top: 52%; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--text-3); pointer-events: none; }
+.au-empty-hint .btn { pointer-events: auto; background: var(--content); }
+.au-month-view + .au-empty-hint { left: 0; top: calc(26px + (100% - 26px) * 0.54); }
+
+/* The small panel beside a slot or an event. */
+.au-pop { position: fixed; z-index: 120; display: flex; flex-direction: column; gap: var(--sp-3); box-sizing: border-box; width: min(344px, calc(100vw - 16px)); max-height: calc(100vh - 48px); padding: var(--sp-4); overflow-y: auto; scrollbar-width: none; border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--menu); box-shadow: var(--pop); outline: 0; }
+.au-pop::-webkit-scrollbar { display: none; }
+.au-pop .au-title.mb-fin { width: 100%; font-size: var(--fs-lg); padding: var(--sp-1) 0 var(--sp-2); }
+.au-pop-when { display: grid; grid-template-columns: auto minmax(0, 1fr) 88px; align-items: center; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-2); }
+.au-pop-when.is-all-day { grid-template-columns: auto minmax(0, 1fr); }
+.au-pop-when .btn { justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.au-pop-when .sel { justify-content: space-between; width: 100%; padding-inline: var(--sp-2) var(--sp-1); font-variant-numeric: tabular-nums; }
+.au-pop-allday { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--text-2); }
+.au-pop .mb-ta { width: 100%; min-height: 56px; box-sizing: border-box; }
+.au-pop .action-row { margin: 0; padding: 0; border: 0; background: transparent; }
+.au-pop .btn.au-pop-routine { margin-right: auto; gap: var(--sp-1); padding-inline: var(--sp-2); font-size: var(--fs-xs); }
+.au-pop-detail { gap: var(--sp-2); padding-top: var(--sp-2); }
+.au-pop-tools { display: flex; justify-content: flex-end; gap: var(--sp-1); margin-right: calc(-1 * var(--sp-2)); }
+.au-pop-detail h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.au-pop-time, .au-pop-status { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.au-pop-notes { margin: var(--sp-1) 0 0; max-height: 168px; overflow-y: auto; font-size: var(--fs-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.au-pop-from { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--fs-xs); color: var(--text-2); }
+.au-pop-from > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.au-pop .btn.au-pop-open { align-self: flex-start; margin-top: var(--sp-1); }
+
+/* A narrow window: the rail is a drawer from the left, and a week shows fewer days. */
+.au-calendar-tools { position: fixed; z-index: 130; left: 0 !important; top: 0 !important; bottom: 0; width: 280px; max-width: calc(100vw - 16px); max-height: none !important; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; background: var(--panel); border-right: 1px solid var(--edge); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); animation: au-drawer 0.18s ease-out; }
+.au-calendar-tools .au-calendar-side { width: 100%; box-sizing: border-box; min-height: 100%; padding: calc(var(--window-controls-height) + var(--sp-3)) var(--sp-4) var(--sp-4); }
+@keyframes au-drawer { from { transform: translateX(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@container calendar (max-width: 760px) {
+  .au-calendar > .au-calendar-side { display: none; }
+  .au-toolbar .btn.au-tools-toggle, .au-toolbar .btn.au-toolbar-new { display: inline-flex; }
+  .au-toolbar { padding-inline: var(--sp-3); }
+  .au-toolbar h1 { margin-left: var(--sp-1); font-size: var(--fs-lg); }
+  .au-calendar-main { margin-inline: var(--sp-3); }
+}

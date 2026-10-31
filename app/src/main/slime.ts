@@ -104,6 +104,11 @@ export const isSlimeAvatar = (avatar: string | null | undefined): boolean => par
 const defaultColor = (id: number): SlimeColor => DEFAULT_COLORS[Math.abs(id) % DEFAULT_COLORS.length]!;
 /** What a member without a choice of its own shows, which the picture menu starts from. */
 export const defaultSlimeAvatar = (id: number): string => `slime:color:${defaultColor(id)}`;
+/** The colour of a member's slime, for what stands for that member elsewhere: its chips on the calendar. */
+export function slimeColorOf(member: { id: number; avatar?: string | null }): string {
+  const slime = parseSlime(member.avatar) ?? { color: defaultColor(member.id) };
+  return "character" in slime ? CHARACTERS[slime.character].color : COLORS[slime.color];
+}
 
 /** The hat of the season, on a plain slime: a character is recognised by its head. */
 export function seasonalHat(now: Date = new Date()): Hat | null {

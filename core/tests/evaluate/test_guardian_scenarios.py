@@ -540,6 +540,63 @@ async def test_rpc_cli_brain_reaches_the_production_authenticated_mcp(tmp_path, 
         await driver.aclose()
 
 
+@pytest.mark.parametrize("operation", ["create", "list", "move", "delete"])
+async def test_calendar_cells_check_the_production_store_after_the_tool(tmp_path, operation):
+    from datetime import datetime
+
+    client = FakeClient([])
+    driver = RpcDriver(tmp_path, "fake/model", client, Budget(20))
+    title = "驗證行程" + driver.nonce
+    tool = {"create": "calendar_add", "list": "calendar_list", "move": "calendar_update", "delete": "calendar_delete"}[operation]
+    args = {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")} if operation == "create" else {} if operation == "list" else {"id": 1}
+    if operation == "move":
+        args["start"] = datetime.now().strftime("%Y-%m-%dT17:00")
+    client.turns = iter([("", [(tool, args)]), (title, [])])
+    try:
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar." + operation)), 10)
+        assert not reasons
+        assert driver.traces[-1]["name"] == tool
+        assert driver.recorder.receipts == []
+    finally:
+        await driver.aclose()
+
+
+async def test_the_real_app_wires_the_calendar_to_a_cli_brain_and_to_home(tmp_path, monkeypatch):
+    from datetime import datetime
+    from raphael_core.agent.cli import loop
+
+    class Driver:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def run(self, *, endpoint, token, **kwargs):
+            yield Event("model", "owner-model")
+            async with httpx.AsyncClient() as http:
+                response = await http.post(endpoint, headers={"Authorization": "Bearer " + token},
+                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "calendar_add", "arguments": {"title": title, "start": datetime.now().strftime("%Y-%m-%dT15:00")}}})
+                assert not response.json()["result"]["isError"]
+            yield Event("final", "已加到今天的行程。")
+
+        async def interrupt(self):
+            pass
+
+    monkeypatch.setattr(loop, "Driver", Driver)
+    driver = RpcDriver(tmp_path, "cli:codex:owner-model?effort=high", FakeClient([]), Budget(20), brains=FakeBrains(tmp_path))
+    title = "驗證行程" + driver.nonce
+    try:
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar.create")), 10)
+        assert not reasons
+        assert driver.traces[0]["name"] == "calendar_add"
+        home = await driver.app.call("home.overview", {})
+        assert [item["title"] for item in home["calendar_events"] if item["kind"] == "own"] == [title]
+        assert home["calendar_google"] == "not_connected"
+        listed = await driver.app.calendar.tool(0, "calendar_list", {})
+        assert listed["google"] == "not_connected" and [item["source"] for item in listed["items"]] == ["own"]
+    finally:
+        await driver.aclose()
+
+
 @pytest.mark.parametrize('calls,reason',[(0,'no_completed_action'),(1,'action_not_in_flight')])
 async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,reason):
     # Live, a member read the mail once where the cell waited for a second read, until its timeout.

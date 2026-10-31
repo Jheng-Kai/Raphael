@@ -29,6 +29,7 @@ export const journeys = [
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
   { name: "self-diagnosis", description: "Force an offline connection card failure; the same member checks and explains the real reason" },
+  { name: "calendar", description: "The real core and SQLite: the owner makes, moves and removes an event on the Calendar page, a member told 加到今天的行程 adds one with the real tool, and Home draws them" },
   { name: "store-finder", description: "Real Composio catalog: measure all-app paint, DOM size and long tasks" },
   { name: "catalog-connect", description: "Raphael and member find/connect a non-Gmail catalog app; stop before consent" },
 ];
@@ -1012,9 +1013,8 @@ export async function drive(name, context) {
     await perform(page, {action:'scroll',selector:'.ho-calendar'});
     await inspect("home-month-compact-1280", ["home-month"]);
     await perform(page, {action:'click-position',selector:'.ho-calendar',x:.02,y:.02,expect:'.au-day-col'}); await pause(200);
-    await click(page, '[data-period="week"]');
     await inspect("calendar-week-1280", ["calendar-shell"]);
-    await click(page, '[data-period="day"]');
+    await click(page, '[data-au="view"]'); await click(page, '#app-popover [data-value="day"]');
     await inspect("calendar-day-1280", ["calendar-shell"]);
     const conversation = await newConversation(context);
     if (await page.$('.conversation-trigger[aria-expanded="true"]')) await click(page, '.mb-det [data-det="close"]');
@@ -1039,6 +1039,76 @@ export async function drive(name, context) {
       await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
       await inspect(`sidebar-home-after-room-${count}-1280`, ["sidebar-selection"]);
     }
+  } else if (name === "calendar") {
+    const events = async () => (await snapshot()).calendar_events;
+    const until = async (test, what) => {
+      for (let i = 0; i < 80; i++) { const rows = await events(); if (test(rows)) return rows; await pause(100); }
+      throw new Error(`The calendar store never showed: ${what}`);
+    };
+    const inspectPage = async (label, checks) => { await pause(200); for (const check of checks) await page.evaluate(checkRendered, check); await capture(label); };
+    await page.setViewport({ width: 1280, height: 800 });
+    await perform(page, { action: "click-position", selector: ".ho-calendar", x: .02, y: .02, expect: ".au-day-col" });
+    await inspectPage("week-empty", ["calendar-shell", "calendar-now"]);
+    // The owner, by hand: 建立, then the small form beside the placeholder.
+    await click(page, '[data-au="new"]');
+    await wait(page, ".au-pop-editor");
+    await inspectPage("create-form", ["calendar-editor"]);
+    await type(page, "#cal-title", "NativeOwner");
+    await click(page, '.au-pop-editor [data-pop="save"]');
+    const [made] = await until(rows => rows.length === 1, "the owner's event");
+    if (made.added_by !== null || made.title !== "NativeOwner") throw new Error(`The owner's event was stored wrongly: ${JSON.stringify(made)}`);
+    const chip = `.cal-chip.is-own[data-entry="own:${made.id}"]`;
+    await wait(page, chip);
+    await inspectPage("created", ["calendar-shell"]);
+    // A drag down moves it, a drag on its edge changes when it ends; a detail never opens for either.
+    await perform(page, { action: "pointer-drag", selector: chip, dx: 0, dy: await page.evaluate(() => parseFloat(document.querySelector(".au-page").style.getPropertyValue("--au-hour"))), y: .3 });
+    const moved = (await until(rows => rows[0].start_ms !== made.start_ms, "the moved event"))[0];
+    if (moved.end_ms - moved.start_ms !== made.end_ms - made.start_ms) throw new Error("Moving the event changed how long it lasts");
+    await wait(page, chip);
+    await perform(page, { action: "pointer-drag", selector: `[data-wrap="own:${made.id}"] .au-event-edge`, dx: 0, dy: 40 });
+    const resized = (await until(rows => rows[0].end_ms !== moved.end_ms, "the resized event"))[0];
+    if (resized.start_ms !== moved.start_ms || resized.end_ms <= moved.end_ms) throw new Error("The edge did not change only the end");
+    if (await page.$(".au-pop-detail")) throw new Error("A drag opened the detail");
+    await capture("moved-resized");
+    // A member, through the real tool: the owner's words, a scripted provider choice, the production gate and store.
+    await chat(page);
+    await perform(page, { action: "member-column", collapsed: false });
+    await click(page, '.mb-col [data-col="add"]');
+    await click(page, '#app-popover [data-pick="member"]');
+    await type(page, "#mb-new-name", "NativeSecretary");
+    await click(page, '.cr-dialog [data-dlg="create"]');
+    await page.waitForSelector(".cr-dialog", { hidden: true });
+    const member = (await snapshot()).members.find(row => row.name === "NativeSecretary");
+    if (!member) throw new Error("The member was not persisted");
+    await perform(page, { action: "member", id: member.id });
+    await wait(page, ".composer .cmp-input");
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id && row.is_default);
+    await typed(context, "把牙醫加到今天的行程 [native-calendar]", conversation.id);
+    const rows = await until(list => list.some(row => row.added_by === member.id), "the member's event");
+    const added = rows.find(row => row.added_by === member.id);
+    const state = await snapshot();
+    if (!state.agent_steps.some(step => step.tool === "calendar_add" && step.outcome === "ok")) throw new Error("The member's turn has no successful calendar_add step");
+    await capture("member-added");
+    // Home draws both, and a click on the member's event opens it on the Calendar page.
+    await perform(page, { action: "click", selector: '#nav [data-go="home"]' });
+    await wait(page, ".ho-hero h1");
+    const eventOnHome = `.ho-calendar [data-home-event="own:${added.id}"]`;
+    await wait(page, eventOnHome);
+    await inspectPage("home", ["home-calendar-language"]);
+    await click(page, eventOnHome);
+    await wait(page, ".au-pop-detail");
+    const detail = await page.$eval(".au-pop-detail", node => node.textContent);
+    if (!detail.includes("NativeSecretary") || !detail.includes("From the member")) throw new Error(`The detail does not say who added it: ${detail}`);
+    await inspectPage("member-event-detail", ["calendar-detail-own"]);
+    // The ⋯ asks once more, then the event is gone from the store and the page.
+    await click(page, '.au-pop-detail [data-pop="more"]');
+    await click(page, "#app-popover [data-confirm-item]");
+    await click(page, "#app-popover [data-confirm-item]");
+    await until(list => !list.some(row => row.id === added.id), "the deletion");
+    await wait(page, ".toast");
+    await capture("deleted");
+    result.assertions = { owner_event: made.id, member_event: added.id, added_by: added.added_by, moved: moved.start_ms !== made.start_ms, resized: resized.end_ms !== moved.end_ms };
+    result.stored = { calendar_events: await events() };
   } else if (name === "self-diagnosis") {
     await chat(page);
     await perform(page, { action: "member-column", collapsed: false });

@@ -82,11 +82,50 @@ describe("the hero", () => {
     expect(page.el.querySelectorAll('.ho-dots i')).toHaveLength(2);
     expect(page.el.querySelector('.ho-week')).toBeNull();
     page.el.querySelector<HTMLButtonElement>('[data-home-select="2026-10-30"]')!.click();
-    expect(app.go).not.toHaveBeenCalled();
-    expect(page.el.querySelector('.ho-agenda')?.getAttribute("data-selected-day")).toBe("2026-10-30");
+    expect(app.go).toHaveBeenLastCalledWith("automations", "2026-10-30");
     page.el.querySelector<HTMLButtonElement>('.ho-calendar > .ho-target')!.click();
-    expect(app.go).toHaveBeenCalledWith("automations", "2026-10-30");
+    expect(app.go).toHaveBeenLastCalledWith("automations", expect.stringMatching(/^calendar-week:2026-10-27$/));
     page.hide(); page.el.remove();
+  });
+  const own = (title: string): HomeOverview["calendar"][number] => ({ id: "own:4", kind: "own", event_id: 4, title, summary: "", at_ms: new Date(2026, 9, 27, 14).getTime(), end_ms: new Date(2026, 9, 27, 15).getTime(), member_id: -1, name: "", avatar: "", turn_id: null, conversation_id: null, routine_id: null, all_day: false, notes: "", added_by: null });
+  test("the block draws the calendar's own chip, and a click opens that event on the Calendar page", async () => {
+    const sample = overview(5);
+    sample.calendar_items = [own("Dentist")]; sample.calendar_counts = { "2026-10-27": 1 };
+    queue.splice(0, queue.length, sample);
+    const { page, app } = await mount();
+    const chip = page.el.querySelector<HTMLButtonElement>('.ho-agenda .cal-chip.is-own')!;
+    expect(chip.querySelector("time")!.textContent).toBe("14:00");
+    expect(chip.querySelector("b")!.textContent).toBe("Dentist");
+    chip.click();
+    expect(app.go).toHaveBeenCalledWith("automations", "calendar:2026-10-27:own%3A4");
+    page.hide(); page.el.remove();
+  });
+  test("an empty day stays calm and offers to make something on that day", async () => {
+    const { page, app } = await mount();
+    expect(page.el.querySelector(".ho-day-empty")).not.toBeNull();
+    expect(page.el.querySelector(".cal-notice")).toBeNull();
+    page.el.querySelector<HTMLButtonElement>(".ho-create-day")!.click();
+    expect(app.go).toHaveBeenCalledWith("automations", "calendar-new:2026-10-27");
+    page.hide(); page.el.remove();
+  });
+  test("Home tells not connected from a failed read from nothing, and a closed offer stays closed", async () => {
+    localStorage.clear();
+    const off = overview(5); off.calendar_google = "not_connected";
+    queue.splice(0, queue.length, off);
+    const { page, app } = await mount();
+    expect(page.el.querySelector(".ho-calendar-note .cal-notice")!.textContent).toMatch(/未連接|isn't connected/);
+    page.el.querySelector<HTMLButtonElement>('.ho-calendar-note [data-home-go="connections"]')!.click();
+    expect(app.go).toHaveBeenCalledWith("settings", "connections");
+    page.el.querySelector<HTMLButtonElement>("[data-home-dismiss]")!.click();
+    expect(page.el.querySelector(".cal-notice")).toBeNull();
+    page.hide(); page.el.remove();
+    const failed = overview(5); failed.calendar_google = "unreadable";
+    queue.splice(0, queue.length, failed);
+    const second = await mount();
+    expect(second.page.el.querySelector(".cal-notice")!.textContent).toMatch(/讀不到|can't be read/);
+    expect(second.page.el.querySelector("[data-home-dismiss]")).toBeNull();
+    second.page.hide(); second.page.el.remove();
+    localStorage.clear();
   });
   test("month arrows request the selected month while a vertical wheel leaves it unchanged", async () => {
     const { page, app } = await mount();

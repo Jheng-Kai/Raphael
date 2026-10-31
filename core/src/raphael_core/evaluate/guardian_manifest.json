@@ -265,6 +265,38 @@
         "production_state"
       ]
     },
+    "raphael/core/calendar_add": {
+      "scenario_ids": [
+        "S21.calendar.create"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_delete": {
+      "scenario_ids": [
+        "S21.calendar.delete"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_list": {
+      "scenario_ids": [
+        "S21.calendar.list"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
+    "raphael/core/calendar_update": {
+      "scenario_ids": [
+        "S21.calendar.move"
+      ],
+      "expected_assertions": [
+        "production_state"
+      ]
+    },
     "raphael/core/routine_create": {
       "scenario_ids": [
         "S21.routines.create"

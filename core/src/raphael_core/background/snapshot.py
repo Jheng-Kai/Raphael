@@ -48,7 +48,7 @@ from ..agent.plugins import MAX_OFFERED, Offer, PluginHub, make_offer
 from ..agent.policy import Tier
 from ..agent.speaker import RAPHAEL, Speaker
 from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
-from ..agent.harness_tools import DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
+from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import (
@@ -212,15 +212,19 @@ class Snapshot:
 
     def find(self, query: str) -> tuple[list[dict[str, Any]], list[str]]:
         """Show the task the tools of the pool that fit `query` best (not the ones it has): returns
-        their definitions and a line about each for the worker to read."""
+        their definitions and a line about each for the worker to read. The calendar is the task's
+        already, but a model that looks for one by the owner's words is told it is there, not sent to
+        connect another."""
+        own = scored([harness_tool(name) for name in CALENDAR_TOOLS if name in self.refs], query)
+        lines = [f"{tool.name} (yours already): {first_sentence(tool.description, 90)}" for score, tool in own if score > 0]
         hidden = self.hidden()
         if self.pool is None or not hidden:
-            return [], []
+            return [], lines
         rows = scored([self.pool.by_alias[a] for a in hidden], query)
         alias_of = {id(tool): alias for alias, tool in self.pool.by_alias.items()}
         chosen = [alias_of[id(tool)] for score, tool in rows[:FIND_MAX] if score > 0]
         added = self.show(chosen)
-        lines = [
+        lines += [
             f"{alias}: {first_sentence(self.pool.by_alias[alias].description)}"
             for alias in chosen
         ]
@@ -266,12 +270,14 @@ def take_snapshot(
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
     snapshot = Snapshot(refs, definitions)
-    for name in ("self_check", "raphael_help"):
-        refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, Tier.T0)
+    # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
+    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS)
+    for name in everywhere:
+        refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)
         definitions.append({"type": "function", "function": {"name": name, **HARNESS_DEFINITIONS[name]}})
     if interactive:
         for name, item in definitions_for(speaker):
-            if name in ("self_check", "raphael_help"):
+            if name in everywhere:
                 continue
             # This tool drives the owner's own desktop. Beside a computer of the speaker's own, two tools
             # called the computer would leave the choice of machine to the model.

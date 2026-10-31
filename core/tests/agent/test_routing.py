@@ -60,13 +60,14 @@ def test_the_criteria_of_the_routes_are_these():
         "play media, lock the screen.",
         "answer": "A question Raphael can answer in a few sentences, possibly after one quick "
         "lookup (weather, time, a web search, a definition, a calculation), including how a "
-        "background task is going or what it did (state.background lists them).",
+        "background task is going or what it did (state.background lists them), and reading or adding to the "
+        "app's own calendar (行事曆, 行程).",
         "operate": "A task done by using a desktop app on this computer's screen: clicking, typing "
         "or choosing inside an app such as Calculator, Excel, File Explorer or the Settings app (for "
         "example: compute something in Calculator, type a line into a document, turn on a switch in "
         "Settings), which no fixed command covers.",
         "delegate": "A multi-step task, or one that needs a connected service such as email, "
-        "calendar, Notion or GitHub, or that will take more than a few seconds, and that is not done "
+        "Google Calendar, Notion or GitHub, or that will take more than a few seconds, and that is not done "
         "by operating an app on the screen. Not a question about a task that was already handed over.",
         "discuss": "The speaker wants to think something through together or plan, an "
         "open-ended conversation rather than one answer.",

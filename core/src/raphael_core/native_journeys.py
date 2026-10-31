@@ -5,6 +5,7 @@ import re
 import json
 import tomllib
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from .connectors.composio import KEY
@@ -362,6 +363,21 @@ def native_memory(messages, offered, seen):
             raise ValueError("Turn one was not automatically recalled at turn twenty-five")
         return "reply", "The project colour is heliotrope."
     return "reply", "Work step recorded."
+
+
+def native_calendar(messages, offered, seen):
+    """Script only the provider's choice; the tool, its gate, the store and Home are production code."""
+    if not native_enabled(True):
+        return None
+    latest = next((str(message.get("content", "")) for message in reversed(messages)
+                   if message.get("role") == "user"), "")
+    if "[native-calendar]" not in latest:
+        return None
+    if seen:
+        return "reply", "已加到今天的行程。"
+    if "calendar_add" not in offered:
+        raise ValueError("Native calendar tool is absent")
+    return "calendar_add", {"title": "NativeMember", "start": datetime.now().strftime("%Y-%m-%dT15:00"), "notes": "From the member"}
 
 
 def native_skill_review(user):

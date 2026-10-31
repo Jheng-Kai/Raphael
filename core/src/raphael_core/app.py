@@ -117,6 +117,7 @@ from .protocol import (
 )
 from .router import Router
 from .home import ConnectedCalendar, HomeOverview
+from .own_calendar import OwnCalendar
 from .services.attachments import Attachment
 from .services.attachment_store import AttachmentStore
 from .services.hub import ServiceHub, offline_transport
@@ -293,8 +294,8 @@ class EchoClient:
             return ChatTurn("", [call], "fake/echo", 0.0, 0, 0, 0)
 
         # Native journeys script the provider's choice, then use the real member tool/store.
-        from .native_journeys import native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
-        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen)
+        from .native_journeys import native_calendar, native_consult, native_connect, native_diagnosis, native_memory, native_skills, native_computer
+        diagnosis = native_computer(messages, offered, seen) or native_skills(messages, offered, seen) or native_memory(messages, offered, seen) or native_diagnosis(messages, offered, seen) or native_calendar(messages, offered, seen)
         if diagnosis is not None:
             name, value = diagnosis
             if name == "reply":
@@ -872,6 +873,9 @@ class App(Router):
             conn=self._conn,
             safety=SafetyGuard(self.safety_rules, SafetyJudge(self.client)),
         )
+        # The app's own calendar, which the window, every member and every task change.
+        self.calendar = OwnCalendar(self._conn, notify=self.notify)
+        self.calendar.register(self)
         # The background worker: tasks the assistant hands over, carried out in a process of their
         # own that has no key, no database and no plugin (raphael_core.worker).
         self.background = BackgroundService(
@@ -882,6 +886,7 @@ class App(Router):
             notify=self._worker_notice,
             model_observer=agent_model_observer,
             known_models=self.brain.known_models,
+            calendar=self.calendar,
         )
         self.background.register(self)
         # The run on the owner's desktop: the core asks the shell, which reaches UI Automation
@@ -947,6 +952,7 @@ class App(Router):
             handbacks=self.handbacks,
             permissions=self.permissions,
             drafts=self.drafts,
+            calendar=self.calendar,
         )
         self.agent.register(self)
         from .native_journeys import bot_homes_brain, home_timing_brain
@@ -964,6 +970,7 @@ class App(Router):
         self.tool_hub.scope_busy = computer_scope_busy
         self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
         self.home.register()
+        self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
         self.vm.timezone = lambda: self.home.timezone_name
         self.home.timezone_changed = self.vm.refresh_timezone
         self.background.use_team(self.members, self.agent.team_tool)

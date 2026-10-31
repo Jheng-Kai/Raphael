@@ -52,6 +52,7 @@ def test_a_private_task_gets_growth_tools_but_not_legacy_write_aliases():
     names = [d["function"]["name"] for d in take_snapshot(None, memory=True).definitions]
     assert names == [
         "weather", "web_search", "local_time", "web_read", "history_search", "self_check", "raphael_help",
+        "calendar_list", "calendar_add", "calendar_update", "calendar_delete",
         "memory_update", "memory_log", "session_search", "session_read",
     ]  # fmt: skip
     assert not {"memory_read", "memory_write", "memory_delete"} & set(names)

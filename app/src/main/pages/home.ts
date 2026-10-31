@@ -1,16 +1,17 @@
 // Home keeps four equal summaries and a month calendar in the same places for every data state.
 import * as api from "../api";
 import { avatarHTML, onAvatarChange } from "../avatar";
-import type { HomeItem, HomeOverview } from "../home-types";
+import { chipHTML, dismissOffer, googleNoticeHTML, type CalendarEntry, type EntryKind } from "../calendar-view";
+import type { GoogleCalendarState, HomeItem, HomeOverview } from "../home-types";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { loadingHTML } from "../loading";
 import { buildReport } from "../report";
 import { durationParts, formatCount } from "../stats";
 import { dateKey, monthDays, monthLabel } from "../schedule-picker";
 import { dayName } from "../members";
-import { onOwnerProfile, ownerFaceHTML } from "../owner-avatar";
+import { onOwnerProfile } from "../owner-avatar";
 import { openMemberThread } from "../team-navigation";
-import type { AppContext, CalendarDate, CalendarEventFocus, Page } from "../types";
+import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, CalendarWeek, Page } from "../types";
 import { faceHTML as memberFaceHTML } from "../members";
 import { btn, esc, ico, iconButton } from "../ui";
 import "../home.css";
@@ -38,6 +39,14 @@ function barsSVG(values: number[], label: string): string {
     values.map((v, i) => { const bh = Math.max(2, (Math.max(0, v) / max) * h); return `<rect class="${i === values.length - 1 ? "is-today" : ""}" x="${i * (w + gap)}" y="${h - bh}" width="${w}" height="${bh}" rx="2"/>`; }).join("") + `</svg>`;
 }
 
+/** A calendar item as the chip of the Calendar page draws it. */
+function chipOf(item: HomeItem): Pick<CalendarEntry, "kind" | "title" | "allDay" | "start" | "member"> {
+  const kind: EntryKind = item.kind === "own" ? "own" : item.kind === "routine" ? "routine" : "event";
+  const by = kind === "routine" ? item.member_id : item.added_by;
+  const member = kind !== "event" && typeof by === "number" && item.name ? { id: by, name: item.name, avatar: item.avatar } : undefined;
+  return { kind, title: item.title, allDay: item.all_day === true, start: item.at_ms, member };
+}
+
 function scheduleHTML(data: HomeOverview, month = new Date(data.generated_at_ms), selected = dateKey(new Date(data.generated_at_ms))): string {
   const today = dateKey(new Date(data.generated_at_ms)), items = data.calendar_items ?? data.calendar;
   const byDay = new Map<string, HomeItem[]>();
@@ -48,7 +57,6 @@ function scheduleHTML(data: HomeOverview, month = new Date(data.generated_at_ms)
   const count = (key: string): number => data.calendar_counts?.[key] ?? byDay.get(key)?.length ?? 0;
   const marked = new Set(data.calendar_days ?? [...byDay.keys()]);
   const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" });
-  const eventTime = (item: HomeItem): string => item.all_day ? t("auto.allDay") : clock(item.at_ms);
   const eventTarget = (item: HomeItem): string => ` data-home-event="${esc(item.id)}" data-home-date="${dateKey(new Date(item.at_ms))}"`;
   const more = (key: string, total: number, limit: number, className: string): string => total > limit
     ? btn(esc(t("overview.moreEvents", { p0: total - limit })), className, ` data-home-go="calendar" data-home-date="${key}"`) : "";
@@ -57,14 +65,16 @@ function scheduleHTML(data: HomeOverview, month = new Date(data.generated_at_ms)
     return `<div class="ho-day${key === today ? " is-today" : ""}${key === selected ? " is-selected" : ""}${day.getMonth() === month.getMonth() ? "" : " ho-other-month"}"${key === today ? ' aria-current="date"' : ""}>` +
       btn(`<b>${day.getDate()}</b><span class="ho-dots" aria-hidden="true">${marked.has(key) ? "<i></i>" : ""}</span>`, "ho-date-btn",
         ` data-home-select="${key}" aria-pressed="${key === selected}" aria-label="${esc(label)}"`) +
-      `<div class="ho-day-events">${events.slice(0, 3).map(item => btn(`<time>${esc(eventTime(item))}</time><span>${esc(item.title)}</span>`, `ho-event-chip is-${item.kind}`, eventTarget(item))).join("")}` +
+      `<div class="ho-day-events">${events.slice(0, 3).map(item => chipHTML(chipOf(item), "ho-event-chip is-line", eventTarget(item), { clock: !item.all_day })).join("")}` +
       more(key, count(key), 2, "ho-more ho-more-two") + more(key, count(key), 3, "ho-more ho-more-three") + `</div></div>`;
   }).join("");
   const chosen = byDay.get(selected) ?? [], chosenLabel = new Date(`${selected}T00:00:00`).toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "short" });
+  const create = (cls: string): string => btn(ico("plus") + esc(t("auto.create")), `sm ho-create ${cls}`, ` data-home-create="${selected}"`);
   const agenda = `<aside class="ho-agenda" data-selected-day="${selected}"><h3>${esc(chosenLabel)}</h3>` +
-    (chosen.length ? chosen.slice(0, 3).map(item => btn(`<time>${esc(eventTime(item))}</time><span>${esc(item.title)}</span>${item.kind === "event" && item.member_id === 0 ? ownerFaceHTML(24) : faceHTML(item, 24)}`, "ho-agenda-row", eventTarget(item))).join("") + more(selected, count(selected), 3, "ho-agenda-more")
-      : `<p class="ho-day-empty">${esc(t("overview.emptyDay"))}</p>`) + `</aside>`;
-  return `<div class="ho-calendar-frame"><section class="ho-calendar" aria-label="${esc(t("overview.calendar"))}" data-month="${dateKey(month).slice(0, 7)}">${blockTarget(t("overview.calendar"), "calendar")}<header><h2>${esc(monthLabel(month))}</h2>` +
+    (chosen.length ? chosen.slice(0, 3).map(item => chipHTML(chipOf(item), "ho-agenda-row is-line", eventTarget(item), { face: 20 })).join("") + more(selected, count(selected), 3, "ho-agenda-more")
+      : `<p class="ho-day-empty">${esc(t("overview.emptyDay"))}</p>${create("ho-create-day")}`) + `</aside>`;
+  const notice = googleNoticeHTML(data.calendar_google, { go: 'data-home-go="connections"', dismiss: "data-home-dismiss" });
+  return `<div class="ho-calendar-frame"><section class="ho-calendar" aria-label="${esc(t("overview.calendar"))}" data-month="${dateKey(month).slice(0, 7)}">${blockTarget(t("overview.calendar"), "calendar")}<header><h2>${esc(monthLabel(month))}</h2><div class="ho-calendar-note">${notice}${items.length ? "" : create("ho-create-month")}</div>` +
     `<div class="ho-month-actions">${iconButton("left", t("auto.monthPrevious"), ' data-home-month="-1"')}${iconButton("right", t("auto.monthNext"), ' data-home-month="1"')}${btn(esc(t("auto.today")), "sm ho-today", ' data-home-today')}</div></header>` +
     `<div class="ho-calendar-body"><div class="ho-month">${[1, 2, 3, 4, 5, 6, 0].map(n => `<span class="ho-weekday" title="${esc(dayName(n))}">${esc(weekday.format(new Date(2024, 0, 7 + n)))}</span>`).join("")}${days}</div>${agenda}</div></section></div>`;
 }
@@ -191,6 +201,8 @@ export function createHome(app: AppContext): Page {
     if (focused) el.querySelector<HTMLElement>(`[data-home-month="${focused}"]`)?.focus();
     void load();
   }
+  /** The block itself opens the calendar in its usual view, on the day this block shows. */
+  const openWeek = (): void => app.go("automations", `calendar-week:${selected ?? dateKey(new Date(data!.generated_at_ms))}` as CalendarWeek);
   let wheelDistance = 0, wheelAt = 0, swipedAt = -1000;
   el.addEventListener("wheel", event => {
     if (!(event.target as Element).closest('.ho-calendar') || event.ctrlKey || Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return;
@@ -224,19 +236,14 @@ export function createHome(app: AppContext): Page {
       void load(); return;
     }
     const dateButton = (event.target as Element).closest<HTMLElement>('[data-home-select]');
-    if (dateButton) {
-      const key = dateButton.dataset.homeSelect!;
-      if (getComputedStyle(dateButton.closest('.ho-calendar')!).getPropertyValue('--home-calendar-expanded').trim() === '1') app.go('automations', key as CalendarDate);
-      else {
-        const focused = document.activeElement === dateButton;
-        selected = key; paint();
-        if (focused) el.querySelector<HTMLElement>(`[data-home-select="${key}"]`)?.focus({ preventScroll: true });
-      }
-      return;
-    }
+    if (dateButton) { app.go('automations', dateButton.dataset.homeSelect as CalendarDate); return; }
+    const creating = (event.target as Element).closest<HTMLElement>('[data-home-create]');
+    if (creating) { app.go('automations', `calendar-new:${creating.dataset.homeCreate}` as CalendarCreate); return; }
+    const dismissing = (event.target as Element).closest<HTMLElement>('[data-home-dismiss]');
+    if (dismissing) { dismissOffer(dismissing.dataset.homeDismiss as GoogleCalendarState); paint(); return; }
     const target = (event.target as Element).closest<HTMLElement>("[data-home-item], [data-home-go], [data-home-event]");
     if (!target) {
-      if ((event.target as Element).closest(".ho-calendar") && data) app.go("automations", (selected ?? undefined) as CalendarDate | undefined);
+      if ((event.target as Element).closest(".ho-calendar") && data) openWeek();
       return;
     }
     if (target.dataset.homeEvent) {
@@ -251,8 +258,12 @@ export function createHome(app: AppContext): Page {
     switch (target.dataset.homeGo) {
       case "reload": void load(); break;
       case "usage": app.go("settings", "usage"); break;
+      case "connections": app.go("settings", "connections"); break;
       case "dictation": app.go("dictation"); break;
-      case "calendar": app.go("automations", (target.dataset.homeDate ?? selected ?? undefined) as CalendarDate | undefined); break;
+      case "calendar":
+        if (target.dataset.homeDate) app.go("automations", target.dataset.homeDate as CalendarDate);
+        else openWeek();
+        break;
       case "report":
         if (data && buildReport(data.report, data.generated_at_ms).action?.target === "retry") {
           void api.statusCheckOpenrouter().then(load, load);
@@ -266,7 +277,7 @@ export function createHome(app: AppContext): Page {
   // Settings retains Home behind its dialog. Translate cached data even while the page is inactive.
   onLocaleChange(paint);
   app.onEvent(event => {
-    if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load();
+    if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load();
   });
   app.cleared.on("dictation", () => { if (visible) void load(); });
   app.cleared.on("conversation", () => { if (visible) void load(); });

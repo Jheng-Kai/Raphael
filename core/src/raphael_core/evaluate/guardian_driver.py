@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -425,6 +426,30 @@ class RpcDriver:
                 valid = target is not None and target["schedule"]["time"] == ("09:00" if operation == "edit" else "08:00")
             if not valid:
                 reasons.append("routine_readback_failed")
+        elif cell.driver.startswith("calendar-"):
+            operation = cell.driver.removeprefix("calendar-")
+            title = "驗證行程" + self.nonce
+            today = datetime.now().strftime("%Y-%m-%d")
+            if operation != "create":
+                await self.app.call("calendar.add", {"title": title, "start": f"{today}T10:00"})
+            # The owner's own words: the model must take them for the app's calendar, with no connection.
+            result = await self.ask({"create": f"把「{title}」加到今天的行程，下午三點開始。", "list": "今天的行程有什麼？請列出完整標題。",
+                                     "move": f"把今天的行程「{title}」改到下午五點開始。", "delete": f"刪掉今天的行程「{title}」。"}[operation])
+            tool = {"create": "calendar_add", "list": "calendar_list", "move": "calendar_update", "delete": "calendar_delete"}[operation]
+            if result.get("status") == "confirm":
+                action = self.app.agent._confirmations._pending.get(result["confirm"]["id"])
+                if action and action.action.tool == tool:
+                    result = await self.confirm(result, True)
+            reasons = []
+            if not any(trace["name"] == tool and trace["outcome"] == "ok" for trace in self.traces):
+                reasons.append("missing_successful_tool:" + tool)
+            if any(trace["name"] in ("connect_app", "find_app") for trace in self.traces):
+                reasons.append("offered_another_calendar")
+            rows = self.app._conn.execute("SELECT start_ms FROM calendar_events WHERE title=?", (title,)).fetchall()
+            hour = datetime.fromtimestamp(rows[0]["start_ms"] / 1000).hour if rows else None
+            valid = {"create": hour == 15, "move": hour == 17, "delete": not rows, "list": bool(rows) and title in result.get("text", "")}[operation]
+            if not valid:
+                reasons.append("calendar_readback_failed")
         else:
             return ["not implemented: " + cell.dependency], []
         if cell.driver in ('immediate-room-work','short-wrapup','task-stop','meeting-actions'):

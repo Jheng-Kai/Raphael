@@ -213,6 +213,7 @@ pub enum MainEvent {
     RoutinesChanged {
         member_id: u64,
     },
+    CalendarChanged,
     RoomsChanged {
         room_id: u64,
     },
@@ -508,6 +509,9 @@ const ALLOWED_METHODS: &[&str] = &[
     "routines.delete",
     "routines.template",
     "routines.runs",
+    "calendar.add",
+    "calendar.update",
+    "calendar.delete",
     "rooms.list",
     "rooms.create",
     "rooms.delete",
@@ -1031,6 +1035,7 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
         "routines.changed" => Some(MainEvent::RoutinesChanged {
             member_id: params.get("member_id")?.as_u64()?,
         }),
+        "calendar.changed" => Some(MainEvent::CalendarChanged),
         "rooms.changed" => Some(MainEvent::RoomsChanged {
             room_id: params.get("room_id")?.as_u64()?,
         }),
@@ -2975,6 +2980,11 @@ mod tests {
                 "routines.changed",
                 json!({"member_id": 4, "prompt": "private"}),
                 json!({"type": "RoutinesChanged", "member_id": 4}),
+            ),
+            (
+                "calendar.changed",
+                json!({"title": "private"}),
+                json!({"type": "CalendarChanged"}),
             ),
             (
                 "members.changed",

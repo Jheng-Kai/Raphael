@@ -4,18 +4,25 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta, tzinfo
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .clock import wall_clock_ms
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
+from .own_calendar import CalendarStore, own_item
 from .protocol import RpcError, invalid_params
 
 TODAY_LIMIT = 12
 REPORT_LIMIT = 8
 CALENDAR_LIMIT = 24
 CALENDAR_EVENT_LIMIT = 2500
+# What the calendar can say of Google, so that "not connected" and "could not read it" are never taken for "no events".
+GOOGLE_CONNECTED = "connected"
+GOOGLE_NOT_CONNECTED = "not_connected"
+GOOGLE_UNREADABLE = "unreadable"
+# Connected through a service whose tools the members call, while the calendar reads only the owner's own sign-in.
+GOOGLE_MEMBERS_ONLY = "members_only"
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +39,12 @@ class HomeItem(TypedDict):
     conversation_id: int | None
     routine_id: int | None
     all_day: bool
+    # When it is over, for an entry that has a length (an own event, a connected one).
+    end_ms: NotRequired[int]
+    # An own event's: its id in the store, its notes and the member who added it (None: the owner).
+    event_id: NotRequired[int]
+    notes: NotRequired[str]
+    added_by: NotRequired[int | None]
 
 
 class DictationNumbers(TypedDict):
@@ -57,6 +70,7 @@ class Overview(TypedDict):
     calendar: list[HomeItem]
     calendar_days: list[str]
     calendar_events: list[HomeItem]
+    calendar_google: str
     calendar_items: list[HomeItem]
     calendar_counts: dict[str, int]
     usage: HomeUsage
@@ -69,26 +83,59 @@ async def no_calendar_events(start_ms: int, end_ms: int) -> list[HomeItem]:
     return []
 
 
+def _event_end(event: dict, at: int, zone: tzinfo) -> int:
+    """When a connected event is over; a day's length when it does not say (its last date is exclusive, as ours ends are)."""
+    try:
+        end = event["end"]
+        when = datetime.fromisoformat(end.get("dateTime") or end["date"])
+        over = int((when if when.tzinfo else when.replace(tzinfo=zone)).timestamp() * 1000)
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError, OSError):
+        return at + (3_600_000 if "dateTime" in event.get("start", {}) else 86_400_000)
+    return over if over > at else at + 3_600_000
+
+
 class ConnectedCalendar:
     """Read the private Google calendar through its existing connector policy."""
 
     def __init__(self, router, connectors):
         self.router, self.connectors = router, connectors
+        self.failed = False  # the last read of a connected calendar did not come back
+
+    async def _connectors(self) -> dict[str, dict]:
+        return {c["id"]: c for c in (await self.router.call("connectors.status", {"refresh": False})).get("connectors", [])}
+
+    @staticmethod
+    def _readable(connectors: dict[str, dict]) -> bool:
+        google = connectors.get("google")
+        return bool(google and google["status"] == "ACTIVE" and "calendar_list_events" in google["enabled_tools"])
+
+    async def state(self) -> str:
+        """What the owner is told of Google beside the calendar. Reads no provider."""
+        connectors = await self._connectors()
+        if self._readable(connectors):
+            return GOOGLE_UNREADABLE if self.failed else GOOGLE_CONNECTED
+        toolkit = connectors.get("composio:googlecalendar")
+        if toolkit and toolkit["status"] == "ACTIVE":
+            return GOOGLE_MEMBERS_ONLY
+        if any(c and c["status"] == "EXPIRED" for c in (connectors.get("google"), toolkit)):
+            return GOOGLE_UNREADABLE
+        return GOOGLE_NOT_CONNECTED
 
     async def __call__(self, start_ms: int, end_ms: int) -> list[HomeItem]:
         try:
             async with asyncio.timeout(12):
-                status = await self.router.call("connectors.status", {"refresh": False})
-                if not any(c["id"] == "google" and c["status"] == "ACTIVE"
-                           and "calendar_list_events" in c["enabled_tools"] for c in status.get("connectors", [])):
+                self.failed = False
+                if not self._readable(await self._connectors()):
                     return []
                 response = await self.connectors.call_google("calendar_list_events", {
                     "calendarId": "primary", "singleEvents": True, "orderBy": "startTime", "maxResults": CALENDAR_EVENT_LIMIT,
                     "timeMin": datetime.fromtimestamp(start_ms / 1000, UTC).isoformat(),
                     "timeMax": datetime.fromtimestamp(end_ms / 1000, UTC).isoformat(),
                 })
-        except (ConnectorFailure, RpcError, TimeoutError):
-            # Provider failures must not hide pending work or expose private diagnostics.
+        except (ConnectorFailure, RpcError, TimeoutError) as exc:
+            # Provider failures must not hide pending work or expose private diagnostics; the window says it could not read.
+            logger.warning("Google Calendar could not be read: %s", type(exc).__name__)
+            self.failed = True
             return []
         try:
             zone = ZoneInfo(response.get("timeZone", "UTC"))
@@ -109,7 +156,7 @@ class ConnectedCalendar:
             if start_ms <= at < end_ms:
                 title = event.get("summary") or "Untitled event"
                 events.append({"id": f"event:{event['id']}", "kind": "event", "title": " ".join(title.split())[:120],
-                               "summary": "", "at_ms": at, "member_id": 0, "name": "Google Calendar", "avatar": "",
+                               "summary": "", "at_ms": at, "end_ms": _event_end(event, at, zone), "member_id": 0, "name": "Google Calendar", "avatar": "",
                                "turn_id": None, "conversation_id": None, "routine_id": None, "all_day": "dateTime" not in start})
         return events
 
@@ -119,6 +166,8 @@ class HomeOverview:
                  calendar_events: Callable[[int, int], Awaitable[list[HomeItem]]] = no_calendar_events):
         self.conn, self.router, self.members = conn, router, members
         self.now_ms, self.tz, self.calendar_events = now_ms, tz, calendar_events
+        self.own = CalendarStore(conn, now_ms=now_ms)
+        self._calendar_failed = False
         self.timezone_name = getattr(tz, "key", None)
         self.timezone_changed = None
         self._allowance_task = None
@@ -128,6 +177,10 @@ class HomeOverview:
 
     def register(self):
         self.router.register("home.overview", self.read)
+
+    def zone(self) -> tzinfo | None:
+        """The owner's time zone as the window last said it, which is what a member's words about today mean too."""
+        return ZoneInfo(self.timezone_name) if self.timezone_name else self.tz
 
     async def _sync_timezone(self):
         try:
@@ -159,10 +212,67 @@ class HomeOverview:
             events = await asyncio.wait_for(asyncio.shield(self._calendar_task), timeout=12)
             if self._calendar_key == key:
                 self._calendar = events
+            self._calendar_failed = False
             return events
         except (ConnectionError, TimeoutError):
             logger.warning("Home calendar is temporarily unavailable")
+            self._calendar_failed = True
             return []
+
+    async def google_state(self) -> str:
+        """What the calendar says of Google. A member's list and the window read the same words."""
+        if self._calendar_failed:
+            return GOOGLE_UNREADABLE
+        state = getattr(self.calendar_events, "state", None)
+        if state is None:
+            return GOOGLE_NOT_CONNECTED
+        try:
+            return await state()
+        except (ConnectorFailure, RpcError, TimeoutError):
+            return GOOGLE_UNREADABLE
+
+    def _own_items(self, start: int, end: int, zone: tzinfo | None, people: dict[int, dict]) -> list[HomeItem]:
+        """The own events that touch the period, named by who added them when a member did and is still here."""
+        def of(event):
+            member = people.get(event.added_by, {})
+            return own_item(event, zone, member.get("name", ""), member.get("avatar", ""))
+        return [of(event) for event in self.own.between(start, end, zone)]
+
+    def _due(self, routine, start: int, end: int, zone: tzinfo | None) -> list[int]:
+        """When a routine runs or has run in a period: what its schedule says from then on, and its past runs."""
+        completed = self.conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id=?", (routine.id,)).fetchone()[0]
+        remaining = CALENDAR_LIMIT if routine.schedule.max_runs is None else max(0, routine.schedule.max_runs - completed)
+        due = next_run(routine.schedule, start - 1, tz=zone) if routine.schedule.max_runs is None else routine.next_run_ms
+        at = []
+        for _ in range(min(42 * 24, 42 * 24 if routine.schedule.max_runs is None else remaining)):
+            if due is None or due >= end:
+                break
+            if due >= start:
+                at.append(due)
+            due = next_run(routine.schedule, due, tz=zone)
+        at += [run["at"] for run in self.conn.execute(
+            "SELECT COALESCE(scheduled, started) AS at FROM routine_runs WHERE routine_id=? AND COALESCE(scheduled, started)>=? AND COALESCE(scheduled, started)<?",
+            (routine.id, start, end))]
+        return sorted(set(at))
+
+    async def between(self, start: int, end: int, zone: tzinfo | None) -> list[HomeItem]:
+        """Everything the calendar shows in a period, for a member who reads it (`calendar_list`): own events,
+        routine occurrences and, when connected, Google events read now. An unavailable connection adds none."""
+        people = {m["id"]: m for m in (await self.router.call("members.list", {}))["members"]}
+        items = self._own_items(start, end, zone, people)
+        for routine in self.members.store.routines():
+            if routine.enabled and routine.next_run_ms is not None and routine.member_id in people:
+                member = people[routine.member_id]
+                items += [{"id": f"routine:{routine.id}:{at}", "kind": "routine", "title": " ".join(routine.title.split())[:120], "summary": "",
+                           "at_ms": at, "member_id": routine.member_id, "name": member["name"], "avatar": member.get("avatar", ""),
+                           "turn_id": None, "conversation_id": None, "routine_id": routine.id, "all_day": False}
+                          for at in self._due(routine, start, end, zone)]
+        try:
+            items += [event for event in await self.calendar_events(start, end) if start <= event["at_ms"] < end]
+            self._calendar_failed = False
+        except (ConnectionError, TimeoutError):
+            self._calendar_failed = True
+        return sorted(items, key=lambda value: (value["at_ms"], value["id"]))
 
     async def read(self, params: dict) -> Overview:
         refresh = params.get("refresh", False)
@@ -234,9 +344,8 @@ class HomeOverview:
         calendar_days = set()
         month_items, month_counts, month_seen = {}, {}, set()
 
-        def month_item(value):
-            key = datetime.fromtimestamp(value["at_ms"] / 1000, zone).date().isoformat()
-            identity = value.get("id", f"event:{value['at_ms']}:{value['title']}")
+        def month_day(value, key):
+            identity = value.get("id", f"event:{value['at_ms']}:{value['title']}"), key
             if identity in month_seen:
                 return
             month_seen.add(identity)
@@ -246,6 +355,18 @@ class HomeOverview:
             candidates.sort(key=lambda item: (item["at_ms"], item.get("id", "")))
             del candidates[3:]
             calendar_days.add(key)
+
+        def month_item(value):
+            # An entry that goes on past midnight is there on each of its days, from its midnight and with no time of its own.
+            first = datetime.fromtimestamp(value["at_ms"] / 1000, zone)
+            last = datetime.fromtimestamp((max(value.get("end_ms", 0), value["at_ms"] + 1) - 1) / 1000, zone).date()
+            if month_start <= value["at_ms"] < month_end:
+                month_day(value, first.date().isoformat())
+            for n in range(1, (last - first.date()).days + 1):
+                day = first.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=n)
+                at = int(day.timestamp() * 1000)
+                if month_start <= at < month_end:
+                    month_day({**value, "at_ms": at, "all_day": True}, day.date().isoformat())
         for routine in self.members.store.routines():
             if not routine.enabled or routine.next_run_ms is None or routine.member_id not in people:
                 continue
@@ -263,22 +384,12 @@ class HomeOverview:
                         today.append(occurrence)
                 due = next_run(routine.schedule, due, tz=zone)
             # The month marks every scheduled day, independently of the bounded seven-day preview.
-            due = (next_run(routine.schedule, month_start - 1, tz=zone)
-                   if routine.schedule.max_runs is None else routine.next_run_ms)
-            monthly_remaining = 42 * 24 if routine.schedule.max_runs is None else remaining
-            for _ in range(min(42 * 24, monthly_remaining)):
-                if due is None or due >= month_end:
-                    break
-                if due >= month_start:
-                    month_item(item("routine", f"{routine.id}:{due}", routine.member_id, routine.title, due, routine=routine.id))
-                due = next_run(routine.schedule, due, tz=zone)
-            for run in self.conn.execute("SELECT COALESCE(scheduled, started) AS at FROM routine_runs WHERE routine_id=? AND COALESCE(scheduled, started)>=? AND COALESCE(scheduled, started)<?", (routine.id, month_start, month_end)):
-                at = run["at"]
+            for at in self._due(routine, month_start, month_end, zone):
                 month_item(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id))
         events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
+        events = [*self._own_items(month_start, month_end, zone, people), *events]
         for event in events:
-            if month_start <= event["at_ms"] < month_end:
-                month_item(event)
+            month_item(event)
         calendar.extend(event for event in events if start <= event["at_ms"] < end)
         today.sort(key=lambda r: (0 if r["kind"] == "question" else 1, r["at_ms"], r["id"]))
         calendar.sort(key=lambda r: (r["at_ms"], r["id"]))
@@ -286,7 +397,8 @@ class HomeOverview:
         stats = await self.router.call("stats.summary", {"days": 14})
         spend = status["spend"]
         return {"generated_at_ms": now, "report": status, "today": today[:TODAY_LIMIT], "reports": reports[:REPORT_LIMIT],
-                "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events, "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
+                "calendar": calendar[:CALENDAR_LIMIT], "calendar_days": sorted(calendar_days), "calendar_events": events,
+                "calendar_google": await self.google_state(), "counts": {"today": len(today), "reports": len(reports), "calendar": len(calendar)},
                 "calendar_items": [value for key in sorted(month_items) for value in month_items[key]], "calendar_counts": month_counts,
                 "usage": {"month_usd": spend["month_usd"], "limit_usd": spend["limit_usd"], "daily": spend["daily"][-14:], "allowances": allowances},
                 "dictation": {"words": stats["all"]["words"], "audio_seconds": stats["all"]["audio_seconds"],

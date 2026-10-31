@@ -114,6 +114,7 @@ from ..brain.settings import DEFAULTS, SettingsStore, api_model
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
 from ..members.activity import Activity, current, member_turn
+from ..own_calendar import OwnCalendar
 from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..messaging.words import compose
@@ -390,7 +391,9 @@ class BackgroundService:
         clock: Callable[[], float] = time.monotonic,
         model_observer: Callable[..., None] | None = None,
         known_models: Callable[[], Sequence[CatalogEntry] | None] = lambda: None,
+        calendar: OwnCalendar | None = None,
     ) -> None:
+        self._calendar = calendar if calendar is not None else OwnCalendar(conn, notify=notify, now_ms=now_ms, tz=tz)
         self._client = client
         self._known_models = known_models  # the catalog, for the window of a task's model
         self._model_observer = model_observer  # told each CLI turn's actual model (Guardian verifies it)
@@ -1124,6 +1127,7 @@ class BackgroundService:
             ask_before_members=speaker.ask_before_members,
             diagnostics=(lambda: self.diagnostics(speaker, task.turn_id or task.source_turn_id)) if self.diagnostics else None,
             cost_cap=self._cost_cap,
+            calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
         )
         from ..computer.vm_tools import vm_scope
         run.scope = lambda: vm_scope(("task", task.id), progress=lambda text: self._progress(task, text), language=language)

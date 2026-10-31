@@ -59,6 +59,7 @@ from typing import Any, Protocol, TypeVar
 
 from ..agent.failure import failure_kind
 from ..agent.gate import ToolGate
+from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
 from ..agent.plugins import MAX_ARGUMENT_CHARS, PluginResult
 from ..agent.steps import reason_of
@@ -84,6 +85,7 @@ from ..services.urls import SeenUrls
 from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import MORE_ROOM, REPLY_TOKENS, WAITING, WRAP_UP, ToolOutcome, result_text
 from ..members.activity import current, tool_step
+from ..own_calendar import CalendarError
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
 from .tasks import TaskStore
 
@@ -249,6 +251,7 @@ class TaskRun:
         ask_before_members: bool = False,
         diagnostics: Callable[[], dict] | None = None,
         cost_cap: Callable[[], float] | None = None,
+        calendar: "Callable[[str, dict], Awaitable[dict]] | None" = None,
     ) -> None:
         self.activity = current()
         # The most this task may spend, as the owner's setting says now; None for none.
@@ -259,6 +262,8 @@ class TaskRun:
         # What a call of a tool is made inside: whose turn at the shared screen it is, and where to say that it
         # waits. A call comes in on the worker's request, not in the task's own context, so the service gives it.
         self.scope: Callable[[], AbstractContextManager] = nullcontext
+        # The app's own calendar (`own_calendar.OwnCalendar.tool`), for this task's speaker.
+        self._calendar = calendar
         self._memory = memory
         self._memory_untrusted = bool(attachments) or any(
             step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
@@ -670,20 +675,22 @@ class TaskRun:
 
     async def _screen(self, ref: ToolRef, arguments: dict) -> Screening:
         """What the owner's safety rules say of a call: PASS for a tool its server says only reads,
-        and for Raphael's own but `create_member`, which are never judged. The judge is paid, so the
+        and for Raphael's own except `create_member` and calendar writes. The judge is paid, so the
         limits on money are read first."""
         if self._gate.is_vm_tool(ref.key):
             return PASS
         if ref.name == ASK_MEMBER and self.ask_before_members:
             return Screening(ASK)
-        if self._gate.safety is None:
-            return PASS
         if ref.kind == BUILTIN:
-            # Of Raphael's own, only adding a member is judged (`agent.team`), by its own name.
-            if ref.name != CREATE_MEMBER:
+            # Of Raphael's own, only adding a member (`agent.team`) and writing to the calendar are judged, by their own names.
+            if ref.name in CALENDAR_WRITES:
+                self._check(paid=True)
+                proposed = Proposed(ref.name, HARNESS_DEFINITIONS[ref.name]["description"], summarize(arguments), narrow_scope(ref.name))
+            elif ref.name != CREATE_MEMBER:
                 return PASS
-            self._check(paid=True)
-            proposed = Proposed(CREATE_MEMBER, team_description(CREATE_MEMBER), summarize(arguments))
+            else:
+                self._check(paid=True)
+                proposed = Proposed(CREATE_MEMBER, team_description(CREATE_MEMBER), summarize(arguments))
         else:
             if self._gate.reads_only(ref.server, ref.name, arguments):
                 return PASS
@@ -867,13 +874,14 @@ class TaskRun:
         """(the reply, how it ended, the tier, the service it used) of one of Raphael's own."""
         gate = self._gate
         tier = gate.tier_now(ref.key)
+        judged = ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES
         try:
-            if ref.name != CREATE_MEMBER:
+            if not judged:
                 gate.check(Action(ref.key, arguments), None, worker=True)
         except (UnknownTool, NotApproved):
             gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
             return _refused(), "blocked", None if tier is None else tier.name, None
-        if (ref.name == CREATE_MEMBER or (ref.name == ASK_MEMBER and self.ask_before_members)) and tier is not None:
+        if (judged or (ref.name == ASK_MEMBER and self.ask_before_members)) and tier is not None:
             screening = await self._screen(ref, arguments)
             if screening.verdict == DENY:
                 gate.record_builtin(ref.name, outcome="blocked", task_id=self.task_id)
@@ -924,6 +932,16 @@ class TaskRun:
                 data = ({"reference": ABOUT} if name == "raphael_help" else
                         self._diagnostics() if self._diagnostics else {"state": "unknown"})
                 return ToolResult(name, True, data)
+            if name in CALENDAR_TOOLS:
+                if self._calendar is None:
+                    return ToolResult(name, False, None, "unavailable")
+                if approval is not None:
+                    self._gate.check_for(action, name, arguments, approval)
+                try:
+                    data = await self._guarded(self._calendar(name, arguments))
+                except CalendarError as error:
+                    return ToolResult(name, False, None, error.kind, instruction=error.instruction)
+                return ToolResult(name, True, data, untrusted=name == CALENDAR_LIST)
             if name == "weather":
                 city = arguments.get("city")
                 city = city.strip() if isinstance(city, str) and city.strip() else self._city()

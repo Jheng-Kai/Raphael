@@ -185,9 +185,10 @@ from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
 from .pages import Pages, PageError
 from .harness_tools import (
-    CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
-    routine_event, tool as harness_tool,
+    CALENDAR_LIST, CALENDAR_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
+    calendar_event, routine_event, tool as harness_tool,
 )
+from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS
 from .local import extract_target, match_command
 from .opening import Opening, clean_target, match_settings, parse_domain, validate_url
@@ -570,6 +571,10 @@ DRAFT_FIRST_NOTE = (
     "Do not send this mail yourself. Write it with email_draft: the owner reviews it in this chat, edits it and sends it "
     "from the card. Then end your turn with one short sentence, and never say it was sent."
 )
+OWN_CALENDAR_NOTE = (
+    "The owner means this app's own calendar, not Google Calendar: read and change it with calendar_list, calendar_add, "
+    "calendar_update and calendar_delete. Connect nothing for it."
+)
 # What the model is told when one of Raphael's own tools refuses it, by the kind of the refusal.
 _HARNESS_NOTES = {
     "private_chat_only": (
@@ -577,6 +582,7 @@ _HARNESS_NOTES = {
         "Do not put the mail's text, or anything private, here; say in one short sentence that you will write it in your "
         "private chat with the owner."
     ),
+    "own_calendar": OWN_CALENDAR_NOTE,
 }
 # What a turn that showed a card is told when it calls anything else, by the kind of card it waits for.
 _WAITING_NOTES = {
@@ -695,7 +701,9 @@ class AgentService:
         handbacks: "HandbackCards | None" = None,
         permissions: "PermissionCards | None" = None,
         drafts: "EmailDrafts | None" = None,
+        calendar: OwnCalendar | None = None,
     ) -> None:
+        self._calendar = calendar if calendar is not None else OwnCalendar(conn, notify=notify, now_ms=now_ms, tz=tz)
         self._tool_observer = tool_observer
         self._model_observer = model_observer
         self._attachment_store = attachment_store
@@ -1879,7 +1887,7 @@ class AgentService:
                     if definitions and isinstance(loop, CliLoop) and loop.resume_session:
                         # Only a turn that can start again in its own thread: a fresh start would not know what was done.
                         loop.reload_note, loop.catalog_changed = TOOLS_FOUND, True
-                    return ToolOutcome(True, content="\n".join(lines), tools=definitions)
+                    return ToolOutcome(True, content="\n".join(lines) or "No other tool fits that.", tools=definitions)
                 planned = plan(name, args)
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
@@ -2386,7 +2394,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("routine_list", "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
+            if tool.key in ("routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2527,6 +2535,10 @@ class AgentService:
                 data = await self._team.routine_tool(ask.speaker.id, name, args)
                 if name != "routine_list":
                     self._message(ask, "event", routine_event(name, data, ask.language))
+            elif name in CALENDAR_TOOLS:
+                data = await self._calendar.tool(ask.speaker.id, name, args)
+                if name != CALENDAR_LIST:
+                    self._message(ask, "event", calendar_event(name, data, ask.language))
             elif name == CONNECT_APP:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
@@ -2535,6 +2547,8 @@ class AgentService:
                 if self._cards is None:
                     raise HarnessToolError("unavailable")
                 data = await self._cards.find(args.get("query"))
+                if means_own_calendar(ask.text):
+                    data = {"apps": [app for app in data["apps"] if "calendar" not in app["id"].lower()], "note": OWN_CALENDAR_NOTE}
             elif name == REQUEST_SECRET:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
@@ -2577,9 +2591,12 @@ class AgentService:
                 data = {"done": name}
             else:
                 raise HarnessToolError("unknown_tool")
-            result = ToolResult(name, True, data)
+            # A listing holds what others wrote: Google titles, a colleague's notes. It stays data.
+            result = ToolResult(name, True, data, untrusted=name == CALENDAR_LIST)
         except PageError as error:
             result = ToolResult(name, False, None, error.kind, instruction=str(error))
+        except CalendarError as error:
+            result = ToolResult(name, False, None, error.kind, instruction=error.instruction)
         except HarnessToolError as error:
             result = ToolResult(name, False, None, str(error), instruction=_HARNESS_NOTES.get(str(error)))
         except RpcError as error:
@@ -2665,6 +2682,8 @@ class AgentService:
         app = await self._cards.resolve(args.get("app"))
         if app is None:
             raise ValueError("unknown app")
+        if "calendar" in app.id.lower() and means_own_calendar(ask.text):
+            raise HarnessToolError("own_calendar")
         card = self._cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                                 app=app, language=ask.language, done=ask.made)
         if card is None:

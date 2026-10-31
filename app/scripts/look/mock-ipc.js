@@ -215,22 +215,51 @@ export function installMock(fixture, config = {}, target = window) {
     const text = Array.from({ length: 12 }, (_, index) => `${index + 1}. 整理每日新聞素材：核對來源、日期與重點，再保留下一次編輯需要的完整脈絡。\n\n完成後依主題整理，確認所有素材都有可追溯的來源。`).join("\n\n");
     for (const message of data.messages.slice(0, 2)) message.text = text;
   }
+  const own = (id, title, start, end, more = {}) => ({ id: `own:${id}`, kind: "own", event_id: id, title, summary: "", at_ms: start, end_ms: end, member_id: -1, name: "", avatar: "", turn_id: null, conversation_id: null, routine_id: null, all_day: false, notes: "", added_by: null, ...more });
+  const octoberAt = (day, hour, minute = 0) => new Date(2026, 9, day, hour, minute).getTime();
+  const addedBy = id => { const person = data.members.find(member => member.id === id); return { member_id: id, added_by: id, name: person.name, avatar: person.avatar ?? "" }; };
   const daily = structuredClone(data.home.calendar.find(item => item.kind === "routine" && item.routine_id === 1));
   const routineTime = new Date(daily.at_ms); routineTime.setHours(9, 0, 0, 0);
   daily.at_ms = routineTime.getTime(); daily.id = `routine:1:${daily.at_ms}`;
   const eventAt = (day, hour) => new Date(2026, 9, day, hour).getTime();
+  data.home.calendar_google = variant.calendarGoogle ?? "connected";
   data.home.calendar_events = [
     ...data.home.calendar.filter(item => item.kind === "event"),
-    ...[["month-start",2,10,"月初規劃"],["month-end",30,15,"月末回顧"],["busy-1",24,10,"設計審查"],["busy-2",24,11,"衝刺規劃"],["busy-3",24,16,"研究同步"]].map(([id,day,hour,title]) => ({...daily,id:`event:${id}`,kind:"event",routine_id:null,at_ms:eventAt(day,hour),title})),
+    ...[["month-start",2,10,"月初規劃"],["month-end",30,15,"月末回顧"],["busy-1",24,10,"設計審查"],["busy-2",24,11,"衝刺規劃"],["busy-3",24,16,"研究同步"]].map(([id,day,hour,title]) => ({...daily,id:`event:${id}`,kind:"event",routine_id:null,at_ms:eventAt(day,hour),end_ms:eventAt(day,hour)+3600000,title})),
+    own(1, "牙醫回診", octoberAt(24, 14), octoberAt(24, 15), { notes: "帶健保卡，診所在中山路。" }),
+    own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
+    own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
-  const monthly = [daily, ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
-  data.home.calendar_counts = {};
-  data.home.calendar_items = monthly.filter(item => {
-    const key = new Date(item.at_ms).toISOString().slice(0,10);
-    data.home.calendar_counts[key] = (data.home.calendar_counts[key] ?? 0) + 1;
-    return data.home.calendar_counts[key] <= 3;
-  });
-  data.home.calendar_days = Object.keys(data.home.calendar_counts);
+  if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
+  if (variant.homeOwnEvents) {
+    const preview = data.home.calendar_events.find(item => item.id === "own:1");
+    preview.at_ms = octoberAt(24, 9, 30); preview.end_ms = octoberAt(24, 10, 30);
+  }
+  if (variant.calendarBusy) data.home.calendar_events.push(
+    own(11, "產品審查", octoberAt(21, 9), octoberAt(21, 10, 30)),
+    own(12, "與小晴對齊", octoberAt(21, 9, 30), octoberAt(21, 10), addedBy(1)),
+    own(13, "客戶來電", octoberAt(21, 10), octoberAt(21, 11)),
+    own(14, "午餐", octoberAt(20, 12), octoberAt(20, 12, 30)),
+    own(15, "簽核", octoberAt(20, 12, 15), octoberAt(20, 12, 45)),
+    own(16, "寄出合約", octoberAt(20, 12, 30), octoberAt(20, 13)),
+    own(17, "校對標題非常長的一份文件與所有附件", octoberAt(19, 15), octoberAt(19, 17)),
+    own(18, "出差台中", octoberAt(19, 0), octoberAt(22, 0), { all_day: true }),
+    own(19, "展會", octoberAt(20, 0), octoberAt(21, 0), { all_day: true }),
+    own(20, "換季盤點", octoberAt(20, 0), octoberAt(21, 0), { all_day: true }),
+    own(21, "發薪日", octoberAt(20, 0), octoberAt(21, 0), { all_day: true }),
+    ...[8, 9, 10, 11, 13, 14, 16].map((hour, index) => own(30 + index, `第 ${index + 1} 場訪談`, octoberAt(28, hour), octoberAt(28, hour + 1))),
+  );
+  const reproject = () => {
+    const monthly = [...(variant.homeSparse || variant.homeEmpty ? [] : [daily]), ...data.home.calendar_events].sort((a,b)=>a.at_ms-b.at_ms);
+    data.home.calendar_counts = {};
+    data.home.calendar_items = monthly.filter(item => {
+      const key = new Date(item.at_ms).toISOString().slice(0,10);
+      data.home.calendar_counts[key] = (data.home.calendar_counts[key] ?? 0) + 1;
+      return data.home.calendar_counts[key] <= 3;
+    });
+    data.home.calendar_days = Object.keys(data.home.calendar_counts);
+  };
+  reproject();
   if (variant.homeSparse || variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
@@ -380,7 +409,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "home.overview": {
         if (!p.month) return {...data.home,report:data.status};
         const shift = at => { const old = new Date(at), [year,month] = p.month.split('-').map(Number); return new Date(year,month-1,Math.min(old.getDate(),new Date(year,month,0).getDate()),old.getHours(),old.getMinutes()).getTime(); };
-        const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,id:item.kind==='routine'?`routine:${item.routine_id}:${at_ms}`:item.id}; };
+        const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,...(item.end_ms===undefined?{}:{end_ms:at_ms+item.end_ms-item.at_ms}),id:item.kind==='routine'?`routine:${item.routine_id}:${at_ms}`:item.id}; };
         const calendar_items = data.home.calendar_items.map(project), calendar_events = data.home.calendar_events.map(project);
         const calendar_counts = Object.fromEntries(Object.entries(data.home.calendar_counts).map(([key,count])=>[new Date(shift(new Date(`${key}T12:00:00`).getTime())).toISOString().slice(0,10),count]));
         return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts),report:data.status};
@@ -522,6 +551,21 @@ export function installMock(fixture, config = {}, target = window) {
       case "routines.create": { const routine = { ...p, id: nextId(data.routines), enabled: true, last_run: null, next_run: data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": { const routine = update(data.routines, p.id, p); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.delete": data.routines = data.routines.filter(item => item.id !== p.id); notify("RoutinesChanged", { member_id: 0 }); return { deleted: true };
+      case "calendar.add": case "calendar.update": {
+        const current = method === "calendar.update" ? data.home.calendar_events.find(item => item.kind === "own" && item.event_id === p.id) : undefined;
+        if (method === "calendar.update" && !current) throw new Error("Calendar fixture not found");
+        const when = value => /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`).getTime() : new Date(value).getTime();
+        const allDay = p.all_day ?? current?.all_day ?? false;
+        const start = p.start ? when(p.start) : current.at_ms;
+        const end = p.end ? when(p.end) + (allDay ? 86400000 : 0) : current?.end_ms ?? start + 3600000;
+        const id = current?.event_id ?? Math.max(100, ...data.home.calendar_events.map(item => item.event_id ?? 0)) + 1;
+        const item = { ...(current ?? { id: `own:${id}`, kind: "own", event_id: id, summary: "", member_id: -1, name: "", avatar: "", turn_id: null, conversation_id: null, routine_id: null, notes: "", added_by: null }),
+          title: p.title ?? current?.title, notes: p.notes ?? current?.notes ?? "", at_ms: start, end_ms: end, all_day: allDay };
+        if (current) Object.assign(current, item); else data.home.calendar_events.push(item);
+        reproject(); notify("CalendarChanged");
+        return { event: { id, title: item.title, start: p.start ?? new Date(start).toISOString(), end: p.end ?? new Date(end).toISOString(), all_day: allDay, notes: item.notes, added_by: item.added_by } };
+      }
+      case "calendar.delete": data.home.calendar_events = data.home.calendar_events.filter(item => item.event_id !== p.id); reproject(); notify("CalendarChanged"); return { deleted: true };
       case "rooms.list": return { rooms: data.rooms.map(room => {
         const messages = data.messages.filter(message => message.room_id === room.id && (message.member_id == null || message.status === "done" && message.text.trim() && !/^[(（]?\s*pass\s*[)）]?[.。]?$/i.test(message.text.trim()))).sort((a, b) => b.id - a.id);
         const latest = messages[0];

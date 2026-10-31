@@ -9,11 +9,13 @@ def names(snapshot):
     return [d["function"]["name"] for d in snapshot.definitions]
 
 
-def test_without_plugins_a_task_has_the_lookups_of_raphael_only():
+def test_without_plugins_a_task_has_raphaels_lookups_and_calendar():
     snapshot = take_snapshot(None)
-    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help"]
+    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help",
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete"]
     assert {ref.kind for ref in snapshot.refs.values()} == {BUILTIN}
-    assert all(ref.tier is Tier.T0 for ref in snapshot.refs.values())
+    writes = {"calendar_add", "calendar_update", "calendar_delete"}
+    assert all(ref.tier is (Tier.T1 if ref.name in writes else Tier.T0) for ref in snapshot.refs.values())
 
 
 def test_the_commands_for_this_computer_are_not_in_it():
@@ -78,7 +80,8 @@ def test_a_tool_of_a_plugin_never_takes_the_name_of_one_of_raphaels_own():
             return Tier.T0
 
     snapshot = take_snapshot(Hub())
-    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help"]
+    assert names(snapshot) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help",
+                               "calendar_list", "calendar_add", "calendar_update", "calendar_delete"]
     assert snapshot.refs["weather"].kind == BUILTIN
 
 
@@ -87,4 +90,5 @@ def test_a_hub_that_breaks_leaves_its_tools_out_and_not_the_task():
         def offered(self):
             raise RuntimeError("down")
 
-    assert names(take_snapshot(Broken())) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help"]
+    assert names(take_snapshot(Broken())) == ["weather", "web_search", "local_time", "web_read", "self_check", "raphael_help",
+                                            "calendar_list", "calendar_add", "calendar_update", "calendar_delete"]

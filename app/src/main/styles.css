@@ -48,6 +48,8 @@
   --tab-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   /* the window's close button under the pointer: Windows' own red, the same in both themes */
   --close: #c42b1c; --on-close: #ffffff;
+  /* What is drawn on a slime's colour: white, as its eyes are, in both themes. */
+  --on-slime: #ffffff;
   --toast-action: #e5e5e5; --toast-hover: #404040;
   /* Activity levels are one hue, the accent, from the empty day up: more reads as stronger. */
   --heat-0: #efefef; --hatch: #d4d4d4;
