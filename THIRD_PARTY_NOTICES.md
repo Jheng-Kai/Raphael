@@ -40,6 +40,42 @@ Modified ports and adaptations, with upstream file names:
 These files are offered under Apache-2.0; unchanged upstream notices, if any,
 remain applicable. OpenMausBot's license grants no trademark rights.
 
+## Hermes Agent: context compression (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
+
+`core/src/raphael_core/worker/context.py` is adapted from `agent/context_compressor.py`
+(the per-tool result summaries, the refused-call summary, deduplication, tool-pair repair, boundary
+alignment, the static fallback summary, the cooldown ladder and anti-thrash),
+`agent/turn_overflow.py` and `agent/model_metadata.py` (telling an overflow from an output cap, and
+reading a provider's limits from its error) and `agent/usage_anchor.py` (real usage plus an estimate
+of what came since). The result limit in `core/src/raphael_core/worker/guards.py` follows
+`tools/budget_config.py`. Its checkpoint template is rewritten for Raphael, and also draws on
+opencode (`packages/core/src/session/compaction.ts`, revision `bf544cd4`, MIT, Copyright (c) 2025
+opencode).
+
+MIT License
+
+Copyright (c) 2025 Nous Research
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## Cua Driver and desktop image (MIT)
 
 Upstream: https://github.com/trycua/cua

@@ -5,8 +5,8 @@ A `ComputerRun` is a request of the owner's ("在小算盤算 12 乘 34") carrie
 (`worker.loop`), for three reasons: it runs in the core and in the foreground, it stops for a
 question in the middle (and the time a question waits is not the run's), and every step must look
 at the latest snapshot of its window. It borrows the worker's guards: every result is wrapped as
-untrusted data (`worker.guards.wrap_untrusted`) and the results of earlier rounds are dropped
-(`elide_old`).
+untrusted data (`worker.guards.wrap_untrusted`) and the results of earlier rounds, whose ids are gone
+by the next look, become a line each (`worker.context.shorten_old_rounds`).
 
 How a run goes:
 
@@ -92,7 +92,8 @@ from ..brain.openrouter import ChatTurn, OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..clock import wall_clock_ms
 from ..memory.conversation import turn_text
-from ..worker.guards import MAX_ARGUMENT_CHARS, canonical, elide_old, neutralize, wrap_untrusted
+from ..worker.context import shorten_old_rounds
+from ..worker.guards import MAX_ARGUMENT_CHARS, canonical, neutralize, wrap_untrusted
 from . import safety, tools, words
 from .bridge import HANDOFF, REVOKED, UNAVAILABLE, BridgeError, ShellBridge
 from .snapshot import (
@@ -112,6 +113,8 @@ logger = logging.getLogger(__name__)
 # One model reply may take this long, and may be this long.
 CHAT_TIMEOUT_S = 45.0
 CHAT_MAX_TOKENS = 1200
+# How many of the latest rounds keep their results in full.
+KEEP_ROUNDS = 3
 # How long the shell is given for each operation.
 APPS_TIMEOUT_S = 6.0
 LOOK_TIMEOUT_S = 10.0
@@ -596,7 +599,7 @@ class ComputerRun:
                         content, made_a_step, handed_back = await self._hand_back(pause), False, True
                 acted = acted or made_a_step
                 messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
-            elide_old(messages)
+            shorten_old_rounds(messages, KEEP_ROUNDS)
 
     def _report(self, content: str) -> Final:
         line, rest = fit_text(content or "", self.language)

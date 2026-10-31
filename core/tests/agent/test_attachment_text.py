@@ -148,14 +148,14 @@ def test_small_files_do_not_reduce_a_normal_articles_budget():
 
 
 async def test_inline_budget_does_not_enlarge_tool_result_or_reader_budgets():
-    from raphael_core.worker.guards import wrap_untrusted
+    from raphael_core.worker.guards import MAX_RESULT_CHARS, wrap_untrusted
 
     article = "A" * 20000
     _, read = await read_file(checked("article.txt", "text/plain", article.encode()))
     assert read["truncated"] and "Cut short" in read["text"]
     for tool in ("read_attachment", "web_read", "web_search"):
-        shown = wrap_untrusted(tool, article, ok=True)
-        assert len(shown) < 6200 and "cut_short=true" in shown
+        shown = wrap_untrusted(tool, "A" * (MAX_RESULT_CHARS * 2), ok=True)
+        assert len(shown) < MAX_RESULT_CHARS + 200 and "cut_short=true" in shown
 
 
 async def test_gemini_cli_receives_image_reader_result(setup, tmp_path, monkeypatch):

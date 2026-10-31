@@ -370,11 +370,11 @@ async def test_exec_has_guest_timeout_and_combined_output_cap(desktop):
     async def run(args, **kwargs):
         if "sh" in args and "-lc" in args:
             runtime.calls.append((args, kwargs))
-            return Result(0, "a" * 15000, "b" * 15000)
+            return Result(0, "a" * 40000, "b" * 40000)
         return await original(args, **kwargs)
     vm.run = run
     result = await vm.execute(target, "printf hello")
-    assert len(result["output"]) == 20000 and result["truncated"]
+    assert len(result["output"]) == 50000 and result["truncated"]
     args, kwargs = next((a, k) for a, k in runtime.calls if "-lc" in a)
     assert "timeout --signal=TERM --kill-after=2" in args[args.index("-c") + 1]
     assert "60" in args and kwargs["timeout"] == 65

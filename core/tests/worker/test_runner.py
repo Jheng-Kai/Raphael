@@ -109,6 +109,32 @@ async def test_responses_continuation_survives_the_worker_ipc_boundary(core):
     assert "opaque-reasoning" not in result["final"]
 
 
+async def test_the_window_and_the_real_usage_shrink_the_conversation_across_the_worker_boundary(core):
+    summaries = []
+
+    async def summarize(params):
+        summaries.append(params)
+        return {"text": "## Goal\nGo on.\n## Completed actions\n1. READ tea — green"}
+
+    core.a.register("host.summarize", summarize)
+    answer = {"ok": True, "content": "tea " * 3000}
+    core.tools = [dict(answer) for _ in range(12)]
+    core.chats = [{**calling(id=f"c{n}", arguments={"topic": f"t{n}"}), "prompt_tokens": 2000 + n * 3000} for n in range(12)] + [final()]
+    result = await core.a.request("task.run", spec(context_window=20_000))
+    assert result["status"] == "done"
+    assert summaries and summaries[0]["task_id"] == 7 and summaries[0]["max_tokens"] >= 2000
+    last = core.chat_requests[-1]["messages"]
+    assert last[1]["role"] == "user" and last[1]["content"].startswith("USER") and "READ tea" in last[1]["content"]
+
+
+async def test_an_overflow_told_by_the_core_is_shrunk_and_sent_again(core):
+    core.tools = [{"ok": True, "content": "tea " * 3000}]
+    core.chats = [calling(), RpcError(WORKER_STOPPED, "no", {"stop": "failed", "detail": "context_overflow", "window": 2000}), final()]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done" and len(core.chat_requests) == 3
+    assert len(json.dumps(core.chat_requests[2]["messages"])) < len(json.dumps(core.chat_requests[1]["messages"]))
+
+
 async def test_a_refusal_of_the_core_ends_the_task_with_what_it_said(core):
     core.chats = [RpcError(WORKER_STOPPED, "no", {"stop": "limit_cost"})]
     result = await core.a.request("task.run", spec())

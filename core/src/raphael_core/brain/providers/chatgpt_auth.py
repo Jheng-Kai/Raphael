@@ -44,6 +44,8 @@ def failure(status, body, request_id=None):
     """Allowlist error codes, never carry remote messages or credentials into diagnostics."""
     error = body.get("error", {}) if isinstance(body, dict) else {}
     code = error.get("code") if isinstance(error, dict) else error
+    if code is None and isinstance(body, dict):  # a stream's `error` event has it at the top
+        code = body.get("code")
     kinds = {
         "subscription_sharing_usage_limit_exceeded": "usage_limit",
         "subscription_sharing_usage_unavailable": "chatgpt_unavailable",
@@ -62,7 +64,7 @@ def failure(status, body, request_id=None):
     result = OpenRouterError(status, kind, "ChatGPT request failed: " + kind)
     # Preserve useful protocol metadata without carrying arbitrary remote text.
     result.details = {"kind": kind, "http_status": status,
-        "code": code if isinstance(code, str) and code in (*kinds, *TERMINAL_REFRESH, "invalid_client") else None,
+        "code": code if isinstance(code, str) and code in (*kinds, *TERMINAL_REFRESH, "invalid_client", "context_length_exceeded") else None,
         "body_shape": "error_object" if isinstance(error, dict) and error else
                       "error_string" if isinstance(error, str) else "detail" if isinstance(body, dict) and "detail" in body else "unknown",
         "request_id": request_id if isinstance(request_id, str) and re.fullmatch(r"req_[A-Za-z0-9_-]{1,128}", request_id) else None}

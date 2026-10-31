@@ -136,7 +136,8 @@ import httpx
 from ..background.brief import background_block, background_line
 from ..background.tasks import Refused
 from ..background.snapshot import FIND, MCP, take_snapshot
-from ..brain.catalog import CatalogEntry, LLM, find
+from ..brain.catalog import CatalogEntry, LLM, context_window, find
+from ..brain.pricing import builtin_catalog
 from ..brain.model_ref import split_api_ref
 from ..clock import wall_clock_ms
 from ..computer.run import ComputerRun, ComputerRuns, Final, Handback, Question, conversation_block
@@ -2014,7 +2015,8 @@ class AgentService:
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
-                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings), **common)
+                loop = NarratedLoop(client=self._client, reasoning_effort=self._effort(settings),
+                                    context_window=context_window(self._tool_support._catalog() or builtin_catalog(), settings.model), **common)
             def refresh_computer():
                 snapshot.refresh_computer(self._plugins, ask.speaker.id)
                 loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
@@ -2977,9 +2979,7 @@ class AgentService:
     def _memory_context(self, speaker, conversation_id, *, quick=False):
         conversation = self._conversation_of(speaker.id, conversation_id)
         model = self._read_settings(speaker, conversation_id).model
-        entry = find(self._tool_support._catalog() or [], LLM, model)
-        if entry is not None and entry.context_length:
-            conversation.context_window = entry.context_length
+        conversation.context_window = context_window(self._tool_support._catalog() or [], model) or conversation.context_window
         if self._memory is not None:
             conversation._client = self._memory._brain(speaker.id)
         return conversation.context(quick=quick)

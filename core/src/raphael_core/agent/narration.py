@@ -13,7 +13,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
-from ..background.run import estimate_cost
+from ..background.run import estimate_cost, summary_reply
+from ..worker.context import CONTEXT_OVERFLOW, is_context_overflow, provider_window, smaller_output
 from ..worker.loop import UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
 from .answers import Reply, loose_reply, parse_reply
 from .failure import AgentFailure, failure_kind
@@ -125,9 +126,12 @@ class NarratedLoop:
         thinking: Callable[[str], None] = lambda text: None,
         fallbacks: Sequence[str] | None = None,
         reasoning_effort: str = "none",
+        context_window: int | None = None,
     ) -> None:
         self.client, self.model, self.ledger = client, model, ledger
         self.reasoning_effort = reasoning_effort
+        self.context_window = context_window
+        self.max_tokens = 4000
         self.language, self.plain = language, plain
         self.system, self.user, self.tools = system + NARRATION_RULES, user, list(tools)
         self.progress, self.execute = progress, execute
@@ -153,13 +157,19 @@ class NarratedLoop:
                     answer = await self.client.chat_tools(
                         model=self.model, fallbacks=self.fallbacks,
                         messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
-                        max_tokens=4000, reasoning_effort=self.reasoning_effort,
+                        max_tokens=self.max_tokens, reasoning_effort=self.reasoning_effort,
                     )
                     self.last_failure = None
                     break
                 except Stop:
                     raise
                 except Exception as error:
+                    if (smaller := smaller_output(error, self.max_tokens)) is not None:
+                        self.max_tokens = smaller
+                        continue
+                    if is_context_overflow(error):  # the loop shrinks the conversation and sends it again
+                        self.last_failure = None
+                        raise Stop("failed", CONTEXT_OVERFLOW, window=provider_window(error)) from None
                     self.last_failure = classify(error)
                     wait = next(waits, None)
                     if not self.last_failure.transient or (wait is None and not self.acted):
@@ -204,7 +214,13 @@ class NarratedLoop:
         self.batch_calls = answer.calls
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
-        ], responses_output=getattr(answer, "responses_output", []))
+        ], responses_output=getattr(answer, "responses_output", []), prompt_tokens=answer.prompt_tokens)
+
+    async def summarize(self, system: str, user: str, max_tokens: int) -> str:
+        reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)
+        self.ledger.add(model=reply.model, cost_usd=reply.cost_usd, prompt_tokens=reply.prompt_tokens,
+                        completion_tokens=reply.completion_tokens)
+        return reply.text
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         self.acted = True
@@ -217,6 +233,7 @@ class NarratedLoop:
             messages=self.messages,
             failure_guard=self.failure_guard,
             corrective_rounds=1,
+            context_window=self.context_window,
         )
         self.model_calls += outcome.model_calls
         self.tool_calls += outcome.tool_calls

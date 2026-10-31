@@ -84,6 +84,15 @@ _OWNER_MESSAGES["ja"].update({
 })
 
 
+def scrub(text: str) -> str:
+    """`text` without what looks like a credential, and otherwise as it was: addresses, paths and
+    long ids stay, for a text that has to keep them (a run's summary), unlike `redact`."""
+    text = re.sub(r"(?i)\b(?:bearer\s+)[^\s,;\"']+", "[redacted]", text)
+    text = re.sub(r"(?i)([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
+    text = re.sub(r"(?i)\b(?:sk[-_]|ak_|lt_|gh[pousr]_|eyJ)[A-Za-z0-9_.-]+", "[redacted]", text)
+    return re.sub(r"(?i)\b(?:refresh_token|access_token|id_token)\b", "[credential]", text)
+
+
 def redact(value: object, *, secrets=(), limit=240) -> str:
     text = str(value)
     for secret in secrets:
@@ -91,10 +100,7 @@ def redact(value: object, *, secrets=(), limit=240) -> str:
             text = text.replace(secret, "[redacted]")
             if secret.lower().startswith("bearer "):
                 text = text.replace(secret[7:], "[redacted]")
-    text = re.sub(r"(?i)\b(?:bearer\s+)[^\s,;\"']+", "[redacted]", text)
-    text = re.sub(r"(?i)([\"']?(?:[\w-]*(?:key|token|secret|password|authorization|cookie))[\"']?\s*[:=]\s*)(?:[\"'][^\"']*[\"']|[^\s,;}]+)", r"\1[redacted]", text)
-    text = re.sub(r"(?i)\b(?:sk[-_]|ak_|lt_|gh[pousr]_|eyJ)[A-Za-z0-9_.-]+", "[redacted]", text)
-    text = re.sub(r"(?i)\b(?:refresh_token|access_token|id_token)\b", "[credential]", text)
+    text = scrub(text)
     text = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[email]", text)
     text = re.sub(r"(?i)(?:[a-z]:[\\/]+Users[\\/]+|/Users/|/home/)[^\s\"'<>|,;]+", "[profile path]", text)
     text = re.sub(r"https?://[^\s\"'<>]+", "[url]", text)

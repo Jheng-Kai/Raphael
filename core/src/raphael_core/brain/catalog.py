@@ -196,6 +196,12 @@ def find(entries: Iterable[CatalogEntry], kind: str, model_id: object) -> Catalo
     return next((e for e in entries if e.kind == kind and e.id == model_id), None)
 
 
+def context_window(entries: Iterable[CatalogEntry], model_id: object) -> int | None:
+    """How many tokens the window of the language model `model_id` holds, if the catalog says."""
+    entry = find(entries, LLM, model_id)
+    return None if entry is None else entry.context_length
+
+
 def choice_problem(
     role: Role, model_id: str, entries: Sequence[CatalogEntry], current: object
 ) -> str | None:

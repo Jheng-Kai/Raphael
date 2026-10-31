@@ -62,9 +62,11 @@ class ChatGPTProvider:
             levels = row.get("supported_reasoning_levels")
             efforts = [level["effort"] for level in levels if isinstance(level, dict) and level.get("effort") in EFFORTS] if isinstance(levels, list) else []
             default = row.get("default_reasoning_level")
+            window = next((row[key] for key in ("context_window", "max_context_window")
+                           if type(row.get(key)) is int and row[key] > 0), None)
             rows.append({"id": row["slug"], "slug": row["slug"], "name": row["display_name"],
                 "display_name": row["display_name"], "tools": True, "vision": True,
-                "context": None, "price_in": None, "price_out": None,
+                "context": window, "price_in": None, "price_out": None,
                 "reasoning_efforts": efforts, "default_effort": default if default in efforts else None})
         self.auth.model_rows = rows
         return rows

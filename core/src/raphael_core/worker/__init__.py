@@ -15,7 +15,8 @@ module here, and nothing they import, reaches `keyring`, `raphael_core.brain.sec
 `raphael_core.integrations.vault` or `sqlite3`.
 
 Modules: `channel` (JSON-RPC both ways over lines), `guards` (what a tool result is wrapped in, how
-it is cut, the guard against repeated calls), `loop` (the loop itself), `runner` (the process).
+it is cut, the guard against repeated calls), `context` (a long conversation kept inside the model's
+window), `loop` (the loop itself), `runner` (the process).
 
 Nothing here logs the task, a prompt, an argument or a result.
 """

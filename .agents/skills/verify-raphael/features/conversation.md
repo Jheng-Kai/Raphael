@@ -592,6 +592,18 @@ review, selected look scenes and the `memory-growth` native journey. Conversatio
 context contracts live in `core/tests/memory/test_conversation.py`; shared harness
 wiring and recall order in `core/tests/agent/test_memory_turns.py`.
 
+## A long job's context, inside one run (2026-10-31)
+
+API brains only: a turn and a background task keep every tool result while the
+provider's real usage stays under the trigger (75% of the window, 50% from 512K;
+unknown window: 32K). Then old results become one-liners that mark failed and refused
+calls, and if that is not enough a checkpoint replaces the older rounds, inside the
+owner's request message. A failed summary falls back to a static checkpoint; a
+provider's "too long" shrinks and sends again, at most three times. Contracts:
+`core/tests/worker/test_context.py`, `core/tests/background/test_long_job.py`, and for
+the ChatGPT plan's Responses items `core/tests/brain/test_chatgpt.py`. No fake here
+proves what the real Responses API accepts: run one real long round on a sign-in.
+
 ## Owner round 7 contracts
 
 Quick questions is named once by its actionable persistent conversation row; its duplicate section heading is removed. Ordinary conversations retain their heading, overflow actions, search and quick-history clearing. conversation-sections and details-quick-once enforce that distinction. The shared private and room conversation scrollport fades its top 24px to soften partial message fragments beneath the fixed header; connector-reconnected, chat/member-text/room-text and details consumers cover this boundary. The compact sheet/scrim behavior remains unchanged.

@@ -110,6 +110,7 @@ async def test_a_model_call_is_made_with_the_tools_of_the_snapshot_and_paid_into
     reply = await rig.chat(tools=[{"type": "function", "function": {"name": "format_the_disk"}}])
     assert reply == {
         "content": "Looking.",
+        "prompt_tokens": 100,
         "calls": [{"id": "c1", "name": "weather", "arguments": {"city": "Taipei"}, "raw": '{"city": "Taipei"}'}],
     }
     sent = rig.client.chat_calls[0]
@@ -365,7 +366,7 @@ async def test_what_a_tool_returns_is_cut_to_a_size_the_worker_can_take(rig):
     await rig.plugins.connect(big="T0")
     rig.resnap()
     reply = await rig.tool("Notes__big")
-    assert reply["ok"] and reply["truncated"] is True and len(reply["content"]) <= 12_000
+    assert reply["ok"] and reply["truncated"] is True and len(reply["content"]) <= 50_001
 
 
 async def test_a_tool_that_fails_is_told_as_a_failure_with_its_kind(rig):

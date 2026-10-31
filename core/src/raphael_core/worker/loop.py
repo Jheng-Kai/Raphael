@@ -10,8 +10,9 @@ Everything that could go wrong on the way is dealt with here or by the host, nev
 - a call to a name that was not offered, with arguments that are not a JSON object or that are far
   too long, is not made: the model is told so as the result of that call, and goes on;
 - the same call with the same arguments for the third time is not made either (`guards`);
-- a result is wrapped as untrusted data and cut down, and the results of earlier steps are dropped
-  once the model has gone on (`guards`);
+- a result is wrapped as untrusted data and cut to what the window can hold (`guards`), and it stays
+  while the conversation fits; then the conversation is shrunk (`context`), and so it is when the
+  provider says the prompt is too long, which is sent again a bounded number of times;
 - the host refuses a model call or a tool call when a limit is reached, the user stopped the task,
   or the model failed: it raises `Stop`, and the loop ends there with the kind. The loop counts the
   limits too, so a host that forgot would not make a task endless;
@@ -35,13 +36,14 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from ..failures import RepeatFailures, REPEAT_NOTE, CORRECTIVE_NOTE, tool_failure, redact
 
+from .context import CONTEXT_OVERFLOW, ContextKeeper
 from .guards import (
     MAX_ARGUMENT_CHARS,
     RepeatGuard,
     FailureGuard,
     STEER_NOTE,
     canonical,
-    elide_old,
+    result_limit,
     wrap_untrusted,
 )
 
@@ -54,6 +56,8 @@ REPEATED = (
     "use what you have, or try something else, or report."
 )
 WAITING_FOR_WORK = "Not made: waiting for delegated work."
+# After a result its source could not give whole.
+SOURCE_CUT = "\n[The source cut this result short. To read the rest, ask it for the next part, if it can.]"
 
 
 @dataclass(frozen=True)
@@ -77,12 +81,15 @@ class Stop(Exception):
     """The host will not go on, or the loop may not. `kind` says why: "cancelled" (the user
     stopped the task), "limit_model", "limit_tool", "limit_time" (a
     limit was reached), "failed" (the model failed; `detail` is the kind of failure) or "waiting"
-    (a call waits for the owner's yes: the task pauses)."""
+    (a call waits for the owner's yes: the task pauses). A failure of the kind `CONTEXT_OVERFLOW` does
+    not end the task at once: the loop shrinks the conversation, and `window` is the provider's, if it
+    said it."""
 
-    def __init__(self, kind: str, detail: str | None = None) -> None:
+    def __init__(self, kind: str, detail: str | None = None, window: int | None = None) -> None:
         super().__init__(kind)
         self.kind = kind
         self.detail = detail
+        self.window = window
 
 
 @dataclass
@@ -98,11 +105,13 @@ class Call:
 
 @dataclass
 class Turn:
-    """A reply of the model: its words, and the calls it asks for."""
+    """A reply of the model: its words, the calls it asks for, and what its provider says the prompt
+    came to (0 when it does not say)."""
 
     content: str
     calls: list[Call] = field(default_factory=list)
     responses_output: list[dict] = field(default_factory=list, repr=False)
+    prompt_tokens: int = 0
 
 
 @dataclass
@@ -120,7 +129,9 @@ class ToolOutcome:
 
 
 class Host(Protocol):
-    """The core, as the loop sees it. Both calls may raise `Stop`."""
+    """The core, as the loop sees it. Every call may raise `Stop`. A host may also have
+    `summarize(system, user, max_tokens) -> str`, a model's reply with no tools, which `context` writes
+    a long task's checkpoint with; without it the checkpoint is made without a model."""
 
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn: ...
 
@@ -201,13 +212,15 @@ async def run_task(
     messages: Sequence[dict] | None = None,
     failure_guard: RepeatFailures | None = None,
     corrective_rounds: int = 0,
+    context_window: int | None = None,
 ) -> Outcome:
     """Carry out a task. `system` and `user` are the first two messages of the conversation (the
     core wrote them), `tools` the tools the model is offered in the chat format; a task that goes
     on after a pause starts from the whole conversation instead (`messages`, which the core gives
     back as the loop left it, with the results of the calls that waited). The loop ends when the
     model reports, when a limit is reached, when the task is cancelled or when the host stops it;
-    it raises nothing for any of those. `limits` are what is left to the task."""
+    it raises nothing for any of those. `limits` are what is left to the task, `context_window` the
+    tokens the model's window holds, if that is known."""
     cancelled = cancelled if cancelled is not None else asyncio.Event()
     tools = list(tools)
     offered = {tool["function"]["name"] for tool in tools}
@@ -225,6 +238,7 @@ async def run_task(
     last_failed = owner_denied = False
     deadline = clock() + limits.seconds
     model_calls = tool_calls = 0
+    keeper = ContextKeeper(getattr(host, "summarize", None), window=context_window, clock=clock)
 
     def check_before(kind: str, used: int, allowed: int) -> None:
         if cancelled.is_set():
@@ -235,9 +249,16 @@ async def run_task(
             raise Stop(kind)
 
     try:
+        await _until(keeper.fit(messages, tools), cancelled, deadline, clock)  # a task that goes on may be long already
         while True:
             check_before("limit_model", model_calls, limits.model_calls)
-            turn = await _until(host.chat(messages, tools), cancelled, deadline, clock)
+            try:
+                turn = await _until(host.chat(messages, tools), cancelled, deadline, clock)
+            except Stop as stop:
+                if stop.detail == CONTEXT_OVERFLOW and await _until(keeper.overflowed(messages, stop.window), cancelled, deadline, clock):
+                    continue
+                raise
+            keeper.saw(turn.prompt_tokens, messages)
             model_calls += 1
             messages.append(_assistant_message(turn))
             if not turn.calls:
@@ -270,7 +291,7 @@ async def run_task(
                             "stopped", "", WAITING, None, model_calls, tool_calls,
                             messages=list(messages), waiting_call=call.id,
                         )  # fmt: skip
-                    content = result_text(call.name, outcome)
+                    content = result_text(call.name, outcome, keeper.window)
                     images.extend(image_parts(outcome))
                     if outcome.ok:
                         failures.succeeded()
@@ -306,7 +327,7 @@ async def run_task(
             if steer:
                 # told after the results of this round, so that it reads them first
                 messages.append({"role": "user", "content": STEER_NOTE})
-            elide_old(messages)
+            await _until(keeper.fit(messages, tools), cancelled, deadline, clock)
     except Stop as stop:
         status = "cancelled" if stop.kind == "cancelled" else "stopped"
         return Outcome(status, "", stop.kind, stop.detail, model_calls, tool_calls)
@@ -343,11 +364,13 @@ def without_computer_images(messages):
             if is_computer_image(message) else message for message in messages]
 
 
-def result_text(name: str, outcome: ToolOutcome) -> str:
+def result_text(name: str, outcome: ToolOutcome, window: int | None = None) -> str:
     """What the model is shown of a call that was made: its result, or why it failed, wrapped as
-    untrusted data. The core uses it too, for the call a paused task waited on."""
+    untrusted data and held to what a window of `window` tokens can take. The core uses it too, for
+    the call a paused task waited on."""
     if outcome.ok:
-        return wrap_untrusted(name, outcome.content, ok=True)
+        text = outcome.content + (SOURCE_CUT if outcome.truncated else "")
+        return wrap_untrusted(name, text, ok=True, limit=result_limit(name, window))
     if outcome.instruction:
         return wrap_untrusted(name, f"The call was refused. {outcome.instruction}", ok=False)
     reason = tool_failure(outcome.kind, outcome.content, record=False).kind
