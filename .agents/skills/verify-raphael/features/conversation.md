@@ -807,3 +807,25 @@ expired wording. The same CLI continues, its answer is saved, subsequent cards w
 their own answers, and Stop still cancels it. The card lifetime and non-CLI expiry stay
 unchanged. Offline contracts are `core/tests/agent/test_cli_confirmation.py` and the
 fake-child expiry/Stop regressions in `core/tests/members/test_cli_brains.py`.
+
+## Missing prerequisites (2026-11-01)
+
+`failures.Missing` extends the existing diagnostics and connection-card flow with
+resource, requirement, state and repair. `agent.steps.step_view` serves both
+foreground and background history. Raw errors, credentials and service URLs are
+never interpolated into the shared UI note. Known provider and service causes
+survive persistence; an unknown cause never asks for a key or credits.
+`main/missing.ts` renders the sentence and one existing-settings action, and the
+real main entry delegates its navigation to the corresponding provider or service
+form. Installation dependencies and file repair steps without an app setting have
+no settings button. Local services remain in Settings > Raphael > Services.
+A store card opens the Composio form; the native Google client needs an administrator.
+
+npm run look -- missing-card missing-card-repair missing-onboarding-repair missing-store-repair missing-search missing-search-repair missing-voice missing-voice-repair missing-hidden missing-vision missing-model-list missing-provider missing-provider-repair missing-routines missing-learned missing-pdf missing-media missing-expired missing-mail --theme both --width 1120,720,1920x1080
+
+Run both themes at 1120,720,1920x1080. Also cover desktop-absent,
+desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
+messaging, connections-empty and email-draft-edit as affected existing consumers.
+Inspect all contact sheets and relevant full-size images. Offline tests cover the
+sanitized TTS event and dictation prerequisite routing; Rust/native acceptance,
+real microphone/audio, provider/login and judge are not authorized by this brief.

@@ -19,7 +19,9 @@ plugins' (`integrations.client.KINDS`), the lookups' (`tools.ToolResult.error`) 
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from ..failures import KINDS
+from ..failures import KINDS, missing_for
+
+SERVICE_REASONS = frozenset(("provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable", "disabled", "unavailable", "not_configured", "vision_unsupported", "encrypted", "bad_pdf", "no_text", "bad_url", "blocked_address", "redirects", "unsupported_type", "too_large"))
 
 # bad_arguments: the tool was given something it does not take. auth: it needs a new sign-in.
 # missing_secret: a key or token it needs is not set. denied: the sign-in was refused. timeout:
@@ -33,7 +35,7 @@ from ..failures import KINDS
 # sign-in, a payment, an administrator's prompt); refused_app: an app Raphael never operates;
 # interrupted: the owner's own mouse or keys stopped the run. forbidden: a safety rule of the
 # owner's (`agent.safety`) forbids it, so it was not done. error: anything else.
-REASONS = KINDS | frozenset(
+REASONS = KINDS | SERVICE_REASONS | frozenset(
     {
         "bad_arguments",
         "auth",
@@ -64,29 +66,15 @@ REASONS = KINDS | frozenset(
 _ALIASES = {
     "offline": "network",
     "http_error": "network",
-    "server": "network",
-    "rate_limit": "network",
     "bad_response": "protocol",
     "changed": "blocked",
-    "disabled": "blocked",  # the owner turned the capability off (Settings › 服務)
     "stale": "not_found",
     "elevated": "handoff",
     "own_window": "blocked",
     "keys_not_allowed": "blocked",
-    "unavailable": "network",
     "failed": "error",
     # The services' kinds (raphael_core.services.common.ServiceError).
-    "blocked_address": "blocked",
     "url_not_seen": "blocked",
-    "bad_url": "bad_arguments",
-    "redirects": "network",
-    "too_large": "error",
-    "unsupported_type": "error",
-    "not_configured": "missing_secret",
-    "vision_unsupported": "error",
-    "bad_pdf": "error",
-    "encrypted": "error",
-    "no_text": "not_found",
 }
 
 # The reason of a step that failed with no kind, by how it ended.
@@ -98,7 +86,7 @@ def reason_of(outcome: str, kind: str | None) -> str | None:
     "cancelled") because of `kind`; None for a step that went well."""
     if outcome == "ok":
         return None
-    if kind in KINDS:
+    if kind in KINDS or kind in SERVICE_REASONS:
         return kind
     if kind:
         kind = _ALIASES.get(kind, kind)
@@ -125,10 +113,26 @@ class Step:
     detail: str | None = None  # the service the step used (see the module), or None
 
 
+def step_view(step: Step) -> dict:
+    return {
+        "kind": step.kind,
+        "tool": step.tool,
+        "server": step.server,
+        "outcome": step.outcome,
+        "ms": step.ms,
+        "reason": step.reason,
+        "at_ms": step.at_ms,
+        "detail": step.detail,
+        **({"missing": missing.wire()} if (missing := missing_for(step.reason, "computer" if step.server == "computer" else step.tool, step.detail)) else {}),
+    }
+
+
 # A call that failed for one of these reasons was refused before it did anything, or by the tool
 # itself; any other failure came after the call was sent, so it may have been made.
 REFUSED_REASONS = frozenset(
-    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "denied"}
+    {"tool_error", "auth", "bad_arguments", "blocked", "missing_secret", "not_found", "denied",
+     "not_configured", "disabled", "unavailable", "vision_unsupported", "auth_expired", "permission_denied",
+     "provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable"}
 )
 # The most tools `work_summary` names (the rest are counted), the longest name and server it shows, and
 # the most characters it takes.

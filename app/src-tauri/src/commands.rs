@@ -159,6 +159,10 @@ pub enum DictationPhase {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum MainEvent {
+    /// Fixed prerequisite metadata only, never the service's error text or credentials.
+    SetupMissing {
+        missing: Value,
+    },
     /// Ephemeral member activity, independent of the conversation currently open.
     MemberActivity {
         member_id: u64,
@@ -1044,6 +1048,16 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
         }),
         "quota.changed" => Some(MainEvent::QuotaChanged),
+        "setup.missing" => {
+            let resource = params.get("resource")?.as_str()?;
+            let requirement = params.get("requirement")?.as_str()?;
+            if resource != "fish" || !["setup", "key"].contains(&requirement) {
+                return None;
+            }
+            Some(MainEvent::SetupMissing {
+                missing: json!({"resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"}),
+            })
+        }
         "action_mode.changed" => Some(MainEvent::ActionModeChanged),
         "providers.changed" => Some(MainEvent::ProvidersChanged),
         "settings.changed" => Some(MainEvent::SettingsChanged),
@@ -2847,6 +2861,21 @@ mod tests {
             main_event_from(&plain, true),
             Some(MainEvent::Level { value: 0.5 })
         );
+    }
+
+    #[test]
+    fn missing_setup_forwards_only_fixed_voice_metadata() {
+        for requirement in ["setup", "key"] {
+            let params = json!({"resource": "fish", "requirement": requirement,
+                "state": "broken", "repair": "https://untrusted.invalid", "token": "never-forward"});
+            let event = main_event_from(&notification("setup.missing", params), false);
+            assert_eq!(event, Some(MainEvent::SetupMissing { missing: json!({
+                "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
+            }) }));
+            assert!(!serde_json::to_string(&event).unwrap().contains("never-forward"));
+        }
+        assert_eq!(main_event_from(&notification("setup.missing", json!({"resource": "other", "requirement": "setup"})), true), None);
+        assert_eq!(main_event_from(&notification("setup.missing", json!({"resource": "fish", "requirement": "raw-error"})), true), None);
     }
 
     #[test]

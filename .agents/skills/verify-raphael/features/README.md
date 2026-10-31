@@ -463,6 +463,8 @@ live proof. Never run the owner probe or borrow another application's credential
 folder, local/SSH selection and resource policy. Local UI scope is its 17 listed
 scenes in both themes at 1120,720,1920x1080. `computer-host-remote` verifies settings
 through the existing shared menu/input; `desktop-frame` now guards a dark frame
-and top-right collapse in both themes. The owner's unit brief prohibits judge,
-native, real Docker, image builds, cargo and network for this handoff. Their absence
-must remain explicit in CODEX_REPORT.md.
+and top-right collapse in both themes.
+
+## Missing prerequisites (2026-11-01)
+
+See [conversation.md](conversation.md#missing-prerequisites-2026-11-01) for the shared failure data, localized note, affected scenes and explicit native/judge limits. Rule R-UI-69 rejects reasons held only in a disabled control title.

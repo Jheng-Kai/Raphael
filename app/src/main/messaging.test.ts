@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 const api = vi.hoisted(() => ({
   telegramStatus: vi.fn(),
@@ -28,16 +28,16 @@ const visible = (html: string): string =>
   html.replace(/<span class="sr">.*?<\/span>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 describe("the setup", () => {
-  test("two concise rows keep BotFather and the token without a helper paragraph", () => {
+  test("BotFather and the token have visible setup instructions", () => {
     const html = messagingHTML(view());
     expect(html).toMatch(/^<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist">/);
     expect(html.match(/<div class="row /g)).toHaveLength(2);
-    expect(html).toContain('data-msg="botfather" title="在 Telegram 找 @BotFather，傳 /newbot。"');
+    expect(html).toContain(t("msg.tg.step1"));
     expect(html).toContain('id="msg-token"');
     expect(html).toContain('type="password"');
     expect(html).toContain('data-msg="connect"');
     expect(html).not.toContain('<p class="foot">');
-    expect(visible(html)).toBe("Telegram BotFather 機器人權杖 連接");
+    expect(visible(html)).toBe(`Telegram BotFather ${t("msg.tg.step1")} 機器人權杖 連接`);
   });
 
   test("the first row carries Telegram's mark and a dot that says it is not connected", () => {

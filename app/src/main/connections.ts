@@ -5,6 +5,7 @@
 // Existing custom MCP setup and device reauthentication stay available.
 // Secrets go directly to the core vault and never enter the render snapshot.
 
+import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { type InventoryView, appOf, countText, isConnected, whyNot } from "./apps-inventory";
 import {
@@ -188,6 +189,7 @@ const typeChoices = (): Choice[] => [
 const words = (w: Words): string => w[getLocale()] ?? w.en;
 
 const FAILURES: Record<string, MessageKey> = {
+  mcp_unavailable: "missing.installation",
   not_found: "conn.err.not_found",
   timeout: "conn.err.timeout",
   auth: "conn.err.auth",
@@ -317,7 +319,7 @@ function installedHTML(v: ConnectionsView): string {
   const shown = v.groups.filter((g) => matches(v.search, g.name, g.description ?? "", entryOf(g, v) ? words(entryOf(g, v)!.summary) : where(g)));
   const skills = skillItems(v);
   const skillsFailed = v.skills === "failed";
-  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length)) return `<p class="cs-none">${esc(t("conn.emptyInstalled"))}</p>`;
+  if (!v.groups.length && !skillsFailed && !(Array.isArray(v.skills) && v.skills.length)) return noticeHTML("emptyApps", "store", "apps");
   if (!shown.length && !skills.length && !skillsFailed) return `<p class="cs-none">${esc(t("conn.noMatch"))}</p>`;
   // The apps that can be called now first, then the ones that cannot (waiting for a sign-in, failed, off, a second way to an app already
   // counted): each still has its switch and its dialog. While the inventory is not read, or cannot be, they are one list as before.
@@ -586,7 +588,7 @@ const composioMark = (): string => `<span class="cs-icon md cs-composio-mark" ar
 function keyDialogHTML(v: ConnectionsView): string {
   return `<div class="cs-scrim" data-conn="scrim" data-dialog="composio-key"><div class="cs-dialog" id="cs-dialog" role="dialog" aria-modal="true" aria-labelledby="cs-dlg-title" tabindex="-1" data-trap>` +
     `<div class="cs-dlg-head">${composioMark()}<h2 class="cs-dlg-name" id="cs-dlg-title">Composio</h2><span class="sp"></span>${closeButton()}</div>` +
-    `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label>` +
+    `<div class="cs-key-form"><label for="conn-key">${esc(t("plugins.keyPrompt"))}</label><p class="note">${esc(t("missing.composioGuide"))}</p>` +
     `<input class="field" type="password" id="conn-key" autocomplete="new-password" spellcheck="false"${v.keyBusy ? " disabled" : ""}${v.keyError ? ' aria-invalid="true" aria-describedby="conn-key-error"' : ""}>` +
     (v.keyError ? `<p id="conn-key-error" role="alert">${esc(keyErrorMessage(v.keyError))}</p>` : "") + dialogNoticeHTML(v) +
     actionRow({ primary: { label: esc(t("plugins.saveKey")), attrs: ` data-conn="save-key"${v.keyBusy ? " disabled" : ""}` } }) + `</div></div></div>`;

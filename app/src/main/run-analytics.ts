@@ -1,4 +1,5 @@
 /** Aggregate retained usage and subscription allowances, alongside daily analytics. */
+import { noticeHTML } from "./missing";
 import "./run-analytics.css";
 import { getLocale, t, onLocaleChange } from "./i18n";
 import { usageModel } from "./usage-models";
@@ -39,9 +40,11 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
   }
   let range: RunPeriod = "month", grouping: RunGrouping = "model", report: RunReport | null = null;
   let allowance: CliAllowances = { brains: [] }, busy = false, exportBusy = false, allowanceBusy = false, error = "", revision = 0, disposed = false;
+  let allowanceFailed = false;
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const params = () => ({ range, tz });
   function allowanceHTML(): string {
+    if (allowanceFailed) return noticeHTML("allowance", "models");
     return allowance.brains.map(brain => {
       const cli = CLIS.find(c => c.id === brain.id), name = brain.id === "claude" ? "Claude" : cli?.name ?? brain.name;
       const quota = allowance.quotas?.find(q => q.provider === brain.id);
@@ -50,7 +53,7 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
       return `<article class="run-subscription"><header><h4>${providerMark(cli?.mark ?? brain.id)}${esc(name)}</h4>` +
         (brain.windows.length ? `<span class="run-allowance-source">${t(reported ? "runs.lastReported" : "runs.liveAllowance")}</span>` : "") + `</header>` +
         (quota ? `<p class="run-quota"><strong>${t("runs.exhausted")}</strong><small>${quota.reset_at_ms ? `${t("runs.resets")} ${esc(time(quota.reset_at_ms))}` : t("runs.resetUnknown")}</small></p>` : "") +
-        (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("runs.allowanceUnavailable")}</p>` : brain.windows.map(w => {
+        (!brain.windows.length ? `<p class="run-allowance-unavailable">${t("missing.allowanceUnknown")}</p>` : brain.windows.map(w => {
           const known = typeof w.remaining_percent === "number" && Number.isFinite(w.remaining_percent);
           const remaining = Math.min(100,Math.max(0,w.remaining_percent ?? 0));
           return `<div class="run-window"><span>${t(periods[w.period])}</span>` +
@@ -109,7 +112,7 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
   }
   async function allowances(): Promise<void> {
     allowanceBusy = true; render();
-    try { allowance = await api.usageAllowances(); } catch { allowance = { brains: [] }; }
+    try { allowance = await api.usageAllowances(); allowanceFailed = false; } catch { allowanceFailed = true; }
     allowanceBusy = false; render();
   }
   async function click(event: Event): Promise<void> {

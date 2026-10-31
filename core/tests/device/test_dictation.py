@@ -1598,6 +1598,7 @@ async def test_a_missing_model_is_not_configured(rig, router, brain):
         await stop(router)
     assert e.value.code == NOT_CONFIGURED
     assert brain.finalize_calls == 0 and not rig.service.active and rig.recorder.stop_count >= 1
+    assert e.value.data["missing"] == {"resource": "stt", "requirement": "local_model", "state": "missing", "repair": "dictation"}
     rig.provider_error = None
     assert await start(router, "s2") == {}  # the service is usable again
 

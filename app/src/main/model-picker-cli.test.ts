@@ -102,7 +102,7 @@ describe("ChatGPT in the chooser", () => {
   });
   test("signed in, its models are read, then listed", () => {
     open({ signed_in: true, plan_scope_granted: true });
-    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("chooser.readingModels"));
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("missing.models"));
     expect(document.querySelector('[data-dlg="chatgpt"]')).toBeNull();
   });
   test("a page that cannot sign in shows no ChatGPT when there are no models", () => {

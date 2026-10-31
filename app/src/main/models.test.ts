@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { describe, expect, test } from "vitest";
 import { ModelDownload, type ModelPhase, type ModelsApi, downloadPhase, formatProgress, resumeModels } from "./models";
 import type { MainEvent, ModelsStatus } from "./types";
@@ -186,7 +187,7 @@ describe("ModelDownload", () => {
     await settle();
     ensures[0].end.reject("[-32603] 下載失敗：連線中斷");
     await first;
-    expect(download.phase).toEqual({ kind: "failed", reason: "下載失敗：連線中斷" });
+    expect(download.phase).toEqual({ kind: "failed", reason: t("missing.unknown") });
 
     const second = download.start();
     await settle();
@@ -267,7 +268,7 @@ describe("resumeModels", () => {
     ensures[0].end.reject("[-32603] download failed: offline");
     await done;
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("download failed: offline");
+    expect(warnings[0]).toContain(t("missing.unknown"));
   });
 
   test("warns when the core cannot even say which models are there", async () => {

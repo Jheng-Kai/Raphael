@@ -173,6 +173,7 @@
 .cs-composio-mark svg { width: 20px; height: 20px; }
 .cs-key-form label { font-size: var(--fs-sm); font-weight: 600; }
 .cs-key-form > p { margin: 0; font-size: var(--fs-xs); color: var(--err); }
+.cs-key-form > .note { font-size: var(--fs-sm); color: var(--text-2); }
 
 /* The form that connects a server of the user's own */
 .cd-help { margin: var(--sp-1) 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-2); text-wrap: pretty; }

@@ -9,6 +9,7 @@ import type { MessageKey } from "./i18n/zh-TW";
 import { entryIcon } from "./service-mark";
 import type { AgentTurn, ConnectorCard } from "./types";
 import { btn, esc, ico } from "./ui";
+import { missingHTML } from "./missing";
 
 const FAILURES: Record<string, MessageKey> = {
   invalid_request: "conn.err.invalid_request",
@@ -22,6 +23,7 @@ const FAILURES: Record<string, MessageKey> = {
   needs_own_app: "card.needsOwnApp",
   key_rejected: "card.keyRejected",
   interrupted: "card.interrupted",
+  mcp_unavailable: "missing.installation",
 };
 
 /** The app asks for the owner's own key, or a developer app of their own, before it can be connected. */
@@ -57,6 +59,7 @@ export function cardStateText(card: ConnectorCard): string {
 
 /** The card's one action, if its state has one. */
 function actionHTML(card: ConnectorCard): string {
+  if (card.error === "mcp_unavailable" || card.missing) return "";
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
   // What it asks for is asked in the form, never in the chat: the key goes from that form to the core and nowhere else.
   const form = (): string => btn(esc(plain(card.needs === "own_app" ? "card.setupApp" : "card.enterKey")), "sm pri",
@@ -81,7 +84,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
   return `<div class="connector-card" data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}" role="group" aria-label="${esc(card.name)}">` +
     appMarkHTML(card.app, card.logo) +
     `<div class="cc-meta"><div class="cc-name">${esc(card.name)}</div>` +
-    (state ? `<div class="cc-state" aria-live="polite">${busy}${done}<span>${clausesHTML(state)}</span></div>` : "") + `</div>` +
+    (card.missing ? missingHTML(card.missing) : state ? `<div class="cc-state" aria-live="polite">${busy}${done}<span>${clausesHTML(state)}</span></div>` : "") + `</div>` +
     (action ? `<div class="cc-actions">${action}</div>` : "") +
     `</div>`;
 }

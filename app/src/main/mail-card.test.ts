@@ -112,7 +112,7 @@ describe("an email card", () => {
     expect(mailErrorText(draft())).toBe("");
     expect(mailErrorText(draft({ state: "failed", error: "interrupted" }))).toContain("上次傳送中斷");
     const failed = mount(mailCardHTML(draft({ state: "failed", error: "error" })));
-    expect(visible(failed.innerHTML)).toContain("沒有傳送成功，信件可能沒有寄出。修改後可以再傳送");
+    expect(visible(failed.innerHTML)).toContain("請先確認信件是否已寄出，若確定未寄出，修改草稿後再傳送。");
     expect(failed.querySelector<HTMLInputElement>('[data-mail-field="to"]')!.disabled).toBe(false);
     expect(failed.querySelector<HTMLButtonElement>('[data-act="mail-send"]')!.disabled).toBe(true);
   });

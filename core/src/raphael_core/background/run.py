@@ -59,6 +59,7 @@ from http import HTTPStatus
 from typing import Any, Protocol, TypeVar
 
 from ..agent.failure import failure_kind
+from ..failures import Failure
 from ..agent.gate import ToolGate
 from ..agent.harness_tools import CALENDAR_LIST, CALENDAR_TOOLS, CALENDAR_WRITES, DEFINITIONS as HARNESS_DEFINITIONS
 from ..agent.ledger import Ledger
@@ -274,6 +275,7 @@ class TaskRun:
         # The team tools (`agent.team`), made for this task's speaker on this task's ledger.
         self._team = team
         self.handoff_receipts = []
+        self.model_failure: Failure | None = None
         # Whether a call that needs the owner's yes pauses the task (the background service's runs)
         # or is refused (any other).
         self.can_wait = can_wait
@@ -514,6 +516,7 @@ class TaskRun:
     async def _chat(self, messages: list[dict], request_chars: int, room: int = 1, *, wrap_up: bool = False) -> dict:
         self._check(model=True, paid=True, final=wrap_up)
         self.model_calls += 1
+        self.model_failure = None
         began = time.perf_counter()
         try:
             from ..failures import PATIENT_WAITS, RETRY_WAITS, classify
@@ -563,7 +566,14 @@ class TaskRun:
             detail = "tools" if error.status == HTTPStatus.NOT_FOUND else failure_kind(error)
             if error.kind == "timeout":
                 self._charge_estimate(request_chars)
-            self._step(kind="model", outcome="error", ms=_ms(began), reason=reason_of("error", detail))
+            diagnostic = classify(error, record=False)
+            if diagnostic.missing is not None:
+                self.model_failure = diagnostic
+                missing = diagnostic.missing
+                reason = diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state
+                self._step(kind="model", tool="provider", outcome="error", ms=_ms(began), reason=reason, detail=missing.resource)
+            else:
+                self._step(kind="model", outcome="error", ms=_ms(began), reason=reason_of("error", detail))
             raise stopped("failed", detail) from None
         except TimeoutError:
             logger.warning("The task's model timed out")

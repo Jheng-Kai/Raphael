@@ -158,6 +158,6 @@ function rowHTML(model: LocalModel, view: LocalView, confirm: LocalConfirm | nul
 /** The rows of the local tab, with the question being asked in one of them. */
 export function localListHTML(view: LocalView, confirm: LocalConfirm | null, selectionOnly = false): string {
   if (view.models === "loading") return `<p class="mp-empty" role="status">${esc(t("common.loading"))}</p>`;
-  if (view.models === "failed") return `<p class="mp-empty" role="status">${esc(t("local.unavailable"))}</p>`;
+  if (view.models === "failed" || Array.isArray(view.models) && !view.models.length) return `<p class="mp-empty" role="status">${esc(t("local.unavailable"))}</p>`;
   return view.models.map((model) => rowHTML(model, view, confirm, selectionOnly)).join("");
 }

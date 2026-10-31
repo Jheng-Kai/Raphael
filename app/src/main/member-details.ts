@@ -3,6 +3,7 @@
 // button; fields being typed in survive live member updates. Raphael keeps his special avatar,
 // routines and memory. Members choose a brain through the shared model picker.
 
+import { noticeHTML } from "./missing";
 import { openRoutineDialog } from "./routine-dialog";
 import { mountConversationList } from "./conversation-list";
 import { openActions } from "./member-column";
@@ -175,7 +176,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       iconButton("plus", t("members.routineAdd"), ` data-det="routine-add" data-k="routine-add"`, "row mb-tool") +
       `</div>`;
     if (routines === "loading") return head + `<span class="spin" role="status" aria-label="${esc(t("common.loading"))}"></span>`;
-    if (routines === "failed") return head;
+    if (routines === "failed") return head + noticeHTML("routines");
     const rows = routines.length ? routines.map(routineRowHTML).join("") : `<p class="mp-empty">${esc(t("members.profile.noRoutines"))}</p>`;
     return head + `<div class="mb-rts">${rows}</div>`;
   }

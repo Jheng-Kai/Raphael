@@ -27,8 +27,12 @@ pub fn publish(app: &AppHandle, words: &[String], undo: Option<&str>, language: 
     let Some(state) = app.try_state::<State>() else { return; };
     let notice = Notice { words: words.to_vec(), token: undo.unwrap_or_default().to_owned(), language: language.to_owned(), theme: app.get_webview_window(crate::MAIN_WINDOW).and_then(|w| w.theme().ok()).map(|theme| if theme == tauri::Theme::Dark { "dark" } else { "light" }.to_owned()).unwrap_or_else(|| "light".to_owned()) };
     *state.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(notice.clone());
-    if let Some(channel) = state.channel.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
-        let _ = channel.send(notice);
+    let delivered = state.channel.lock().unwrap_or_else(PoisonError::into_inner).as_ref()
+        .is_some_and(|channel| channel.send(notice).is_ok());
+    if !delivered {
+        crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
+            missing: json!({"resource": "dictionary", "requirement": "learned", "state": "broken", "repair": null}),
+        });
     }
 }
 
@@ -61,7 +65,12 @@ pub fn learned_subscribe(app: AppHandle, webview: Webview, channel: Channel<Noti
     let mut subscriber = state.channel.lock().unwrap_or_else(PoisonError::into_inner);
     *subscriber = Some(channel.clone());
     if let Some(notice) = state.current.lock().unwrap_or_else(PoisonError::into_inner).as_ref() {
-        channel.send(notice.clone()).map_err(|e| e.to_string())?;
+        channel.send(notice.clone()).map_err(|e| {
+            crate::commands::tell_main_window(crate::commands::MainEvent::SetupMissing {
+                missing: json!({"resource": "dictionary", "requirement": "learned", "state": "broken", "repair": null}),
+            });
+            e.to_string()
+        })?;
     }
     Ok(())
 }

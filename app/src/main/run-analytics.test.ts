@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { mountRunAnalytics } from "./run-analytics";
 import type { RunAnalyticsApi, RunReport } from "./run-analytics-types";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 
 afterEach(() => document.body.replaceChildren());
 it("separates the ledger bill from retained work and only shows applicable exclusions", async () => {
@@ -82,7 +82,7 @@ it("retries a failed load and does not open a save dialog after the view is dest
   const api: RunAnalyticsApi = { usageRuns: vi.fn().mockRejectedValueOnce("offline").mockResolvedValue(report), usageExport: vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; })), usageAllowances: vi.fn().mockResolvedValue({ brains: [] }), saveUsageCsv: vi.fn() };
   const host = document.createElement("div"); document.body.append(host);
   const view = mountRunAnalytics(host, api); await view.ready;
-  expect(host.querySelector('[role="alert"]')!.textContent).toContain("offline");
+  expect(host.querySelector('[role="alert"]')!.textContent).toContain(t("missing.unknown"));
   host.querySelector<HTMLButtonElement>('[data-run-act="retry"]')!.click();
   await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull());
   host.querySelector<HTMLButtonElement>('[data-run-act="export"]')!.click();
@@ -122,7 +122,7 @@ it("renders and refreshes all allowance sources with maker marks and honest unkn
   expect(section.querySelectorAll(".run-subscription")).toHaveLength(3);
   expect(section.querySelectorAll("h4 .mono")).toHaveLength(3);
   expect(section.textContent).toContain("更新於");
-  expect(section.textContent).toContain("這個 CLI 不提供剩餘額度");
+  expect(section.textContent).toContain("尚未取得這個帳號的剩餘額度");
   expect(section.textContent).toContain("接近額度上限");
   expect(section.textContent).not.toContain("null%");
   expect(section.querySelectorAll('[role="progressbar"]')).toHaveLength(2);

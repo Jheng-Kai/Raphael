@@ -53,7 +53,8 @@ def timeout_for(audio_seconds: float) -> float:
 
 
 def _refusal(code: int, kind: str, message: str) -> RpcError:
-    return RpcError(code, message, {"kind": kind})
+    from ..failures import Missing
+    return RpcError(code, message, {"kind": kind, **({"missing": Missing("stt", "cloud_credentials", "missing", "models").wire()} if kind == "no_key" else {})})
 
 
 def _audio_seconds(params: dict) -> tuple[str, float]:

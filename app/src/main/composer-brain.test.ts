@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
 const state = vi.hoisted(() => ({
@@ -527,7 +528,7 @@ test("a save the core refuses leaves what the core holds, and says so", async ()
   await flush();
   expect(name()).toBe("Global");
   expect(q('[data-model="@p:global"]')!.getAttribute("aria-checked")).toBe("true");
-  expect(document.body.textContent).toContain("refused");
+  expect(document.body.textContent).toContain(t("missing.unknown"));
 });
 
 test("a read that began before a choice cannot put the old choice back", async () => {

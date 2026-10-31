@@ -104,8 +104,8 @@ from ..agent.plugins import preview
 from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
 from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending
 from ..agent.safety import asked_with
-from ..agent.speaker import MAX_DEPTH, RAPHAEL, Speaker
-from ..agent.steps import REFUSED_REASONS
+from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
+from ..agent.steps import REFUSED_REASONS, step_view as _step_view
 from ..agent.team import CONSULTED, Team, handoff_refused, team_tools_for, roster_prompt
 from ..agent.tools import ToolResult, Tools
 from ..brain.catalog import CatalogEntry, context_window
@@ -212,20 +212,6 @@ def _earlier_outcome(step: Step) -> str:
     if step.outcome == "blocked" or step.reason in REFUSED_REASONS:
         return "failed"
     return "failed, unknown whether it ran"
-
-
-def _step_view(step: Step) -> dict[str, Any]:
-    """A step of a task as the conversation view shows it: the same fields as a turn's own."""
-    return {
-        "kind": step.kind,
-        "tool": step.tool,
-        "server": step.server,
-        "outcome": step.outcome,
-        "ms": step.ms,
-        "reason": step.reason,
-        "at_ms": step.at_ms,
-        "detail": step.detail,
-    }
 
 
 def report_from(final: str, language: str, *, plain: bool = False) -> Reply | None:
@@ -1848,7 +1834,10 @@ class BackgroundService:
             if str(detail).startswith("cli_"):  # the CLI loop's own words already say what happened
                 self._conclude(task, run, "failed", negative, reply.get("final") or phrase(language, "error"), None, detail)
                 return
-            if detail == "tools":
+            if diagnostic := getattr(run, "model_failure", None):
+                speaker = self._speaker(task.member_id)
+                text = diagnostic.sentence(speaker.name if speaker else RAPHAEL_NAMES[language], language)
+            elif detail == "tools":
                 text = phrase(language, "worker_model")
             else:
                 text = phrase(language, detail if detail in KINDS else "error")

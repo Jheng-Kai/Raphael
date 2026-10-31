@@ -30,6 +30,7 @@
 // thread is its own: the search looks in it alone, and no turn of another thread shows in it but
 // the closed line of what a colleague asked it (exchange-line.ts).
 
+import { noticeHTML } from "../missing";
 import { conversationTitle, conversationChange, type ConversationInfo } from "../conversation-list";
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
@@ -1795,6 +1796,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     voiceButton.innerHTML = avatarHTML({ size: 32, avatar: null });
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     voiceButton.disabled = !task && conversationId() === undefined;
+    let note = composer.querySelector<HTMLElement>("[data-conversation-missing]");
+    if (voiceButton.disabled && !note) {
+      note = document.createElement("div"); note.dataset.conversationMissing = ""; composer.append(note);
+    }
+    if (note) { note.hidden = !voiceButton.disabled; note.innerHTML = voiceButton.disabled ? noticeHTML("conversation") : ""; }
     if (task) { if (!listening || voiceMember !== memberId()) voice.drop(); voiceButton.classList.remove("vm-away"); }
     drawTaskSlot(composer, task ? question ? "waiting" : task.state : "idle", task !== null && stoppingComposerTasks.has(task.key));
   }
@@ -2073,7 +2079,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void cardSetup(act);
         break;
       case "card-settings":
-        app.go("settings", "connections");
+        app.go("settings", "repair:store:composio");
         break;
       case "card-save":
         void secretSave(act);

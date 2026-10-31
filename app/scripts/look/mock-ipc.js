@@ -2,6 +2,9 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.missingSearch) data.serviceStatus.search.options.push({id: "searxng", needs_key: false, has_key: false, key_optional: false});
+  if (variant.missingVision) data.serviceStatus.vision.supports_images = false;
+  if (variant.missingModelList) data.clis = data.clis.map(cli => cli.id === "codex" ? {...cli, installed: true, available: true, models: []} : cli);
   if (variant.richReply) {
     const source = data.richContent[variant.richReply === true ? "reply" : variant.richReply];
     data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member && turn.conversation_id !== 4)), id: 701 + index,
@@ -160,6 +163,7 @@ export function installMock(fixture, config = {}, target = window) {
   // `mailOffer` has the member ask whether 小森 may send it.
   if (variant.mailDraft) {
     const mail = structuredClone(data.mailTurns[variant.mailDraft]);
+    if (variant.missingMail) mail.drafts[0].senders = [];
     if (variant.mailOffer) mail.drafts[0].offer = { member_id: 2, name: data.members.find(member => member.id === 2).name };
     data.turns.push(mail);
     if (!data.conversations.some(item => item.id === data.colleagueConversation.id)) data.conversations.push(structuredClone(data.colleagueConversation));
@@ -391,6 +395,7 @@ export function installMock(fixture, config = {}, target = window) {
     return head.split("\n").map(line => line.trim()).find(line => line.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? "";
   };
   async function core(method, p = {}) {
+    if (variant.missingHidden && method === "members.list" && target.document.querySelector('[data-hidden-members]')) throw new Error("Synthetic hidden member read failure");
     switch (method) {
       case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
       case "pages.open":
@@ -567,7 +572,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "memory.clear": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: "" }; return { cleared: true };
       case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
       case "safety.rules.list": return { rules: data.safetyRules };
-      case "routines.list": return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
+      case "routines.list": if (variant.missingRoutines) throw new Error("Synthetic routines read failure"); return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
       case "routines.create": { const routine = { ...p, id: nextId(data.routines), enabled: true, last_run: null, next_run: data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": { const routine = update(data.routines, p.id, p); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }

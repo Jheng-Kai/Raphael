@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Window } from "happy-dom";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import type { SkillItem } from "./connection-skills";
 import type { AppsInventory, AuditEntry, ConnectionGroup, InventoryApp, StoreService } from "./types";
 
@@ -191,7 +191,7 @@ describe("已安裝", () => {
   });
 
   test("empty connections and unmatched searches have concise empty states", () => {
-    expect(connectionsHTML(view({ groups: [] }))).toContain("尚無連線");
+    expect(connectionsHTML(view({ groups: [] }))).toContain(t("conn.emptyInstalled"));
     expect(connectionsHTML(view({ search: "zzz" }))).toContain("沒有符合的項目");
     const found = bodyHTML(view({ search: "files" }));
     expect(found).toContain("Files");
@@ -277,7 +277,7 @@ describe("the apps that cannot be called, and the private skills", () => {
     const failed = bodyHTML(view({ skills: "failed" }));
     expect(failed).toContain("無法讀取技能。");
     expect(failed).toContain('data-conn="retry-skills"');
-    expect(bodyHTML(view({ groups: [], skills: [] }))).toContain("尚無連線");
+    expect(bodyHTML(view({ groups: [], skills: [] }))).toContain(t("conn.emptyInstalled"));
   });
 
   test("the page of a skill is the dialog of an app: its name, who has it and when it is used, its instructions and 刪除技能 on the left", () => {
@@ -637,7 +637,7 @@ describe("the page of a store service", () => {
     expect(denied).toContain("你在瀏覽器上拒絕了，所以沒有加入。");
     expect(denied).toContain('data-conn="join"');
     expect(storePage("linear", { loginError: { target: "linear", kind: "timeout" } })).toContain("太久沒有登入");
-    expect(storePage("linear", { loginError: { target: "linear", kind: "network" } })).toContain("沒有登入成功：網路連不上");
+    expect(storePage("linear", { loginError: { target: "linear", kind: "network" } })).toContain(t("conn.err.network"));
     expect(storePage("sentry", { loginError: { target: "linear", kind: "denied" } })).not.toContain("拒絕");
   });
 });
@@ -1295,7 +1295,7 @@ describe("what the tab does", () => {
       api.membersSkillsUpdate.mockRejectedValueOnce("[-32602] Invalid params: no such member skill");
       c.click(button("skill-enable", { member: "1", id: "7" }));
       await settle();
-      expect(c.view().dialogNotice?.text).toContain("no such member skill");
+      expect(c.view().dialogNotice?.text).toContain(t("missing.unknown"));
       expect(toaster.info).not.toHaveBeenCalled();
     });
 
@@ -1418,7 +1418,7 @@ describe("what the tab does", () => {
       c.click(button("connect"));
       await settle();
       expect(c.view().form!.busy).toBe(false);
-      expect(c.view().form!.error!()).toContain("exists already");
+      expect(c.view().form!.error!()).toContain(t("missing.unknown"));
       c.click(button("form-cancel"));
       expect(c.view().form).toBeNull();
     });

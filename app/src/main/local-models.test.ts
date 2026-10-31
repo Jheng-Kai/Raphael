@@ -256,7 +256,7 @@ describe("a download", () => {
 describe("while there is no catalogue", () => {
   test("says it is being read, or that it cannot be had", () => {
     expect(localListHTML(view({ models: "loading" }), null)).toContain("正在載入…");
-    expect(localListHTML(view({ models: "failed" }), null)).toContain("目前無法取得本機模型清單");
+    expect(localListHTML(view({ models: "failed" }), null)).toContain("目前無法取得本機語音模型清單，請重新開啟語音模型選單，仍然失敗時重新啟動拉斐爾。");
   });
 });
 

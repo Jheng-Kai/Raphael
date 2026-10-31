@@ -798,6 +798,15 @@ class Toaster implements Notifier {
     this.show(message);
   }
 
+  notice(render: () => string): void {
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.innerHTML = render();
+    const stop = onLocaleChange(() => { toast.innerHTML = render(); });
+    this.container().append(toast);
+    setTimeout(() => { stop(); toast.remove(); }, 12000);
+  }
+
   /** Takes the toast with 「復原」 away. */
   hide(): void {
     if (this.undoToast) this.messages.delete(this.undoToast);

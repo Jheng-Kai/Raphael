@@ -879,3 +879,21 @@ async def test_stopping_a_session_stops_the_task_that_runs_when_it_is_the_sessio
     assert await rig.service.cancel_session("telegram:42") is True
     [done] = await rig.wait_for_reports()
     assert (done["task_id"], done["state"]) == (task_id, "cancelled")
+
+
+@pytest.mark.parametrize("resource,kind", [("chatgpt", "auth_expired"), ("anthropic", "auth_expired"), ("chatgpt", "chatgpt_scope")])
+async def test_background_provider_failure_keeps_its_repair_in_report_and_stored_steps(make_rig, resource, kind):
+    from raphael_core.agent.steps import step_view
+    from raphael_core.failures import Failure, Missing
+    rig = make_rig()
+    error = OpenRouterError(401, "auth", "synthetic private provider message")
+    error.diagnostic = Failure(kind, "bounded", missing=Missing(resource, "provider", "broken", "models"))
+    rig.client.replies = [error]
+    task_id = rig.submit()
+    [done] = await rig.wait_for_reports()
+    assert "Settings > Models & usage > Models" in done["text"]
+    assert "OpenRouter" not in done["text"] and "private" not in done["text"]
+    (step,) = rig.steps(task_id)
+    missing = step_view(step)["missing"]
+    assert missing["resource"] == resource and missing["repair"] == "models"
+    assert missing["requirement"] == (kind if kind.startswith("chatgpt_") else "provider")

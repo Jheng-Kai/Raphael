@@ -235,7 +235,7 @@ from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
 from .permissions import qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
-from .steps import Step, reason_of
+from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
 from .team import (
     ANSWER_MAX_CHARS,
@@ -346,19 +346,6 @@ def _plugin_outcome(result: PluginResult) -> str:
     if result.kind == "cancelled":
         return "cancelled"
     return "error"
-
-
-def _step_view(step: Step) -> dict[str, Any]:
-    return {
-        "kind": step.kind,
-        "tool": step.tool,
-        "server": step.server,
-        "outcome": step.outcome,
-        "ms": step.ms,
-        "reason": step.reason,
-        "at_ms": step.at_ms,
-        "detail": step.detail,
-    }
 
 
 def _unmade(call: PlannedCall) -> ToolResult:
@@ -4452,16 +4439,20 @@ class AgentService:
             return "pdf_off"
         return None
 
-    def _blocked(self, settings: _Settings) -> str | None:
-        """Why no model may be asked: "no_key", "auth" (the key store failed), or None."""
+    def _blocked(self, settings: _Settings) -> str | AgentFailure | None:
+        """The known provider prerequisite, a failed key-store read, or None."""
         if brain_ref(settings.model):
             return None
         try:
             if isinstance(self._client, ProviderRouter):
-                return None if self._client.available(settings.model) else "no_key"
+                return None if self._client.available(settings.model) else AgentFailure("auth_expired", diagnostic=self._client.missing(settings.model), model=settings.model)
             key = self._keys.get()
         except Exception as exc:  # its message could hold the key
             logger.warning("The key store failed to read the key: %s", type(exc).__name__)
+            if isinstance(self._client, ProviderRouter):
+                diagnostic = self._client.missing(settings.model)
+                diagnostic = replace(diagnostic, missing=replace(diagnostic.missing, state="broken"))
+                return AgentFailure("auth_expired", diagnostic=diagnostic, model=settings.model)
             return "auth"
         if not (key or "").strip():
             return "no_key"
@@ -4476,15 +4467,18 @@ class AgentService:
         model = kind.model if isinstance(kind, AgentFailure) else None
         diagnostic = kind.diagnostic if isinstance(kind, AgentFailure) else None
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
+        if diagnostic is not None and diagnostic.missing is not None:
+            missing = diagnostic.missing
+            reason = (diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state)
+            ask.steps.append(self._step("model", "provider", None, "error", time.perf_counter(), reason, missing.resource))
         if model:
             diagnostic = diagnostic or classify(kind, record=False)
             return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error")
         if diagnostic is not None:
             name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")
-        return self._finish(
-            ask, route, "negative", phrase(ask.language, kind), ledger, status="error"
-        )
+        text = classify(kind, record=False).sentence(RAPHAEL_NAMES[ask.language], ask.language) if kind in ("context_overflow", "payload_too_large", "content_policy") else phrase(ask.language, kind)
+        return self._finish(ask, route, "negative", text, ledger, status="error")
 
     def _finish(
         self,

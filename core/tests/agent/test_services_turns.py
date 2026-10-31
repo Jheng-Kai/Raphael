@@ -146,7 +146,7 @@ async def test_a_search_with_a_service_that_has_no_key_fails_and_the_answer_says
     client.decisions.append(decision("answer", search=0.9))
     client.replies.append(spoken("否", "查不到。"))
     await rig.ask("今天的新聞")
-    assert "web_search: unavailable (missing_secret)" in client.json_calls[0]["user"]
+    assert "Settings > Raphael > Services > Search the web" in client.json_calls[0]["user"]
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_search")
     assert (step["outcome"], step["reason"], step["detail"]) == ("error", "missing_secret", "tavily")
@@ -194,7 +194,7 @@ async def test_an_address_of_this_computer_in_the_request_is_not_fetched(service
     assert web.requests == []
     (turn,) = await rig.turns()
     (step,) = steps(turn, "web_read")
-    assert (step["outcome"], step["reason"]) == ("error", "blocked")
+    assert (step["outcome"], step["reason"]) == ("error", "blocked_address")
 
 
 # --- the files of a request ---------------------------------------------------------------------
@@ -277,7 +277,7 @@ async def test_a_vision_model_that_reads_no_images_is_not_asked(services_rig, cl
     client.replies.append(spoken("否", "我看不到圖。"))
     await ask(services_rig, "這是什麼", [wire("a.png", "image/png", PNG)])
     assert client.text_calls == []
-    assert "read_attachment: unavailable (vision_unsupported)" in client.json_calls[0]["user"]
+    assert "Settings > Raphael > Services > See images" in client.json_calls[0]["user"]
 
 
 async def test_the_files_go_with_a_task_handed_to_the_background(services_rig, client):

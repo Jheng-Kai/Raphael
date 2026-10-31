@@ -63,11 +63,11 @@ const TOLD = / — ([^\n—]{1,60}) · (\d{4}-\d{2}-\d{2})$/;
 
 /** What a refused edit says to the owner. The core's reasons start with their kind. */
 export function memoryError(err: unknown): string {
-  const said = describeError(err);
+  const said = err instanceof Error ? err.message : String(err);
   if (/(^|\s)changed:/.test(said)) return t("mem.changed");
   if (/(^|\s)secret:/.test(said)) return t("mem.refusedSecret");
   if (/(^|\s)injection:/.test(said)) return t("mem.refusedInstructions");
-  return said;
+  return describeError(err);
 }
 
 function entryHTML(entry: string): string {

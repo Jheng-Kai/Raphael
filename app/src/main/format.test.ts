@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { setLocale } from "./i18n";
+import { setLocale, t } from "./i18n";
 import {
   dayLabel,
   describeError,
@@ -111,26 +111,23 @@ describe("describeError says what went wrong in words the page can show", () => 
     expect(describeError("[-32001] history.list got no answer within 15s")).toBe("Raphael 的核心沒有及時回應");
   });
 
-  test("an error of the core keeps its message but not its code", () => {
+  test("an unknown core error uses safe actionable copy", () => {
     expect(describeError("[-32602] Invalid params: id must be a whole number")).toBe(
-      "Invalid params: id must be a whole number",
+      t("missing.unknown"),
     );
   });
 
-  test("anything else is shown as it is", () => {
+  test("known command copy stays localized and unknown details stay out of notices", () => {
     expect(describeError("設定已經生效，但無法存檔：disk full")).toBe("設定已經生效，但無法存檔：disk full");
-    expect(describeError(new Error("boom"))).toBe("boom");
-    expect(describeError({ code: 3 })).toBe('{"code":3}');
+    expect(describeError(new Error("boom"))).toBe(t("missing.unknown"));
+    expect(describeError({ code: 3 })).toBe(t("missing.unknown"));
   });
 
   test("a rejection that JSON cannot write still has words, and never throws", () => {
     // It runs in catch blocks and while a page draws its error: throwing there would lose the message.
     const loop: Record<string, unknown> = {};
     loop.self = loop;
-    expect(describeError(undefined)).toBe("undefined");
-    expect(describeError(Symbol("gone"))).toBe("Symbol(gone)");
-    expect(describeError(10n)).toBe("10");
-    expect(describeError(loop)).toBe("[object Object]");
+    for (const error of [undefined, Symbol("gone"), 10n, loop]) expect(describeError(error)).toBe(t("missing.unknown"));
   });
 });
 

@@ -1,4 +1,5 @@
 /** One persistent noVNC stream in the existing member details panel. */
+import { noticeHTML } from "./missing";
 import * as api from "./api";
 import { onLocaleChange, t } from "./i18n";
 import { esc, iconButton, btn } from "./ui";
@@ -68,11 +69,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
 
   function draw(): void {
-    panel.hidden = !visible || !state || state.state === "absent";
+    panel.hidden = !visible || !state;
     panel.querySelector('h2')!.textContent = t("desktop.screenOf", { p0: options.name() });
-    const absent = !state || state.state === "absent";
-    options.available?.(visible && !absent);
-    if (absent && viewing === "computer") setView("details");
+    options.available?.(visible && !!state);
     frame.title = t("desktop.open"); hit.setAttribute('aria-label', t("desktop.expand"));
     const expand = panel.querySelector<HTMLButtonElement>('[data-desktop="expand"]')!;
     expand.title = t(panel.hasAttribute('data-expanded') ? "members.close" : "desktop.expand"); expand.setAttribute('aria-label', expand.title);
@@ -93,7 +92,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     status.textContent = t("desktop.operating"); status.hidden = !owner || !connected;
     action.textContent = t(pending() ? "desktop.done" : "desktop.release"); action.hidden = !owner; action.disabled = changing;
     const asleep = state?.state === "stopped" || state?.state === "missing";
-    retry.textContent = t(asleep ? "desktop.start" : "desktop.retry"); retry.hidden = !!running || !!preparing; retry.disabled = opening;
+    retry.textContent = t(asleep ? "desktop.start" : "desktop.retry"); retry.hidden = !!running || !!preparing || state?.state === "absent"; retry.disabled = opening;
     revoke.textContent = t("desktop.revoke"); revoke.hidden = !state?.granted || owner || !!preparing;
     const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
     const picture = running && !connected ? lastFrames.get(member()) : undefined;
@@ -101,6 +100,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (picture && last.src !== picture) last.src = picture;
     placeholder.hidden = (!!running && connected) || !!picture;
     placeholder.innerHTML = preparing ? preparationHTML(state!) : esc(t(!running && state?.error ? state.error === "build_failed" || state.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed" : STATUS_KEY[label]));
+    if (state?.state === "incompatible") placeholder.innerHTML = esc(t("desktop.incompatible"));
+    if (state?.state === "absent") placeholder.innerHTML = noticeHTML(state.error === "disabled" ? "installation" : "docker", state.error === "disabled" ? null : "computer", "computer");
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { frame.src = session.url; panel.querySelector('.desktop-screen')!.append(frame); }
   }

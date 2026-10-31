@@ -24,3 +24,15 @@ test("a stale read cannot replace a newer hidden member list", async () => {
   const first = controller.load(); await controller.load(); resolve({members: [{id: 3, name: "Mia", hidden: true}]}); await first;
   expect(root.textContent).toContain("Alex"); expect(root.textContent).not.toContain("Mia");
 });
+
+test("a failed hidden member read is visible and its retry reloads the real list", async () => {
+  api.membersList.mockReset().mockRejectedValueOnce(new Error("synthetic"))
+    .mockResolvedValueOnce({members: [{id: 3, name: "Mia", hidden: true}]});
+  const root = document.createElement("div"); root.innerHTML = "<section data-hidden-members></section>";
+  const controller = createHiddenMembers(); controller.mount(root); await controller.load();
+  expect(root.textContent).toContain("目前無法讀取已隱藏的成員");
+  expect(root.querySelector("[title]")).toBeNull();
+  root.querySelector<HTMLButtonElement>("[data-hidden-retry]")!.click(); await flush();
+  expect(root.textContent).toContain("Mia");
+  expect(root.textContent).not.toContain("目前無法讀取");
+});

@@ -355,7 +355,7 @@ async def test_a_command_whose_action_fails_is_said_to_have_failed(rig, client, 
     actions.fail["open_url"] = OSError("no browser: 秘密")
     client.decisions.append(decision("command", "open"))
     result = await rig.ask("打開 youtube.com")
-    assert (result["prefix"], result["text"]) == ("否", "執行失敗。")
+    assert (result["prefix"], result["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 
@@ -431,7 +431,7 @@ async def test_a_page_that_did_not_open_is_not_learned(rig, client, actions):
     client.decisions.append(decision("command", "open"))
     client.replies.append(site("https://www.reddit.com/", "Reddit"))
     result = await rig.ask("open reddit", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Execution failed.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'This task has no confirmed result. Check whether the original action completed and provide the correct target before retrying.')
     assert learned(rig) == []
 
 
@@ -518,7 +518,7 @@ async def test_an_app_the_model_names_that_is_not_in_the_list_is_not_started(rig
     client.decisions.append(decision("command", "open"))
     client.replies.append(completion({"kind": "app", "name": "cmd.exe", "url": ""}))
     result = await rig.ask("open the console", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Nothing to open was found by that name.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'The item to open was not found. Provide the correct file or URL and try again.')
     assert did(actions) == []
 
 
@@ -575,7 +575,7 @@ async def test_a_name_that_is_nothing_is_said_so_and_nothing_is_opened(rig, clie
     client.decisions.append(decision("command", "open"))
     client.replies.append(completion({"kind": "none", "name": "", "url": ""}))
     result = await rig.ask("打開 qwertyuiop")
-    assert (result["prefix"], result["text"]) == ("否", "找不到可以開啟的項目。")
+    assert (result["prefix"], result["text"]) == ("否", '找不到可以開啟的項目，請提供正確的檔案或網址後再試。')
     assert did(actions) == []
     assert (await rig.turns())[0]["status"] == "done"
 
@@ -619,7 +619,7 @@ async def test_a_model_that_fails_to_find_it_is_a_failure_of_its_kind(rig, clien
 async def test_without_a_key_a_name_nobody_knows_is_not_guessed(rig, client, actions):
     rig.keys.clear()
     result = await rig.ask("open lobsters", language="en")
-    assert (result["prefix"], result["text"]) == ("Negative", "Nothing to open was found by that name.")
+    assert (result["prefix"], result["text"]) == ("Negative", 'The item to open was not found. Provide the correct file or URL and try again.')
     assert client.calls == 0 and did(actions) == []
     assert (await rig.ask("open lobste.rs", language="en"))["prefix"] == "Understood"
     assert (await rig.ask("打開藍牙"))["prefix"] == "了"
@@ -1070,7 +1070,7 @@ async def test_a_copy_that_fails_is_said_to_have_failed(rig, client, actions):
     actions.fail["copy_to_clipboard"] = OSError("the clipboard is busy")
     client.decisions.append(decision("command", "copy_text"))
     result = await rig.ask("copy")
-    assert (result["prefix"], result["text"]) == ("否", "執行失敗。")
+    assert (result["prefix"], result["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 
@@ -1327,7 +1327,7 @@ async def test_a_copy_that_fails_after_the_yes_is_said_to_have_failed(rig, clien
     actions.fail["copy_to_clipboard"] = OSError("the clipboard is busy")
     asked = await ask_to_copy(rig, client)
     done = await rig.confirm(asked["confirm"]["id"], True)
-    assert (done["prefix"], done["text"]) == ("否", "執行失敗。")
+    assert (done["prefix"], done["text"]) == ("否", '這次工作缺少可確認的結果，請確認原操作是否已完成，並提供正確目標後再試。')
     assert (await rig.turns())[0]["status"] == "error"
 
 

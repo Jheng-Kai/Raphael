@@ -81,6 +81,7 @@ function setupRows(v: MessagingView): string[] {
   const botfather = btn(`${ico("bot")}<span>BotFather</span>${ico("link")}`, "", ` data-msg="botfather" title="${esc(t("msg.tg.step1"))}"`);
   return [
     row(headName("Telegram", dotHTML("idle", t("msg.tg.notSet"))), "", botfather, { cls: "msg-head" }),
+    note(esc(t("msg.tg.step1"))),
     row(esc(t("msg.tg.token")), "", tokenRow, { cls: "msg-token-row" }),
     ...(v.tokenError ? [note(st("err", tr(v.tokenError)), ' role="alert"')] : []),
   ];

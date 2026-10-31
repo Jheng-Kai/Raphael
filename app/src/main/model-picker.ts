@@ -1,4 +1,6 @@
 // A two-phase model chooser shared by settings, services and member details.
+import * as api from "./api";
+import { noticeHTML } from "./missing";
 import "./model-picker.css";
 import { getLocale, t } from "./i18n";
 import {
@@ -540,6 +542,8 @@ export function modelPickerSelection(o: ModelPickerLook): { name: string; source
   const cli = CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name;
   const from = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
     `${cli ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? t("chooser.same") : "";
+  const stale = !!ref && !!o.catalog && !o.loading && !model && !local && o.lead?.id !== ref;
+  if (stale) return { name, source: t("missing.retired"), provider: cli ?? from, model };
   const source = inherited ? `${from} · ${t("services.sameAsAnswer")}` : from;
   // The plain name of where it runs, the same kind of word for every source.
   return { name, source, provider: cli ?? (!model && ref.startsWith("@chatgpt:") ? "ChatGPT" : from), model };
@@ -733,6 +737,7 @@ class MountedPicker implements ModelPicker {
         primary: { label: esc(t("chooser.use")), attrs: ' data-dlg="use"' } },
       onAct: (act) => {
         if (act === "use") this.use();
+        if (act === "reload") void this.reload();
         if (act === "sources") { this.close(); this.o.onSources?.(); }
         if (act === "chatgpt") this.o.onChatgpt?.("sign-in");
         if (act === "chatgpt-cancel") this.o.onChatgpt?.("cancel");
@@ -837,7 +842,10 @@ class MountedPicker implements ModelPicker {
         list.rows = all.filter((row) => !favorites.includes(row));
         listEl.innerHTML = `<h4>${esc(t("chooser.favorites"))}</h4>${first}<h4>${esc(t("chooser.all"))}</h4>${listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite)}`;
       } else listEl.innerHTML = listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite);
-      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t((source.cli?.available || source.account?.signed_in) && !source.models.length ? "chooser.readingModels" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t((source.cli?.available || source.account?.signed_in) && !source.models.length ? "missing.models" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+    }
+    if (source.group === "subscriptions" && !source.models.length && (source.cli?.available || source.account?.signed_in)) {
+      listEl.innerHTML += btn(esc(t("page.retry")), "sm", ' data-dlg="reload"') + noticeHTML("noModels", "models");
     }
     const model = this.effortModel();
     const supported = model?.reasoning_efforts ?? [];
@@ -846,6 +854,15 @@ class MountedPicker implements ModelPicker {
     const efforts = this.dialog!.el.querySelector(".mc-effort")!;
     efforts.innerHTML = levels.length ? effortSliderHTML(levels, this.effort) : "";
     this.paintFooter();
+  }
+  private async reload(): Promise<void> {
+    if (this.o.loading) return;
+    this.o = { ...this.o, loading: true }; this.paintPane();
+    try {
+      const [catalog, clis] = await Promise.all([api.modelsCatalog(), api.brainsCli()]);
+      this.o = { ...this.o, catalog, clis: clis.clis };
+    } catch { /* The empty state keeps its visible retry and account settings action. */ }
+    finally { this.o = { ...this.o, loading: false }; if (this.dialog) this.paintPane(); }
   }
   private paintFooter(): void {
     if (!this.dialog) return;

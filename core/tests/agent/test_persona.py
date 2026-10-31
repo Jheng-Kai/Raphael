@@ -214,10 +214,11 @@ def test_the_hand_off_names_the_owner_in_the_word_of_its_language():
 def test_the_fixed_lines_are_brief(language):
     for name in _LINES:
         text = phrase(language, name)
+        repair = name in {"budget", "credits", "worker_model", "worker_limit_model", "worker_limit_tool", "worker_limit_time", "worker_limit_cost", "worker_limit_month", "vision_off", "pdf_off", "failed", "open_not_found", "computer_watch", "computer_unavailable", "computer_refused_app"}
         if language == "en":
-            assert len(text.split()) <= 16, name
+            assert len(text.split()) <= (45 if repair else 16), name
         else:
-            assert len(text) <= 40, name
+            assert len(text) <= (140 if repair else 40), name
 
 
 def test_the_english_lines_are_formal_without_contractions():

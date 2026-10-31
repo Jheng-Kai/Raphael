@@ -156,7 +156,7 @@ class DesktopViewer:
     async def status(self, params):
         target = self.target(params)
         if not await self.vm.installed():
-            return {"state": "absent", "control": "member", "ready": False}
+            return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
         state = await self.status_for(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
         return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {})}

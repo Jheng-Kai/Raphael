@@ -1541,7 +1541,13 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
     fn failure_notice(&self, err: &RpcError) -> Option<Notice> {
         match err.code {
             NO_MICROPHONE => Some(notices::NO_MIC),
-            NOT_CONFIGURED => Some(notices::NOT_READY),
+            NOT_CONFIGURED => Some(if err.data.as_ref().and_then(|data| data.get("missing"))
+                .and_then(|missing| missing.get("requirement")).and_then(Value::as_str) == Some("local_model") {
+                notices::LOCAL_MODEL_MISSING
+            } else if err.data.as_ref().and_then(|data| data.get("missing"))
+                .and_then(|missing| missing.get("requirement")).and_then(Value::as_str) == Some("cloud_credentials") {
+                notices::CLOUD_STT_MISSING
+            } else { notices::NOT_READY }),
             NO_LOCAL_MODEL => Some(notices::NO_LOCAL_MODEL),
             CORE_EXITED => {
                 let mut state = lock(&self.state);
@@ -4396,6 +4402,17 @@ mod tests {
         ends_with_notice(&c, NO_MIC.zh);
         assert_eq!(c.phase(), Phase::Idle);
         assert_eq!(c.cancel().last(), Some(false));
+    }
+
+    #[tokio::test]
+    async fn known_speech_prerequisites_keep_their_exact_repair_place() {
+        for (requirement, words) in [("local_model", notices::LOCAL_MODEL_MISSING.zh), ("cloud_credentials", notices::CLOUD_STT_MISSING.zh)] {
+            let mut error = RpcError::new(1001, "synthetic");
+            error.data = Some(json!({"missing": {"resource": "stt", "requirement": requirement, "state": "missing", "repair": "dictation"}}));
+            let c = controller(FakeCore::failing("dictation.start", error), FakePaster::pasting("notepad.exe"));
+            run(&c, HotkeyEvent::DictationDown, 0).await;
+            ends_with_notice(&c, words);
+        }
     }
 
     #[tokio::test]

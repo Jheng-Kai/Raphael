@@ -80,6 +80,7 @@ export function formatRetention(days: number): string {
  * `Raphael's core is not running`, or one of the Chinese messages the Rust side writes itself.
  */
 export function describeError(err: unknown): string {
+  if (err instanceof Error && ["NotAllowedError", "NotFoundError", "NotReadableError"].includes(err.name)) return t("missing.microphone");
   const text = err instanceof Error ? err.message : typeof err === "string" ? err : asText(err);
   // CORE_EXITED and TIMEOUT of rpc.rs, and the message of core_call for a core that is missing.
   if (text.includes("core is not running") || text.startsWith("[-32000]")) return t("format.010");

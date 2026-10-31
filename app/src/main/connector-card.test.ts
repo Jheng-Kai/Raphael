@@ -88,10 +88,13 @@ describe("a connector card", () => {
 
   test("with no Composio key the failed card says so and opens the settings, not a vague retry", () => {
     const failed = connectorCardHTML(card({ state: "failed", error: "needs_composio_key" }));
-    // What is missing, and the button to the place that adds it; the member's reply says where in words.
-    expect(visible(failed)).toBe("Gmail 還沒有 Composio 金鑰 開啟連接設定");
+    expect(visible(failed)).toBe("Gmail 還沒有 Composio 金鑰， 請到「設定 › 連接 › 商店」開啟 Composio 表單， 依表單指引取得金鑰後填入並儲存。 開啟連接設定");
+    const shared = connectorCardHTML(card({ state: "failed", error: "needs_composio_key", missing: {resource: "composio", requirement: "composio_key", state: "missing", repair: "store"} }));
+    expect(visible(shared)).toContain("設定 › 連接 › 商店");
+    expect(shared).toContain('data-missing-repair="store"');
+    expect(actions(shared)).toEqual([]);
     expect(actions(failed)).toEqual(["card-settings"]);
-    expect(visible(connectorCardHTML(card({ state: "failed", error: "not_configured" })))).toContain("Google 登入還沒設定好");
+    expect(visible(connectorCardHTML(card({ state: "failed", error: "not_configured" })))).toContain(t("card.notConfigured").replace("，", "， "));
   });
 
   test("speaks only the window's language", () => {

@@ -58,7 +58,7 @@ it.each([
   ["toolkit_not_allowed", "Composio 尚未允許這個應用程式登入，請重試連結。"],
   ["denied", "你在瀏覽器上拒絕了，所以沒有加入。"],
   ["timeout", "太久沒有登入，已經停止。"],
-  ["network", "沒有登入成功：網路連不上"],
+  ["network", "沒有登入成功：網路連不上，請確認網路與服務狀態後重新連線。"],
 ])("renders %s beside the app accounts, without a toast", async (error, words) => {
   api.connectorsConnect.mockResolvedValue({ connected: false, error });
   const { root, click } = await mount();

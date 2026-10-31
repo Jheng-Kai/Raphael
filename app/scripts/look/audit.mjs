@@ -71,6 +71,14 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
+    if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
+      const title = element.getAttribute('title')?.trim();
+      const label = element.getAttribute('aria-label')?.trim() || element.textContent.trim();
+      const context = element.parentElement;
+      const visibleText = node => node.nodeType === 3 ? node.textContent : node.nodeType === 1 && visible(node) && onScreen(node) ? [...node.childNodes].map(visibleText).join('') : '';
+      const text = context ? visibleText(context).trim() : '';
+      if (title && title !== label && !text.includes(title)) violation('R-UI-69', 'A disabled control explains its reason only in a hover title');
+    }
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
     const scrollbar = element.offsetWidth - element.clientWidth - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0);
     if (['auto', 'scroll'].includes(style.overflowY) && scrollbar > 1 && !element.matches('.main, .modal-body, .cs-results, .cs-form .add-grid')) violation('R-UI-62', 'A scrollbar takes room from a narrow part; only a wide page shows one');

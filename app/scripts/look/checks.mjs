@@ -2,6 +2,35 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("missing-")) {
+    const note = [...document.querySelectorAll('.missing-note')].find(visible);
+    if (name === 'missing-onboarding-repair') {
+      require(visible(document.querySelector('[data-act="rerun-guide"]')), 'repair reaches the existing Start tour action');
+    } else if (name === 'missing-store-repair') {
+      require(visible(document.querySelector('[data-k="conn-tab:store"][aria-selected="true"]')), 'repair switches the existing settings to Store');
+    } else if (name === 'missing-provider-repair') {
+      require(visible(document.querySelector('#pv-dialog')), 'provider repair opens the existing provider card');
+      require(document.activeElement === document.querySelector('#pv-dialog [data-pv="replace"]'), 'provider repair focuses its credential action');
+    } else if (name === 'missing-card-repair') {
+      require(visible(document.querySelector('#conn-key')), 'the shared card opens the existing Composio key field');
+      require(document.querySelector('.cs-key-form .note')?.textContent.includes('專案設定 › API 金鑰'), 'the form says where to obtain the project key before typing it');
+    } else if (name.endsWith('-repair')) {
+      const field = document.querySelector(name === 'missing-search-repair' ? '#svc-url' : '#svc-voice-id');
+      require(visible(field), 'repair reaches the existing exact field');
+      require(document.querySelector('[data-pane="agent"][aria-current="page"]'), 'services stay in their existing Raphael pane');
+    } else if (name === 'missing-model-list') {
+      require(visible(document.querySelector('[data-dlg="reload"]')), 'the empty account offers a real reload');
+      require(document.querySelector('.mc-list').textContent.includes('重新讀取'), 'the reason names reloading in visible words');
+    } else {
+      require(visible(note) && note.textContent.length > 20, 'the reason is visible text');
+      require(!note.querySelector('[title]'), 'no reason depends on a hover title');
+      if (name === 'missing-search') require(note.textContent.includes('尚未設定 SearXNG 網址') && note.querySelectorAll('button').length === 1, 'the step says address, not key, with one action');
+      if (name === 'missing-card') require(note.textContent.includes('設定 › 連接 › 商店') && note.querySelectorAll('button').length === 1, 'the card names its existing repair form with one action');
+      if (name === 'missing-hidden') require(visible(document.querySelector('[data-hidden-retry]')), 'the unreadable list offers a real retry');
+      if (name === 'missing-vision') require(document.querySelector('[data-svc="use"]').disabled && note.textContent.includes('回答模型無法讀取圖片'), 'same-as-answer says why it cannot be used');
+    }
+    return {check:name};
+  }
   if (name.startsWith("local-command-setting") || name === "local-command-menu") {
     const picker = document.querySelector('[data-k="local-commands"]');
     require(visible(picker) && picker.classList.contains('sel'), 'local commands use the shared settings dropdown');
@@ -284,7 +313,12 @@ export function checkRendered(name, context = {}) {
   }
   if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
     const panel=document.querySelector('.desktop-panel'), frame=panel?.querySelector('iframe'), calls=window.__look.calls;
-    if(name==='desktop-absent'){require(!visible(panel),'absent Docker has no computer section');return {check:name};}
+    if(name==='desktop-absent'){
+      require(visible(panel)&&visible(panel.querySelector('.missing-note')),'absent Docker says what is missing in the existing panel');
+      require(visible(panel.querySelector('[data-missing-repair="computer"]')),'absent Docker offers its installation settings');
+      require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
+      return {check:name};
+    }
     require(visible(panel)&&panel.closest('.mb-det')&&![...document.querySelectorAll('.desktop-viewer, [role="dialog"]')].some(visible),'computer uses the existing side panel without a dialog');
     require(!document.querySelector('.thread iframe, .desktop-card, [data-desktop-card-open]'),'timeline has no screen card or control buttons');
     const screenHit=panel.querySelector('[data-desktop="peek"]');

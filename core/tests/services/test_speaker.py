@@ -325,7 +325,10 @@ def test_a_voice_that_can_be_heard_has_a_service_a_key_and_a_voice_id(rig):
     assert rig.speaker.speaks() is False
     rig.settings.set("tts_service", "fish")
     rig.settings.set("tts_enabled", True)
+    events = []
+    rig.speaker._notify = lambda method, params: events.append((method, params))
     assert rig.speaker.speaks() is False  # no voice id, no key
+    assert events == [("setup.missing", {"resource": "fish", "requirement": "setup", "state": "missing", "repair": "voice"})]
     rig.settings.set("tts_fish_voice", VOICE)
     assert rig.speaker.speaks() is False  # no key
     rig.keys.set("fish", KEY)

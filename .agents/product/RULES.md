@@ -143,6 +143,7 @@ These owner decisions supersede older conflicting preview, learning notice and E
 | R-UI-68 | 2026-10-31 | No app of the store is a dead end: each row says in visible words what adding it asks (登入即可, 需要 API key, 需要自己的開發者 app), never only in a hover title; 加入 opens a form that asks exactly what the service asks for in masked fields, says where to get it (the catalog's guide, else the service's own page, else that there is none) and that Composio keeps it. A chat card asks the same way and never takes a key in chat; a failed card or connection names what is missing and where to add it, and a missing Composio key is said and offered in the store. | vitest, look, pytest | hard | app/src/main/plugins.test.ts::加入 on an app that needs a key asks in its form first: the key crosses one call and the field is emptied; app/src/main/connection-setup.test.ts; core/tests/test_connector_setup.py; features/connections-mcp.md (plugins-setup-key) |
 | R-AG-20 | 2026-10-31 | A key or a developer app's secret typed for an app goes to Composio in the one call that adds it and is kept in no row, event, log, transcript, setting or reply; the model never sees it. What stays is the id of the auth config Composio keeps, and giving the app back gives the account and the auth config back. | pytest | hard | core/tests/test_connector_setup.py::test_a_key_is_given_to_composio_and_the_apps_tools_come_through; core/tests/test_connector_setup.py::test_a_card_for_an_app_with_a_key_takes_the_key_from_its_form_and_never_keeps_it |
 | R-AG-19 | 2026-10-30 | Conversations use only the owner's chosen model and fallbacks exposed and explicitly saved in the UI. Hidden legacy chains confer no consent. Preserve the complete timeout, name failures plainly and record the actual answering model. Dictation cleanup retains its separate contract. | pytest, authorized live | hard | core/tests/agent/test_model_choice.py::test_timed_out_turn_stays_on_the_chosen_model_and_reports_it |
+| R-UI-69 | 2026-11-01 | A missing prerequisite states the known resource, requirement and repair in visible localized words, beside the disabled control or failed result. One action opens the existing repair place; installation-only dependencies offer no invented setting. Unknown remains unknown; service URL, provider credentials, owner-off and incompatible models keep their distinct causes through stored steps. A title alone never explains a disabled control. | vitest, pytest, look | hard | app/scripts/look/audit.test.mjs::rejects a disabled control whose reason exists only in a title (R-UI-69); core/tests/agent/test_missing.py; features/conversation.md |
 
 ## Member computer hosts (owner, 2026-11-01)
 
@@ -157,8 +158,9 @@ settings explains the missing runtime and offers installation or another host.
 Remote Docker uses a validated `ssh://alias`, no published viewer port, named
 workspace/team volumes on that engine, and a temporary random loopback SSH viewer
 forward. It never starts Docker Desktop on this PC. Local idle-stop remains 15
-minutes; remote desktops have no idle-stop. The provisional cap is 2 GiB and two
-CPUs per container. Local starts keep at most two running owned computers, counting
+minutes; remote desktops have no idle-stop. The cap is 2 GiB and two CPUs per
+container (measured 2026-11-01 on the real image in Firefox: 181 MiB with no browser,
+1.1 GiB on one shop page, 1.4 GiB on three, 1.7 GiB on five tabs). Local starts keep at most two running owned computers, counting
 old incompatible containers without stopping them. Only a compatible, longest-idle
 computer with no work or owner lease may be evicted; otherwise
 report capacity. Remote hosts have no such limit.
@@ -168,5 +170,4 @@ and a collapse control at the top right. It preserves the current stream and
 handback nonce. The image has a plain wallpaper and one small bottom-centred dock
 with Browser, Files and Terminal. No browser starts with the desktop. Task teaching
 is outside scope. AT-SPI and websockify stay until real driver/viewer compatibility
-can be established. The owner explicitly prohibits judge, network, native journeys,
-real Docker operations and image builds for this handoff; none is claimed as PASS.
+can be established.
