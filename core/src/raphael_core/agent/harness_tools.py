@@ -5,6 +5,7 @@ from .plugins import PluginTool
 from .policy import Tier
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, TIERS as ADMIN_TIERS
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS, WRITE_TOOLS as GROWTH_WRITES
+from ..members.schedule import KINDS
 
 CONNECT_APP = "connect_app"
 FIND_APP = "find_app"
@@ -20,8 +21,9 @@ class HarnessToolError(Exception):
 
 
 SCHEDULE = {
-    "type": "object", "description": "Owner's local time zone. Daily or weekly at HH:MM (24-hour). Weekdays means weekly days [1,2,3,4,5]; Sunday is 0.",
-    "properties": {"kind": {"type": "string", "enum": ["daily", "weekly", "every"]}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"}}, "required": ["kind"],
+    "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. every: every so many hours. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
+    "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"},
+                   "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "until": {"type": "string", "description": "YYYY-MM-DD"}, "max_runs": {"type": "integer"}}, "required": ["kind"],
 }
 ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "enabled": {"type": "boolean"}}
 
@@ -74,7 +76,7 @@ DEFINITIONS = {
     "self_check": definition("Read Raphael's connection failures, required key presence (never values), brain sign-in and reported quota/credits, relevant settings and recent redacted failure logs. Read-only, offline; unknown stays unknown."),
     "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
-    "routine_create": definition("Create a routine for the current speaker from the owner's request. Translate daily/weekdays/weekly times into a schedule in the owner's local time zone.", ROUTINE_FIELDS, ["title", "prompt", "schedule"]),
+    "routine_create": definition("Create a routine for the current speaker from the owner's request. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt", "schedule"]),
     "routine_list": definition("List only the current speaker's routines."),
     "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),

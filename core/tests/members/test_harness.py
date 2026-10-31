@@ -1,11 +1,14 @@
 """Every speaker uses the same guarded tools, with routines scoped to its thread."""
 
 import json
+from dataclasses import fields
 
 import pytest
 
 from agent.test_narration import chat
+from raphael_core.agent.harness_tools import DEFINITIONS
 from raphael_core.agent.tools import ToolResult
+from raphael_core.members.schedule import KINDS, Schedule
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
 from computer.test_operate import shell, PRESS_SEVEN  # noqa: F401
 
@@ -70,6 +73,24 @@ async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, clie
     client.chats = [chat("Opening it.", ("open", {"target_kind": "url", "target": "https://example.com"})), live_said("Please ask at the computer.")]
     await typed(rig, "Open example.com", teacher.id, source="telegram")
     assert rig.actions.calls == []
+
+
+def test_the_tool_offers_every_schedule_the_engine_runs():
+    schedule = DEFINITIONS["routine_create"]["parameters"]["properties"]["schedule"]
+    assert set(schedule["properties"]["kind"]["enum"]) == set(KINDS)
+    assert {field.name for field in fields(Schedule)} <= set(schedule["properties"])
+
+
+@pytest.mark.parametrize("schedule", [
+    {"kind": "once", "start_date": "2099-03-04", "time": "09:30"},
+    {"kind": "weekdays", "time": "08:00"},
+    {"kind": "daily", "time": "08:00", "until": "2099-03-31"},
+    {"kind": "daily", "time": "08:00", "start_date": "2099-03-01", "max_runs": 5},
+])
+async def test_a_member_can_set_up_a_once_a_bounded_or_a_weekdays_routine(setup, schedule):
+    rig, team = setup
+    created = await team.members.routine_tool(member(team).id, "routine_create", {"title": "Lesson", "prompt": "Teach", "schedule": schedule})
+    assert created["routine"]["schedule"] == schedule
 
 
 async def test_routine_tools_cannot_modify_another_speakers_routine(setup):
