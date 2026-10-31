@@ -491,6 +491,14 @@ async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop
     assert not hub.actions[target.key].locked() and vm.active[target.key] == 0
 
 
+def test_the_image_carries_the_labels_the_core_checks():
+    # Live, a new image with an old label left every computer refused as incompatible.
+    import raphael_core.computer.vm as vm_module
+    dockerfile = (Path(vm_module.__file__).parent / "image/Dockerfile").read_text(encoding="utf-8")
+    for key, value in IMAGE_LABELS.items():
+        assert f'{key}="{value}"' in dockerfile
+
+
 async def test_every_driver_call_of_a_computer_is_one_session_and_page_input_is_foreground(desktop, tmp_path):
     # Each call has its own connection, and the driver ends what a connection's session made with it: live, the browser
     # that browser_prepare opened was gone by the next call, and a drag never found the screenshot read before it.
