@@ -13,6 +13,10 @@ from ..brain.spend import SpendTracker
 from ..brain.settings import api_model
 from ..protocol import RpcError
 
+# What bounds the members talking among themselves unasked: the turns of one slice of discussion, the hand-offs and the
+# interjections they make on their own. They never bound an address: a colleague named in a reply (or the owner's
+# message) is owed a reply (`room_reply_intents`), however many turns and hops there have been, and a slice that
+# is full goes on by itself. Grok Bot's documentation has no such numbers; these are only how far chatter goes.
 MAX_TURNS = 6
 MAX_HOPS = 3
 MAX_CHIME_INS = 2
@@ -221,7 +225,9 @@ class RoomExchanges:
     async def start(self, room, origin, language, attachments, recipient=None):
         if hasattr(self.rooms._background, 'cancel_room'):
             self.stop(room['id'])
-            await self.rooms._background.cancel_room(room['id'])
+            # The owner speaking cuts what the members were saying, not the work they were assigned: that is
+            # long, and ends when it is done or the owner stops it (`rooms.stop`).
+            await self.rooms._background.cancel_room(room['id'], work=False)
         # A new owner message takes priority without replaying completed actions.
         with self.conn:
             # Owner interjections take priority, but already accepted explicit addresses survive.
@@ -367,8 +373,7 @@ class RoomExchanges:
                         targets = ids if choice == "everyone" else [choice] if type(choice) is int else self.fallback(room)
                     pending = [{"member":i,"reply_to_member":None,"reply_to":exchange.origin_message_id,"handoff":False} for i in targets]
                 pending = [p for p in pending if p["member"] in ids and
-                           (p.get('round') or p["member"] not in spoken or p["handoff"]) and
-                           (p.get('round') or not p["handoff"] or exchange.hops < MAX_HOPS)]
+                           (p.get('round') or p["member"] not in spoken or p["handoff"])]
                 planned = pending
                 with self.conn:
                     for intent in self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id", (exchange.origin_message_id,)).fetchall():

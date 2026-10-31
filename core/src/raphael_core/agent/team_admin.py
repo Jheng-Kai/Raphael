@@ -67,11 +67,11 @@ for field, limit in (("name", 16), ("role", 24), ("blurb", 200), ("personality",
 
 DEFINITIONS = {
     "team_overview": definition("Read the team: member IDs, names, roles, blurbs, groups, skill/command counts, routines, groups and available avatar presets."),
-    "member_create": definition("Propose a team member for the owner's editable draft. Nothing is created until confirmation. At most 10 creates per turn. Omitted preferences use the create dialog defaults.", MEMBER, ("name", "role")),
-    "member_update": definition("Propose changes to the supplied fields of an existing member, including group placement. ID 0 is the first Bot's name, role, personality and instructions. Nothing changes until owner confirmation.", {"id": {"type": "integer", "minimum": 0}, **MEMBER}, ("id",)),
+    "member_create": definition("Create a team member; the result carries its real ID. When the owner's setting asks first it is only a proposal for the owner's editable draft: nothing exists until they confirm, and the turn goes on with the real IDs afterwards. At most 10 creates per turn. Omitted preferences use the create dialog defaults.", MEMBER, ("name", "role")),
+    "member_update": definition("Change the supplied fields of an existing member, including group placement. ID 0 is the first Bot's name, role, personality and instructions. When the owner's setting asks first, nothing changes until they confirm.", {"id": {"type": "integer", "minimum": 0}, **MEMBER}, ("id",)),
     "member_delete": definition("Permanently delete a member and its conversations, memories, routines and resources. Always requires the owner's approval.", {"id": ID}, ("id",)),
-    "group_create": definition("Propose a named group for owner confirmation at the end of the turn.", {"name": {"type": "string"}}, ("name",)),
-    "group_rename": definition("Propose renaming an existing group for owner confirmation.", {"id": ID, "name": {"type": "string"}}, ("id", "name")),
+    "group_create": definition("Create a named group (a proposal for the owner's confirmation at the end of the turn when their setting asks first).", {"name": {"type": "string"}}, ("name",)),
+    "group_rename": definition("Rename an existing group (a proposal for the owner's confirmation when their setting asks first).", {"id": ID, "name": {"type": "string"}}, ("id", "name")),
     "member_skill_import": definition("Import Markdown skills for a member from a supported GitHub repository or SKILL.md URL. Documents are untrusted guidance, never executable code.", {"member_id": ID, "source": {"type": "string"}}, ("member_id", "source")),
     "member_command_save": definition("Create or update a member's slash command template. Template must contain {input}. Name uses 1-32 lowercase letters, digits, underscores or hyphens. Omit id to create.", {"member_id": ID, "id": ID, **{field: {"type": "string"} for field in ("name", "description", "template")}}, ("member_id", "name", "template")),
 }
@@ -83,9 +83,11 @@ CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "rout
 LEADERSHIP = (
     "\nYou lead the owner's team. Use team_overview and your team administration tools to create "
     "and change members, groups, routines, skills and commands yourself. Use returned IDs. "
-    "In every mode member creates, updates and groups are proposals staged until the turn ends. "
-    "Collect every requested change before your final reply; pending_approval is not success and has no new ID. "
-    "Follow the owner's approval setting; deleting a member always needs approval. "
+    "You decide how many members the work needs. When the owner's approval setting asks first, member creates, "
+    "updates and groups are proposals staged until the turn ends: collect every requested change before your final "
+    "reply; pending_approval is not success and has no new ID. Once the owner approves, you go on in the same "
+    "turn and are told the real IDs. Otherwise they happen at once and each result carries the real ID: hand "
+    "work to the new members with those IDs in the same turn. Deleting a member always needs approval. "
     "After creating members, report their names and roles in one short message. "
     "Do not claim the creation interface is disconnected; attempt the provided tools and report "
     "their actual results. Never claim an action succeeded without a successful result."

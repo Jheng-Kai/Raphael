@@ -26,6 +26,9 @@ SOCKET = "/run/user/1000/raphael-cua.sock"
 LABEL = "org.raphael.computer"
 IMAGE_LABELS = {LABEL: "1", f"{LABEL}.driver": VERSION, f"{LABEL}.base": BASE, f"{LABEL}.layer": "1"}
 MAX_OUTPUT = 20_000
+# The longest a command may be waited for, and the longest a job started in the background may run.
+FOREGROUND_S = 1800
+BACKGROUND_S = 21_600
 
 
 class VmError(Exception):
@@ -110,8 +113,8 @@ def run_args(target, owner, password, *, tz=None):
     ]
 
 
-def exec_args(target, command, *, interactive=False):
-    return ["exec", *(["-i"] if interactive else []), "-u", "cua", "-e", "HOME=/home/cua",
+def exec_args(target, command, *, interactive=False, detached=False):
+    return ["exec", *(["-i"] if interactive else []), *(["-d"] if detached else []), "-u", "cua", "-e", "HOME=/home/cua",
             "-e", "DISPLAY=:1", "-e", "CUA_DRIVER_INSTALL_CHANNEL=python_package",
             "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0", target.name, *command]
 
@@ -420,11 +423,16 @@ class LocalVm:
             self.held.discard(target.key)
         self.last_activity[target.key] = self.clock()
 
-    async def execute(self, target, command, timeout=60):
+    async def execute(self, target, command, timeout=60, *, background=False):
+        """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
+        in the background it is started detached and this returns at once with a job whose log and exit code the
+        caller reads with later commands. A job is ended by its own timeout, at most `BACKGROUND_S`."""
         if not isinstance(command, str) or not command.strip() or len(command) > 16_000:
             raise VmError("bad_arguments")
-        if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 300:
+        if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= (BACKGROUND_S if background else FOREGROUND_S):
             raise VmError("bad_arguments")
+        if background:
+            return await self._detached(target, command, timeout)
         # The guest timeout also ends the process when the host docker client is cancelled.
         token = secrets.token_hex(16)
         script = 'echo $$ > "$1"; shift; exec timeout --signal=TERM --kill-after=2 "$@"'
@@ -439,6 +447,17 @@ class LocalVm:
             raise
         finally:
             await asyncio.shield(self.run(exec_args(target, ["rm", "-f", pidfile])))
+
+    async def _detached(self, target, command, timeout):
+        job = secrets.token_hex(6)
+        base = f"{GUEST}/.raphael-jobs/{job}"
+        script = ('mkdir -p "$1" && { timeout --signal=TERM --kill-after=2 "$2" sh -lc "$3"; echo $? > "$5"; } > "$4" 2>&1')
+        args = exec_args(target, ["sh", "-c", script, "sh", f"{GUEST}/.raphael-jobs", str(timeout),
+                                  f"cd {GUEST} && {command}", f"{base}.log", f"{base}.exit"], detached=True)
+        result = await self.run(args, timeout=30)
+        if result.code:
+            raise VmError("start_failed")
+        return {"job": job, "log": f"{base}.log", "exit_file": f"{base}.exit"}
 
     async def read_file(self, target, guest_path, *, limit):
         path = PurePosixPath(guest_path) if isinstance(guest_path, str) else PurePosixPath("/")

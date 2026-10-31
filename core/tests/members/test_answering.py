@@ -289,6 +289,32 @@ async def test_member_exchange_returns_to_the_named_conversation_that_asked(setu
     assert theirs.source_turn_id == selected[0]['id']
 
 
+async def test_a_colleague_that_is_still_answering_is_waited_for(setup, client, monkeypatch):
+    # Live, a member that took longer than 45 seconds to answer had its question given up on.
+    import asyncio
+
+    import raphael_core.agent.service as service
+
+    monkeypatch.setattr(service, "EXCHANGE_TIMEOUT_S", 0.05, raising=False)
+    rig, team = setup
+    member(team, name="Researcher")
+
+    async def slow(**kwargs):
+        await asyncio.sleep(0.4)
+        return live_said("The reports agree.")
+
+    client.decisions.append(decision("answer"))
+    client.chats.append(chat("I will ask Researcher.", ("ask_member", {"member": "Researcher", "request": "Compare the reports"})))
+    client.decisions.append(decision("answer"))
+    client.chats.append(slow)
+    client.chats.append(live_said("Researcher checked both reports.", prefix="Answer"))
+    result = await rig.call("agent.ask", {"session_id": "slow-exchange", "text": "Ask Researcher to compare the reports",
+        "source": "app", "ui_language": "en"})
+    assert result["status"] == "done"
+    given = str(client.chat_calls[-1]["messages"])
+    assert "The reports agree." in given and "timeout" not in given
+
+
 async def test_deleting_a_member_removes_named_conversation_context(setup, conn):
     rig, team = setup
     one = member(team, name="Researcher")
@@ -314,6 +340,7 @@ async def test_a_question_about_something_else_offers_no_team_tool(setup, client
 
 async def test_raphael_adds_a_member_when_the_owner_asks(setup, client):
     rig, team = setup
+    rig.settings.set("action_mode", "ask")
     client.decisions.append(decision("command"))  # the router took it for a command it has not
     client.plans.append(
         tool_plan(("Raphael__create_member", {"name": "小行程", "role": "管行程", "instructions": "每天早上提醒我", "group": "生活"}))
@@ -327,8 +354,18 @@ async def test_raphael_adds_a_member_when_the_owner_asks(setup, client):
     assert client.json_calls == []  # nothing more to word
 
 
+async def test_in_automatic_mode_raphael_adds_a_member_at_once(setup, client):
+    rig, team = setup
+    rig.settings.set("action_mode", "direct")
+    client.decisions.append(decision("command"))
+    client.plans.append(tool_plan(("Raphael__create_member", {"name": "小行程", "role": "管行程", "instructions": "每天早上提醒我"})))
+    result = await rig.ask("幫我加一個管行程的成員")
+    assert result["status"] == "done" and team.members.store.by_name("小行程") is not None
+
+
 async def test_voice_picked_members_share_one_proposal(setup, client):
     rig, team = setup
+    rig.settings.set("action_mode", "ask")
     client.decisions.append(decision("command"))
     client.plans.append(tool_plan(*[
         ("Raphael__create_member", {"name": f"Member {index}", "role": "Research"})

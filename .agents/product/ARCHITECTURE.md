@@ -68,6 +68,21 @@ mechanical boundaries below.
 | A-13 | Every mechanical architecture and product rule links an existing executable test. | vitest | app/src/architecture.test.ts::mechanical rules link existing named tests |
 | A-14 | Native notifications retain their main/overlay channel contracts and behavior. | human | Native notification journeys |
 
+## Long team work (2026-10-31)
+
+A background task has no clock: it works until it is done, the owner stops it, it stalls (no model
+reply and no tool returns for `RunLimits.seconds`) or it reaches a ceiling (1000 model calls, 2000 tool
+calls, the owner's `worker_cost_cap_usd` for a paid model; a subscription spends nothing and has no
+cap). At a ceiling the task is asked once, with no tools, where it stands, and that summary is its
+result (`worker.loop.WRAP_UP`; a CLI task is told in place of the tool call it asked for). Up to
+`MAX_PARALLEL` (3) tasks run at once, one per member; the rest wait in the queue and none is refused.
+The worker process carries them side by side. Delegated results reach the parent as completed,
+error or cancelled with the evidence the system recorded; a file the work was to leave is
+judged on the bytes found in the member's workspace, not on the member's word. Members share one
+screen by turns (`computer.vm_tools`): a bounded wait with one progress line, then a result naming
+who holds it; commands never take the screen. Assigned work (`handoff`) survives the owner
+speaking in a room; only the owner's stop ends it.
+
 ## Shared cancellation boundary (owner round 3)
 
 Main, room and desktop surfaces register visible task targets with the same

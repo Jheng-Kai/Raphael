@@ -93,9 +93,11 @@ selection or persistence: core tests drive API turns and authenticated HTTP MCP
 turns through the real member service. Live provider/CLI and native relaunch
 checks remain separate.
 
-Every action mode and brain collects the entire turn's reversible member/group changes in one card,
-including eight-member requests across multiple model rounds or sequential CLI MCP
-calls. Every member lists name, role, blurb and group. Approval applies the entire
+Where the owner's setting asks first (先詢問 or 計畫) every brain collects the entire turn's reversible
+member/group changes in one card, including eight-member requests across multiple model
+rounds or sequential CLI MCP calls (a safety rule that asks does the same in 自動). In 自動 the
+changes are made at once, like any other tool of their tier, and the model has the real IDs in
+the tool results. Every member lists name, role, blurb and group. Approval applies the entire
 transaction; rejection or expiry applies none. An invalid operation rolls everything
 back without publishing partial roster changes. Deletions retain per-member T3 cards.
 Chinese and Japanese labels use full-width colons; English uses colon-space.
@@ -158,10 +160,13 @@ after a relaunch, the allowlisted `members.set_primary`) need their own acceptan
 
 ## Editable member proposals (P05)
 
-API and sequential authenticated CLI/MCP calls queue the same turn-end proposal.
-Pending tool responses have no created IDs and explicitly prohibit claiming success.
-Owner confirmation rechecks edited arguments against current safety rules and applies
-the transaction once. Cancel, expiry and a superseding turn discard it. Repeated
+Where the owner's setting asks first, API and sequential authenticated CLI/MCP calls queue the
+same turn-end proposal. Pending tool responses have no created IDs and explicitly prohibit
+claiming success. Owner confirmation rechecks edited arguments against current safety rules and
+applies the transaction once; the turn then goes on in the same turn (the API brain's own
+conversation, a CLI brain's native thread) told what now exists with the real IDs, so a chief
+asked to create a team and start it can hand the new members their work after the yes. Cancel,
+expiry and a superseding turn discard it. Repeated
 updates to one target merge their fields into one card. Nested member work cannot
 administer the roster; deletion retains its separate held T3 confirmation.
 
@@ -176,7 +181,8 @@ npm run look -- admin-cli-draft-edit admin-draft-cancel admin-draft-apply-result
 ```
 
 Core evidence: tests/members/test_admin_proposals.py covers both fake API and
-sequential HTTP MCP paths, edits, direct/ask modes, cancellation, expiry, resend,
+sequential HTTP MCP paths, edits, the turn going on after the yes with the real IDs, the
+automatic mode creating at once, a safety rule that asks, cancellation, expiry, resend,
 atomic rollback, target scope, current safety, saved first Bot identity and replay.
 Guardian S01 runs the production loops for both fake brains. Browser IPC fixtures
 prove rendered interactions only; live brains and native persistence remain separate.

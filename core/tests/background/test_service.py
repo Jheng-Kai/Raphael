@@ -16,7 +16,7 @@ from raphael_core.agent.persona import PREFIXES, phrase
 from raphael_core.agent.steps import Step
 from raphael_core.background.host import WorkerHost
 from raphael_core.background.run import RunLimits
-from raphael_core.background.service import MAX_QUEUED, report_from
+from raphael_core.background.service import report_from
 from raphael_core.background.tasks import Refused
 from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.brain.settings import SettingsStore
@@ -74,7 +74,9 @@ async def test_the_model_is_given_the_task_the_tools_of_the_snapshot_and_the_res
     first, second = rig.client.chat_calls
     system, user = first["messages"]
     assert system["role"] == "system" and "background worker" in system["content"]
-    assert "80 model calls" in system["content"] and "200 tool calls" in system["content"]
+    limits = RunLimits()
+    assert f"{limits.model_calls} model calls" in system["content"] and f"{limits.tool_calls} tool calls" in system["content"]
+    assert "no deadline" in system["content"]
     assert user["role"] == "user" and f"<task>\n{TASK_TEXT}\n</task>" in user["content"]
     assert "2026-10-21 14:05" in user["content"] and user["content"].rstrip().endswith("English only.")
     assert [t["function"]["name"] for t in first["tools"]] == [
@@ -297,11 +299,12 @@ async def test_at_fifteen_model_calls_the_task_stops_and_says_so_with_a_fixed_li
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
     assert done["state"] == "limit"
-    assert done["text"] == phrase("en", "worker_limit_model", steps="15")
+    assert done["text"] == phrase("en", "worker_limit_model", steps="15")  # the summary it was asked for said nothing
     assert done["prefix"] == "Notice"
-    assert len(rig.client.chat_calls) == 15  # not one more, so not one more paid
+    assert len(rig.client.chat_calls) == 16  # the fifteenth, then the one call that asks where it stands
+    assert rig.client.chat_calls[-1]["tools"] == []
     assert rig.task(task_id).reason == "limit_model"
-    assert rig.conn.execute("SELECT count(*) FROM spend").fetchone()[0] == 15
+    assert rig.conn.execute("SELECT count(*) FROM spend").fetchone()[0] == 16
 
 
 async def test_at_twenty_five_tool_calls_the_task_stops_before_the_twenty_sixth(make_rig):
@@ -316,13 +319,13 @@ async def test_at_twenty_five_tool_calls_the_task_stops_before_the_twenty_sixth(
     assert rig.task(task_id).tool_calls == 25
 
 
-async def test_spending_does_not_stop_a_task(make_rig):
+async def test_spending_under_the_cap_does_not_stop_a_task(make_rig):
     rig = make_rig()
-    rig.client.replies = [turn("", [call("local_time", {}, "c0")], cost=0.3), report("Done", cost=0.4)]
+    rig.client.replies = [turn("", [call("local_time", {}, "c0")], cost=0.09), report("Done", cost=0.09)]
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
     assert done["state"] == "done" and done["text"] == "Done"
-    assert rig.task(task_id).cost_usd == pytest.approx(0.7)
+    assert rig.task(task_id).cost_usd == pytest.approx(0.18)
 
 
 async def test_the_month_limit_does_not_stop_a_task_in_the_middle(make_rig, conn):
@@ -541,7 +544,7 @@ async def test_stopping_with_no_task_does_nothing(make_rig):
 # --- the queue ------------------------------------------------------------------------------------
 
 
-async def test_one_task_runs_at_a_time_three_wait_and_a_fifth_is_refused(make_rig):
+async def test_a_members_tasks_wait_in_the_queue_in_order_however_many_there_are(make_rig):
     rig = make_rig()
     release = asyncio.Event()
     running = []
@@ -554,20 +557,14 @@ async def test_one_task_runs_at_a_time_three_wait_and_a_fifth_is_refused(make_ri
         running.pop()
         return report("ok")
 
-    rig.client.replies = [hold, hold, hold, hold]
-    ids = [rig.submit() for _ in range(1 + MAX_QUEUED)]
-    with pytest.raises(Refused) as refused:
-        rig.submit()
-    assert refused.value.kind == "worker_busy"
+    rig.client.replies = [hold] * 8
+    ids = [rig.submit() for _ in range(8)]  # none is refused
     await until(lambda: len(rig.client.chat_calls) == 1)
-    assert [rig.task(i).state for i in ids] == ["running", "queued", "queued", "queued"]
+    assert [rig.task(i).state for i in ids] == ["running"] + ["queued"] * 7
     release.set()
-    reports = await rig.wait_for_reports(4)
+    reports = await rig.wait_for_reports(8)
     assert [r["task_id"] for r in reports] == ids  # in the order they came
-    assert max(most) == 1  # never two at once
-    rig.submit()  # the queue has room again
-    rig.client.replies.append(report("again"))
-    await rig.wait_for_reports(5)
+    assert max(most) == 1  # one member never works on two at once
 
 
 # --- a worker that dies ---------------------------------------------------------------------------

@@ -8,12 +8,14 @@ priority and without a window, with the keys of the environment taken out, and t
 stdin and stdout (`worker.channel`). It belongs to the core's Job Object like any child (the app
 puts the core in one: the worker dies with it), and ends by itself when its stdin closes.
 
-`WorkerHost` owns one worker at a time:
+`WorkerHost` owns one worker process, which carries out the tasks that are given it side by side
+(each `TaskRun` is found by its task id when the worker calls back):
 
 - `run(run, spec)` starts the worker if it is not there (and says hello to it), points the worker's
   `host.chat` and `host.tool` at the `TaskRun`, sends `task.run` and waits for how it ended. If the
-  worker dies meanwhile, that is `WorkerCrashed`; a worker that cannot be started is
-  `WorkerUnavailable`. A task is never started again by itself after either.
+  worker dies meanwhile, that is `WorkerCrashed` for every task it had (one crash, however many
+  tasks it had); a worker that cannot be started is `WorkerUnavailable`. A task is never started
+  again by itself after either.
 - Three crashes within ten minutes switch the worker off until the core is started again
   (`disabled`): something is wrong that starting again will not mend.
 - `cancel(run)` tells the worker to stop the task, and ends the process if it has not stopped within
@@ -294,13 +296,16 @@ class WorkerHost:
         self._start_cancelled = False
         # The ends of workers whose start was cancelled, which are let go of in the background.
         self._reaping: set[asyncio.Task[None]] = set()
-        self._current: TaskRun | None = None
+        # The tasks the worker has now, by id, and the timers that end it if one it was told to stop does not.
+        self._current: dict[int, TaskRun] = {}
+        self._kill_timers: dict[int, asyncio.TimerHandle] = {}
         self._crashes: list[float] = []
+        # The worker whose death was counted already: its other tasks see it die too.
+        self._counted: Link | None = None
         self._disabled = False
         self._closing = False
         self._starting = asyncio.Lock()
         self._idle_timer: asyncio.TimerHandle | None = None
-        self._kill_timer: asyncio.TimerHandle | None = None
         self.pid: int | None = None
 
     @property
@@ -399,8 +404,8 @@ class WorkerHost:
     # --- the worker's calls ---------------------------------------------------------------------
 
     def _run_for(self, params: dict) -> TaskRun:
-        run = self._current
-        if run is None or params.get("task_id") != run.task_id:
+        run = self._current.get(params.get("task_id"))
+        if run is None:
             raise stopped("cancelled")  # a task that is over, or was never started
         return run
 
@@ -420,14 +425,16 @@ class WorkerHost:
             raise WorkerUnavailable
         self._cancel_idle()
         link = await self._ensure(run)
-        self._current = run
+        self._current[run.task_id] = run
         try:
             # The worker keeps to its own limits too; this is the net under them.
             reply = await link.peer.request("task.run", spec)
         except PeerClosed:
             if run.cancelled or run.timed_out or self._closing:
                 raise WorkerStopped from None
-            self._note_crash()
+            if self._counted is not link:
+                self._counted = link
+                self._note_crash()
             raise WorkerCrashed from None
         except RpcError as error:
             if error.code == WORKER_STOPPED:
@@ -435,8 +442,9 @@ class WorkerHost:
             logger.warning("The worker refused a task: code=%s", error.code)
             raise WorkerUnavailable from None
         finally:
-            self._current = None
-            self._cancel_kill()
+            if self._current.get(run.task_id) is run:
+                del self._current[run.task_id]
+            self._cancel_kill(run)
             self._arm_idle()
         if not isinstance(reply, dict):
             raise WorkerUnavailable
@@ -453,11 +461,17 @@ class WorkerHost:
                 self._pending.kill()
             return
         link = self._link
-        if link is None or self._current is not run:
+        if link is None or self._current.get(run.task_id) is not run:
             return
         link.peer.notify("task.cancel", {"task_id": run.task_id})
-        self._cancel_kill()
-        self._kill_timer = asyncio.get_running_loop().call_later(self._grace_s, self.kill)
+        self._cancel_kill(run)
+        self._kill_timers[run.task_id] = asyncio.get_running_loop().call_later(
+            self._grace_s, self._kill_if_still_there, run)
+
+    def _kill_if_still_there(self, run: TaskRun) -> None:
+        self._kill_timers.pop(run.task_id, None)
+        if self._current.get(run.task_id) is run:
+            self.kill()
 
     def kill(self) -> None:
         """End the worker now (it comes back when the next task needs it)."""
@@ -476,7 +490,7 @@ class WorkerHost:
 
     def _arm_idle(self) -> None:
         self._cancel_idle()
-        if self._closing or self._link is None:
+        if self._closing or self._link is None or self._current:
             return
         self._idle_timer = asyncio.get_running_loop().call_later(
             self._idle_s, lambda: asyncio.ensure_future(self._idle_out())
@@ -487,14 +501,16 @@ class WorkerHost:
             self._idle_timer.cancel()
             self._idle_timer = None
 
-    def _cancel_kill(self) -> None:
-        if self._kill_timer is not None:
-            self._kill_timer.cancel()
-            self._kill_timer = None
+    def _cancel_kill(self, run: TaskRun | None = None) -> None:
+        """Forget the kill timer of `run`, or all of them."""
+        for task_id in [run.task_id] if run is not None else list(self._kill_timers):
+            timer = self._kill_timers.pop(task_id, None)
+            if timer is not None:
+                timer.cancel()
 
     async def _idle_out(self) -> None:
         self._idle_timer = None
-        if self._current is None:
+        if not self._current:
             await self._end()
 
     async def _end(self) -> None:

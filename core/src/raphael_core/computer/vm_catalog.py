@@ -41,6 +41,10 @@ DRIVER_TOOLS = {
     "browser_download": "Save a bound browser download in an explicit guest directory.",
 }
 
+# Answers that report how things stand and are not a tool failing: a model told one decides what to do, and
+# nothing it did is evidence of work.
+NOTICES = ("computer_busy", "screen_changed")
+
 # Everything else is excluded: updates/installs/configuration, recording/replay,
 # escalation, lifecycle, cosmetic cursor settings and redundant primitives. In
 # particular page/run_script/run_steps never bypass the single vm_exec path.

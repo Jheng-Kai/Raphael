@@ -3,10 +3,13 @@
 A `TaskRun` is the gate between a task and the world. The worker asks it for a model reply or for a
 tool call; it decides whether to give them, and gives them itself. In order:
 
-- **Limits.** Before every call it checks that the task was not cancelled, that its time is not up,
-  that it has model calls and tool calls left. A call it refuses is answered with `WORKER_STOPPED` and the
-  kind, and the task ends there with no more spend. The worker counts the limits too; this is the
-  count that counts.
+- **Limits.** Before every call it checks that the task was not cancelled, that it has not stalled
+  (no model reply and no tool came back for `RunLimits.seconds`: a task has no clock, only
+  silence ends it), that it has model calls and tool calls left, and, for a paid model, that it has
+  not spent the money cap (`cost_cap`; a subscription spends nothing and has none). A call it
+  refuses is answered with `WORKER_STOPPED` and the kind, and the task ends there with no more
+  spend, but for one last model call with no tools (`WRAP_UP`) that says where the task stands. The
+  worker counts the limits too; this is the count that counts.
 - **The model.** The key is read here, by the client, and nowhere else. The tools the model is offered
   are the snapshot's, whatever the worker sent; every reply is paid for into the spend (purpose
   "agent") and into the task's own total, with `data_collection: deny` as for every call.
@@ -49,6 +52,7 @@ import logging
 import sqlite3
 import time
 from collections.abc import Awaitable, Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Protocol, TypeVar
@@ -68,12 +72,13 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..brain.pricing import builtin_catalog
+from ..computer.vm_catalog import NOTICES
 from ..brain.spend import SpendTracker
 from ..integrations.pool import McpPool
 from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
-from ..worker.loop import WAITING, ToolOutcome, result_text
+from ..worker.loop import WAITING, WRAP_UP, ToolOutcome, result_text
 from ..members.activity import current, tool_step
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
 from .tasks import TaskStore
@@ -86,7 +91,7 @@ T = TypeVar("T")
 CHAT_TIMEOUT_S = 60.0
 CHAT_MAX_TOKENS = 2000
 # The conversation the worker sends is bounded: a worker that sent more is not doing a task.
-MAX_MESSAGES = 200
+MAX_MESSAGES = 1000
 MAX_CHAT_CHARS = 600_000
 # The most of a tool's result that goes to the worker, in characters (it cuts it further).
 MAX_RESULT_CHARS = 12_000
@@ -123,12 +128,13 @@ def estimate_cost(model: str, request_chars: int) -> float:
 
 @dataclass(frozen=True)
 class RunLimits:
-    """Non-monetary safety bounds; cost_usd is retained for settings compatibility only."""
+    """Safety bounds of one task. They are far from what honest work reaches: a task that keeps
+    working goes on for hours. `seconds` is the stall time, the longest the task may go without a
+    model reply or a tool coming back. The money cap is the owner's setting (`TaskRun.cost_cap`)."""
 
-    model_calls: int = 80
-    tool_calls: int = 200
+    model_calls: int = 1000
+    tool_calls: int = 2000
     seconds: float = 1800.0
-    cost_usd: float = 0.20
 
 
 def stopped(kind: str, detail: str | None = None) -> RpcError:
@@ -224,8 +230,17 @@ class TaskRun:
         can_wait: bool = False,
         ask_before_members: bool = False,
         diagnostics: Callable[[], dict] | None = None,
+        cost_cap: Callable[[], float] | None = None,
     ) -> None:
         self.activity = current()
+        # The most this task may spend, as the owner's setting says now; None for none.
+        self._cost_cap = cost_cap
+        self._wrapped_up = False
+        # The ceiling a CLI task was told to report at (its own model calls are not ours to refuse).
+        self.ceiling: str | None = None
+        # What a call of a tool is made inside: whose turn at the shared screen it is, and where to say that it
+        # waits. A call comes in on the worker's request, not in the task's own context, so the service gives it.
+        self.scope: Callable[[], AbstractContextManager] = nullcontext
         self._memory = memory
         self._memory_untrusted = bool(attachments) or any(
             step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
@@ -308,13 +323,18 @@ class TaskRun:
             if not task.done():
                 task.cancel()
 
-    def _check(self, *, model: bool = False, tool: bool = False, paid: bool = False) -> None:
-        """Refuse a call the task may not make: `stopped(kind)`."""
+    def _check(self, *, model: bool = False, tool: bool = False, paid: bool = False, final: bool = False) -> None:
+        """Refuse a call the task may not make: `stopped(kind)`. The `final` call that says where a
+        stopped task stands is held to nothing but the owner's stop."""
         current = self._store.get(self.task_id)
         if self.cancelled or (current and (current.generation != self.generation or current.state in ("cancelled", "interrupted"))):
             raise stopped("cancelled")
+        if final:
+            return
         if self._clock() >= self.deadline:
             raise stopped("limit_time")
+        if (model or paid) and self._cost_cap is not None and self.ledger.total >= self._cost_cap():
+            raise stopped("limit_cost")
         if self.room_budget is not None:
             if self.ledger.total >= self.room_budget():
                 raise stopped("limit_cost")
@@ -329,14 +349,36 @@ class TaskRun:
         return max(self.deadline - self._clock(), 0.0)
 
     def remaining_s(self) -> float:
-        """The task's own time that is left now."""
+        """How long the task may still stay silent before it counts as stalled."""
         return self._remaining_s()
 
-    def reopen(self, remaining_s: float) -> None:
-        """Make the run ready to go on after a pause: the time it waited was not the task's, so it
-        has `remaining_s` from now; it has a new pool of connections (the old one was closed when it
+    def touch(self) -> None:
+        """The task did something (a model replied, a tool came back): the stall time starts again."""
+        self.deadline = self._clock() + self.limits.seconds
+
+    async def watch(self, work: Awaitable[T], *, extra: float = 0.0) -> T:
+        """Await `work` for as long as the task is not stalled: `TimeoutError` once `seconds` (and
+        `extra`, for what `work` does before the task can speak: a worker that is started first) have
+        passed with nothing heard. `work` is given up on then."""
+        task = asyncio.ensure_future(work)
+        try:
+            while True:
+                wait = self.deadline + extra - self._clock()
+                if wait <= 0:
+                    raise TimeoutError
+                done, _ = await asyncio.wait({task}, timeout=wait)
+                if done:
+                    return task.result()
+        finally:
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+    def reopen(self) -> None:
+        """Make the run ready to go on after a pause: the time it waited was not the task's, so its
+        stall time starts again; it has a new pool of connections (the old one was closed when it
         paused), and no call waits."""
-        self.deadline = self._clock() + max(remaining_s, 0.0)
+        self.touch()
         self.timed_out = False
         self.waiting = None
         self.pool = McpPool()
@@ -408,13 +450,25 @@ class TaskRun:
             else:
                 request_chars += len(json.dumps(message, ensure_ascii=False))
         async with self._turn:
+            if messages[-1].get("role") == "user" and messages[-1].get("content") == WRAP_UP:
+                return await self._wrap_up(messages, request_chars)
             # A conversation grown past what is sent is a task that has used what it was given.
             if len(messages) > MAX_MESSAGES or request_chars > MAX_CHAT_CHARS or image_chars > 14_000_000:
                 raise stopped("limit_model")
             return await self._chat(messages, request_chars)
 
-    async def _chat(self, messages: list[dict], request_chars: int) -> dict:
-        self._check(model=True, paid=True)
+    async def _wrap_up(self, messages: list[dict], request_chars: int) -> dict:
+        """The one model call after a ceiling: no tools, held to nothing but the owner's stop. A task
+        that was stalled gets a fresh stall time for it."""
+        self._check(final=True)
+        if self._wrapped_up:
+            raise stopped("limit_model")
+        self._wrapped_up = True
+        self.touch()
+        return await self._chat(messages, request_chars, wrap_up=True)
+
+    async def _chat(self, messages: list[dict], request_chars: int, *, wrap_up: bool = False) -> dict:
+        self._check(model=True, paid=True, final=wrap_up)
         self.model_calls += 1
         began = time.perf_counter()
         remaining = self._remaining_s()
@@ -432,8 +486,8 @@ class TaskRun:
                         # took over slow replies, each attempt getting a third of the time.
                         fallbacks=[],
                         messages=messages,
-                        # The snapshot's tools, whatever the worker sent.
-                        tools=self.snapshot.definitions,
+                        # The snapshot's tools, whatever the worker sent; none for the last word of a stopped task.
+                        tools=[] if wrap_up else self.snapshot.definitions,
                         timeout_s=timeout,
                         max_tokens=CHAT_MAX_TOKENS,
                         reasoning_effort="none",
@@ -473,6 +527,7 @@ class TaskRun:
             logger.warning("The task's model failed unexpectedly: %s", type(exc).__name__)
             self._step(kind="model", outcome="error", ms=_ms(began), reason="error")
             raise stopped("failed", "error") from None
+        self.touch()
         cost = turn.cost_usd
         if not turn.usage_known:  # no usage is not a free call
             cost = max(cost, estimate_cost(self.model, request_chars))
@@ -511,7 +566,10 @@ class TaskRun:
             raise invalid_params("name must be a string and arguments an object")
         call_id = params.get("call_id")
         async with self._turn:
-            return await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+            try:
+                return await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+            finally:
+                self.touch()
 
     async def _tool(self, name: str, arguments: dict, call_id: str = "") -> dict:
         ref = self.snapshot.refs.get(name)
@@ -538,7 +596,7 @@ class TaskRun:
         if ref.name == 'handoff' and reply.get('ok'):
             self.handoff_receipts.append(json.loads(reply['content']))
             reply['kind'] = 'handoff'
-        if reply.get('ok'):
+        if reply.get('ok') and reply.get('kind') not in NOTICES:
             import hashlib
             self._store.record_evidence(self.task_id,call_id or str(self.tool_calls),kind='tool_receipt',
                 uri=ref.key,digest=hashlib.sha256(reply.get('content','').encode()).hexdigest(),mime='text/plain')
@@ -640,9 +698,10 @@ class TaskRun:
             ms=0,
         )
         try:
-            result = await self._guarded(
-                self._gate.call_plugin(ref.key, arguments, task_id=self.task_id, pool=self.pool)
-            )
+            with self.scope():
+                result = await self._guarded(
+                    self._gate.call_plugin(ref.key, arguments, task_id=self.task_id, pool=self.pool)
+                )
         except (RpcError, asyncio.CancelledError):
             # The call did not come back: it may or may not have been made. A later attempt is
             # told so.
@@ -710,12 +769,13 @@ class TaskRun:
         self._in_plugin_call = True
         self._memory_untrusted = True
         try:
-            result = await self._guarded(
-                self._gate.call_plugin(
-                    ref.key, waiting.arguments, approval=approval, action=action,
-                    task_id=self.task_id, pool=self.pool,
-                )
-            )  # fmt: skip
+            with self.scope():
+                result = await self._guarded(
+                    self._gate.call_plugin(
+                        ref.key, waiting.arguments, approval=approval, action=action,
+                        task_id=self.task_id, pool=self.pool,
+                    )
+                )  # fmt: skip
         except (RpcError, asyncio.CancelledError):
             self._end_step(
                 sent, tool=ref.name, server=ref.server, tier=None if now is None else now.name,

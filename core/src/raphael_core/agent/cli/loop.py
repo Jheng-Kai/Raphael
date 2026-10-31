@@ -85,8 +85,10 @@ class CliLoop:
     def __init__(self, *, brains, sessions, member_id, model, ledger, language, plain,
                  system, user, tools, progress, thinking, event, execute, expire=None, spoken=False,
                  conversation_id=None, quota=None, attachments=(), wait_timeout_s=None, resume_session=True,
-                 rate_limit_waits=None, structured=None):
+                 rate_limit_waits=None, structured=None, alive=lambda: None):
         self.brains, self.sessions, self.member_id, self.model = brains, sessions, member_id, model
+        # Told whenever the CLI does anything (a word, a tool): whoever watches for a stalled turn hears it.
+        self.alive = alive
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
         self.resume_session = resume_session
@@ -392,6 +394,7 @@ class CliLoop:
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
                 cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:
             async for event in stream:
+                self.alive()
                 if self.catalog_changed and event.kind in ("tool_end", "text_delta", "final", "error"):
                     await self.driver.interrupt()
                     return "tools_changed"

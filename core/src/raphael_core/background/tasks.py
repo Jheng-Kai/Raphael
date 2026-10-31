@@ -41,6 +41,9 @@ from ..agent.conversations import Conversations
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
+# What a `done_when` says when the work is to leave a file, and the file names it gives.
+ARTIFACT_WORDS = re.compile(r'(?i)\b(html|xlsx|pdf|artifact|file)\b|檔案|產物')
+FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)')
 
 
 def _asker_key(turn_id: int) -> str:
@@ -49,7 +52,7 @@ def _asker_key(turn_id: int) -> str:
 
 class Refused(Exception):
     """A task cannot be taken. `kind` names the phrase that says why (`persona.Phrases`):
-    "worker_busy" (the queue is full) or "worker_disabled" (the worker crashed too often)."""
+    "worker_disabled" (the worker crashed too often). A long queue is no reason: work waits its turn."""
 
     def __init__(self, kind: str) -> None:
         super().__init__(kind)
@@ -315,13 +318,14 @@ class TaskStore:
                                (str(root),task_id,call_id,artifact.relative_to(root).as_posix()))
         return digest
 
-    def completion_reason(self, task):
-        """Validate executor receipts and required artifacts; prose alone never proves work."""
+    def completion_reason(self, task, *, verifiable=True):
+        """Validate executor receipts and required artifacts; prose alone never proves work. Work with
+        nowhere to look for a file (`verifiable` false: its member has no computer) is not asked for one."""
         evidence = self.evidence(task.id)
         if not evidence:
             return 'work_without_action'
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
-        requires_artifact = bool(re.search(r'(?i)\b(html|xlsx|pdf|artifact|file)\b|檔案|產物', task.done_when))
+        requires_artifact = verifiable and bool(ARTIFACT_WORDS.search(task.done_when))
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         for item in artifacts:
@@ -332,8 +336,8 @@ class TaskStore:
                     return 'artifact_changed'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
-        expected = re.findall(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)',task.done_when)
-        if any(not any(Path(item['uri']).name == name for item in artifacts) for name in expected):
+        expected = FILE_NAMES.findall(task.done_when) if verifiable else []
+        if any(not any(Path(item['uri']).name.lower() == name.lower() for item in artifacts) for name in expected):
             return 'missing_artifact'
         return None
 

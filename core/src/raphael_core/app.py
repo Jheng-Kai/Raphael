@@ -970,6 +970,11 @@ class App(Router):
         # column, and the overlay's notice of one names the member whose thread holds it.
         self.members.add_waiting_source(self.background.waiting_members)
         self.background.use_member_names(self.members.name_of)
+        # Work that was to leave a file is judged on the file found in the member's computer; the
+        # shared computer says who holds it by the member's name.
+        self.background.use_workspaces(
+            lambda member: self.vm.target(member).workspace if self.vm.grants.allowed(member) else None)
+        self.tool_hub.names = self.members.name_of
         # Messaging apps (Telegram): messages reach the assistant like a spoken question.
         self.messaging = MessagingService(
             MessagingStore(data_dir),

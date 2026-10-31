@@ -322,6 +322,9 @@ class RpcDriver:
             reasons, result = await self.draft_handoff_scenario()
         elif cell.driver == "team-setup":
             reasons = []
+            # Where the owner asks first a team is a draft for them to edit; in 自動 it is made at once.
+            SettingsStore(self.app._conn).set("action_mode", "ask")
+
             async def team_state():
                 roster = await self.app.call("members.list", {})
                 for member in roster["members"]:

@@ -14,7 +14,11 @@ Everything that could go wrong on the way is dealt with here or by the host, nev
   once the model has gone on (`guards`);
 - the host refuses a model call or a tool call when a limit is reached, the user stopped the task,
   or the model failed: it raises `Stop`, and the loop ends there with the kind. The loop counts the
-  limits too, so a host that forgot would not make a task endless;
+  limits too, so a host that forgot would not make a task endless. A task has no clock: `seconds`
+  is how long one model reply or one tool may take to come back, so work that keeps answering goes
+  on for hours and one that hangs is a stall (`limit_time`);
+- a task that reaches a ceiling (`limit_*`) is asked once more, with no tools, where it stands
+  (`WRAP_UP`), and that answer ends it as `Outcome.final`: a task stopped by a ceiling still reports;
 - cancelling is looked at before every step and while a host call is under way: the task stops at
   once, and the call under way is given up;
 - a call the owner must say yes to first stops the loop too (`Stop("waiting")`): the core keeps the
@@ -58,15 +62,26 @@ WAITING_FOR_WORK = "Not made: waiting for delegated work."
 
 @dataclass(frozen=True)
 class Limits:
-    """What one task may use. The core enforces these; the loop counts them too."""
+    """What one task may use. The core enforces these; the loop counts them too. `seconds` is the
+    stall time: the longest one model reply or one tool may take, not the length of the task."""
 
-    model_calls: float = 80
-    tool_calls: float = 200
+    model_calls: float = 1000
+    tool_calls: float = 2000
     seconds: float = 1800.0
 
 
 # A turn in a conversation works until the job is done or the owner stops it.
 UNLIMITED = Limits(math.inf, math.inf, math.inf)
+
+# What a task that reached a ceiling is asked, once and with no tools: where it stands.
+WRAP_UP = (
+    "This task has reached a limit and stops here; you can use no more tools. Reply once, in plain text and in the "
+    "language of the request, with three short parts: what is done (name the files, ids or links that show it), "
+    "what is not done, and the next step to take."
+)
+# The longest that one call may take, and the most of the conversation it is shown beyond the first two messages.
+WRAP_UP_S = 120.0
+WRAP_UP_TAIL = 40
 
 
 # The kind of `Stop` of a call that waits for the owner's yes: the task pauses there.
@@ -223,21 +238,22 @@ async def run_task(
     corrective = any(message.get("role") == "user" and message.get("content") == CORRECTIVE_NOTE
                      for message in messages)
     last_failed = owner_denied = False
-    deadline = clock() + limits.seconds
     model_calls = tool_calls = 0
 
     def check_before(kind: str, used: int, allowed: int) -> None:
         if cancelled.is_set():
             raise Stop("cancelled")
-        if clock() >= deadline:
-            raise Stop("limit_time")
         if used >= allowed:
             raise Stop(kind)
+
+    def stall() -> float:
+        """When the step about to begin has taken too long to come back."""
+        return clock() + limits.seconds
 
     try:
         while True:
             check_before("limit_model", model_calls, limits.model_calls)
-            turn = await _until(host.chat(messages, tools), cancelled, deadline, clock)
+            turn = await _until(host.chat(messages, tools), cancelled, stall(), clock)
             model_calls += 1
             messages.append(_assistant_message(turn))
             if not turn.calls:
@@ -260,7 +276,7 @@ async def run_task(
                     tool_calls += 1
                     try:
                         outcome = await _until(
-                            host.tool(call.id, call.name, call.arguments), cancelled, deadline, clock
+                            host.tool(call.id, call.name, call.arguments), cancelled, stall(), clock
                         )
                     except Stop as stop:
                         if stop.kind != WAITING:
@@ -309,7 +325,47 @@ async def run_task(
             elide_old(messages)
     except Stop as stop:
         status = "cancelled" if stop.kind == "cancelled" else "stopped"
-        return Outcome(status, "", stop.kind, stop.detail, model_calls, tool_calls)
+        summary = ""
+        if stop.kind.startswith("limit_"):
+            summary = await _wrap_up(host, messages, cancelled, clock)
+        return Outcome(status, summary, stop.kind, stop.detail, model_calls, tool_calls)
+
+
+def _settled(messages: Sequence[dict]) -> list[dict]:
+    """The conversation as a provider takes it after a stop: every call of the last reply has a
+    result, and a long one is cut to its first two messages and its tail."""
+    out = [dict(message) for message in messages]
+    last = next(
+        (n for n in range(len(out) - 1, -1, -1) if out[n].get("role") == "assistant" and out[n].get("tool_calls")),
+        None,
+    )
+    if last is not None:
+        answered = {m.get("tool_call_id") for m in out[last + 1 :] if m.get("role") == "tool"}
+        for item in out[last]["tool_calls"]:
+            if item["id"] not in answered:
+                text = wrap_untrusted(item["function"]["name"], "Not made: the task reached its limit.", ok=False)
+                out.append({"role": "tool", "tool_call_id": item["id"], "content": text})
+    if len(out) > WRAP_UP_TAIL + 2:
+        tail = out[-WRAP_UP_TAIL:]
+        while tail and tail[0].get("role") == "tool":
+            tail.pop(0)
+        out = out[:2] + tail
+    return out
+
+
+async def _wrap_up(
+    host: Host, messages: Sequence[dict], cancelled: asyncio.Event, clock: Callable[[], float]
+) -> str:
+    """What a task that reached a ceiling says of where it stands: one more model call with no
+    tools. "" when none could be had (the owner stopped it, the model failed): the ceiling stays the end."""
+    if cancelled.is_set():
+        return ""
+    asked = [*_settled(messages), {"role": "user", "content": WRAP_UP}]
+    try:
+        turn = await _until(host.chat(asked, []), cancelled, clock() + WRAP_UP_S, clock)
+    except Exception:  # a Stop of the host, or whatever else went wrong: not a second failure
+        return ""
+    return turn.content.strip()
 
 
 def _refusal(call: Call, offered: set[str], repeats: RepeatGuard) -> str | None:

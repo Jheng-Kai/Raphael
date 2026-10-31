@@ -180,6 +180,21 @@ async def test_interjection_preempts_old_queue_stop_and_duplicate_notifications(
     assert len(rig.background.submitted) == 2
 
 
+async def test_a_new_owner_message_cuts_the_replies_but_not_the_work_assigned_to_members(rig, exchange):
+    cancelled = []
+
+    async def cancel_room(room_id, *, work=True):
+        cancelled.append(work)
+
+    rig.background.cancel_room = cancel_room
+    room, ids = await team(rig)
+    await send(rig, room, "@Alice build the program")
+    await send(rig, room, "@Bob check the logo", "two")
+    assert cancelled == [False, False]
+    await rig.call("rooms.stop", {"room_id":room["id"]})
+    assert cancelled == [False, False, True]
+
+
 async def test_cost_and_restart_stop_without_replay(rig, exchange):
     room, ids = await team(rig)
     await send(rig, room, "@everyone report")
