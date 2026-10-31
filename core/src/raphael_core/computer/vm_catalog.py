@@ -41,6 +41,12 @@ DRIVER_TOOLS = {
     "browser_download": "Save a bound browser download in an explicit guest directory.",
 }
 
+# Each call has its own connection and the driver ends what a connection's session made, so a computer's calls share one
+# label: its browser, the tab it bound and the screenshot a gesture needs outlive the call that made them.
+DRIVER_SESSION = "raphael"
+# On a screen that is the member's own, a page's input need not stay in the background (the driver refuses to, on Linux).
+FOREGROUND = frozenset({"browser_click", "browser_pointer", "browser_dialog"})
+
 # Answers that report how things stand and are not a tool failing: a model told one decides what to do, and
 # nothing it did is evidence of work.
 NOTICES = ("computer_busy", "screen_changed")

@@ -40,5 +40,7 @@ def test_a_speaker_without_one_keeps_the_guarded_desktop():
 
 def test_a_model_is_told_to_work_where_the_owner_can_see():
     assert "browser_navigate" in _SHARED_CONTRACT and "shows them nothing" in _SHARED_CONTRACT
+    # What the driver refuses without them, and what keeps a sign-in.
+    assert "isolated_named" in _SHARED_CONTRACT and "get_browser_state" in _SHARED_CONTRACT and "http.server" in _SHARED_CONTRACT
     assert "already has their yes" in _SHARED_CONTRACT
     assert "never to fetch a page" in EXEC["description"]

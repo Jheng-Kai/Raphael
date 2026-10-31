@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 BASE = "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b"
 VERSION = "0.37.0"
-IMAGE = "raphael/cua-local-vm:driver-0.37.0-v2"
+IMAGE = "raphael/cua-local-vm:driver-0.37.0-v3"
 GUEST = "/home/cua/workspace"
 SHARED = "/home/cua/team"
 MEMORY_GB = 2

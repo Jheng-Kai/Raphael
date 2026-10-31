@@ -154,7 +154,8 @@ async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monke
     assert made[-1].killed
 
 
-async def test_driver_discovery_and_validation_remove_session(desktop, tmp_path):
+async def test_the_session_is_raphaels_and_never_the_models(desktop, tmp_path):
+    from raphael_core.computer.vm_catalog import DRIVER_SESSION
     from raphael_core.computer.vm_tools import VmTools
     from raphael_core.services.attachment_store import AttachmentStore
     vm, target, runtime = desktop
@@ -164,7 +165,7 @@ async def test_driver_discovery_and_validation_remove_session(desktop, tmp_path)
             if method == 'tools/list':
                 schema = {'type': 'object', 'properties': {'session': {'type': 'string'}}, 'required': ['session']}
                 return {'tools': [{'name': 'get_desktop_state', 'description': 'screen', 'inputSchema': schema, 'originalInputSchema': schema}]}
-            assert 'session' not in params['arguments']
+            assert params['arguments']['session'] == DRIVER_SESSION
             return await super().request(method, params)
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=SessionBridge)
     await hub.prepare()

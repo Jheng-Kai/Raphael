@@ -19,6 +19,7 @@ from raphael_core.background.snapshot import take_snapshot
 from raphael_core.brain.settings import SettingsStore, checked
 from raphael_core.computer.vm import BASE, DRIVER, IMAGE, IMAGE_LABELS, LABEL, GUEST, LocalVm, Result, VmError, compatible, exec_args, healthy, run_args
 from raphael_core.computer.vm_bridge import CuaBridge, normalize_schema
+from raphael_core.computer.vm_catalog import DRIVER_SESSION
 from raphael_core.computer.vm_tools import VmTools, vm_scope
 from raphael_core.services.attachment_store import AttachmentStore
 from raphael_core.worker.loop import Call, Turn, ToolOutcome, run_task, without_computer_images
@@ -488,6 +489,29 @@ async def test_start_failure_is_reported_on_use_and_releases_action_lock(desktop
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     assert (await hub.call(shot.key, {}, approver="auto")).kind == "docker_start_failed"
     assert not hub.actions[target.key].locked() and vm.active[target.key] == 0
+
+
+async def test_every_driver_call_of_a_computer_is_one_session_and_page_input_is_foreground(desktop, tmp_path):
+    # Each call has its own connection, and the driver ends what a connection's session made with it: live, the browser
+    # that browser_prepare opened was gone by the next call, and a drag never found the screenshot read before it.
+    vm, target, runtime = desktop
+    class Recording(CatalogBridge):
+        calls = []
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Recording)
+    await hub.prepare()
+    tool = lambda name: next(item for item in hub.offered() if item.name == name)
+    assert (await hub.call(tool("get_desktop_state").key, {}, approver="auto")).ok
+    assert (await hub.call(tool("browser_pointer").key, {"action": "drag"}, approver="auto")).ok
+    assert (await hub.call(tool("browser_click").key, {"delivery_mode": "background"}, approver="auto")).ok
+    assert (await hub.call(tool("click").key, {"x": 1, "y": 2}, approver="auto")).ok
+    sent = {params["name"]: params["arguments"] for method, params in Recording.calls if method == "tools/call"}
+    assert {name: arguments["session"] for name, arguments in sent.items()} == dict.fromkeys(
+        ("get_desktop_state", "browser_pointer", "browser_click", "click"), DRIVER_SESSION)
+    assert sent["browser_pointer"]["delivery_mode"] == "foreground"
+    assert sent["browser_click"]["delivery_mode"] == "background"  # what the model chose stays
+    assert "delivery_mode" not in sent["click"] and "delivery_mode" not in sent["get_desktop_state"]
+    # The label is Raphael's: the model cannot choose one.
+    assert not (await hub.call(tool("click").key, {"session": "other"}, approver="auto")).ok
 
 
 async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_path):

@@ -13,7 +13,7 @@ RUN set -eux; \
     done; \
     install -m 0755 /opt/raphael-desktop/raphael-browser /usr/local/bin/raphael-browser; \
     install -m 0755 /opt/raphael-desktop/prepare-desktop /usr/local/bin/prepare-raphael-desktop; \
-    install -d -o cua -g cua /home/cua/.local/share/applications /home/cua/.config/autostart; \
+    install -d -o cua -g cua /home/cua/.local /home/cua/.local/share /home/cua/.local/share/applications /home/cua/.config/autostart; \
     install -o cua -g cua /opt/raphael-desktop/browser.desktop /home/cua/.local/share/applications/raphael-browser.desktop; \
     install -o cua -g cua /opt/raphael-desktop/prepare-desktop.desktop /home/cua/.config/autostart/; \
     printf '[Default Applications]\nx-scheme-handler/http=raphael-browser.desktop\nx-scheme-handler/https=raphael-browser.desktop\ntext/html=raphael-browser.desktop\n' > /home/cua/.config/mimeapps.list; \
@@ -92,7 +92,7 @@ RUN printf '%s\n' \
       '  if [ "$attempt" -ge 45 ]; then echo "X display :1 did not become ready within 45 seconds" >&2; exit 1; fi' \
       '  sleep 1' \
       'done' \
-      'exec env CUA_DRIVER_INSTALL_CHANNEL=python_package CUA_DRIVER_RS_TELEMETRY_ENABLED=0 CUA_DRIVER_WINDOW_CHANGE_TIMEOUT_MS=200 NO_COLOR=1 /usr/local/libexec/raphael/cua-driver serve --socket /run/user/1000/raphael-cua.sock --permission-mode standard --cursor-reduced-motion on' \
+      'exec env CUA_DRIVER_INSTALL_CHANNEL=python_package CUA_DRIVER_RS_TELEMETRY_ENABLED=0 CUA_DRIVER_WINDOW_CHANGE_TIMEOUT_MS=200 CUA_DRIVER_BROWSER_NO_SANDBOX=1 CUA_DRIVER_BROWSER_PROFILE_ROOT=/home/cua/workspace/.browser-profiles/driver NO_COLOR=1 /usr/local/libexec/raphael/cua-driver serve --socket /run/user/1000/raphael-cua.sock --permission-mode standard --cursor-reduced-motion on' \
       > /usr/local/bin/start-raphael-cua-driver.sh \
     && chmod 0755 /usr/local/bin/start-raphael-cua-driver.sh
 RUN printf '%s\n' \
@@ -107,7 +107,15 @@ RUN printf '%s\n' \
       'stderr_logfile=/var/log/supervisor/cua-driver.error.log' \
       'priority=30' \
       >> /etc/supervisor/supervisord.conf
+# The driver's page tools drive a root-owned system Chromium. With every capability dropped it cannot make its own
+# sandbox, and the container is one already.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends chromium; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf 'export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type"\n' > /etc/chromium.d/raphael-container; \
+    chromium --version
 LABEL org.raphael.computer="1" \
       org.raphael.computer.driver="0.37.0" \
       org.raphael.computer.base="docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b" \
-      org.raphael.computer.layer="2"
+      org.raphael.computer.layer="3"

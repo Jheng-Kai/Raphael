@@ -21,7 +21,7 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, NOTICES, READS, without_session
+from .vm_catalog import DRIVER_SESSION, DRIVER_TOOLS, FOREGROUND, NOTICES, READS, without_session
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
@@ -352,7 +352,8 @@ class VmTools:
                         result = PluginResult(False, "bad_arguments", "The driver requires different arguments. Read the refreshed computer tool schema before retrying.")
                         return result
                     async with self.bridge(self.vm, target) as client:
-                        data = await client.request("tools/call", {"name": tool.name, "arguments": dict(arguments)})
+                        sent = {**({"delivery_mode": "foreground"} if tool.name in FOREGROUND else {}), **arguments, "session": DRIVER_SESSION}
+                        data = await client.request("tools/call", {"name": tool.name, "arguments": sent})
                     blocks, text = [], []
                     for block in data.get("content", []):
                         if block.get("type") == "text":

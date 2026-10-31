@@ -138,7 +138,7 @@ async def test_a_message_from_a_phone_cannot_operate_this_computer(operating, cl
 async def test_without_a_shell_nothing_is_operated(rig, client):
     client.decisions.append(decision("operate"))
     answer = await rig.ask("在小算盤按七")
-    assert (answer["prefix"], answer["text"]) == ("否", "目前無法操作電腦。")
+    assert (answer["prefix"], answer["text"]) == ("否", "目前無法操作電腦。請先親自完成這一步，若連其他視窗也無法使用請重新啟動拉斐爾。")
     assert client.chat_calls == []
 
 

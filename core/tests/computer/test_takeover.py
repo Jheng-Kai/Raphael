@@ -60,7 +60,7 @@ async def test_private_takeover_blocks_every_tool_and_resumes_once_after_explici
         assert (await viewer.status({"member_id": 1, "conversation_id": 11}))["works"][0]["state"] == "waiting_control"
         assert "works" not in await viewer.status({"member_id": 0, "conversation_id": 11})
         assert "works" not in await viewer.status({"member_id": 1, "conversation_id": 12})
-        for ref in snapshot.refs.values():
+        for ref in list(snapshot.refs.values()):
             if ref.server == "computer":
                 assert (await call(ref.name)).kind == "owner_holds_control"
         wrong = await viewer.open({"member_id": 0})
