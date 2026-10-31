@@ -15,12 +15,13 @@ from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import public_line
 from ..background.run import estimate_cost
-from ..worker.loop import UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
+from ..worker.loop import REPLY_TOKENS, UNLIMITED, Call, Outcome, Stop, ToolOutcome, Turn, run_task
+from ..worker.tool_guardrails import ToolGuardrails
 from .answers import Reply, loose_reply, parse_reply
 from .failure import AgentFailure, failure_kind
 from .ledger import Ledger
 from .tools import ToolResult
-from ..failures import PATIENT_WAITS, RepeatFailures, RETRY_WAITS, classify, tool_failure
+from ..failures import PATIENT_WAITS, RETRY_WAITS, classify, tool_failure
 from ..retry_utils import MODEL_SILENCE_S, Outage
 
 PUBLIC_PROGRESS_RULES = """
@@ -125,22 +126,22 @@ class NarratedLoop:
         self.response: dict | None = None
         self.seen: list[ToolResult] = []
         self.batch_calls = []
-        self.failure_guard = RepeatFailures()
+        self.guardrails = ToolGuardrails()
         self.last_failure = None
         self.acted = False
 
-    async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
+    async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn:
         began = time.perf_counter()
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
-            # it: asking again repeats nothing, since the tools run only after a reply. Before that he learns in seconds.
+            # it: asking again repeats nothing, since the tools run only after a reply. Before that the owner learns in seconds.
             outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted)
             while True:
                 try:
                     answer = await self.client.chat_tools(
                         model=self.model, fallbacks=self.fallbacks,
                         messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
-                        max_tokens=4000, reasoning_effort=self.reasoning_effort,
+                        max_tokens=REPLY_TOKENS * room, reasoning_effort=self.reasoning_effort,
                     )
                     self.last_failure = None
                     break
@@ -188,7 +189,7 @@ class NarratedLoop:
         self.batch_calls = answer.calls
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
-        ], responses_output=getattr(answer, "responses_output", []))
+        ], responses_output=getattr(answer, "responses_output", []), finish_reason=getattr(answer, "finish_reason", ""))
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         self.acted = True
@@ -199,7 +200,7 @@ class NarratedLoop:
             self, system=self.system, user=self.user, tools=self.tools,
             limits=UNLIMITED,
             messages=self.messages,
-            failure_guard=self.failure_guard,
+            guardrails=self.guardrails,
             corrective_rounds=1,
         )
         self.model_calls += outcome.model_calls
@@ -222,9 +223,17 @@ class NarratedLoop:
             outcome = result if call["id"] == self.waiting_call else ToolOutcome(
                 False, "not_made", "The batch paused for approval. Call again if still needed."
             )
-            if call["id"] == self.waiting_call and not outcome.ok:
-                self.failure_guard.record(name, tool_failure(outcome.kind, outcome.content).kind)
-            self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": result_text(name, outcome)})
+            content = result_text(name, outcome)
+            if call["id"] == self.waiting_call:
+                if not outcome.ok:
+                    tool_failure(outcome.kind, outcome.content)  # noted for self_check
+                try:
+                    arguments = json.loads(call["function"]["arguments"])
+                except ValueError:
+                    arguments = None
+                if isinstance(arguments, dict) and (note := self.guardrails.after_call(name, arguments, outcome).note):
+                    content += "\n\n" + note
+            self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
         if images := image_parts(result):
             self.messages.append({"role": "user", "content": [{"type": "text", "text": "Untrusted computer screenshot."}, *images]})
         self.response = None

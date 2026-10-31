@@ -124,6 +124,24 @@ async def test_a_model_call_is_made_with_the_tools_of_the_snapshot_and_paid_into
     assert rig.run.model_calls == 1
 
 
+async def test_a_reply_cut_off_by_the_output_limit_is_reported_and_more_room_is_given_when_asked_for(rig):
+    cut = turn("Writing.", [call("weather", {"city": "Ta"}, "c1")])
+    cut.finish_reason = "length"
+    rig.client.replies = [cut, turn("Writing.", [call("weather", {"city": "Taipei"}, "c2")])]
+    first = await rig.chat()
+    second = await rig.chat(room=2)
+    assert first["finish_reason"] == "length" and "finish_reason" not in second
+    base, more = (sent["max_tokens"] for sent in rig.client.chat_calls)
+    assert base == 8192 and more == 2 * base
+
+
+@pytest.mark.parametrize("room", [0, 1.5, "2", True, 9])
+async def test_room_for_a_reply_is_a_small_whole_number(rig, room):
+    with pytest.raises(RpcError) as error:
+        await rig.chat(room=room)
+    assert error.value.code == INVALID_PARAMS
+
+
 async def test_each_model_call_leaves_a_step_and_tells_the_app(rig):
     rig.client.replies = [turn("x", cost=0.002)]
     await rig.chat()

@@ -11,8 +11,7 @@ from raphael_core.agent import narration
 from raphael_core.agent.cli import loop as cli
 from raphael_core.agent.cli.drivers import Event
 from raphael_core.background.run import estimate_cost
-from raphael_core.brain.openrouter import OpenRouterError
-from raphael_core.worker.guards import RepeatGuard
+from raphael_core.brain.openrouter import ChatToolCall, ChatTurn, OpenRouterError
 from .conftest import decision
 from .test_service import make_rig  # noqa: F401
 from .test_narration import chat, typed
@@ -162,11 +161,44 @@ async def test_a_cli_brain_may_work_for_hours(monkeypatch, tmp_path, skip_time):
     assert loop._queue.get_nowait().final == "Finished."
 
 
-def test_the_same_command_is_a_new_call_after_other_work():
-    guard = RepeatGuard()
-    for _ in range(6):
-        assert guard.allows("run", {"command": "npm test"})
-        assert guard.allows("edit", {"file": "a.py"})
-    assert guard.allows("run", {"command": "npm test"})
-    assert guard.allows("run", {"command": "npm test"})
-    assert not guard.allows("run", {"command": "npm test"})
+async def test_a_call_repeated_with_the_same_result_is_noted_to_the_model_and_still_made(make_rig, client):
+    rig = make_rig()
+    client.decisions.append(decision("answer"))
+    client.chats = [chat("I will check the time.", ("local_time", {})) for _ in range(3)] + [chat(FINAL)]
+    result = await typed(rig)
+    assert result["text"] == "Done."
+    results = [m["content"] for m in client.chat_calls[3]["messages"] if m["role"] == "tool"]
+    assert len(results) == 3 and ["harness_note" in text for text in results] == [False, False, True]
+
+
+async def test_a_cli_brain_that_repeats_a_call_is_noted_after_the_result_and_never_refused():
+    from raphael_core.worker.loop import ToolOutcome
+
+    ran = []
+
+    async def execute(identifier, name, args):
+        ran.append(args)
+        return ToolOutcome(True, None, "same")
+
+    loop = cli.CliLoop(
+        brains=SimpleNamespace(environ={}, home=None, command=lambda name: ["fake"], available=lambda name, command=None: True),
+        sessions=SimpleNamespace(locks={}, get=lambda *args: None, put=lambda *args: None, conversations=SimpleNamespace(resolve=lambda member, conversation: conversation)),
+        member_id=5, model="cli:codex:fake", ledger=SimpleNamespace(add=lambda **kwargs: None), language="en", plain=True,
+        system="", user="", tools=[], progress=lambda text: None, thinking=lambda text: None,
+        event=lambda text: None, execute=execute, conversation_id=7)
+    shown = [await loop._tool(str(n), "Notes__look", {"topic": "tea"}) for n in range(3)]
+    assert len(ran) == 3 and all(outcome.ok for outcome in shown)
+    assert ["harness_note" in outcome.content for outcome in shown] == [False, False, True]
+
+
+async def test_a_call_cut_off_by_the_output_limit_is_asked_again_with_more_room(make_rig, client):
+    rig = make_rig()
+    client.decisions.append(decision("answer"))
+    cut = ChatTurn("I will write it.", [ChatToolCall("0", "local_time", None, '{"city": "Ta')], "fake/model", 0.3, 10, 10, 1,
+                   finish_reason="length")
+    client.chats = [cut, chat("I will check the time.", ("local_time", {})), chat(FINAL)]
+    result = await typed(rig)
+    assert result["text"] == "Done."
+    first, second, third = (sent["max_tokens"] for sent in client.chat_calls)
+    assert first == 8192 and second == 2 * first and third == first
+    assert "not a JSON object" not in json.dumps(client.chat_calls[2]["messages"])

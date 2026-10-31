@@ -9,7 +9,12 @@ Everything that could go wrong on the way is dealt with here or by the host, nev
 
 - a call to a name that was not offered, with arguments that are not a JSON object or that are far
   too long, is not made: the model is told so as the result of that call, and goes on;
-- the same call with the same arguments for the third time is not made either (`guards`);
+- a call that only repeats itself (the same arguments, the same result), or fails again and again, is
+  made all the same: the model is told so after the result and decides (`tool_guardrails`). Only a
+  task nobody is in is ended by it;
+- a reply that is cut off by the output limit is not judged as it stands: a text is continued, a call
+  is asked for again with more room; a reply that says what it will do and makes no call is asked
+  to go on, and one that only repeats itself is dropped (`stall_guards`, `repetition_guard`);
 - a result is wrapped as untrusted data and cut down, and the results of earlier steps are dropped
   once the model has gone on (`guards`);
 - the host refuses a model call or a tool call when a limit is reached, the user stopped the task,
@@ -33,25 +38,49 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from ..failures import RepeatFailures, REPEAT_NOTE, CORRECTIVE_NOTE, tool_failure, redact
+from ..failures import CORRECTIVE_NOTE, tool_failure, redact
 
 from .guards import (
     MAX_ARGUMENT_CHARS,
-    RepeatGuard,
-    FailureGuard,
-    STEER_NOTE,
     canonical,
     elide_old,
     wrap_untrusted,
 )
+from .repetition_guard import (
+    REPETITION_LOOP_INTERRUPTED,
+    STOP_PATH_MIN_CHARS,
+    is_repetition_dominated,
+    is_runaway_repetition,
+)
+from .stall_guards import (
+    CONTINUE_NOW,
+    CONTINUE_TEXT,
+    LENGTH,
+    LOOPED,
+    MAX_LOOPS,
+    MAX_NUDGES,
+    MAX_PIECES,
+    stalled,
+)
+from .tool_guardrails import ToolGuardrails
+
+# The most a reply of the model may be, in tokens. Every provider takes this much: the lowest ceilings still
+# in use (DeepSeek's chat model, Claude 3.5, Gemini 2.0 Flash) are 8192. A call that it cuts off is asked
+# for again with MORE_ROOM times as much; a provider that takes no more refuses that, and the model is
+# told to write the call in parts.
+REPLY_TOKENS = 8192
+MORE_ROOM = 2
 
 # What the model is told for a call that was not made.
 UNKNOWN_TOOL = "There is no such tool. Use only the tools you are offered."
 BAD_ARGUMENTS = "The arguments are not a JSON object. Call the tool again with a JSON object."
-TOO_LONG = "The arguments are far too long. Call the tool again with less."
-REPEATED = (
-    "This exact call has been made twice already, with the same arguments. Do not make it again: "
-    "use what you have, or try something else, or report."
+CUT_OFF = (
+    "Your reply reached the output limit while you wrote this call, so it was cut off and not made. "
+    "Call it again with less: write a large file in several parts, one call for each."
+)
+TOO_LONG = (
+    f"The arguments are far too long (over {MAX_ARGUMENT_CHARS} characters). Call the tool again with "
+    "less: write a large file in several parts, one call for each."
 )
 WAITING_FOR_WORK = "Not made: waiting for delegated work."
 
@@ -98,11 +127,13 @@ class Call:
 
 @dataclass
 class Turn:
-    """A reply of the model: its words, and the calls it asks for."""
+    """A reply of the model: its words, and the calls it asks for. `finish_reason` is "length" when the
+    output limit cut it off."""
 
     content: str
     calls: list[Call] = field(default_factory=list)
     responses_output: list[dict] = field(default_factory=list, repr=False)
+    finish_reason: str = ""
 
 
 @dataclass
@@ -121,9 +152,10 @@ class ToolOutcome:
 
 
 class Host(Protocol):
-    """The core, as the loop sees it. Both calls may raise `Stop`."""
+    """The core, as the loop sees it. Both calls may raise `Stop`. `room` is how many times the usual
+    limit on a reply the model may use; the loop passes it only to ask a cut-off call again."""
 
-    async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn: ...
+    async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn: ...
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome: ...
 
@@ -200,7 +232,7 @@ async def run_task(
     cancelled: asyncio.Event | None = None,
     clock: Callable[[], float] = time.monotonic,
     messages: Sequence[dict] | None = None,
-    failure_guard: RepeatFailures | None = None,
+    guardrails: ToolGuardrails | None = None,
     corrective_rounds: int = 0,
 ) -> Outcome:
     """Carry out a task. `system` and `user` are the first two messages of the conversation (the
@@ -208,7 +240,8 @@ async def run_task(
     on after a pause starts from the whole conversation instead (`messages`, which the core gives
     back as the loop left it, with the results of the calls that waited). The loop ends when the
     model reports, when a limit is reached, when the task is cancelled or when the host stops it;
-    it raises nothing for any of those. `limits` are what is left to the task."""
+    it raises nothing for any of those. `limits` are what is left to the task. `guardrails` watch
+    the calls; a task nobody is in gets ones that end it (`hard_stop`)."""
     cancelled = cancelled if cancelled is not None else asyncio.Event()
     tools = list(tools)
     offered = {tool["function"]["name"] for tool in tools}
@@ -218,11 +251,13 @@ async def run_task(
         else [{"role": "system", "content": system}, {"role": "user", "content": user}]
     )
     messages = conversation
-    repeats = RepeatGuard()
-    failures = FailureGuard()
-    failure_guard = failure_guard or RepeatFailures()
+    guardrails = guardrails or ToolGuardrails()
     corrective = any(message.get("role") == "user" and message.get("content") == CORRECTIVE_NOTE
                      for message in messages)
+    # Counted in the conversation, so that a pause for the owner's yes does not start the count again.
+    nudged = sum(message.get("role") == "user" and message.get("content") == CONTINUE_NOW for message in messages)
+    pieces: list[str] = []  # the parts of a text the output limit cut off, until it is whole
+    loops = 0
     last_failed = owner_denied = False
     deadline = clock() + limits.seconds
     model_calls = tool_calls = 0
@@ -235,27 +270,55 @@ async def run_task(
         if used >= allowed:
             raise Stop(kind)
 
+    async def ask(room: int = 1) -> Turn:
+        nonlocal model_calls
+        check_before("limit_model", model_calls, limits.model_calls)
+        chat = host.chat(messages, tools, room=room) if room > 1 else host.chat(messages, tools)
+        turn = await _until(chat, cancelled, deadline, clock)
+        model_calls += 1
+        return turn
+
     try:
         while True:
-            check_before("limit_model", model_calls, limits.model_calls)
-            turn = await _until(host.chat(messages, tools), cancelled, deadline, clock)
-            model_calls += 1
+            turn = await ask()
+            if turn.finish_reason == LENGTH and turn.calls:
+                # Cut off in the middle of a call: it gets more room before anyone judges its arguments.
+                try:
+                    turn = await ask(MORE_ROOM)
+                except Stop as stop:
+                    if stop.kind != "failed":  # a provider that takes no more leaves the call cut off
+                        raise
+            if _looped(turn):
+                loops += 1
+                if loops > MAX_LOOPS:
+                    raise Stop("failed", "repetition")
+                # Not kept: the loop would start again on the next request.
+                messages.append({"role": "assistant", "content": REPETITION_LOOP_INTERRUPTED})
+                messages.append({"role": "user", "content": LOOPED})
+                continue
             messages.append(_assistant_message(turn))
             if not turn.calls:
+                if turn.finish_reason == LENGTH and turn.content.strip() and len(pieces) < MAX_PIECES:
+                    pieces.append(turn.content)
+                    messages.append({"role": "user", "content": CONTINUE_TEXT})
+                    continue
+                said = "".join([*pieces, turn.content])
+                if tools and nudged < MAX_NUDGES and stalled(said):
+                    nudged += 1
+                    messages.append({"role": "user", "content": CONTINUE_NOW})
+                    continue
                 if last_failed and not owner_denied and not corrective and corrective_rounds:
                     corrective = True
                     messages.append({"role": "user", "content": CORRECTIVE_NOTE})
                     continue
-                return Outcome("done", turn.content, None, None, model_calls, tool_calls)
+                return Outcome("done", said, None, None, model_calls, tool_calls)
             last_failed = False
-            steer = False
             dispatched = False
             images = []
             for call in turn.calls:
                 # Every hand-off of a batch starts now; anything else in it waits for the delegated work.
-                refusal = WAITING_FOR_WORK if dispatched and call.name != "handoff" else _refusal(call, offered, repeats)
-                if refusal is None and failure_guard.blocked(call.name):
-                    refusal = REPEAT_NOTE
+                refusal = (WAITING_FOR_WORK if dispatched and call.name != "handoff"
+                           else _refusal(call, offered, cut=turn.finish_reason == LENGTH))
                 if refusal is None:
                     check_before("limit_tool", tool_calls, limits.tool_calls)
                     tool_calls += 1
@@ -273,21 +336,17 @@ async def run_task(
                         )  # fmt: skip
                     content = result_text(call.name, outcome)
                     images.extend(image_parts(outcome))
-                    if outcome.ok:
-                        failures.succeeded()
-                        failure_guard.succeeded()
-                    else:
+                    if not outcome.ok:
                         last_failed = True
                         owner_denied = owner_denied or outcome.kind in (
                             "denied", "declined", "cancelled", "owner_denied", "forbidden",
                             "presence_required", "private_chat_only", "member_create_limit")
-                        failure = tool_failure(outcome.kind, outcome.content)
-                        if failure_guard.record(call.name, failure.kind):
-                            content += "\n" + REPEAT_NOTE
-                        verdict = failures.failed()
-                        if verdict == "stop":
-                            raise Stop("failed", "tool_failures")
-                        steer = steer or verdict == "steer"
+                        tool_failure(outcome.kind, outcome.content)  # noted for self_check
+                    verdict = guardrails.after_call(call.name, call.arguments, outcome)
+                    if verdict.halt:
+                        raise Stop("failed", "tool_loop")
+                    if verdict.note:  # after the result, outside the wrapper that marks it as data
+                        content += "\n\n" + verdict.note
                     if outcome.replace_tools:
                         tools[:] = outcome.tools
                         offered = {tool["function"]["name"] for tool in tools}
@@ -307,25 +366,29 @@ async def run_task(
             if dispatched:
                 # The receipts have returned. Persist this continuation and release the worker.
                 return Outcome('stopped',kind='handoff',model_calls=model_calls,tool_calls=tool_calls,messages=list(messages))
-            if steer:
-                # told after the results of this round, so that it reads them first
-                messages.append({"role": "user", "content": STEER_NOTE})
             elide_old(messages)
     except Stop as stop:
         status = "cancelled" if stop.kind == "cancelled" else "stopped"
         return Outcome(status, "", stop.kind, stop.detail, model_calls, tool_calls)
 
 
-def _refusal(call: Call, offered: set[str], repeats: RepeatGuard) -> str | None:
-    """Why a call is not made, in the words the model is told, or None when it may be."""
+def _looped(turn: Turn) -> bool:
+    """Whether a reply is only the same few words again and again. One that ended of itself is judged
+    only at runaway size, so that a repetition the owner asked for is delivered."""
+    if turn.finish_reason == LENGTH:
+        return is_repetition_dominated(turn.content)
+    return len(turn.content) >= STOP_PATH_MIN_CHARS and is_runaway_repetition(turn.content)
+
+
+def _refusal(call: Call, offered: set[str], *, cut: bool) -> str | None:
+    """Why a call is not made, in the words the model is told, or None when it may be. `cut` is
+    whether the reply it came in ended at the output limit."""
     if call.name not in offered:
         return UNKNOWN_TOOL
     if not isinstance(call.arguments, dict):
-        return BAD_ARGUMENTS
+        return CUT_OFF if cut else BAD_ARGUMENTS
     if len(canonical(call.arguments)) > MAX_ARGUMENT_CHARS:
         return TOO_LONG
-    if not repeats.allows(call.name, call.arguments):
-        return REPEATED
     return None
 
 

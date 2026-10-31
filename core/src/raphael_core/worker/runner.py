@@ -12,8 +12,11 @@ a core that is gone leaves it nothing to do. The core calls:
 - `task.cancel {task_id}` (a notification): stop the task at once.
 
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
-reply of the model and `host.tool {task_id, call_id, name, arguments}` for the result of a tool. A
-refusal of either comes as an error whose data says `stop`, and the loop ends with it.
+reply of the model (with `room`, how many times the usual limit on a reply, when it asks again for a
+call that the limit cut off; the reply says `finish_reason: "length"` when it was cut off) and
+`host.tool {task_id, call_id, name, arguments}` for the result of a tool. A refusal of either comes as
+an error whose data says `stop`, and the loop ends with it. A task here has nobody in it to read a
+note about a call that repeats itself, so the loop ends it (`tool_guardrails`).
 
 stdout is claimed for the protocol before anything else is done (`stdio_server.claim_stdout`). This
 module imports the loop and the channel and nothing of the core's other side: no keys, no database,
@@ -34,6 +37,8 @@ from raphael_core.stdio_server import _decoded_lines, claim_stdout
 
 from .channel import Peer
 from .loop import Call, Limits, Outcome, Stop, ToolOutcome, Turn, run_task
+from .stall_guards import LENGTH
+from .tool_guardrails import ToolGuardrails
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +60,10 @@ class CoreHost:
                 raise Stop(data["stop"], detail if isinstance(detail, str) else None) from None
             raise
 
-    async def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> Turn:
-        reply = await self._ask("host.chat", {"messages": list(messages), "tools": list(tools)})
+    async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn:
+        reply = await self._ask(
+            "host.chat", {"messages": list(messages), "tools": list(tools), **({"room": room} if room > 1 else {})}
+        )
         calls = [
             Call(
                 id=str(call.get("id", "")),
@@ -69,7 +76,8 @@ class CoreHost:
         ]
         content = reply.get("content")
         return Turn(content if isinstance(content, str) else "", calls,
-                    responses_output=reply.get("responses_output", []))
+                    responses_output=reply.get("responses_output", []),
+                    finish_reason=LENGTH if reply.get("finish_reason") == LENGTH else "")
 
     async def tool(self, call_id: str, name: str, arguments: dict) -> ToolOutcome:
         reply = await self._ask(
@@ -166,6 +174,7 @@ class Worker:
                 messages=messages,
                 limits=_limits(params.get("limits")),
                 cancelled=self._cancelled,
+                guardrails=ToolGuardrails(hard_stop=True),  # nobody is in a background task to read a note
             )
         finally:
             self._task_id = None

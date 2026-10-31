@@ -175,7 +175,7 @@ class Outage:
     """The waits of one run of failed model calls. Asking again repeats nothing, since tools run only after a reply, so
     after something was done the run rides the failure out at the `patient` pace until the owner stops it; before that it
     gives up after the `quick` waits so that the owner learns in seconds. The owner is told once, when the outage is
-    long enough to notice: a wait he would feel, or the run settling in to wait."""
+    long enough to notice: a wait the owner would feel, or the run settling in to wait."""
 
     def __init__(self, quick, patient, *, patient_ok: bool) -> None:
         patient = tuple(patient)

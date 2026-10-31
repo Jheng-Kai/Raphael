@@ -118,6 +118,26 @@ async def test_responses_continuation_survives_the_worker_ipc_boundary(core):
     assert "opaque-reasoning" not in result["final"]
 
 
+async def test_a_background_task_that_repeats_the_same_call_for_ever_still_ends(core):
+    """Nobody is in a background task to read a note, so the worker is the one that ends it."""
+    core.chats = [calling() for _ in range(10)]
+    core.tools = [{"ok": True, "kind": None, "content": "green", "truncated": False} for _ in range(10)]
+    result = await core.a.request("task.run", spec())
+    assert (result["status"], result["kind"], result["detail"]) == ("stopped", "failed", "tool_loop")
+    assert result["tool_calls"] == 5 and len(core.tool_requests) == 5
+
+
+async def test_a_reply_the_core_says_was_cut_off_is_asked_for_again_with_more_room(core):
+    cut = {"content": "", "calls": [{"id": "c1", "name": "Notes__look", "arguments": None, "raw": '{"top'}],
+           "finish_reason": "length"}
+    core.chats = [cut, calling(), final()]
+    core.tools = [{"ok": True, "content": "green"}]
+    result = await core.a.request("task.run", spec())
+    assert result["status"] == "done" and len(core.tool_requests) == 1
+    assert ["room" in request for request in core.chat_requests] == [False, True, False]
+    assert core.chat_requests[1]["room"] == 2
+
+
 async def test_a_refusal_of_the_core_ends_the_task_with_what_it_said(core):
     core.chats = [RpcError(WORKER_STOPPED, "no", {"stop": "limit_cost"})]
     result = await core.a.request("task.run", spec())

@@ -150,6 +150,9 @@ class ChatTurn:
     usage_known: bool = True
     # Ephemeral Responses continuation items; never published as public narration/history.
     responses_output: list[dict] = field(default_factory=list, repr=False)
+    # Why the reply ended as the provider says it ("stop", "tool_calls", "length" when the output limit
+    # cut it off), or "" when it does not say.
+    finish_reason: str = ""
 
 
 @dataclass
@@ -596,6 +599,7 @@ def _to_chat_turn(reply: _Reply, requested_model: str) -> ChatTurn:
         completion_tokens=_usage_count(usage, "completion_tokens"),
         latency_ms=reply.latency_ms,
         usage_known=_known_cost(usage),
+        finish_reason=choice["finish_reason"] if isinstance(choice.get("finish_reason"), str) else "",
     )
 
 

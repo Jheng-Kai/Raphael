@@ -538,6 +538,26 @@ async def test_unfinished_or_malformed_stream_is_never_success(rig, response):
         await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
 
 
+def cut_sse(output=(), reason="max_output_tokens"):
+    response = {"status": "incomplete", "incomplete_details": {"reason": reason}, "model": "chosen-model",
+                "output": [], "usage": {"input_tokens": 10, "output_tokens": 3}}
+    packets = [*({"type": "response.output_item.done", "item": item} for item in output),
+               {"type": "response.incomplete", "response": response}]
+    return httpx.Response(200, headers={"content-type": "text/event-stream"},
+        text="".join("data: " + json.dumps(packet) + "\n\n" for packet in packets))
+
+
+async def test_a_response_cut_off_by_the_output_limit_is_a_turn_that_says_so_and_any_other_cut_is_an_error(rig):
+    await rig.sign_in()
+    item = {"type": "function_call", "call_id": "c1", "name": "look", "namespace": "raphael", "arguments": '{"topic": "te'}
+    rig.responses = [cut_sse([message("Writing it."), item]), cut_sse(reason="content_filter")]
+    turn = await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+    assert turn.finish_reason == "length" and turn.content == "Writing it."
+    assert turn.calls[0].arguments is None and turn.calls[0].raw_arguments == '{"topic": "te'
+    with pytest.raises(OpenRouterError):
+        await rig.registry.chatgpt.chat_tools(model="chosen-model", messages=[], tools=[], timeout_s=2, max_tokens=50)
+
+
 async def test_sign_out_revokes_and_keeps_client_host_mapping(rig):
     await rig.sign_in()
     state = rig.auth._state()
