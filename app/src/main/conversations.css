@@ -1,7 +1,6 @@
 .conversation-list { min-width: 0; }
 .mb-det .conversation-list { border: 0; border-radius: 0; overflow: hidden; }
 .mb-det .conversation-open { border: 0; background: transparent; }
-.mb-det .conversation-row .conversation-open { padding-inline: 0; }
 .mb-det .conversation-open:hover, .mb-det .conversation-new:hover { background: var(--hover); }
 .conversation-tools { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) 0; }
 .conversation-tools input, .conversation-name { min-width: 0; min-height: var(--h-ctl); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--panel); color: var(--text); outline: none; }
@@ -9,7 +8,7 @@
 .conversation-name { width: 100%; }
 :root[data-keys] .conversation-tools input:focus, :root[data-keys] .conversation-name:focus { border-color: var(--focus); box-shadow: 0 0 0 2px var(--accent-ring); }
 .conversation-rows { max-height: 340px; overflow-y: auto; padding: var(--sp-1) 0; }
-.conversation-section > .mb-dh { padding: 0; }
+.conversation-section > .mb-dh { padding: 0 var(--sp-2); }
 .conversation-section + .conversation-section { margin-top: var(--sp-3); }
 .conversation-row { display: flex; align-items: center; border-radius: var(--r-sm); }
 .conversation-row:hover { background: var(--hover); }
@@ -39,7 +38,7 @@
 .work-section { margin: var(--sp-1) 0 var(--sp-2); }
 /* Work is a muted one-line state above the answer, not a framed control. */
 .page-agent .btn.work-toggle { display: inline-flex; justify-self: start; align-items: center; gap: var(--sp-1); min-height: 0; max-width: 100%; padding: 2px 0; border-color: transparent; border-radius: var(--r-sm); background: transparent; font-size: var(--fs-xs); color: var(--text-3); }
-.page-agent button.btn.work-toggle:hover:not(:disabled) { border-color: transparent; background: transparent; color: var(--text-2); }
+.page-agent .btn.work-toggle:hover:not(:disabled) { border-color: transparent; background: transparent; color: var(--text-2); }
 .page-agent div.work-toggle { cursor: default; }
 .work-chevron { display: inline-flex; flex-shrink: 0; }
 .work-toggle[aria-expanded="true"] .work-chevron .i { transform: rotate(90deg); }

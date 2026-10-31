@@ -2,7 +2,7 @@
 // role, instructions and group, with 「取消」 and 「建立」), the routine the core offers with a
 // new member of a group with places to look (taken only with 「加入」), the question before a member
 // or a group is deleted, a group's name, a group's 看的地方, and the popover that changes a picture
-// (the presets, if the owner has any, and 「從電腦選…」).
+// (the slimes and, for the owner and Raphael, 「從電腦選…」).
 //
 // Each dialog sits over the window on a dimmed scrim, grows in as the settings' dialogs do (styles.css,
 // nothing under reduced motion), closes on Escape, on its × and on a click beside it, and gives the
@@ -10,8 +10,7 @@
 
 import { pickSlime, slimePickerHTML } from "./slime";
 import { onLocaleChange, t } from "./i18n";
-import { openMemberProfile } from "./member-profile";
-export { openEditMemberDialog, openMemberProfile } from "./member-profile";
+export { openEditMemberDialog } from "./member-profile";
 export type { MemberProfileHost, ProfileTab } from "./member-profile";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import {
@@ -21,7 +20,7 @@ import {
   scheduleText,
   sourceLabel,
 } from "./members";
-import type { AvatarPreset, Member, MemberGroup, MemberSource, NewMember, RoutineOffer, WireAttachment } from "./types";
+import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
 import { type ActionRowOptions, actionRow, btn, closeMenu, esc, ico, iconButton, openPopover, toaster } from "./ui";
 
 // ---------- the dialog ----------
@@ -45,6 +44,8 @@ export interface DialogOptions {
   onEnter?(dialog: Dialog): void;
   /** Whether the dialog may be closed by Escape, the backdrop or × right now. */
   canClose?(): boolean;
+  /** It is about to leave the document: the last moment something running in it can be carried out alive. */
+  onClosing?(): void;
   /** The dialog closed, however it was. */
   onClose?(): void;
   /** A class of the dialog's own, for its layout. */
@@ -80,6 +81,7 @@ export function openDialog(o: DialogOptions): Dialog {
         document.activeElement instanceof HTMLElement &&
         document.activeElement !== document.body &&
         !scrim.contains(document.activeElement);
+      o.onClosing?.();
       scrim.remove();
       document.removeEventListener("keydown", onKey, true);
       if (!keepFocus) opener?.focus({ preventScroll: true });
@@ -337,11 +339,10 @@ export function pickPicture(then: (file: File) => void): void {
 }
 
 export interface AvatarPickerOptions {
-  presets: readonly AvatarPreset[];
-  /** A preset was chosen: its avatar value, `preset:<stem>`. */
-  onPreset?(avatar: string): void;
-  /** 「從電腦選…」: what it does (the file dialog, or Raphael's own picker of the app). */
-  onComputer(): void;
+  /** A slime was chosen: its avatar value. */
+  onSlime?(avatar: string): void;
+  /** 「從電腦選…」, for a picture that is the owner's own or Raphael's; a member is a slime. */
+  onComputer?(): void;
   /** More actions under 從電腦選 (Raphael's 還原). */
   more?: readonly { label: string; run(): void }[];
   /** Whether the slimes are offered: a member's picture, not the owner's. */
@@ -350,24 +351,12 @@ export interface AvatarPickerOptions {
   current?: string | null;
 }
 
-/** The small popover of a picture: the slimes, the preset grid if there are presets, and 「從電腦選…」. */
+/** The small popover of a picture: the slimes and, for the owner and Raphael, 「從電腦選…」. */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
-  const slimes = o.slimes ? slimePickerHTML(o.current, esc) : "";
-  const grid = o.presets.length || o.slimes
-    ? slimes + (o.presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-      o.presets
-        .map(
-          (preset, i) =>
-            `<button type="button" role="menuitem" tabindex="-1" class="mb-preset" data-preset="${esc(preset.avatar)}" aria-label="${esc(t("members.preset", { p0: i + 1 }))}">` +
-            `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
-        )
-        .join("") +
-      `</div>` : "") + `<div class="menu-sep" role="separator"></div>`
-    : "";
-  const actions = [{ label: t("members.fromPc"), run: o.onComputer }, ...(o.more ?? [])];
+  const actions = [...(o.onComputer ? [{ label: t("members.fromPc"), run: o.onComputer }] : []), ...(o.more ?? [])];
   const el = openPopover(
     anchor,
-    grid +
+    (o.slimes ? slimePickerHTML(o.current, esc) : "") +
       actions
         .map((action, i) => `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-pick="${i}"><span class="mt">${esc(action.label)}</span></button>`)
         .join(""),
@@ -378,32 +367,14 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
     if (!target) return;
     // Trying slimes is the point of this menu, so a press on one leaves it where it is.
     const slime = pickSlime(target);
-    if (slime) { o.onPreset?.(slime); return; }
+    if (slime) { o.onSlime?.(slime); return; }
     closeMenu();
-    if (target.dataset.preset !== undefined) o.onPreset?.(target.dataset.preset);
-    else actions[Number(target.dataset.pick)]?.run();
+    actions[Number(target.dataset.pick)]?.run();
   });
   el.querySelector<HTMLElement>("button")?.focus();
 }
 
-// ---------- 新增成員 ----------
-
-/** What 建立 hands over: the member, and a picture of this PC to set once it exists. */
-export interface NewMemberResult {
-  member: NewMember;
-  picture: WireAttachment | null;
-}
-
-export interface NewMemberOptions {
-  groups: readonly MemberGroup[];
-  /** The group it starts in (the one the menu was opened from), null for 未分組. */
-  groupId: number | null;
-  presets: readonly AvatarPreset[];
-  /** The names already taken (the names are unique). */
-  taken: readonly string[];
-  /** Makes the member; true when it was made and the dialog may close. */
-  create(result: NewMemberResult): Promise<boolean | Member>;
-}
+// ---------- the groups' dropdowns ----------
 
 /** The value of a group in the dropdowns: its id, or `none` for 未分組. */
 export const groupValue = (id: number | null): string => (id === null ? "none" : String(id));
@@ -414,8 +385,3 @@ export const groupChoices = (groups: readonly MemberGroup[]): { value: string; l
   { value: "none", label: t("members.ungrouped") },
   ...groups.map((group) => ({ value: String(group.id), label: group.name })),
 ];
-
-/** 新增成員, the mockup's `new-member`. */
-export function openNewMember(o: NewMemberOptions): Dialog {
-  return openMemberProfile(o);
-}

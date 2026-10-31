@@ -902,6 +902,8 @@ export interface AppsInventory { state: "complete" | "partial" | "unknown"; coun
 /** What `members.create` takes (`ui_language` names the language of the routine it may offer). */
 export interface NewMember {
   name: string;
+  /** It speaks first in its own conversation, asking what it is for. */
+  greet?: boolean;
   role?: string;
   instructions?: string;
   personality?: string;
@@ -924,14 +926,6 @@ export interface NewMember {
  * (a picture of the PC goes by `members.set_avatar`).
  */
 export type MemberPatch = Partial<Pick<Member, "name" | "role" | "personality" | "instructions" | "group_id" | "model" | "tools" | "avatar" | "position" | "blurb" | "reply_style" | "voice" | "read_aloud" | "notify" | "ask_before_members" | "draft_first" | "pinned" | "hidden">>;
-
-/** An image of the presets folder (`members.presets`): its avatar value, its file stem, and the picture as a data URL. */
-export interface AvatarPreset {
-  /** What `members.update`/`members.create` take as the avatar: `preset:<stem>`. */
-  avatar: string;
-  name: string;
-  url: string;
-}
 
 /** The routine the core offers with a new member of a group with places to look (`members.create`, `routines.template`). */
 export interface RoutineOffer {

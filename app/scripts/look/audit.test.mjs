@@ -157,6 +157,16 @@ describe("rendered look checks", () => {
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
   });
+  it("rejects words that hug the edge of a hover fill (R-UI-53)", () => {
+    const { window, audit } = productAudit('<div class="row" style="color:rgb(10,10,10);background-color:rgb(255,255,255)">Quick questions</div><style>.row:hover{background-color:rgb(230,230,230)}</style>');
+    const row = window.document.querySelector('.row');
+    row.getBoundingClientRect = () => ({ left: 20, top: 10, right: 220, bottom: 50, width: 200, height: 40 });
+    const inset = px => { window.Range.prototype.getClientRects = () => [{ left: 20 + px, right: 120 + px }]; };
+    inset(2);
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-53').map(item => item.class)).toEqual(['row']);
+    inset(8);
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-53')).toEqual([]);
+  });
   it("rejects a second dots style in the conversation", () => {
     const { window, audit } = productAudit('<section class="page-agent"><p class="ans thinking"><span class="think"></span></p></section>');
     expect(audit().productRules).toContainEqual(expect.objectContaining({ rule: 'R-UI-38', reason: 'Conversation waiting must use the shared work line' }));

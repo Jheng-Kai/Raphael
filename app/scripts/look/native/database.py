@@ -137,6 +137,18 @@ elif operation == "init":
             session_id="native-rich-content", question="Review the research summary.", route="answer",
             prefix="", text=fixture["richContent"]["reply"], status="done", source="app",
         )
+    if len(sys.argv) > 3 and sys.argv[3] == "pages":
+        from raphael_core.agent.history import AgentHistory
+        from raphael_core.agent.pages import PageStore
+
+        fixture = json.loads((Path(__file__).resolve().parent.parent / "fixture.json").read_text(encoding="utf-8"))
+        turn_id = AgentHistory(connection).add(
+            session_id="native-pages", question="Show me the shoe.", route="answer",
+            prefix="", text="Here it is.", status="done", source="app",
+        )
+        turn = connection.execute("SELECT member_id, conversation_id FROM agent_turns WHERE id=?", (turn_id,)).fetchone()
+        PageStore(connection).write(turn_id=turn_id, member_id=turn[0], conversation_id=turn[1],
+                                    title="Trail shoe", html=fixture["nativePage"], fallback_text="A trail shoe.")
     connection.close()
     print("{}")
 else:

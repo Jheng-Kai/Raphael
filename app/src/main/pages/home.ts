@@ -11,6 +11,7 @@ import { dayName } from "../members";
 import { onOwnerProfile, ownerFaceHTML } from "../owner-avatar";
 import { openMemberThread } from "../team-navigation";
 import type { AppContext, CalendarDate, CalendarEventFocus, Page } from "../types";
+import { faceHTML as memberFaceHTML } from "../members";
 import { btn, esc, ico, iconButton } from "../ui";
 import "../home.css";
 
@@ -18,11 +19,7 @@ const money = (value: number): string => value.toFixed(2);
 const clock = (at: number): string => new Date(at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 const unitHTML = (parts: [string, string][]): string => parts.map(([n, u]) => `${esc(n)}<small>${esc(u)}</small>`).join("");
 
-function faceHTML(item: HomeItem, size: number): string {
-  if (item.member_id === 0) return avatarHTML({ size });
-  return item.avatar_url?.startsWith("data:image/") ? `<img class="ho-face" style="--face:${size}px" src="${esc(item.avatar_url)}" alt="">`
-    : `<span class="ho-face ho-face-none" style="--face:${size}px">${ico("person")}</span>`;
-}
+const faceHTML = (item: HomeItem, size: number): string => memberFaceHTML({ id: item.member_id, name: item.name, avatar: item.avatar }, size);
 
 function card(key: string, title: string, go: string, body: string, count?: number): string {
   return `<section class="ho-card ho-${key}">${blockTarget(title, go)}<header><h2>${esc(title)}${count ? `<span class="ho-count">${count}</span>` : ""}</h2>` +

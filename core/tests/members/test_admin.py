@@ -154,20 +154,15 @@ async def test_peer_cannot_discover_or_execute_admin_tools_or_select_peer_routin
         await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Stolen", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
 
 
-async def test_admin_turn_assigns_distinct_presets_and_enforces_ten_creates(setup, client, tmp_path):
+async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup, client):
     rig, team = setup
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     client.chats = [chat("Creating the team.", *(("member_create" if i % 2 else "create_member", {"name": f"Member {i}", "role": "RD"}) for i in range(11))), live_said("Created ten members.")]
     asked = await typed(rig, "Create eleven members", 0, language="en")
     assert len(asked["confirm"]["drafts"]) == 10
     await rig.confirm(asked["confirm"]["id"])
     roster = (await rig.call("members.list", {}))["members"][1:]
     assert len(roster) == 10
-    assert {roster[0]["avatar"], roster[1]["avatar"]} == {"preset:alpha", "preset:beta"}
-    assert all(item["avatar"] == "" for item in roster[2:])
+    assert all(item["avatar"] == "" for item in roster)
     assert "member_create_limit" in client.chat_calls[-1]["messages"][-1]["content"]
 
 
@@ -377,10 +372,6 @@ async def test_roster_readers_never_observe_a_partially_applied_batch(setup, cli
 async def test_batch_confirmation_exposes_structured_member_and_group_drafts(setup, client, tmp_path):
     rig, team = setup
     rig.settings.set("action_mode", "ask")
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta", "gamma"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     client.chats = [
         chat(
             "Planning the team.",
@@ -401,17 +392,13 @@ async def test_batch_confirmation_exposes_structured_member_and_group_drafts(set
     assert [d["blurb"] for d in drafts] == ["營運管理", "產品規劃", "系統開發"]
     assert drafts[0]["personality"] == "果斷" and drafts[0]["instructions"] == "追蹤OKR"
     assert [d["group"] for d in drafts] == ["核心團隊", "核心團隊", "工程部"]
-    assert [d["avatar_preset"] for d in drafts] == ["preset:alpha", "preset:beta", "preset:gamma"]
+    assert [d["avatar_preset"] for d in drafts] == ["", "", ""]
     assert [g["name"] for g in groups] == ["核心團隊", "工程部"]
 
 
 async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_members(setup, client, tmp_path):
     rig, team = setup
     rig.settings.set("action_mode", "ask")
-    folder = tmp_path / "avatars/presets"
-    folder.mkdir(parents=True)
-    for name in ("alpha", "beta", "gamma"):
-        (folder / f"{name}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     client.chats = [
         chat(
             "Planning the team.",
@@ -433,12 +420,12 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
             "personality": "務實清晰",
             "instructions": "每週整理營運週報",
             "group": "核心團隊",
-            "avatar_preset": "preset:gamma",
+            "avatar_preset": "slime:shion",
         },
         {
             **asked["confirm"]["drafts"][2],
             "group": "核心團隊",
-            "avatar_preset": "preset:alpha",
+            "avatar_preset": "slime:color:coral",
         },
     ]
     done = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": edited})
@@ -447,8 +434,8 @@ async def test_owner_edits_and_removals_in_drafts_apply_to_created_and_updated_m
     roster = await rig.call("members.list", {})
     created = roster["members"][1:]
     assert [(m["name"], m["role"], m["blurb"], m["personality"], m["instructions"], m["avatar"]) for m in created] == [
-        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "preset:gamma"),
-        ("RD", "研發", "研發簡介", "", "", "preset:alpha"),
+        ("營運長", "跨部門營運", "負責日常營運與跨部門協調", "務實清晰", "每週整理營運週報", "slime:shion"),
+        ("RD", "研發", "研發簡介", "", "", "slime:color:coral"),
     ]
     assert [g["name"] for g in roster["groups"]] == ["核心團隊"]
     assert all(m["group_id"] == roster["groups"][0]["id"] for m in created)

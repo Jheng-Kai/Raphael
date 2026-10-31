@@ -8,7 +8,6 @@ import { ownerFaceHTML, setOwnerProfile } from "./owner-avatar";
 import { openAvatarPicker, pickPicture, readPicture } from "./member-dialogs";
 import { cropDialog } from "./avatar-settings";
 import { croppedMemberPicture } from "./member-profile-resources";
-import { isPictureUrl } from "./members";
 import "./owner-settings.css";
 
 export function applyAppearance(appearance: "system" | "light" | "dark", systemDark: boolean): void {
@@ -29,24 +28,15 @@ export function createOwnerControls(saved: (settings: BrainSettings) => void) {
     click(target: Element): boolean {
       const photo = target.closest<HTMLElement>("[data-owner-photo]");
       if (photo) {
-        void api.membersPresets().then(({ presets }) => openAvatarPicker(photo, {
-          presets,
+        openAvatarPicker(photo, {
           more: [{ label: t("settings.avatarReset"), run: () => set("owner_photo", "") }],
-          onPreset(next) {
-            const url = presets.find(p => p.avatar === next)?.url;
-            if (!isPictureUrl(url)) return;
-            const file = { name: "avatar.png", mime: url.slice(5, url.indexOf(";")), data: url.slice(url.indexOf(",") + 1) };
-            void croppedMemberPicture(file, { x: 0.5, y: 0.5, zoom: 1 }, 192, "image/webp").then(cropped => {
-              set("owner_photo", `data:${cropped.mime};base64,${cropped.data}`);
-            }).catch(error => toaster.info(describeError(error)));
-          },
           onComputer: () => pickPicture(file => { void (async () => {
             const read = await readPicture(file); if (!read) return;
             const crop = await cropDialog(`data:${read.mime};base64,${read.data}`); if (!crop) return;
             const cropped = await croppedMemberPicture(read, crop, 192, "image/webp");
             set("owner_photo", `data:${cropped.mime};base64,${cropped.data}`);
           })().catch(error => toaster.info(describeError(error))); }),
-        })).catch(error => toaster.info(describeError(error)));
+        });
         return true;
       }
       return false;

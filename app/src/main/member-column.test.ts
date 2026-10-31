@@ -168,7 +168,7 @@ describe("the column, used", () => {
     host = {
       view: () => ({ list: LIST, current: 0, previews, fresh: new Set() }),
       select: vi.fn(), newMember: vi.fn(), newGroup: vi.fn(), moveMember: vi.fn(), deleteMember: vi.fn(),
-      renameGroup: vi.fn(), editSources: vi.fn(), deleteGroup: vi.fn(), newConversation: vi.fn(), memberAction: vi.fn(),
+      renameGroup: vi.fn(), editSources: vi.fn(), deleteGroup: vi.fn(), memberAction: vi.fn(),
     } as never;
   });
   afterEach(() => stopContextMenus());
@@ -223,9 +223,9 @@ describe("the column, used", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-col="add"]')!.click();
     const items = [...document.querySelectorAll<HTMLElement>("#app-popover [data-pick]")];
-    expect(items.map(b => b.dataset.pick)).toEqual(["conversation", "member", "group", "group-chat"]);
+    expect(items.map(b => b.dataset.pick)).toEqual(["member", "group", "group-chat"]);
     items[0].click();
-    expect(host.newConversation).toHaveBeenCalled();
+    expect(host.newMember).toHaveBeenCalled();
   });
 
   test("the plus menu retains group creation and opens the shared group chat creator", () => {

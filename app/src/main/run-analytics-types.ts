@@ -2,7 +2,7 @@ export type RunPeriod = "week" | "month" | "last_month" | "all";
 export interface RunRequest { range: RunPeriod; tz?: string }
 export interface RunSummary { duration_ms: number; cost_usd: number; tokens: number; ai_steps: number; tools: number; errors: number }
 export type RunGrouping = "member" | "model" | "day" | "provider" | "routine";
-export interface RunGroup { label: string; tokens: number; cost_usd: number; runs: number; member_id?: number; avatar_url?: string | null }
+export interface RunGroup { label: string; tokens: number; cost_usd: number; runs: number; member_id?: number; avatar?: string | null; avatar_url?: string | null }
 export interface UsageBill { cost_usd: number; purposes: { purpose: string; cost_usd: number; share: number }[] }
 export interface RunReport { range: RunPeriod; start_day: string | null; end_day: string; summary: RunSummary; groups: Record<RunGrouping, RunGroup[]>; total: number; bill: UsageBill; fish_voice: boolean }
 export interface CliAllowanceWindow {

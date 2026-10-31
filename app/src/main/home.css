@@ -33,7 +33,7 @@
 .ho-slot.btn:hover { background: var(--hover); }
 .ho-slot time { grid-column: 1; grid-row: 1; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--text-2); }
 .ho-slot-title { grid-column: 3; font-size: var(--fs-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ho-slot > .av, .ho-slot > .ho-face, .ho-slot-source { grid-column: 4; }
+.ho-slot > .av, .ho-slot-source { grid-column: 4; }
 .ho-slot-source { display: grid; place-items: center; width: 24px; height: 24px; color: var(--text-3); }
 .ho-slot.is-past { opacity: 0.55; }
 .ho-now { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); color: var(--err); font-size: var(--fs-2xs); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -45,8 +45,6 @@
 .ho-row-copy strong { font-size: var(--fs-sm); font-weight: 500; }
 .ho-row-copy span, .ho-row time { font-size: var(--fs-xs); color: var(--text-3); }
 .ho-row time { font-variant-numeric: tabular-nums; }
-.ho-face { width: var(--face); height: var(--face); border-radius: var(--r-pill); object-fit: cover; }
-.ho-face-none { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; background: var(--surface-2); color: var(--text-3); }
 /* Figures and charts have the same skeleton and bottom baseline in all three stats. */
 .ho-big { font: 600 calc(2 * var(--fs-sm))/1.1 var(--display, var(--ui)); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .ho-big small, .ho-sub small { margin-left: var(--sp-1); font: 500 var(--fs-sm)/1.5 var(--ui); color: var(--text-3); }
@@ -87,7 +85,7 @@
 .ho-agenda { position: relative; z-index: 2; min-width: 0; min-height: 192px; display: flex; flex-direction: column; gap: var(--sp-1); pointer-events: none; }
 .ho-agenda .btn { pointer-events: auto; }
 .ho-agenda h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); }
-.page-home .ho-agenda-row.btn { display: grid; grid-template-columns: 48px minmax(0, 1fr) 24px; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: var(--sp-1) 0; border: 0; background: transparent; text-align: left; font-size: var(--fs-sm); }
+.page-home .ho-agenda-row.btn { display: grid; grid-template-columns: 48px minmax(0, 1fr) 24px; align-items: center; gap: var(--sp-2); width: 100%; min-height: 40px; padding: var(--sp-1) var(--sp-2); border: 0; background: transparent; text-align: left; font-size: var(--fs-sm); }
 .ho-agenda-row time { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .ho-agenda-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ho-day-empty { margin: 0; color: var(--text-3); font-size: var(--fs-sm); }

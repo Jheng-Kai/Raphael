@@ -126,7 +126,7 @@ class Recorder:
                 self.cards.append({"tool": name, "language": "zh-TW", "choices": ["YES", "NO"], "executed": False})
                 raise Stop(WAITING) from None
         if name == "team_overview":
-            data = {"members": [{"id": 7, "name": "測試員", "role": "測試"}], "groups": [], "avatar_presets": []}
+            data = {"members": [{"id": 7, "name": "測試員", "role": "測試"}], "groups": []}
         elif name in ("member_create", "create_member"):
             data = {"created": 100 + len(self.calls), "member": {"id": 100 + len(self.calls), **args}}
         elif name == "routine_list":

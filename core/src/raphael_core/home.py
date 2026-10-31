@@ -27,7 +27,7 @@ class HomeItem(TypedDict):
     at_ms: int
     member_id: int
     name: str
-    avatar_url: str | None
+    avatar: str
     turn_id: int | None
     conversation_id: int | None
     routine_id: int | None
@@ -109,7 +109,7 @@ class ConnectedCalendar:
             if start_ms <= at < end_ms:
                 title = event.get("summary") or "Untitled event"
                 events.append({"id": f"event:{event['id']}", "kind": "event", "title": " ".join(title.split())[:120],
-                               "summary": "", "at_ms": at, "member_id": 0, "name": "Google Calendar", "avatar_url": None,
+                               "summary": "", "at_ms": at, "member_id": 0, "name": "Google Calendar", "avatar": "",
                                "turn_id": None, "conversation_id": None, "routine_id": None, "all_day": "dateTime" not in start})
         return events
 
@@ -204,7 +204,7 @@ class HomeOverview:
             member = people[mid]
             return {"id": f"{kind}:{key}", "kind": kind, "title": " ".join(title.split())[:120],
                     "summary": " ".join(summary.split())[:160], "at_ms": at, "member_id": mid,
-                    "name": member["name"], "avatar_url": member.get("avatar_url"),
+                    "name": member["name"], "avatar": member.get("avatar", ""),
                     "turn_id": turn, "conversation_id": conversation, "routine_id": routine, "all_day": False}
 
         reports = []

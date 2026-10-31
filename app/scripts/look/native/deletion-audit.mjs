@@ -32,10 +32,9 @@ export async function deletionAudit(context, helpers) {
     await click(page, '.mb-col [data-col="add"]');
     await click(page, '#app-popover [data-pick="member"]');
     await type(page, "#mb-new-name", name);
-    await type(page, "#mb-new-role", "Native audit colleague");
-    await click(page, '.mp-dialog [data-dlg="create"]');
+    await click(page, '.cr-dialog [data-dlg="create"]');
     const member = await until(async () => (await snapshot()).members.find(row => row.name === name), `create ${name}`);
-    await page.waitForSelector(".mp-dialog", { hidden: true });
+    await page.waitForSelector(".cr-dialog", { hidden: true });
     return member.id;
   };
   await select(0);

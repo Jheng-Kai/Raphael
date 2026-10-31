@@ -9,7 +9,6 @@ import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX, faceHTML } from 
 import type {
   AgentQuestion,
   AgentTurn,
-  AvatarPreset,
   GroupDraft,
   MemberDraft,
   MemberGroup,
@@ -97,18 +96,8 @@ export function draftGroupChoices(
   return choices;
 }
 
-export function presetUrlOf(avatarPreset: string, presets: readonly AvatarPreset[]): string | null {
-  const raw = (avatarPreset ?? "").trim();
-  if (!raw) return null;
-  const normalized = raw.startsWith("preset:") ? raw : `preset:${raw}`;
-  const stem = raw.startsWith("preset:") ? raw.slice("preset:".length) : raw;
-  const found = presets.find((p) => p.avatar === raw || p.avatar === normalized || p.name === stem);
-  return found?.url ?? null;
-}
-
 export interface DraftPanelHost {
   groups(): readonly MemberGroup[];
-  presets(): readonly AvatarPreset[];
   onConfirm(drafts: MemberDraft[], groups?: GroupDraft[]): void;
   onCancel(): void;
 }
@@ -144,11 +133,10 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     return allCreate ? t("members.draftCreateCount", { p0: count }) : t("members.draftSaveCount", { p0: count });
   }
 
-  function cardHTML(draft: MemberDraft, choices: Choice[], presets: readonly AvatarPreset[]): string {
+  function cardHTML(draft: MemberDraft, choices: Choice[]): string {
     const id = esc(draft.id);
     const expanded = openMore.has(draft.id);
-    const avatarUrl = presetUrlOf(draft.avatar_preset, presets);
-    const face = faceHTML({ id: draft.member_id ?? -1, name: draft.name, avatar: draft.avatar_preset, avatar_url: avatarUrl }, 40);
+    const face = faceHTML({ id: draft.member_id ?? -1, name: draft.name, avatar: draft.avatar_preset }, 40);
     const peek = morePreview(draft);
     const removeLabel = t("members.draftRemove", { p0: draft.name.trim() || t("members.name") });
     return (
@@ -194,7 +182,6 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
     const focusedField = active && el.contains(active) ? active.dataset.draftField : undefined;
 
     const choices = draftGroupChoices(host.groups(), currentGroups, currentDrafts);
-    const presets = host.presets();
     const groupPills = currentGroups
       .map((g) => `<label class="draft-group-pill">${ico("folder")}<input class="mb-fin draft-group-name" data-draft-group="${esc(g.id)}" aria-label="${esc(t("members.group"))}" maxlength="24" value="${esc(g.name)}"${isBusy ? " disabled" : ""}></label>`)
       .join("");
@@ -207,7 +194,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       groupPills +
       `</div>` +
       `<div class="draft-list">` +
-      currentDrafts.map((draft) => cardHTML(draft, choices, presets)).join("") +
+      currentDrafts.map((draft) => cardHTML(draft, choices)).join("") +
       `</div>` +
       actionRow({
         secondary: btn(esc(t("common.cancel")), "draft-cancel", ` data-draft-act="cancel"${isBusy ? " disabled" : ""}`),
@@ -227,18 +214,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
   }
 
   function openDraftAvatarMenu(anchor: HTMLElement, draft: MemberDraft): void {
-    const presets = host.presets();
-    const grid = presets.length >= 0
-      ? slimePickerHTML(draft.avatar_preset, esc) + (presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
-        presets
-          .map(
-            (preset, i) =>
-              `<button type="button" role="menuitem" tabindex="-1" class="mb-preset" data-preset="${esc(preset.avatar)}" aria-label="${esc(t("members.preset", { p0: i + 1 }))}">` +
-              `<img src="${esc(preset.url)}" alt="" draggable="false"></button>`,
-          )
-          .join("") +
-        `</div>` : "") + `<div class="menu-sep" role="separator"></div>`
-      : "";
+    const grid = slimePickerHTML(draft.avatar_preset, esc) + `<div class="menu-sep" role="separator"></div>`;
     const resetBtn = `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-preset=""><span class="mt">${esc(t("members.draftDefaultAvatar"))}</span></button>`;
     const pop = openPopover(anchor, grid + resetBtn, {
       className: "menu mb-avpop",

@@ -24,7 +24,7 @@ PACKAGE = Path(raphael_core.worker.__file__).parent
 MODULES = sorted(PACKAGE.glob("*.py"))
 
 # The one thing of the core's the worker may use besides its own package.
-ALLOWED_CORE_MODULES = {"raphael_core.protocol", "raphael_core.stdio_server", "raphael_core.worker"}
+ALLOWED_CORE_MODULES = {"raphael_core.protocol", "raphael_core.stdio_server", "raphael_core.worker", "raphael_core.failures"}
 FORBIDDEN = (
     "keyring",
     "raphael_core.brain.secrets",
@@ -59,7 +59,7 @@ def imported_names(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom):
             base = node.module or ""
             if node.level:
-                base = package + ("." + base if base else "")
+                base = package.rsplit(".", node.level - 1)[0] + ("." + base if base else "")
             names.add(base)
             names.update(f"{base}.{alias.name}" for alias in node.names)
     return names

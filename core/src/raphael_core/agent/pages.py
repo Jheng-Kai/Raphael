@@ -102,9 +102,12 @@ _HELPER = """<script>
   addEventListener('DOMContentLoaded', () => {
     let previous = 0;
     const report = () => { const box = document.body.getBoundingClientRect(), style = getComputedStyle(document.body);
-      const height = Math.max(80, Math.min(2400, Math.ceil(box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom))));
+      const own = box.height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+      // The root also holds the margins of a first and last child, which collapse through the body.
+      const height = Math.max(80, Math.min(2400, Math.ceil(Math.max(own, document.documentElement.getBoundingClientRect().height))));
       if (height !== previous) { previous = height; post('height', {height}); } };
-    new ResizeObserver(report).observe(document.body); report();
+    const sizes = new ResizeObserver(report);
+    sizes.observe(document.body); sizes.observe(document.documentElement); report();
   }, {once:true});
 })();
 </script>"""

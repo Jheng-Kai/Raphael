@@ -19,7 +19,7 @@ class Plugins:
 
 
 def speaker(member_id):
-    return SimpleNamespace(id=member_id, is_chief=member_id == 0, uses_plugin=lambda key: True, uses=lambda name: True)
+    return SimpleNamespace(id=member_id, is_chief=member_id == 0, has_no_job=False, uses_plugin=lambda key: True, uses=lambda name: True)
 
 
 def offered(member_id, plugins):

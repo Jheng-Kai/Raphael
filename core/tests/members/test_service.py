@@ -14,7 +14,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 WEBP = b"RIFF\x10\0\0\0WEBPVP8 " + b"\0" * 16
 METHODS = {
     "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
-    "members.presets", "members.read", "members.viewing", "members.tool_choices",
+    "members.read", "members.viewing", "members.tool_choices",
     "groups.create", "groups.update", "groups.delete",
     "routines.list", "routines.create", "routines.update", "routines.delete", "routines.template",
 }  # fmt: skip
@@ -147,21 +147,12 @@ async def test_what_is_not_a_picture_is_refused(rig, mime, data, kind):
     assert await refused(rig, "members.set_avatar", {"id": member["id"], "name": "x", "mime": mime, "data": data}) == kind
 
 
-async def test_the_presets_are_the_owners_own_files_if_the_folder_is_there(rig):
-    assert await rig.call("members.presets") == {"presets": []}
+async def test_a_picture_from_an_older_build_has_no_url_left(rig):
     folder = rig.local / "avatars" / "presets"
     folder.mkdir(parents=True)
-    (folder / "chibi-01.webp").write_bytes(WEBP)
-    (folder / "chibi-02.png").write_bytes(PNG)
-    (folder / "notes.txt").write_text("x")
-    (folder / "fake.png").write_bytes(b"<html>")
-    presets = (await rig.call("members.presets"))["presets"]
-    assert [p["avatar"] for p in presets] == ["preset:chibi-01", "preset:chibi-02"]
-    assert presets[0]["url"].startswith("data:image/webp;base64,")
-    member = (await rig.call("members.create", {"name": "A", "avatar": "preset:chibi-02"}))["member"]
-    assert member["avatar_url"].startswith("data:image/png;base64,")
-    gone = (await rig.call("members.create", {"name": "B", "avatar": "preset:nobody"}))["member"]
-    assert "avatar_url" not in gone  # the app shows the first character of the name
+    (folder / "old.png").write_bytes(PNG)
+    member = (await rig.call("members.create", {"name": "A", "avatar": "preset:old"}))["member"]
+    assert "avatar_url" not in member  # the app shows its slime
 
 
 # --- unread and waiting ----------------------------------------------------------------------------

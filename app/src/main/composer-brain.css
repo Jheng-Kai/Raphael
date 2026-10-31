@@ -1,31 +1,56 @@
-/* The composer's model menu: sources on the left stay where they are while the models on the right change. */
-.menu.cb-menu { width: min(560px, calc(100vw - 16px)); max-width: min(560px, calc(100vw - 16px)); padding: var(--sp-1); overflow: hidden; }
-.menu.cb-menu .menu-head { text-align: left; }
-.cb-panes { display: grid; grid-template-columns: minmax(150px, 2fr) minmax(0, 3fr); gap: var(--sp-1); height: min(300px, 45vh); min-height: 0; }
-.cb-rail { min-height: 0; overflow-y: auto; padding-right: var(--sp-1); border-right: 1px solid var(--line); scrollbar-width: none; }
-.cb-pane { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-height: 0; min-width: 0; }
+/* The composer's model menu: one card standing on the composer, showing one view at a time. */
+.menu.cb-menu { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(320px, calc(100vw - 16px)); max-width: min(320px, calc(100vw - 16px)); padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.cb-card { min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--menu); box-shadow: var(--pop); }
+.cb-body { display: flex; flex-direction: column; max-height: min(420px, 60vh); overflow: hidden; }
+.cb-body[hidden], .cb-now[hidden] { display: none; }
+.cb-pane { display: grid; flex: 0 1 auto; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-height: 0; min-width: 0; }
 .cb-pane:not(:has(.cb-search)) { grid-template-rows: minmax(0, 1fr); }
-.cb-list { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; }
-.cb-group { display: grid; grid-template-columns: minmax(0, 1fr); }
-.cb-group + .cb-group { margin-top: var(--sp-2); }
-.cb-group h4 { margin: 0; padding: var(--sp-1) var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
-.menu .cb-source, .menu .cb-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 36px; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); text-align: left; }
-.menu .cb-source[aria-pressed="true"] { background: var(--hover); }
-.cb-source .mono { flex: none; }
+.cb-list { display: grid; flex: 0 1 auto; row-gap: 2px; grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: none; }
+.cb-group { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+.cb-group + .cb-group { margin-top: var(--sp-3); }
+.cb-group h4 { margin: 0; padding: var(--sp-1) var(--sp-3) var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
+.menu .cb-source, .menu .cb-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 44px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: left; }
+.cb-source .mono { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; }
+.cb-source .mono .logo, .cb-source .mono svg { width: 20px; height: 20px; }
+.cb-source > .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
 .cb-name { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .cb-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.cb-name small, .cb-row > small { overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
-.cb-row > small { flex: none; max-width: 40%; }
-.cb-here { flex: none; width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--accent); }
+.cb-source > small, .cb-row > small { flex: none; overflow: hidden; max-width: 40%; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
 .cb-check { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; color: var(--accent-text); }
 .cb-check .i { width: 16px; height: 16px; }
 .cb-row[aria-checked="true"] .cb-name b { font-weight: 600; }
 .menu .cb-row:disabled { opacity: 0.5; cursor: default; }
-.menu .cb-lead { margin-bottom: var(--sp-1); border-bottom: 1px solid var(--line); border-radius: var(--r-sm) var(--r-sm) 0 0; }
+/* The way back on the left, the title in the middle of the card whatever the length of either. */
+.cb-head { display: grid; flex: none; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; margin-bottom: var(--sp-2); }
+.cb-head h3 { display: flex; grid-column: 2; align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; margin: 0; color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.cb-head h3 span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-head .mono { display: inline-grid; flex: none; place-items: center; width: 20px; height: 20px; margin: 0; }
+.cb-head .mono .logo, .cb-head .mono svg { width: 16px; height: 16px; }
+.menu .cb-back { grid-column: 1; grid-row: 1; justify-content: center; width: 32px; min-height: 32px; padding: 0; }
 .cb-search { width: 100%; min-height: 32px; padding: 0 var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); background: var(--content); color: var(--text); font-size: var(--fs-sm); }
-.cb-empty { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-2); margin: 0; padding: var(--sp-2); color: var(--text-2); font-size: var(--fs-sm); }
+.cb-empty { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-2); margin: 0; padding: var(--sp-3); color: var(--text-2); font-size: var(--fs-sm); }
 .cb-empty p { margin: 0; }
-.cb-depth-slot { padding: var(--sp-2) var(--sp-2) var(--sp-1); border-top: 1px solid var(--line); margin-top: var(--sp-1); }
+/* What is chosen, centred above its depth. */
+.cb-now { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) var(--sp-3); text-align: center; }
+.menu .cb-pick { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 2px; min-height: 0; padding: var(--sp-1) var(--sp-2); text-align: center; }
+.cb-pick small { max-width: 100%; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.cb-pick small:empty { display: none; }
+.cb-pick-name { display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; }
+.cb-pick-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.cb-pick-name .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
 .cb-depth-slot[hidden] { display: none; }
+/* The depth as a thick track with a dot at each stop and a round thumb; only the stop it is on is named. */
+.cb-now .mc-depth { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-2); }
+.cb-now .mc-depth-title { display: none; }
+.cb-now .mc-track { position: relative; display: block; }
+.cb-now .mc-range { display: block; height: 28px; }
+.cb-now .mc-range::-webkit-slider-runnable-track { height: 28px; border-radius: var(--r-pill); background: linear-gradient(to right, color-mix(in srgb, var(--text) 42%, transparent) var(--at), var(--hover) var(--at)); }
+.cb-now .mc-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: 2px; background: var(--text); box-shadow: var(--pop); }
+.cb-now .mc-dots { position: absolute; inset: 0 10px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.cb-now .mc-dot { display: block; width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--text-3); }
+.cb-now .mc-dot[data-on="true"] { visibility: hidden; }
+.cb-now .mc-stops { grid-column: 1; justify-content: center; }
+.cb-now .mc-stop { display: none; padding: 0; color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.cb-now .mc-stop[data-on="true"] { display: block; }
 .cmp-model .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
 .cmp-model .mp-ttext:has(.cb-depth) { display: inline-flex; align-items: baseline; gap: var(--sp-1); max-width: 200px; }

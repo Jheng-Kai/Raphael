@@ -962,6 +962,15 @@ not be done), and the next step you suggest.
 otherwise an empty string."""
 
 
+NEW_MEMBER = (
+    "\n<new_member>\nYou were made a moment ago and have no job yet; your greeting has already asked the owner what you are for. "
+    "If their message says what your job is, or what they want you to do for them from now on, then before you reply call the "
+    "set_my_job tool with a short role and the job in their words. Only then say in one short sentence what you took it to be, "
+    "and begin if there is something to begin. If it is only a one-off question, answer it without the tool. "
+    "Never make up a job for yourself.\n</new_member>"
+)
+
+
 def _member_fields(language: str, name: str, role: str, instructions: str, personality: str) -> dict[str, str]:
     return {
         "persona": _MEMBER_PERSONA.format(

@@ -1,4 +1,4 @@
-import { perform } from "../driver.mjs";
+import { perform, pressInFrame } from "../driver.mjs";
 import { checkRendered } from "../checks.mjs";
 import { deletionAudit, privateTimeline } from "./deletion-audit.mjs";
 
@@ -10,6 +10,8 @@ export const journeys = [
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
+  { name: "member-job", description: "The real core and the real Codex CLI: a member made with only a name speaks first, and the owner's answer becomes its job" },
+  { name: "pages", description: "A stored page from the core's real host under the real CSP: isolated, speaks only on a real press, survives a redraw, expands, follows the theme, comes back after a reload" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
   { name: "skill-growth", description: "Learn after ten real tool calls, then read the skill on the next similar task" },
   { name: "memory-growth", description: "Recall a turn-one fact on turn twenty-five and inspect the member-written home" },
@@ -29,6 +31,12 @@ const wait = (page, selector) => perform(page, { action: "wait", selector });
 const type = (page, selector, text) => perform(page, { action: "type", selector, text });
 export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/** The window runs beside whatever the owner is doing on this PC: their taking the focus is not what a journey tests. */
+async function keepFocus(page) {
+  const session = await page.createCDPSession();
+  await session.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+}
+
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
   const back = await page.$('.mb-det [data-det="tab"][data-tab="details"]');
@@ -46,8 +54,11 @@ async function newConversation(context, member = 0) {
     await wait(context.page, ".composer .cmp-input");
   }
   await details(context.page);
-  const before = new Set((await context.snapshot()).conversations.map(row => row.id));
-  await click(context.page, "[data-conversation-new]");
+  const rows = (await context.snapshot()).conversations, before = new Set(rows.map(row => row.id));
+  // One nobody has written in is already new: the button rests on it, or goes to it.
+  const unwritten = rows.find(row => row.member_id === member && !row.title && row.kind !== "quick");
+  if (!await context.page.$eval("[data-conversation-new]", button => button.disabled)) await click(context.page, "[data-conversation-new]");
+  if (unwritten) { await wait(context.page, ".cmp-input"); return unwritten.id; }
   for (let i = 0; i < 80; i++) {
     const created = (await context.snapshot()).conversations.find(row => !before.has(row.id) && row.kind !== "quick");
     if (created) { await wait(context.page, ".cmp-input"); return created.id; }
@@ -177,6 +188,7 @@ export async function drive(name, context) {
     return;
   }
   if (name === "model-sync") {
+    await keepFocus(page);
     const composerName = () => page.$eval(".composer .cmp-model .mp-tname", el => el.textContent);
     const savedModel = async () => (await context.rpc("settings.get", {})).settings.agent_model;
     const until = async (check, what) => {
@@ -194,6 +206,7 @@ export async function drive(name, context) {
     context.menuLog = () => page.evaluate(() => window.__menuClosers);
     await click(page, ".composer .cmp-model .mp-trigger");
     await wait(page, ".cb-menu");
+    await click(page, ".cb-pick");
     await click(page, '.cb-menu [data-cb-source="cli:codex"]');
     try { await page.waitForSelector('.cb-menu [data-model^="cli:codex:"]', { timeout: 30000 }); }
     catch (error) {
@@ -201,7 +214,7 @@ export async function drive(name, context) {
       result.menuLog = await context.menuLog();
       const listed = (await context.rpc("brains.cli", {})).clis.map(cli => ({ id: cli.id, installed: cli.installed, logged_in: cli.logged_in, available: cli.available, models: cli.models.length, notes: cli.notes }));
       result.brains = listed;
-      result.pane = await page.$eval(".cb-menu .cb-pane", el => el.textContent.slice(0, 120)).catch(() => "the menu is closed");
+      result.pane = await page.$eval(".cb-menu .cb-body", el => el.textContent.slice(0, 120)).catch(() => "the menu is closed");
       throw new Error(`The real Codex's models never reached the composer: ${JSON.stringify(listed)} / ${result.pane}`, { cause: error });
     }
     await capture("composer-codex-models");
@@ -244,6 +257,162 @@ export async function drive(name, context) {
     await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:haiku" });
     await until(async () => (await composerName()).includes("Haiku"), "a change of the setting did not reach the composer");
     await capture("change-reaches-composer");
+    return;
+  }
+  if (name === "member-job") {
+    await keepFocus(page);
+    let codex;
+    for (let i = 0; i < 150 && !codex; i++) {
+      const models = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models ?? [];
+      codex = models.find(model => model.id.endsWith("gpt-5.6-luna")) ?? models.at(-1);
+      if (!codex) await pause(200);
+    }
+    if (!codex) throw new Error("The real Codex listed no models");
+    await context.rpc("settings.set", { key: "agent_model", value: `${codex.id}?effort=low` });
+    await click(page, '[data-col="add"]');
+    await click(page, '#app-popover [data-pick="member"]');
+    await wait(page, ".cr-dialog");
+    await capture("maker");
+    await click(page, '.cr-characters [data-slime-character="gobta"]');
+    await type(page, "#mb-new-name", "NativeJob");
+    await click(page, '.cr-dialog [data-dlg="create"]');
+    await page.waitForSelector(".cr-dialog", { hidden: true });
+    await wait(page, ".page-agent .ra-body");
+    const member = (await context.rpc("members.list", {})).members.find(row => row.name === "NativeJob");
+    if (!member) throw new Error("The member was not made");
+    if (member.avatar !== "slime:gobta") throw new Error(`The member lost its slime: ${member.avatar}`);
+    const greeting = await page.$eval(".page-agent .ra-body", el => el.textContent);
+    result.greeting = greeting;
+    if (!greeting.includes("NativeJob") || !greeting.includes("？")) throw new Error(`It did not speak first: ${greeting}`);
+    if (await page.$(".page-agent .owner-message")) throw new Error("A message was put in the owner's mouth");
+    if (member.role || member.instructions) throw new Error("A job was made up before the owner said one");
+    await capture("greeting");
+    const conversation = (await snapshot()).conversations.find(row => row.member_id === member.id);
+    const text = "幫我看我貼給你的發布說明，每次都整理成三行重點。";
+    await type(page, ".composer .cmp-input", text);
+    await click(page, ".cmp-send");
+    let turn;
+    for (let i = 0; i < 900 && !turn; i++) {
+      turn = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation.id && row.question === text && ["done", "error"].includes(row.status));
+      if (!turn) await pause(200);
+    }
+    if (!turn) throw new Error("The turn on the real Codex did not finish");
+    await capture("answered");
+    result.turn = { model: turn.model, status: turn.status, text: turn.text.slice(0, 160) };
+    if (turn.status !== "done") throw new Error(`The turn failed: ${JSON.stringify(result.turn)}`);
+    const saved = (await context.rpc("members.list", {})).members.find(row => row.id === member.id);
+    result.job = { role: saved.role, instructions: saved.instructions };
+    if (!saved.role || !saved.instructions) throw new Error(`The owner's answer did not become its job: ${JSON.stringify(result.job)}`);
+    await page.waitForFunction((id, role) => document.querySelector(`.mb-row[data-member="${id}"]`)?.textContent.includes(role), { timeout: 10000 }, member.id, saved.role);
+    await capture("job-saved");
+    return;
+  }
+  if (name === "pages") {
+    const frameNow = async () => {
+      for (let i = 0; i < 100; i++) {
+        const frame = page.frames().find(item => /^http:\/\/127\.0\.0\.1:\d+\/p\//.test(item.url()));
+        if (frame && await frame.$("#ready").catch(() => null)) return frame;
+        await pause(100);
+      }
+      throw new Error("The page's frame never ran from the core's host");
+    };
+    const inFrame = (frame, id) => frame.$eval(id, el => el.textContent);
+    const asked = async question => (await snapshot()).agent_turns.filter(row => row.question === question);
+    const refuseAsk = async () => {
+      if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) {
+        await click(page, '.pg-ask [data-dlg="cancel"]');
+        await page.waitForSelector(".pg-ask", { hidden: true });
+      }
+    };
+    await chat(page);
+    await wait(page, '.pg-body[data-state="ready"] iframe');
+    let frame = await frameNow();
+    result.page = { origin: await inFrame(frame, "#origin"), parent: await inFrame(frame, "#parent"), network: await inFrame(frame, "#network"), helper: await inFrame(frame, "#helper") };
+    if (result.page.origin !== "null") throw new Error(`The page has an origin: ${result.page.origin}`);
+    if (result.page.parent !== "isolated") throw new Error("The page reached the app's document");
+    if (result.page.helper !== "object") throw new Error("The page's helper did not run under the real CSP");
+    for (let i = 0; i < 50 && await inFrame(frame, "#network") === "waiting"; i++) await pause(100);
+    result.page.network = await inFrame(frame, "#network");
+    if (result.page.network !== "blocked") throw new Error(`The page reached the network: ${result.page.network}`);
+    const fit = await frame.evaluate(() => ({ inner: innerHeight, content: document.documentElement.scrollHeight }));
+    result.page.fit = fit;
+    if (fit.content > fit.inner) throw new Error(`The page scrolls inside its card: ${JSON.stringify(fit)}`);
+    await capture("shown");
+    // Right after a press elsewhere in the app, a page that sends by itself has the app's activation, and takes the focus.
+    await pause(2500);
+    result.page.autoSent = (await asked("Sent by the page alone")).length;
+    if (result.page.autoSent) throw new Error("A page spoke for the owner with no press inside it");
+    result.page.autoAsked = await page.$eval(".pg-ask", el => el.textContent).catch(() => "");
+    if (!result.page.autoAsked.includes("Sent by the page alone")) throw new Error("A page's own attempt to speak was not shown to the owner");
+    await capture("asked");
+    await click(page, '.pg-ask [data-dlg="cancel"]');
+    await page.waitForSelector(".pg-ask", { hidden: true });
+    if ((await asked("Sent by the page alone")).length) throw new Error("A refused message was sent");
+    await pressInFrame(page, await frame.$("#add"));
+    await pressInFrame(page, await frame.$("#add"));
+    if (await inFrame(frame, "#count") !== "2") throw new Error("A press inside the page did not reach it");
+    const loaded = await inFrame(frame, "#loaded");
+    await pressInFrame(page, await frame.$("#ask"));
+    for (let i = 0; i < 120 && !(await asked("Pressed in the page")).some(row => row.status === "done"); i++) await pause(150);
+    if (!(await asked("Pressed in the page")).some(row => row.status === "done")) throw new Error("A real press inside the page did not become the owner's message");
+    await pause(500);
+    frame = await frameNow();
+    result.page.afterRedraw = { count: await inFrame(frame, "#count"), kept: await inFrame(frame, "#loaded") === loaded };
+    if (!result.page.afterRedraw.kept || result.page.afterRedraw.count !== "2") throw new Error(`A redraw reloaded the page: ${JSON.stringify(result.page.afterRedraw)}`);
+    await capture("after-press");
+    await pressInFrame(page, await frame.$("#later"));
+    await pause(7500);
+    result.page.lateSent = (await asked("Sent long after the press")).length;
+    if (result.page.lateSent) throw new Error("A page spoke long after the owner's press");
+    await click(page, '.pg-card [data-page-act="expand"]');
+    await wait(page, ".pg-view iframe");
+    frame = await frameNow();
+    if (await inFrame(frame, "#count") !== "2") throw new Error("Making the page larger lost what was in it");
+    await capture("expanded");
+    await click(page, '.pg-view-dialog [data-dlg="close"]');
+    await page.waitForSelector(".pg-view-dialog", { hidden: true });
+    frame = await frameNow();
+    if (await inFrame(frame, "#count") !== "2") throw new Error("Closing the larger page lost what was in it");
+    result.layout = [];
+    for (const [width, height] of [[1120, 900], [720, 900], [1920, 1080]]) {
+      await page.setViewport({ width, height });
+      await pause(300);
+      await perform(page, { action: "scroll", selector: ".pg-card" });
+      result.layout.push(await page.evaluate(checkRendered, "page-card"));
+      await capture(`light-${width}`);
+      frame = await frameNow();
+      if (await inFrame(frame, "#loaded") !== loaded) throw new Error(`A change of the window to ${width} reloaded the page`);
+    }
+    await page.setViewport({ width: 1120, height: 900 });
+    await click(page, '#nav [data-go="settings"]');
+    await perform(page, { action: "settle-motion" });
+    await click(page, '.modal-scrim [data-pane="appearance"]');
+    frame = await frameNow();
+    if (await inFrame(frame, "#loaded") !== loaded) throw new Error("Opening Settings reloaded the page");
+    await click(page, '[data-k="appearance"]');
+    await click(page, '.menu [data-value="dark"]');
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+    // The theme reloads the page, and this one tries to speak each time it loads: refused once, it no longer asks.
+    if (await page.waitForSelector(".pg-ask", { timeout: 2500 }).catch(() => null)) throw new Error("A page the owner refused asked again");
+    await click(page, '.modal-scrim [data-act="close"]');
+    await page.waitForSelector(".modal-scrim", { hidden: true });
+    await chat(page);
+    await wait(page, '.pg-body[data-state="ready"] iframe');
+    for (let i = 0; i < 50 && !page.frames().some(item => /[?&]theme=dark/.test(item.url())); i++) await pause(100);
+    frame = await frameNow();
+    result.page.darkBackground = await frame.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim());
+    if (result.page.darkBackground !== "#18181b") throw new Error(`The page did not follow the theme: ${result.page.darkBackground}`);
+    await perform(page, { action: "scroll", selector: ".pg-card" });
+    await capture("dark");
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".page-home:not([hidden]) .ho-hero", { visible: true, timeout: 90000 });
+    await chat(page);
+    await wait(page, '.pg-body[data-state="ready"] iframe');
+    await refuseAsk();
+    frame = await frameNow();
+    if (await inFrame(frame, "#helper") !== "object") throw new Error("The page did not come back after a reload");
+    await perform(page, { action: "scroll", selector: ".pg-card" });
+    await capture("after-reload");
     return;
   }
   if (name === "model-picker") {
@@ -496,9 +665,8 @@ export async function drive(name, context) {
     await click(page, '.mb-col [data-col="add"]');
     await click(page, '#app-popover [data-pick="member"]');
     await type(page, '#mb-new-name', 'NativeConnector');
-    await type(page, '#mb-new-role', 'Catalog connection audit');
-    await click(page, '.mp-dialog [data-dlg="create"]');
-    await page.waitForSelector('.mp-dialog', { hidden: true });
+    await click(page, '.cr-dialog [data-dlg="create"]');
+    await page.waitForSelector('.cr-dialog', { hidden: true });
     const member = (await snapshot()).members.find(item => item.name === 'NativeConnector');
     if (!member) throw new Error("Native member did not persist");
     for (const memberId of [0, member.id]) {
@@ -713,9 +881,8 @@ export async function drive(name, context) {
     await click(page, '.mb-col [data-col="add"]');
     await click(page, '#app-popover [data-pick="member"]');
     await type(page, "#mb-new-name", "NativeDiagnosis");
-    await type(page, "#mb-new-role", "Diagnosis colleague");
-    await click(page, '.mp-dialog [data-dlg="create"]');
-    await page.waitForSelector(".mp-dialog", { hidden: true });
+    await click(page, '.cr-dialog [data-dlg="create"]');
+    await page.waitForSelector(".cr-dialog", { hidden: true });
     const member = (await snapshot()).members.find(row => row.name === "NativeDiagnosis");
     if (!member) throw new Error("Diagnosis member was not persisted");
     await perform(page, { action: "member", id: member.id });

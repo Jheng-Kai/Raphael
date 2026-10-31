@@ -6,7 +6,7 @@ from test_app import make_app  # noqa: F401  (the fixture)
 
 MEMBER_METHODS = {
     "members.list", "members.create", "members.update", "members.delete", "members.set_avatar",
-    "members.presets", "members.read", "members.viewing", "members.tool_choices", "groups.create",
+    "members.read", "members.viewing", "members.tool_choices", "groups.create",
     "groups.update", "groups.delete", "routines.list", "routines.create", "routines.update",
     "routines.delete", "routines.template", "memory.move",
 }  # fmt: skip

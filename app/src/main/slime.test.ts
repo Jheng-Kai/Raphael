@@ -17,7 +17,7 @@ test("a member without a picture is a slime, its chosen one or a colour from its
   expect(slimeFaceHTML({ id: 3 }, 40)).toContain('style="--av:40px"');
   expect(face({ id: 3, name: "Ada", avatar: "slime:diablo" }).innerHTML).toContain("#EE5A64");
   expect(face({ id: 3, name: "Ada", avatar: "slime:unknown" }).querySelector(".mb-av-slime")).not.toBeNull();
-  expect(face({ id: 3, name: "Ada", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime")).toBeNull();
+  expect(face({ id: 3, name: "Ada", avatar: "preset:old", avatar_url: "data:image/png;base64,AAAA" }).querySelector(".mb-av-slime svg.slime")).not.toBeNull();
   expect(face({ id: 0, name: "Raphael" }).querySelector(".mb-av-slime")).toBeNull();
 });
 

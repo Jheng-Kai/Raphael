@@ -8,6 +8,19 @@ export function finiteMotionSettled() {
 }
 
 /** Wait for real entrance transitions without changing their paint measurements or infinite activity indicators. */
+/** A hand reaches a page's button from outside the frame: the app hears the pointer up to its edge, and nothing after that. */
+export async function pressInFrame(page, element) {
+  await element.scrollIntoView();
+  const box = await element.boundingBox(), owner = await page.$(".pg-frame");
+  const edge = await owner.boundingBox();
+  await owner.dispose();
+  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  await page.mouse.move(edge.x - 20, y);
+  await page.mouse.move(x, y, { steps: 6 });
+  await page.mouse.down();
+  await page.mouse.up();
+}
+
 async function waitForPageFrame(page) {
   const deadline = Date.now() + 10000;
   for (;;) {
@@ -160,7 +173,7 @@ export async function perform(page, step) {
       const frame = await waitForPageFrame(page);
       const element = await frame.waitForSelector(step.selector, { visible: true, timeout: 10000 });
       if (step.action === "frame-click") {
-        await element.click();
+        await pressInFrame(page, element);
         await new Promise(resolve => setTimeout(resolve, 250));
       }
       await element.dispose();
@@ -186,7 +199,6 @@ export async function perform(page, step) {
       if (await page.evaluate(() => document.querySelector('[data-au="tools"]').getBoundingClientRect().width > 0)) await click('[data-au="tools"]');
       break;
     }
-    case "member-picker": await click('[data-col="add"]'); await click('#app-popover [data-pick="conversation"]'); break;
     case "member-column": {
       if (step.collapsed) throw new Error("Icon strips were removed; use sidebar drawer scenes");
       if (await page.evaluate(() => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open"))) await page.click('[data-sidebar="open"]');

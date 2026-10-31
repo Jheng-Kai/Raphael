@@ -35,15 +35,22 @@ complete flow for creation changes.
 npm run look -- members-expanded sidebar-folders --theme both --width 1120,720,1920x1080
 npm run look -- details member-avatar member-edit details-memory details-routines details-skills details-commands details-voice --theme both --width 1120,720,1920x1080
 npm run look -- sidebar-folders member-text --theme both --width 1120,720,1920x1080
-npm run look -- member-delete sidebar-new-conversation conversation-delete-main --theme both --width 1120,720,1920x1080
+npm run look -- member-delete new-conversation-rests conversation-delete-main --theme both --width 1120,720,1920x1080
+npm run look -- member-maker member-maker-chosen member-maker-made --theme both --width 1120,720,1920x1080
 npm run look -- slime-states slime-picker --theme both --width 1120,720,1920x1080
 ```
 
-The last command walks the owner's flows of 2026-10-27 to their end: `member-delete`
+These walk the owner's flows to their end: `member-delete`
 deletes 小森 from the row's ⋯ menu after the confirmation (the menu had lost 刪除 on
-10/24); `sidebar-new-conversation` presses 新對話 in the sidebar's ＋ twice for 小晴,
-the second time from the empty conversation the first made, and each press must make a
-conversation; `conversation-delete-main` deletes Raphael's main conversation, and the
+10/24); `new-conversation-rests` presses 新對話 in the details and the button must rest
+while that conversation is unwritten (owner, 10/31: a new conversation is made only from
+a member's details, never the sidebar's ＋, and never beside one still empty);
+`member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
+only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
+at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg). It asks only for a name; the
+member opens and speaks first (the core's greeting, no model), and the owner's answer
+becomes its job through `set_my_job`, offered only while it has none;
+`conversation-delete-main` deletes Raphael's main conversation, and the
 latest one must take over with no empty 新對話 in its place (the look mock keeps the main
 conversation as the core's `Conversations.main` does).
 
@@ -132,7 +139,7 @@ The primary takes Raphael's large top slot in the member column, collapsed strip
 Raphael's row has no destructive menu wherever it moves; an ordinary primary keeps its member menu at the top. Raphael can be chosen again from another member's primary picker. The primary holds the chief capability, is required in new or edited rooms and writes their single wrap-up. Existing rooms missing a newly selected chief require membership adjustment; in-flight work is not replayed. Opening the Conversation page and Alt+Space quick questions retain their existing thread behavior; this change only exchanges display positions.
 
 ```powershell
-npm run look -- members-expanded sidebar-folders primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-member-picker primary-new-conversation primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
+npm run look -- members-expanded sidebar-folders primary-contact-column primary-contact-menu primary-contact-picker primary-contact-set primary-room-picker primary-room-members primary-calendar-members primary-routine-members primary-room-chief --theme both --width 1120,720,1920x1080
 ```
 
 `primary-contact-column` and `primary-contact-strip` check the exchanged positions, Raphael's emblem and localized name tooltips; only the sidebar chief has a star. `primary-contact-menu` retains 設為主要 after 移到分組; `primary-contact-picker` excludes the current primary while offering Raphael, with one checked choice, 取消 immediately before 設為主要 and no write before confirmation. `primary-contact-set` asserts one `members.set_primary` call, the updated top row, badge-free details and no room/task/conversation mutation. The board scene also checks top-card visibility before/after fit, natural panel heights and no overlap. Member/new-conversation/mention/calendar/routine/room scenes assert the exchanged order; room choices require the current chief and routine selection stays unchanged. The member-picker driver uses the compact picker when available and the real new-conversation picker at wide widths.
@@ -164,7 +171,7 @@ proposals and explicit profile updates remain protected by normal confirmation.
 Group proposal names are editable and follow the existing native confirmation route.
 
 ```powershell
-npm run look -- admin-description-draft admin-cli-draft-edit admin-draft-cancel admin-draft-apply-result no-naming --theme both --width 1120,720,1920x1080
+npm run look -- admin-cli-draft-edit admin-draft-cancel admin-draft-apply-result no-naming --theme both --width 1120,720,1920x1080
 ```
 
 Core evidence: tests/members/test_admin_proposals.py covers both fake API and

@@ -13,7 +13,7 @@ import { changeRaphaelAvatar, resetRaphaelAvatar } from "./avatar-settings";
 import { currentAvatar } from "./avatar";
 import { describeError } from "./format";
 import { t } from "./i18n";
-import { groupChoices, groupFromValue, groupValue, openAvatarPicker, pickPicture, readPicture } from "./member-dialogs";
+import { groupChoices, groupFromValue, groupValue, openAvatarPicker } from "./member-dialogs";
 import { defaultSlimeAvatar } from "./slime";
 import { createMemory } from "./memory-view";
 import { memoryHTML } from "./memory-view";
@@ -30,7 +30,7 @@ import {
   scheduleText,
   sourceLabel,
 } from "./members";
-import type { AppContext, AvatarPreset, Member, MemberPatch, MembersList, Routine, WireAttachment } from "./types";
+import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { btn, esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
 export type DetailsTab = "details" | "memory" | "routines" | "skills" | "commands" | "voice";
@@ -40,16 +40,16 @@ export interface DetailsHost {
   /** The member whose thread is open. */
   member(): Member;
   list(): MembersList | null;
-  presets(): readonly AvatarPreset[];
   /** Changes the member and reads the list again; false (with a toast) when the core refused. */
   update(id: number, patch: MemberPatch): Promise<boolean>;
   /** A picture of this PC for the member; then the list again. */
-  setPicture(id: number, file: WireAttachment): Promise<void>;
   /** The × of the panel. */
   close(): void;
   edit?(member: Member): void;
   hide?(member: Member): void;
   openConversation?(member: number, conversation: number): void;
+  /** The conversation open with this member, undefined for their default. */
+  conversationOf?(member: number): number | undefined;
 }
 
 export interface DetailsPanel {
@@ -101,6 +101,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       memberId, collapseWhenEmpty: true,
       onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current) current.hidden = !visible; },
       onOpen(id) { host.openConversation?.(memberId, id); },
+      current: () => host.conversationOf?.(memberId),
     });
     slot.hidden = conversationHost.hidden;
   }
@@ -344,23 +345,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const member = host.member();
     if (member.id === RAPHAEL_ID) {
       openAvatarPicker(anchor, {
-        presets: [],
         onComputer: () => void changeRaphaelAvatar(),
         more: currentAvatar() !== null ? [{ label: t("settings.avatarReset"), run: () => void resetRaphaelAvatar() }] : [],
       });
       return;
     }
     openAvatarPicker(anchor, {
-      presets: host.presets(),
       slimes: true,
       current: member.avatar || defaultSlimeAvatar(member.id),
-      onPreset: (avatar) => void host.update(member.id, { avatar }),
-      onComputer: () =>
-        pickPicture((file) =>
-          void readPicture(file).then((read) => {
-            if (read) void host.setPicture(member.id, read);
-          }),
-        ),
+      onSlime: (avatar) => void host.update(member.id, { avatar }),
     });
   }
 

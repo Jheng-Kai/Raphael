@@ -15,7 +15,6 @@
 
 import * as api from "./api";
 import { describeError } from "./format";
-import { conversationChange } from "./conversation-list";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import { teamMentions } from "./team-mentions";
@@ -27,13 +26,12 @@ import {
   confirmDelete,
   editSources,
   offerRoutine,
-  openNewMember,
-  openDialog,
 } from "./member-dialogs";
+import { openMemberCreator } from "./member-creator";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
 import { followSlimeRoster, setSlimeState } from "./slime";
-import type { AppContext, AvatarPreset, MainEvent, Member, MemberGroup, MemberPatch, MembersList, WireAttachment } from "./types";
-import { type Choice, btn, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
+import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
+import { type Choice, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
 
 /** Below this width details start closed to leave a readable conversation column. */
 export const DETAILS_COLUMN_MIN_PX = 1440;
@@ -42,6 +40,8 @@ const REFRESH_DELAY_MS = 300;
 
 export interface MembersHost {
   onOpenConversation?(member: number, conversation: number, turn?: number): void;
+  /** The conversation open with this member, undefined for their default. */
+  conversationOf?(member: number): number | undefined;
   app: AppContext;
   /** The owner chose another member's thread. */
   onSelect(id: number): void;
@@ -72,8 +72,6 @@ export interface MembersShell {
   member(): Member;
   /** Existing groups sorted by position. */
   groups(): readonly MemberGroup[];
-  /** Loaded avatar presets. */
-  presets(): readonly AvatarPreset[];
   mention(input: HTMLTextAreaElement): void;
   /** Opens the thread of member `id`. */
   select(id: number): void;
@@ -96,8 +94,6 @@ export function createMembers(host: MembersHost): MembersShell {
   const previews = new Map<number, string>();
   let known: Set<number> | null = null;
   let fresh = new Set<number>();
-  let presets: AvatarPreset[] = [];
-  let presetsRead = false;
   let loads = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
@@ -110,7 +106,7 @@ export function createMembers(host: MembersHost): MembersShell {
   // ---------- the parts ----------
 
   const { editMember, memberAction, moveMember, deleteMember } = createMemberActions({
-    list: () => list, presets: () => presets, current: () => current, select, load, update, setPicture,
+    list: () => list, current: () => current, select, load, update,
     cleared: id => host.onSelect(id), deleted: id => previews.delete(id),
   });
 
@@ -120,7 +116,6 @@ export function createMembers(host: MembersHost): MembersShell {
     select: (id) => select(id),
     newMember: (groupId) => newMember(groupId),
     newGroup: () => void newGroup(),
-    newConversation: () => newConversation(),
     newGroupChat: () => void openNewGroupChat(),
     memberAction: (id, action) => void memberAction(id, action),
     moveMember: (id, _group, anchor) => moveMember(id, anchor),
@@ -147,13 +142,12 @@ export function createMembers(host: MembersHost): MembersShell {
     app: host.app,
     member,
     list: () => list,
-    presets: () => presets,
     update,
-    setPicture,
     close: () => setDetails(false),
     edit: m => editMember(m),
     hide: m => void memberAction(m.id, "hide"),
     openConversation: host.onOpenConversation ? (member, conversation) => host.onOpenConversation!(member, conversation) : undefined,
+    conversationOf: member => host.conversationOf?.(member),
   });
 
   const pill = document.createElement("span");
@@ -224,20 +218,6 @@ export function createMembers(host: MembersHost): MembersShell {
     previews.clear();
     for (const m of read.members) previews.set(m.id, m.preview ?? "");
     column.draw();
-    if (!presetsRead) {
-      void Promise.resolve()
-        .then(() => api.membersPresets())
-        .then(
-          (answer) => {
-            if (Array.isArray(answer?.presets)) {
-              presets = answer.presets;
-              presetsRead = true;
-              host.onUpdate?.();
-            }
-          },
-          () => {},
-        );
-    }
   }
 
   /** The open thread is read: the core forgets that it was unread. */
@@ -326,7 +306,6 @@ export function createMembers(host: MembersHost): MembersShell {
     openMenu(picker, people, String(current), (value) => select(Number(value)), undefined, [
       { label: t("chat.searchAll"), icon: "search", run: () => column.openSearch(picker) },
       { label: t("rooms.title"), icon: "chat", run: () => { closeMenu(); void openRoomsMenu(picker); } },
-      { label: t("members.sideNewConversation"), icon: "chat", run: () => { closeMenu(); newConversation(); } },
       {
         label: t("members.newMember"),
         icon: "plus",
@@ -353,41 +332,24 @@ export function createMembers(host: MembersHost): MembersShell {
     return true;
   }
 
-  async function setPicture(id: number, file: WireAttachment): Promise<void> {
-    try {
-      await api.membersSetAvatar(id, file);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-    await load();
-  }
-
   function newMember(groupId: number | null): void {
-    openNewMember({
-      groups: [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
+    window.dispatchEvent(new Event("raphael:close-sidebar"));
+    openMemberCreator({
       groupId,
-      presets,
       taken: (list?.members ?? []).map((m) => m.name),
-      async create({ member: made, picture }) {
+      async create(made) {
         let answer: Awaited<ReturnType<typeof api.membersCreate>>;
         try {
           answer = await api.membersCreate({ ...made, ui_language: getLocale() });
         } catch (err) {
           toaster.info(describeError(err));
-          return false;
+          return null;
         }
         const id = answer.member.id;
-        if (picture) {
-          try {
-            await api.membersSetAvatar(id, picture);
-          } catch (err) {
-            toaster.info(describeError(err));
-          }
-        }
         toaster.info(t("members.created", { p0: made.name }));
         await load();
         select(id);
-        // the routine the core offers goes in only with the owner's 加入, once the dialog is gone
+        // the routine the core offers goes in only with the owner's 加入, once the maker is gone
         const offer = answer.routine_offer;
         if (offer) {
           setTimeout(async () => {
@@ -405,48 +367,6 @@ export function createMembers(host: MembersHost): MembersShell {
     });
   }
 
-  /** A new conversation with `id`, opened: 新對話 always makes one, even when the open one is still empty. */
-  async function startConversation(id: number): Promise<void> {
-    try {
-      const result = await api.core<{conversation: {id: number}}>("conversations.create", {member_id: id});
-      conversationChange(id);
-      if (host.onOpenConversation) host.onOpenConversation(id, result.conversation.id);
-      else select(id);
-    } catch (err) {
-      toaster.info(describeError(err));
-    }
-  }
-
-  function newConversation(): void {
-    const dialog = openDialog({title: t("members.sideNewConversation"), cls: "mb-chat-picker",
-      body: `<input class="mb-fin" type="search" data-chat-search placeholder="${esc(t("members.sidePickerHint"))}" aria-label="${esc(t("members.sidePickerHint"))}"><div class="mb-chat-choices"></div>`,
-      actions: {secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"')},
-      onAct(action, target, d) {
-        if (action === "describe") {
-          const description = input.value.trim();
-          if (!description) return;
-          d.close();
-          select(RAPHAEL_ID);
-          setDetails(false);
-          host.app.go("agent", `draft:${t("firstBot.newProposal", { description })}`);
-        }
-        else if (action === "member") { d.close(); newMember(null); }
-        else if (action === "conversation") { d.close(); void startConversation(Number(target.dataset.id)); }
-        else d.close();
-      },
-    });
-    const input = dialog.el.querySelector<HTMLInputElement>("[data-chat-search]")!;
-    const choices = dialog.el.querySelector<HTMLElement>(".mb-chat-choices")!;
-    const draw = () => {
-      const q = input.value.trim().toLocaleLowerCase();
-      choices.innerHTML = (q ? btn(`${ico("plus")}<span>${esc(t("firstBot.describe"))}</span>`, "mb-chat-choice", ' data-dlg="describe"') : "") +
-        btn(`${ico("plus")}<span>${esc(t("members.newMember"))}</span>`, "mb-chat-choice", ' data-dlg="member"') +
-        orderedMembers(list)
-          .filter(m => `${m.name} ${memberRole(m)} ${m.blurb ?? ""}`.toLocaleLowerCase().includes(q))
-          .map(m => btn(`${faceHTML(m, 34)}<span><b>${esc(m.name)}</b><small>${esc(m.blurb || memberRole(m))}</small></span>`, "mb-chat-choice", ` data-dlg="conversation" data-id="${m.id}"`)).join("");
-    };
-    input.addEventListener("input", draw); draw();
-  }
   window.addEventListener("keydown", event => {
     if (event.ctrlKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "n" && host.visible() && !document.querySelector(".mb-scrim")) {
       event.preventDefault(); newMember(null);
@@ -501,7 +421,6 @@ export function createMembers(host: MembersHost): MembersShell {
     current: () => current,
     nameOf: (id) => memberOf(list, id)?.name ?? "",
     groups: () => [...(list?.groups ?? [])].sort((a, b) => a.position - b.position),
-    presets: () => presets,
     mention: input => { if (list) teamMentions(input, list); },
     faceOf(id, size) {
       const found = memberOf(list, id);

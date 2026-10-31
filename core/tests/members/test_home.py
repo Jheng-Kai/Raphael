@@ -122,7 +122,7 @@ async def test_today_limits_pending_questions_after_ordering(home, rig):
 
 async def test_calendar_seam_and_invalid_timezone(home, rig):
     async def events(start, end):
-        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": rig.wall.now + 1000, "member_id": 0, "name": "Raphael", "avatar_url": None, "turn_id": None, "conversation_id": None, "routine_id": None}]
+        return [{"id": "private-event", "kind": "event", "title": "Planning", "summary": "", "at_ms": rig.wall.now + 1000, "member_id": 0, "name": "Raphael", "avatar": "", "turn_id": None, "conversation_id": None, "routine_id": None}]
     home.calendar_events = events
     assert (await rig.call("home.overview", {"refresh": True}))["calendar"][0]["title"] == "Planning"
     with pytest.raises(RpcError) as caught:

@@ -21,7 +21,6 @@ import type {
   NewConnection,
   StoreService,
   AudioDevices,
-  AvatarPreset,
   BrainSettings,
   CliBrain,
   CliBrainId,
@@ -225,8 +224,6 @@ export const membersDelete = (id: number): Promise<{ deleted: boolean }> => core
 export const membersSetPrimary = (id: number): Promise<{ primary_id: number }> => core("members.set_primary", { id });
 /** A picture of this PC for a member: name, type and bytes in base64, checked by the core as the composer's images are. */
 export const membersSetAvatar = (id: number, file: WireAttachment): Promise<{ member: Member }> => core("members.set_avatar", { id, ...file });
-/** The images of the presets folder (`<app data>\avatars\presets`), none when it is not there. */
-export const membersPresets = (): Promise<{ presets: AvatarPreset[] }> => core("members.presets");
 /** The owner read the thread of member `id`: it is no longer unread. */
 export const membersRead = (id: number): Promise<unknown> => core("members.read", { id });
 /** The thread on screen now (null for none): what arrives there is no news. */

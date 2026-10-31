@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from raphael_core.members.activity import Activity, step, tool_state
+from raphael_core.members.activity import Activity, step, tool_state, tool_step
 from raphael_core.worker.loop import Call, ToolOutcome, Turn, run_task
 
 
@@ -25,7 +25,7 @@ def test_single_tool_table(name, expected):
 
 @pytest.mark.parametrize("name,expected", [("local_time", "working"), ("web_read", "searching"),
                                            ("computer__click", "computer")])
-async def test_real_loop_classifies_tools_and_releases_them(name, expected):
+async def test_real_loop_with_the_core_side_of_a_tool_classifies_and_releases_it(name, expected):
     notes = []
     activity = Activity(lambda method, data: notes.append(data["state"]))
 
@@ -37,6 +37,8 @@ async def test_real_loop_classifies_tools_and_releases_them(name, expected):
             self.calls += 1
             return Turn("Checking", [Call("one", name, {})]) if self.calls == 1 else Turn("Finished")
 
+        # The worker is a process of its own with no activity: the core marks a tool where it runs it.
+        @tool_step(lambda self, call_id, tool, arguments: tool)
         async def tool(self, call_id, tool, arguments):
             assert activity.state(4) == expected
             return ToolOutcome(True)

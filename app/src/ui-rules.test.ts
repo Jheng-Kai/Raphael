@@ -63,7 +63,7 @@ describe("action rows", () => {
 describe("buttons", () => {
   // Every <button> is one of the shapes of the component inventory (docs/ui.md), or a part of a menu / list / dialog.
   const ALLOWED_CLASS = [
-    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-action", "lang-item", "lm-main", "lm-del", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess",
+    "btn", "sel", "tg", "tab", "nav", "usage-box", "menu-action", "lang-item", "lm-main", "lm-del", "mp-star", "mp-opt", "mp-dd", "chip-x", "sess", "mb-preset", "mb-slime-color",
   ];
   const ALLOWED_ROLE = ["option", "menuitem", "menuitemradio", "radio", "checkbox", "switch", "tab"];
   const classOf = (tag: string): string[] => (/\bclass="([^"]*)"/.exec(tag)?.[1] ?? "").split(/\s+/).filter(Boolean);

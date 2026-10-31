@@ -14,12 +14,12 @@ const dictation = tab => [page("dictation"), click(`[data-dictation-tab="${tab}"
 export default [
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
   scene("model-sync", "A model chosen at the composer shows in Settings, and one chosen in Settings shows at the composer", [
-    click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-menu [data-model="cli:codex:gpt-6.1"][aria-checked="true"]'), check("model-sync-composer"),
+    click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
     click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'),
     ...settings("models"), check("model-sync-settings"),
     click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait('.model-chooser .mc-row'), click('.model-chooser [data-source="openrouter"]'), click('.model-chooser .mc-row[aria-checked="false"]:not(:disabled)'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), check("model-sync-both"),
   ]),
-  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
+  scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
     ...settings("models"), check("quick-model-row"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('.model-chooser [data-source="cli:codex"]'),

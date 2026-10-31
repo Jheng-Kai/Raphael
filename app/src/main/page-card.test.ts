@@ -9,6 +9,13 @@ const turn = (cards: PageCard[]): AgentTurn => ({ pages: cards }) as unknown as 
 const opened = { url: "http://127.0.0.1:9/p/abc?theme=light", title: "藍色背包", rev: 0, height: 400, source: "html", server: null } as const;
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
 
+/** A press inside a frame leaves the focus on it. */
+const focusOn = (element: Element): void => {
+  Object.defineProperty(document, "activeElement", { value: element, configurable: true });
+};
+/** Where the app last heard the pointer; a frame in the test window stands at 0,0. */
+const pointerAt = (x: number, y: number): void => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: x, clientY: y })); };
+
 function mount(cards: PageCard[] = [card]) {
   const thread = document.createElement("div");
   thread.innerHTML = pageCardsHTML(turn(cards));
@@ -19,6 +26,8 @@ function mount(cards: PageCard[] = [card]) {
   const frame = thread.querySelector("iframe")!;
   // The test window loads no frames, so each is given a window of its own for messages to come from.
   Object.defineProperty(frame, "contentWindow", { value: { postMessage: vi.fn() }, configurable: true });
+  focusOn(frame);
+  pointerAt(10, 10);
   return { thread, send, pages, frame };
 }
 
@@ -38,7 +47,7 @@ beforeEach(() => {
   setActivation(true);
 });
 
-afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ""; });
+afterEach(() => { vi.restoreAllMocks(); document.body.innerHTML = ""; Reflect.deleteProperty(document, "activeElement"); });
 
 test("a card escapes its words and holds no frame of its own in its html", () => {
   const html = pageCardsHTML(turn([card]));
@@ -81,6 +90,60 @@ test("a page speaks for the owner only right after a press in it, and not withou
   expect(send).toHaveBeenCalledExactlyOnceWith("買兩個");
   fromFrame(frame, { raphaelPage: 1, type: "send", text: "再買" });
   expect(send).toHaveBeenCalledTimes(1);
+});
+
+test("a press elsewhere in the app is not a press in the page", async () => {
+  const opener = vi.spyOn(api, "openExternalUrl").mockResolvedValue();
+  const { frame, send } = mount();
+  await flush();
+  focusOn(document.body);
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
+  fromFrame(frame, { raphaelPage: 1, type: "open", url: "https://shop.example/a" });
+  expect(send).not.toHaveBeenCalled();
+  expect(opener).not.toHaveBeenCalled();
+  expect(document.querySelector(".pg-ask")).toBeNull();
+});
+
+test("a page that took the focus by itself, the pointer elsewhere, does not speak: the owner sees the words and decides", async () => {
+  const { frame, send } = mount();
+  await flush();
+  pointerAt(2000, 2000);
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "再買" });
+  expect(send).not.toHaveBeenCalled();
+  expect(document.querySelectorAll(".pg-ask")).toHaveLength(1);
+  expect(document.querySelector(".pg-ask")!.textContent).toContain("買兩個");
+  document.querySelector<HTMLElement>('.pg-ask [data-dlg="yes"]')!.click();
+  expect(send).toHaveBeenCalledExactlyOnceWith("買兩個");
+});
+
+test("a page the owner said no to asks no more, and a real press in it still speaks", async () => {
+  const { frame, send } = mount();
+  await flush();
+  pointerAt(2000, 2000);
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買兩個" });
+  document.querySelector<HTMLElement>('.pg-ask [data-dlg="cancel"]')!.click();
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買三個" });
+  expect(document.querySelector(".pg-ask")).toBeNull();
+  expect(send).not.toHaveBeenCalled();
+  pointerAt(10, 10);
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買四個" });
+  expect(send).toHaveBeenCalledExactlyOnceWith("買四個");
+});
+
+test("a press right after a press in the app, with no move between, is not sure either; Tab into the page is", async () => {
+  const { frame, send } = mount();
+  await flush();
+  window.dispatchEvent(new MouseEvent("pointerdown", { clientX: 10, clientY: 10 }));
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買" });
+  expect(send).not.toHaveBeenCalled();
+  document.querySelector<HTMLElement>('.pg-ask [data-dlg="yes"]')!.click();
+  expect(send).toHaveBeenCalledExactlyOnceWith("買");
+  send.mockClear();
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab" }));
+  fromFrame(frame, { raphaelPage: 1, type: "send", text: "買" });
+  expect(send).toHaveBeenCalledExactlyOnceWith("買");
 });
 
 test("a message from anywhere else is not a page's", async () => {

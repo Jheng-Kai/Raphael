@@ -40,9 +40,7 @@ function mount() {
     app: { undo: { begin: vi.fn() } } as unknown as AppContext,
     member: () => LIST.members.find((m) => m.id === current)!,
     list: () => LIST,
-    presets: () => [],
     update: vi.fn(async (_id: number, _patch: MemberPatch) => true),
-    setPicture: vi.fn(async () => {}),
     close: vi.fn<() => void>(),
   };
   const panel = createDetails(host);

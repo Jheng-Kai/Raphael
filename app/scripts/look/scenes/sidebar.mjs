@@ -2,7 +2,6 @@ import { scene, click, hover, check, page, room, settings, wait } from "./steps.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
-const ownerPresets = { presets: [fixture.sidebarOwnerPreset] };
 
 export default [
   scene("sidebar", "One conversation sidebar across Home and dictation", [page("home"), check("sidebar-shell"), page("dictation"), check("sidebar-shell"), page("agent"), check("sidebar-shell")]),
@@ -20,7 +19,6 @@ export default [
   scene("sidebar-group-avatar-pair", "Two participant faces fill the same grid in sidebar and header", [room(1), { action: "member-column", collapsed: false }, check("sidebar-room-avatar"), check("sidebar-shell")], { rooms: fixture.rooms.map(room => ({...room, member_ids:room.id === 1 ? [0,1] : room.member_ids})) }),
   scene("sidebar-group-avatar-four", "Four participant faces fill a 2 by 2 grid without rings", [room(1),{action:'member-column',collapsed:false},check('sidebar-room-avatar'),check('sidebar-shell')], {rooms:fixture.rooms.map(room=>({...room,member_ids:room.id===1?[0,1,2,3]:room.member_ids}))}),
   scene("sidebar-room-home", "Leaving a group selects Home alone and returning selects that group alone", [room(1), page("home"), check("sidebar-shell"), room(1), check("sidebar-shell")]),
-  scene("sidebar-owner", "Account exposes the shared drag and crop avatar picker", [...settings("general"), check("owner-avatar"), click('[data-owner-photo]'), wait('.mb-avpop')], ownerPresets),
-  scene("sidebar-owner-preset", "A local avatar preset reaches the account and outgoing messages", [...settings("general"), click('[data-owner-photo]'), click('.mb-avpop [data-preset]'), wait('[data-owner-photo] img'), click('.modal-scrim [data-act="close"]'), check("owner-avatar-saved")], ownerPresets),
+  scene("sidebar-owner", "Account exposes the shared drag and crop avatar picker", [...settings("general"), check("owner-avatar"), click('[data-owner-photo]'), wait('.mb-avpop')]),
   scene("sidebar-owner-upload", "An uploaded and dragged owner photo reaches the account and outgoing messages", [...settings("general"), click('[data-owner-photo]'), click('.mb-avpop [data-pick="0"]'), { action: "upload", selector: 'input.mb-picker', path: 'public/brand/glyph-ring.png' }, wait('.av-crop-view img'), { action: "wheel", selector: '.av-crop-view', deltaY: -200 }, { action: "pointer-drag", selector: '.av-crop-view', dx: 20, dy: -10 }, click('[data-act="crop-done"]'), wait('[data-owner-photo] img'), click('.modal-scrim [data-act="close"]'), check("owner-avatar-saved")]),
 ];

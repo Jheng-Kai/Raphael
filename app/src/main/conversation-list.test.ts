@@ -48,6 +48,26 @@ test("searching and opening a conversation keeps its identity; plus creates for 
   list.destroy();
 });
 
+test("the new-conversation button rests while the open conversation is unwritten, and an unwritten one elsewhere is opened, not doubled", async () => {
+  let current: number | undefined = 3;
+  core.mockImplementation(async () => ({ conversations: [
+    { id: 2, member_id: 7, title: "", created_at_ms: 1, updated_at_ms: 1 },
+    { id: 3, member_id: 7, title: "Cobalt notes", created_at_ms: 2, updated_at_ms: 2, is_default: 1 },
+  ] }));
+  const host = document.createElement("div"); document.body.append(host);
+  const onOpen = vi.fn();
+  const list = mountConversationList(host, { memberId: 7, onOpen, current: () => current }); await flush();
+  const button = host.querySelector<HTMLButtonElement>("[data-conversation-new]")!;
+  expect(button.disabled).toBe(false);
+  button.click();
+  expect(onOpen).toHaveBeenCalledWith(2);
+  expect(core).not.toHaveBeenCalledWith("conversations.create", expect.anything());
+  current = 2;
+  window.dispatchEvent(new CustomEvent("conversation-opened", { detail: 7 }));
+  expect(button.disabled).toBe(true);
+  list.destroy();
+});
+
 test("rename saves the selected row and delete waits for confirmation", async () => {
   core.mockResolvedValue({ conversations: [{ id: 2, member_id: 7, title: "Cobalt notes", created_at_ms: 1, updated_at_ms: Date.now() }] });
   const host = document.createElement("div"); document.body.append(host);

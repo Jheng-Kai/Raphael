@@ -265,6 +265,30 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (unreadable(foreground, background)) { reportContrast(`hover:${fill.selector}`, element, `under the pointer (${fill.selector.trim()})`); break; }
     }
   }
+  // R-UI-53: a hover fill keeps its words off its edges (owner, 2026-10-31). Measured at rest, so every row of every scene counts.
+  const HOVER_TEXT_GAP = 6, HOVER_ROW_MIN = 80;
+  for (const [element, { fill }] of hovered) {
+    if (!fill || /^(?:transparent|none)$/.test(fill.value.trim()) || !visible(element) || !onScreen(element)) continue;
+    const box = element.getBoundingClientRect();
+    if (box.width < HOVER_ROW_MIN || element.matches("input, textarea")) continue;
+    let left = Infinity, right = -Infinity;
+    const range = doc.createRange(), walker = doc.createTreeWalker(element, 4);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim() || !visible(node.parentElement)) continue;
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects?.() ?? []) {
+        let end = rect.right;
+        // An ellipsis ends where its box ends, not where the whole sentence would.
+        for (let parent = node.parentElement; parent && parent !== element; parent = parent.parentElement)
+          if (/hidden|clip/.test(win.getComputedStyle(parent).overflowX)) end = Math.min(end, parent.getBoundingClientRect().right);
+        left = Math.min(left, rect.left); right = Math.max(right, end);
+      }
+    }
+    if (left === Infinity) continue;
+    const cutOff = element.scrollWidth > element.clientWidth + 1;
+    if (left - box.left < HOVER_TEXT_GAP || (!cutOff && box.right - right < HOVER_TEXT_GAP))
+      productRules.push({ ...describe(element), rule: "R-UI-53", reason: `Words ${Math.round(left - box.left)}px and ${Math.round(box.right - right)}px from the edges of a hover fill (${fill.selector.trim()})` });
+  }
   const documentWidth = Math.max(doc.documentElement.scrollWidth, doc.body.scrollWidth);
   return { horizontalOverflow: { document: documentWidth > viewport.width + 1, documentWidth, viewportWidth: viewport.width, elements: horizontalOverflow }, outsideViewport, missingI18nKeys, nativeControls, invalidDurations, mixedLanguage, rawMarkdown, productRules };
 }

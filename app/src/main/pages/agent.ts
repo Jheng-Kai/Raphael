@@ -289,9 +289,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   let visible = false;
   let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
+  const chosenConversations = new Map<number, number>();
   const members = createMembers({
     app,
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
+    conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => desktop.sync()); },
@@ -332,7 +334,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   conversationButton.append(members.pill, caption);
   head.append(conversationButton);
   el.querySelector(".mb-head-c")!.append(head);
-  const chosenConversations = new Map<number, number>();
   const conversationCache = new Map<number, ConversationInfo[]>();
   let targetTurn: number | undefined;
   const quotaHost = document.createElement("div"); quotaHost.className = "quota-chips";
@@ -366,6 +367,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         else chosenConversations.delete(member);
       }
       if (member === memberId()) drawConversation();
+      window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
   }
 
@@ -375,6 +377,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     chosenConversations.set(member, id); targetTurn = turnId;
     if (changed) members.select(member); else switchThread();
     drawConversation();
+    window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
   }
 
   window.addEventListener("conversation-deleted", event => {
@@ -453,7 +456,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const slashMenu = mountSlashMenu(input, { memberId });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
-  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { openSources: () => app.go("settings", "models"), onEvent: handler => app.onEvent(handler) });
+  composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler) });
   const voiceButton = composer.querySelector<HTMLButtonElement>(".cmp-voice")!;
   const sendButton = composer.querySelector<HTMLButtonElement>(".cmp-send")!;
   const fileChip = composer.querySelector<HTMLElement>(".cmp-file")!;
@@ -481,7 +484,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const yesButton = askCard.querySelector<HTMLButtonElement>(".ask-yes")!;
   const draftPanel = createDraftPanel({
     groups: () => members.groups(),
-    presets: () => members.presets(),
     onConfirm: (edited, groups) => void answer(true, false, edited, groups),
     onCancel: () => void answer(false),
   });

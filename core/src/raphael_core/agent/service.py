@@ -168,6 +168,7 @@ from ..members.activity import Activity, member_turn, step as activity_step, too
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import MEMORY_TOOLS, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
+from .persona import NEW_MEMBER
 from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
@@ -183,7 +184,7 @@ from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
 from .pages import Pages, PageError
 from .harness_tools import (
-    CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, HarnessToolError,
+    CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
     routine_event, tool as harness_tool,
 )
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS
@@ -1764,6 +1765,8 @@ class AgentService:
                     memory_index=index, narrated=True,
                 )
             system += roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings)
+            if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
+                system += NEW_MEMBER
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             if ask.speaker.is_raphael:
@@ -2381,7 +2384,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("routine_list", "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT):
+            if tool.key in ("routine_list", "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2556,6 +2559,12 @@ class AgentService:
                 data = self._show_draft(ask, args)
             elif name in ("show_page", "update_page"):
                 data = self._show_page(ask, name, args)
+            elif name == SET_MY_JOB:
+                if ask.scope != "private" or ask.nested or ask.quick:
+                    raise HarnessToolError("private_chat_only")
+                if self._team is None:
+                    raise HarnessToolError("unavailable")
+                data = await self._team.set_my_job(ask.speaker.id, args)
             elif name in ("self_check", "raphael_help"):
                 from .self_check import ABOUT, snapshot
                 data = snapshot(self, ask) if name == "self_check" else {"reference": ABOUT}

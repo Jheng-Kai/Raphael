@@ -31,7 +31,10 @@ export function relativeTime(ms: number, now = Date.now()): string {
   return t("conversations.days", { p0: Math.floor(minutes / 1440) });
 }
 
-export function mountConversationList(host: HTMLElement, options: { memberId: number; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void }): { refresh(): Promise<void>; destroy(): void } {
+/** A conversation nobody has written in yet: its title comes from its first question. */
+const isBlank = (conversation: ConversationInfo): boolean => conversation.kind !== "quick" && !conversation.title;
+
+export function mountConversationList(host: HTMLElement, options: { memberId: number; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
   let conversations: ConversationInfo[] = [];
   let epoch = 0, destroyed = false;
   host.classList.add("conversation-list");
@@ -46,6 +49,10 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     input.placeholder = t("conversations.search");
     input.setAttribute("aria-label", t("conversations.search"));
     host.querySelector("[data-conversation-new] span")!.textContent = t("conversations.new");
+    // The one open is already new: there is nothing another would add.
+    const current = options.current?.();
+    const open = conversations.find(c => (current === undefined ? !!c.is_default : c.id === current));
+    host.querySelector<HTMLButtonElement>("[data-conversation-new]")!.disabled = !!open && isBlank(open);
     const found = conversations.filter(c => conversationTitle(c).toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
     const section = (kind: "quick" | "standard", label: string): string => {
       const items = found.filter(c => (c.kind === "quick") === (kind === "quick"));
@@ -107,6 +114,9 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
       });
       document.querySelector('[data-pick="delete"], [data-pick="clear"]')?.classList.add("danger");
     } else if (target.closest("[data-conversation-new]")) {
+      // Another conversation still unwritten is the new one; the list does not fill with empty rows.
+      const waiting = conversations.find(isBlank);
+      if (waiting) { closeMenu(); options.onOpen(waiting.id); return; }
       void api.core<{ conversation: ConversationInfo }>("conversations.create", { member_id: options.memberId }).then(result => {
         conversationChange(options.memberId); closeMenu(); options.onOpen(result.conversation.id);
       }).catch(error => toaster.info(describeError(error)));
@@ -116,7 +126,9 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
   input.addEventListener("input", draw);
   const changed = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) void refresh(); };
   window.addEventListener("conversations-changed", changed);
+  const opened = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) draw(); };
+  window.addEventListener("conversation-opened", opened);
   const stopLocale = onLocaleChange(draw);
   draw(); void refresh();
-  return { refresh, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); host.replaceChildren(); } };
+  return { refresh, destroy() { destroyed = true; epoch++; host.removeEventListener("click", clicked); input.removeEventListener("input", draw); stopLocale(); window.removeEventListener("conversations-changed", changed); window.removeEventListener("conversation-opened", opened); host.replaceChildren(); } };
 }

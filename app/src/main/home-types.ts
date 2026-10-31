@@ -9,7 +9,7 @@ export interface HomeItem {
   at_ms: number;
   member_id: number;
   name: string;
-  avatar_url: string | null;
+  avatar: string;
   turn_id: number | null;
   conversation_id: number | null;
   routine_id: number | null;

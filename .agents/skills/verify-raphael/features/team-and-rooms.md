@@ -68,12 +68,6 @@ The following retained room and sidebar journeys cover their shared consumers:
 npm run look -- sidebar-owner-upload --theme both --width 1120,720,1920x1080
 ```
 
-The following retained room and sidebar journeys cover their shared consumers:
-
-```powershell
-npm run look -- sidebar-owner-preset --theme both --width 1120,720,1920x1080
-```
-
 ## Gotchas
 
 Synthetic IPC does not establish native persistence, provider or design acceptance.

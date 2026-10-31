@@ -105,7 +105,6 @@ export interface ColumnHost {
   select(id: number): void;
   newMember(groupId: number | null): void;
   newGroup(): void;
-  newConversation?(): void;
   newGroupChat?(): void;
   memberAction?(id: number, action: string): void;
   /** 移到分組 chose a group for member `id` (null: 未分組). */
@@ -240,14 +239,12 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
       openActions(
         addButton,
         [
-          { id: "conversation", label: t("members.sideNewConversation"), icon: "chat" },
           { id: "member", label: t("members.newMember") + "  Ctrl+N", icon: "plus" },
           { id: "group", label: t("members.newGroup"), icon: "folder" },
           { id: "group-chat", label: t("members.sideNewGroupChat"), icon: "chat" },
         ],
         pick => {
           if (pick === "member") host.newMember(null);
-          else if (pick === "conversation") host.newConversation?.();
           else if (pick === "group") host.newGroup();
           else if (host.newGroupChat) host.newGroupChat();
           else void openNewGroupChat();

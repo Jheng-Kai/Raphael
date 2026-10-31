@@ -579,7 +579,8 @@ const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (c
 export function effortSliderHTML(levels: readonly string[], value: string): string {
   const at = Math.max(0, levels.indexOf(value));
   return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
-    (levels.length > 1 ? `<input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` : "") +
+    (levels.length > 1 ? `<div class="mc-track"><input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` +
+      `<span class="mc-dots" aria-hidden="true">${levels.map((level, index) => `<i class="mc-dot" data-dot="${esc(level)}" data-on="${index === at}"></i>`).join("")}</span></div>` : "") +
     `<div class="mc-stops" aria-hidden="true">${levels.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${index === at}">${esc(effortText(level))}</span>`).join("")}</div></div>`;
 }
 
@@ -588,7 +589,7 @@ export function moveEffortSlider(range: HTMLInputElement): string {
   const levels = (range.dataset.levels ?? "").split(","), at = Number(range.value), level = levels[at] ?? "";
   range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
   range.setAttribute("aria-valuetext", effortText(level));
-  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort]") ?? []) stop.dataset.on = String(stop.dataset.effort === level);
+  for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort], [data-dot]") ?? []) stop.dataset.on = String((stop.dataset.effort ?? stop.dataset.dot) === level);
   return level;
 }
 

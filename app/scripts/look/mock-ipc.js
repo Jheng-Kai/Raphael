@@ -404,7 +404,6 @@ export function installMock(fixture, config = {}, target = window) {
           apps: counted.apps, connected: counted.count,
         } };
       }
-      case "members.presets": return { presets: data.presets };
       case "members.viewing": case "members.read": return {};
       case "members.tool_choices": return { tools: [], connections: data.servers };
       case "members.update": { const member = update(data.members, p.id, p); if (p.hidden && p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { member }; }
@@ -413,7 +412,17 @@ export function installMock(fixture, config = {}, target = window) {
         if (p.id !== 0 && !data.members.some(member => member.id === p.id && !member.hidden)) throw new Error("Invalid params: no such member");
         data.primaryId = p.id; notify("MembersChanged", { member_id: p.id }); return { primary_id: p.id };
       }
-      case "members.create": { const member = { ...data.members[1], ...p, id: nextId(data.members) }; data.members.push(member); notify("MembersChanged", { member_id: member.id }); return { member, routine_offer: null }; }
+      case "members.create": {
+        const member = { ...data.members[1], role: "", blurb: "", ...p, id: nextId(data.members) };
+        data.members.push(member);
+        if (p.greet) {
+          mainConversation(member.id);
+          const conversation = data.conversations.find(item => item.member_id === member.id);
+          data.turns.push({ id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: `你好，我是${member.name}。你想請我幫你做什麼？`, detail: null, status: "done", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() });
+        }
+        notify("MembersChanged", { member_id: member.id });
+        return { member, routine_offer: null };
+      }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow), undo: skillUndo.get(p.member_id)?.revision ?? null };
       case "members.skills.read": { const skill = skillOf(p); return { skill: skillRow(skill), text: skillText(skill) }; }

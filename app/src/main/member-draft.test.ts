@@ -6,7 +6,6 @@ import {
   draftGroupChoices,
   hasDrafts,
   isSettledDraftTurn,
-  presetUrlOf,
   settledDraftHTML,
 } from "./member-draft";
 import { emptyTimelineState, turnHTML } from "./timeline";
@@ -77,18 +76,12 @@ describe("member draft helpers", () => {
     expect(choices.map((c) => c.label)).toEqual(["未分組", "專案工作", "個人公司"]);
   });
 
-  test("presetUrlOf resolves preset stem or full preset:<stem>", () => {
-    const presets = [{ avatar: "preset:1", name: "1", url: "data:image/png;base64,AAAA" }];
-    expect(presetUrlOf("preset:1", presets)).toBe("data:image/png;base64,AAAA");
-    expect(presetUrlOf("1", presets)).toBe("data:image/png;base64,AAAA");
-    expect(presetUrlOf("", presets)).toBeNull();
-  });
 });
 
 describe("DraftPanelController", () => {
   test("group edits preserve draft membership and reach the shared confirmation", () => {
     const onConfirm = vi.fn();
-    const panel = createDraftPanel({ groups: () => [], presets: () => [], onConfirm, onCancel: vi.fn() });
+    const panel = createDraftPanel({ groups: () => [], onConfirm, onCancel: vi.fn() });
     panel.sync(sampleQuestion());
     const input = panel.el.querySelector<HTMLInputElement>('[data-draft-group="group-1"]')!;
     input.value = "Studio";
@@ -105,7 +98,6 @@ describe("DraftPanelController", () => {
     const onCancel = vi.fn();
     const panel = createDraftPanel({
       groups: () => [{ id: 1, name: "專案工作", position: 0, sources: [] }],
-      presets: () => [],
       onConfirm,
       onCancel,
     });

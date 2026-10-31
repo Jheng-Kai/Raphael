@@ -130,6 +130,8 @@
 /* The depth of thought: a slider to drag, with each stop named under it. */
 .mc-depth { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-4); row-gap: 2px; }
 .mc-depth-title { grid-row: 1 / span 2; color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
+.mc-track { display: contents; }
+.mc-dots { display: none; }
 .mc-range { --at: 0%; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; appearance: none; }
 .mc-range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--text) var(--at), var(--line) var(--at)); }
 .mc-range::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; border: 0; border-radius: var(--r-pill); background: var(--text); appearance: none; transition: transform 120ms ease; }

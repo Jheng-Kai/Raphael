@@ -31,7 +31,7 @@ export function stableSnapshot(selector, keys) {
   const items = keys ? keys.map(key => ({ selector: key, node: [...document.querySelectorAll(key)].find(node => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0) })).filter(item => item.node) : [{ selector, node: control }];
   if (!keys) {
     const top = control.getBoundingClientRect().top;
-    const boundary = control.closest('.modal, .mp-dialog, .page') ?? document.body;
+    const boundary = control.closest('.modal, .mp-dialog, .cr-dialog, .page') ?? document.body;
     for (let node = control; node && node !== boundary; node = node.parentElement) {
       for (let previous = node.previousElementSibling; previous; previous = previous.previousElementSibling) {
         const bounds = previous.getBoundingClientRect();

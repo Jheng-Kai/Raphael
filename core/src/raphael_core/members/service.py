@@ -15,8 +15,7 @@ The RPC methods (the main window only, through the shell's allow-list):
   has places to look (`sources`): `{title, prompt, schedule}` for 「每天早上的進度」 at 09:00, or
   null. It is offered, not made: `routines.create` makes it.
 - `members.update {id, name?, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, position?}`
-  -> `{member}`. `avatar` here is "", "preset:<stem>" or "slime:<shape>:<color>"; a picture of the owner's own comes by
-  `members.set_avatar`. Raphael (0) is not changed here: his picture is the app's to change.
+  -> `{member}`. `avatar` here is "" or a slime, "slime:<character>" or "slime:color:<color>". Raphael (0) is not changed here: his picture is the app's to change.
 - `members.delete {id}` -> `{deleted}`: the member, its conversation (and the exchanges of other
   threads with it), its memory folder, its routines, its tasks and its picture. The app asks first.
 - `members.set_primary {id}` -> `{primary_id}`: the owner's primary contact, the Bot that new work is brought
@@ -28,9 +27,6 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.set_avatar {id, name, mime, data}` -> `{member}`: a picture of the owner's own, in
   base64, checked as the images of a request are (`services.attachments`), copied into
   `<local>\\avatars\\members\\` under a name of its own: the path it came from is never known here.
-- `members.presets {}` -> `{presets: [{avatar, name, url}]}`: the pictures in
-  `<local>\\avatars\\presets\\` (`.webp` and `.png`), if that folder is there. They are the owner's
-  own files and never part of the app.
 - `members.read {id}` -> `{}`; `members.viewing {id | null}` -> `{}`: which thread is on screen now
   (null for none), so that what arrives there is not news.
 - `members.tool_choices {}` -> `{tools, connections}`: Raphael's own tools a member may be given, by
@@ -112,14 +108,22 @@ CATCH_UP_MS = 12 * 3_600_000
 # What the member column shows of the last line of a thread, at most.
 PREVIEW_CHARS = 80
 # The folders of the pictures, in the app's local folder.
+# What a member made in the maker says first, before anything has run: no model is asked, so it costs nothing and is there at once.
+GREETINGS = {
+    "zh-TW": "你好，我是{name}。你想請我幫你做什麼？",
+    "en": "Hi, I'm {name}. What would you like me to do for you?",
+    "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
+}
+GREETINGS_WITH_A_JOB = {
+    "zh-TW": "你好，我是{name}，你的{role}。想先從哪件事開始？",
+    "en": "Hi, I'm {name}, your {role}. Where shall we start?",
+    "ja": "はじめまして、{name}です。{role}として動きます。何から始めましょうか？",
+}
 AVATARS_DIR = "avatars"
-PRESETS_DIR = "presets"
+SLIME = "slime:"
 MEMBERS_DIR = "members"
 # Raphael's own picture, kept by the shell (app/src-tauri/src/avatar.rs): read here, never written.
 RAPHAEL_AVATAR_DIR = "avatar"
-PRESET_SUFFIXES = (".webp", ".png")
-MAX_PRESETS = 60
-_PRESET_STEM = re.compile(r"[A-Za-z0-9._ -]{1,120}")
 _EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}
 # The template of the routine offered to a member of a group with places to look.
 TEMPLATE_TIME = "09:00"
@@ -291,7 +295,6 @@ class MembersService:
             "members.delete": self._delete,
             "members.set_primary": self._set_primary,
             "members.set_avatar": self._set_avatar,
-            "members.presets": self._presets,
             "members.read": self._read,
             "members.unread": self._unread,
             "members.viewing": self._viewing_now,
@@ -501,30 +504,12 @@ class MembersService:
         self._pictures[path] = _Picture(key, url)
         return url
 
-    def _preset_files(self) -> list[Path]:
-        folder = self._avatars / PRESETS_DIR
-        try:
-            files = sorted(
-                path
-                for path in folder.iterdir()
-                if path.is_file()
-                and path.suffix.lower() in PRESET_SUFFIXES
-                and _PRESET_STEM.fullmatch(path.stem)
-            )
-        except OSError:  # no folder: no presets
-            return []
-        return files[:MAX_PRESETS]
-
     def _avatar_url(self, avatar: str) -> str | None:
         """The picture a member's `avatar` names, as a data URL; None for none, or one that is
         gone (the app shows the default silhouette)."""
         kind, _, name = avatar.partition(":")
         if kind == "file" and name:
             return self._data_url(self._avatars / MEMBERS_DIR / name)
-        if kind == "preset" and name:
-            for path in self._preset_files():
-                if path.stem == name:
-                    return self._data_url(path)
         return None
 
     def _raphael_picture(self) -> tuple[str, dict] | None:
@@ -835,9 +820,25 @@ class MembersService:
             raise _rpc_error(error) from None
         logger.info("A member was added")
         group = None if member.group_id is None else self.store.group(member.group_id)
-        offer = routine_template(group.sources if group else (), self._ui_language(params))
+        language = self._ui_language(params)
+        offer = routine_template(group.sources if group else (), language)
+        if params.get("greet") is True:
+            words = GREETINGS_WITH_A_JOB[language] if member.role else GREETINGS[language]
+            self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
+                              text=words.format(name=member.name, role=member.role), status="done", source="greeting",
+                              member_id=member.id)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}
+
+    async def set_my_job(self, member_id: int, arguments: dict) -> dict:
+        """A new member saves the job its owner has just given it. Once only: after that the job is the owner's to edit."""
+        member = self.store.member(member_id)
+        if member is None or self.store.is_chief(member_id):
+            raise invalid_params("only a member can take a job")
+        if member.role or member.instructions:
+            raise invalid_params("this member has a job already")
+        saved = await self._update({"id": member_id, "role": arguments.get("role"), "instructions": arguments.get("instructions")})
+        return {"role": saved["member"]["role"], "note": "Saved. The owner can see it in your details."}
 
     async def _update(self, params: dict) -> dict:
         member_id = self._member_id(params)
@@ -938,14 +939,6 @@ class MembersService:
         logger.info("A member's picture was set (%s, %d bytes)", picture.mime, len(picture.data))
         self._changed()
         return {"member": self.view_of(member)}
-
-    async def _presets(self, params: dict) -> dict:
-        presets = []
-        for path in await asyncio.to_thread(self._preset_files):
-            url = self._data_url(path)
-            if url is not None:
-                presets.append({"avatar": f"preset:{path.stem}", "name": path.stem, "url": url})
-        return {"presets": presets}
 
     async def _unread(self, params: dict) -> dict:
         member_id = _whole(params, "id")
@@ -1079,9 +1072,6 @@ class MembersService:
         """Build structured member and group drafts for a pending team administration batch."""
         from ..agent.team_admin import GroupDraft, MemberDraft
 
-        presets = (await self._presets({}))["presets"]
-        available = [preset["avatar"] for preset in presets]
-        used = {member.avatar for member in self.store.members() if member.avatar}
         existing_groups = {group.name.casefold() for group in self.store.groups()}
         drafts: list[dict[str, Any]] = []
         groups: list[dict[str, Any]] = []
@@ -1102,19 +1092,8 @@ class MembersService:
                 current_group = self.store.group(current.group_id) if current and current.group_id else None
                 group_val = arguments.get("group", current_group.name if current_group else "")
                 group_name = group_val.strip() if isinstance(group_val, str) else ""
-                if "avatar_preset" in arguments:
-                    raw_preset = arguments["avatar_preset"]
-                    avatar_preset = (
-                        ("preset:" + raw_preset if raw_preset and not raw_preset.startswith("preset:") else raw_preset)
-                        if isinstance(raw_preset, str)
-                        else ""
-                    )
-                elif is_update:
-                    avatar_preset = current.avatar if current and current.avatar.startswith("preset:") else ""
-                else:
-                    avatar_preset = next((p for p in available if p not in used), "")
-                if avatar_preset:
-                    used.add(avatar_preset)
+                wanted = arguments.get("avatar_preset", current.avatar if current else "")
+                avatar_preset = wanted if isinstance(wanted, str) and wanted.startswith(SLIME) else ""
                 draft = MemberDraft(
                     id=f"draft-{len(drafts) + 1}",
                     name=str(arguments.get("name", current.name if current else "") or ""),
@@ -1243,15 +1222,13 @@ class MembersService:
             raise invalid_params("edited drafts exceed the proposed scope")
         if not planned:
             return []
-        # Finish filesystem work before opening the transaction; its handlers must not yield.
-        presets = (await self._presets({}))["presets"]
         notifications, pictures = [], []
         notify, remove_picture = self._notify, self._remove_picture
         self._notify = lambda method, data: notifications.append((method, data))
         self._remove_picture = pictures.append
         try:
             with self.store.transaction():
-                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"], presets=presets)
+                results = [await self.admin_tool(member_id, "member_create" if op["name"] == "create_member" else op["name"], op["arguments"])
                            for op in planned]
         finally:
             self._notify, self._remove_picture = notify, remove_picture
@@ -1262,7 +1239,7 @@ class MembersService:
                 notify(method, data)
         return results
 
-    async def admin_tool(self, member_id: int, name: str, arguments: dict, *, presets: list[dict] | None = None) -> dict:
+    async def admin_tool(self, member_id: int, name: str, arguments: dict) -> dict:
         """Adapt Raphael's registry to the same RPC handlers, defaults and notifications."""
         from ..agent.team_admin import DEFINITIONS
 
@@ -1283,9 +1260,7 @@ class MembersService:
                                 "skills_count": len(self.capabilities.skills(identifier)),
                                 "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
                                 "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
-            return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
-                    "avatar_presets": [{"avatar": preset["avatar"], "name": preset["name"]}
-                                       for preset in (await self._presets({}))["presets"]]}
+            return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"]}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
             if name == "member_update" and params.get("id") == 0:
@@ -1309,21 +1284,11 @@ class MembersService:
                 return {"member": self._raphael_view(self._language(), set(), set(), {})}
             if name == "member_update":
                 self._member_id(params)
-            if presets is None:
-                presets = (await self._presets({}))["presets"]
-            available = {preset["avatar"] for preset in presets}
             if "avatar_preset" in params:
                 avatar = params.pop("avatar_preset")
-                if not isinstance(avatar, str):
-                    raise invalid_params("invalid avatar preset")
-                if avatar and not avatar.startswith("preset:"):
-                    avatar = "preset:" + avatar
-                if avatar and avatar not in available:
-                    raise invalid_params("unavailable avatar preset")
+                if not isinstance(avatar, str) or (avatar and not avatar.startswith(SLIME)):
+                    raise invalid_params("a member's avatar is a slime")
                 params["avatar"] = avatar
-            elif name == "member_create":
-                used = {member.avatar for member in self.store.members()}
-                params["avatar"] = next((preset["avatar"] for preset in presets if preset["avatar"] not in used), "")
             created_group = None
             if "group" in params:
                 group_name = params.pop("group")

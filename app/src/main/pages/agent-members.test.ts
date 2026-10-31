@@ -20,7 +20,6 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   workerCancel: vi.fn(),
   workerRerun: vi.fn(),
   membersList: vi.fn(),
-  membersPresets: vi.fn(),
   membersRead: vi.fn(),
   membersViewing: vi.fn(),
   membersToolChoices: vi.fn(),
@@ -160,8 +159,8 @@ test("a member is deleted from its ⋯ menu only after the confirmation, and its
   agent.hide();
 });
 
-test("新對話 makes a new conversation with the picked member and opens it, also from that member's empty one", async () => {
-  const conversations = [{ id: 31, member_id: 3, title: "", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
+test("the sidebar's plus makes no conversation, and 新對話 in a member's details opens the new one", async () => {
+  const conversations = [{ id: 31, member_id: 3, title: "Cobalt", is_default: 1, created_at_ms: 1, updated_at_ms: 1 }];
   api.core.mockImplementation(async (method: string, params: { member_id?: number }) => {
     if (method === "conversations.list") return { conversations: conversations.filter(c => c.member_id === params.member_id) };
     if (method !== "conversations.create") return undefined;
@@ -170,23 +169,19 @@ test("新對話 makes a new conversation with the picked member and opens it, al
     return { conversation: made };
   });
   const agent = mount(); await flush(); await pick(3);
-  const start = async (name: string) => {
-    $('[data-col="add"]').click(); $('[data-pick="conversation"]').click();
-    const search = $<HTMLInputElement>("[data-chat-search]"); search.value = name; search.dispatchEvent(new Event("input"));
-    expect(document.querySelectorAll('[data-dlg="conversation"]')).toHaveLength(1);
-    $('[data-dlg="conversation"]').click(); await flush();
-  };
-  await start("日文老師");
+  $('[data-col="add"]').click();
+  expect(document.querySelector('#app-popover [data-pick="conversation"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  const button = $<HTMLButtonElement>(".mb-det [data-conversation-new]");
+  expect(button.disabled).toBe(false);
+  button.click(); await flush();
   expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 3 });
   expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 3, conversation_id: 101 }));
-  await start("行程管家");
-  expect(api.core).toHaveBeenCalledWith("conversations.create", { member_id: 4 });
-  expect(document.querySelector('[data-member="4"][aria-current="true"]')).not.toBeNull();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({ member_id: 4, conversation_id: 102 }));
-  expect(document.querySelector(".mb-chat-picker")).toBeNull(); agent.hide();
+  expect($<HTMLButtonElement>(".mb-det [data-conversation-new]").disabled).toBe(true);
+  agent.hide();
 });
 
-test.each([undefined, 0, 4])("primary %s swaps both conversation pickers without changing the open thread", async primary_id => {
+test.each([undefined, 0, 4])("primary %s swaps the member picker without changing the open thread", async primary_id => {
   api.membersList.mockResolvedValue({ ...LIST, team_context: { primary_id } });
   const agent = mount(); await flush();
   const expected = primary_id === 4 ? ['4', '3', '0'] : ['0', '3', '4'];
@@ -194,12 +189,9 @@ test.each([undefined, 0, 4])("primary %s swaps both conversation pickers without
   $('.mb-pick').click();
   expect([...document.querySelectorAll<HTMLElement>('#app-popover [data-value]')].slice(0, 3).map(row => row.dataset.value)).toEqual(expected);
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  $('[data-col="add"]').click(); $('[data-pick="conversation"]').click();
-  expect([...document.querySelectorAll<HTMLElement>('[data-dlg="conversation"]')].map(row => row.dataset.id)).toEqual(expected);
-  expect(document.querySelector('[data-dlg="conversation"][data-id="0"] .mb-av')).toBeNull();
   expect(api.agentHistoryList).toHaveBeenCalledTimes(historyCalls);
   expect(document.querySelector('.mb-col [data-member="0"][aria-current="true"]')).not.toBeNull();
-  $('[data-dlg="cancel"]').click(); agent.hide();
+  agent.hide();
 });
 
 test("files dropped into a member's thread are sent only to that member", async () => {
@@ -234,7 +226,6 @@ beforeEach(() => {
   api.providersList.mockResolvedValue({ providers: [] });
   api.agentQuestionOpen.mockResolvedValue(null);
   api.membersList.mockResolvedValue(structuredClone(LIST));
-  api.membersPresets.mockResolvedValue({ presets: [] });
   api.membersRead.mockResolvedValue({});
   api.membersViewing.mockResolvedValue({});
   api.membersToolChoices.mockResolvedValue({ tools: ["web_search", "weather"], connections: [] });
@@ -933,7 +924,9 @@ describe("a new member", () => {
     api.membersList.mockResolvedValue({ ...structuredClone(LIST), members: [...structuredClone(LIST).members, made] });
     $('[data-col="add"]').click();
     $('#app-popover [data-pick="member"]').click();
-    $<HTMLInputElement>("#mb-new-name").value = "進度官";
+    const name = $<HTMLInputElement>("#mb-new-name");
+    name.value = "進度官";
+    name.dispatchEvent(new Event("input"));
     $('[data-dlg="create"]').click();
     await flush();
   }
@@ -941,7 +934,7 @@ describe("a new member", () => {
   test("is made in the language of the window and opened; the routine the core offers is asked, 加入 makes it", async () => {
     vi.useFakeTimers();
     await create(OFFER);
-    expect(api.membersCreate).toHaveBeenCalledWith({ name: "進度官", role: "", personality: "", instructions: "", group_id: null, ui_language: "zh-TW", blurb: "", reply_style: "full", voice: "", read_aloud: false, notify: false, ask_before_members: false, draft_first: true });
+    expect(api.membersCreate).toHaveBeenCalledWith(expect.objectContaining({ name: "進度官", group_id: null, ui_language: "zh-TW", greet: true, avatar: expect.stringMatching(/^slime:/) }));
     expect($(".mb-pill-t").textContent).toBe("進度官");
     expect(api.routinesCreate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(10);
@@ -970,29 +963,13 @@ describe("a new member", () => {
     const picker = $<HTMLButtonElement>(".mb-pick");
     picker.click();
     expect(document.getElementById("app-popover")).not.toBeNull();
-    $<HTMLElement>('#app-popover [data-action="3"]').click();
+    $<HTMLElement>('#app-popover [data-action="2"]').click();
     expect(document.getElementById("app-popover")).toBeNull();
     expect(document.querySelector(".mb-dialog")).not.toBeNull();
     expect(document.activeElement?.id).toBe("mb-new-name");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(document.querySelector(".mb-scrim")).toBeNull();
     expect(document.activeElement).toBe(picker);
-  });
-
-  test("retries loading presets after a transient failure on startup", async () => {
-    const url = "data:image/png;base64,iVBORw0KGgo=";
-    api.membersPresets.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({
-      presets: [{ avatar: "preset:a", name: "a", url }],
-    });
-    mount();
-    await flush();
-    send({ type: "AgentTurn", turn_id: 99, member_id: 4 });
-    await new Promise((r) => setTimeout(r, 350));
-    await flush();
-    $('[data-col="add"]').click();
-    $('#app-popover [data-pick="member"]').click();
-    $('[data-dlg="avatar"]').click();
-    expect(document.querySelector('#app-popover [data-preset="preset:a"]')).not.toBeNull();
   });
 });
 

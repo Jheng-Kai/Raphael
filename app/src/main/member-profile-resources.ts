@@ -1,57 +1,18 @@
-// The profile and details panel share the member-owned skill and command editor. New members
-// keep these in a draft; existing members write each explicit resource action immediately.
+// The profile and details panel share the member-owned skill and command editor. Each explicit
+// resource action is written immediately.
 import * as api from "./api";
 import { openActions } from "./member-column";
 import { describeError, formatDate } from "./format";
 import { onLocaleChange, t } from "./i18n";
-import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, Routine, WireAttachment } from "./types";
+import type { Member, MemberCommand, MemberPatch, MemberSkill, MemberVoice, WireAttachment } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
-export interface ProfileDraft {
-  skills: (MemberSkill & { importedIds?: number[] })[];
-  commands: MemberCommand[];
-  memories: { name: string; body: string; description: string }[];
-  routines: Routine[];
-}
-export const emptyProfileDraft = (): ProfileDraft => ({ skills: [], commands: [], memories: [], routines: [] });
-let draftSerial = 0;
-export const nextProfileDraftId = (): number => --draftSerial;
-
-/** Removes each successful item from the queue, so a failed import can be retried safely. */
-export async function flushMemberProfileDraft(memberId: number, draft: ProfileDraft): Promise<void> {
-  while (draft.skills.length) {
-    const skill = draft.skills[0]!;
-    if (!skill.importedIds) {
-      const answer = await api.membersSkillsImport(memberId, skill.source);
-      skill.importedIds = (answer.skills ?? [answer.skill]).map(imported => imported.id);
-    }
-    for (const id of skill.importedIds) await api.membersSkillsUpdate(memberId, id, skill.enabled);
-    draft.skills.shift();
-  }
-  while (draft.commands.length) {
-    const { name, description, template } = draft.commands[0]!;
-    await api.membersCommandsSave(memberId, { name, description, template });
-    draft.commands.shift();
-  }
-  while (draft.memories.length) {
-    const { body, description } = draft.memories[0]!;
-    await api.core("memory.create", { member_id: memberId, space: "own", body, description });
-    draft.memories.shift();
-  }
-  while (draft.routines.length) {
-    const { title, prompt, schedule, enabled } = draft.routines[0]!;
-    await api.routinesCreate({ member_id: memberId, title, prompt, schedule, enabled });
-    draft.routines.shift();
-  }
-}
-
 export interface ResourceHost {
-  memberId: number | null;
+  memberId: number;
   tab: "skills" | "commands" | "voice";
   /** The narrow details panel gives skills and commands separate subpages. */
   standalone?: boolean;
   member?: Member;
-  draft?: ProfileDraft;
   /** Profile fields remain drafts until its footer is saved. The details panel writes now. */
   patch?(patch: MemberPatch): void;
   changed?(): void;
@@ -68,9 +29,9 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   let busy = false;
   let failed = false;
   let generation = 0;
-  let loaded = host.memberId === null;
-  let skills: MemberSkill[] = host.draft?.skills ?? [];
-  let commands: MemberCommand[] = host.draft?.commands ?? [];
+  let loaded = false;
+  let skills: MemberSkill[] = [];
+  let commands: MemberCommand[] = [];
   let voices: MemberVoice[] = [];
   let configured = false;
   const voiceState = { voice: host.member?.voice ?? "", read_aloud: host.member?.read_aloud ?? false, notify: host.member?.notify ?? false };
@@ -121,7 +82,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
         if (!alive || mine !== generation) return;
         voices = answer.voices;
         configured = answer.configured;
-      } else if (host.memberId !== null) {
+      } else {
         const [s, c] = await Promise.all([api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
         if (!alive || mine !== generation) return;
         skills = s.skills;
@@ -150,12 +111,12 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
   }
   async function patch(next: MemberPatch): Promise<void> {
     if (host.patch) host.patch(next);
-    else if (host.memberId !== null) await api.membersUpdate(host.memberId, next);
+    else await api.membersUpdate(host.memberId, next);
     Object.assign(voiceState, next);
   }
   function choose(action: string | undefined, id: number, target: HTMLButtonElement): void {
     if (action === "skill-cancel") { editing = null; draw(); return; }
-    if (action === "skill-edit" && host.memberId !== null) {
+    if (action === "skill-edit") {
       void (async () => {
         try {
           const answer = await api.core<{ skill: MemberSkill; text: string }>("members.skills.read", { member_id: host.memberId, id });
@@ -173,58 +134,48 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     if (action === "command-edit") { suggested = false; command = { ...commands.find(c => c.id === id)! }; container.innerHTML = ""; draw(); container.querySelector<HTMLInputElement>("#mp-command-name")?.focus(); return; }
     if (action === "command-cancel") { suggested = false; command = { name: "", description: "", template: "" }; container.innerHTML = ""; draw(); return; }
     void run(async () => {
-      if (action === "skill-save" && editing && host.memberId !== null) {
+      if (action === "skill-save" && editing) {
         await api.core("members.skills.update", { member_id: host.memberId, id: editing.id, text: editing.text, expected_hash: editing.revision });
         editing = null;
         await refresh();
-      } else if (action === "skill-undo" && undo && host.memberId !== null) {
+      } else if (action === "skill-undo" && undo) {
         await api.core("members.skills.update", { member_id: host.memberId, undo });
         editing = null;
         await refresh();
       } else if (action === "import") {
         const value = source.trim();
         if (!value) return;
-        if (host.memberId === null) {
-          if (!skills.some(s => s.source === value)) skills.push({ id: nextProfileDraftId(), source: value, name: value, description: "", enabled: true });
-        } else {
-          const answer = await api.membersSkillsImport(host.memberId, value);
-          for (const skill of answer.skills ?? [answer.skill]) {
-            const index = skills.findIndex(existing => existing.id === skill.id);
-            if (index < 0) skills.push(skill); else skills[index] = skill;
-          }
+        const answer = await api.membersSkillsImport(host.memberId, value);
+        for (const skill of answer.skills ?? [answer.skill]) {
+          const index = skills.findIndex(existing => existing.id === skill.id);
+          if (index < 0) skills.push(skill); else skills[index] = skill;
         }
         source = "";
         const field = alive ? container.querySelector<HTMLInputElement>("#mp-skill-source") : null;
         if (field) field.value = "";
       } else if (action === "skill-toggle") {
         const skill = skills.find(s => s.id === id)!;
-        if (host.memberId !== null) await api.membersSkillsUpdate(host.memberId, id, !skill.enabled);
+        await api.membersSkillsUpdate(host.memberId, id, !skill.enabled);
         skill.enabled = !skill.enabled;
       } else if (action === "skill-delete") {
-        if (host.memberId !== null) await api.membersSkillsDelete(host.memberId, id);
+        await api.membersSkillsDelete(host.memberId, id);
         const index = skills.findIndex(s => s.id === id);
         if (index >= 0) skills.splice(index, 1);
         editing = null;
-        if (host.memberId !== null) await refresh();
+        await refresh();
       } else if (action === "command-delete") {
-        if (host.memberId !== null) await api.membersCommandsDelete(host.memberId, id);
+        await api.membersCommandsDelete(host.memberId, id);
         const index = commands.findIndex(c => c.id === id);
         if (index >= 0) commands.splice(index, 1);
       } else if (action === "command-save") {
         const name = command.name.trim().replace(/^\//, "").toLowerCase();
         if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name) || !command.template.includes("{input}")) { toaster.info(t("members.profile.badCommand", { input: "{input}" })); return; }
         const next = { ...command, name, description: command.description.trim(), template: command.template.trim() };
-        if (host.memberId !== null) {
-          const saved = (await api.membersCommandsSave(host.memberId, next) as { command?: MemberCommand } | undefined)?.command;
-          if (saved) {
-            const index = commands.findIndex(existing => existing.id === saved.id);
-            if (index < 0) commands.push(saved); else commands[index] = saved;
-          } else commands = (await api.membersCommandsList(host.memberId)).commands;
-        } else {
-          const index = commands.findIndex(c => c.id === next.id || c.name.toLowerCase() === name.toLowerCase());
-          const saved = { ...next, id: index >= 0 ? commands[index]!.id : nextProfileDraftId() };
-          if (index >= 0) commands[index] = saved; else commands.push(saved);
-        }
+        const saved = (await api.membersCommandsSave(host.memberId, next) as { command?: MemberCommand } | undefined)?.command;
+        if (saved) {
+          const index = commands.findIndex(existing => existing.id === saved.id);
+          if (index < 0) commands.push(saved); else commands[index] = saved;
+        } else commands = (await api.membersCommandsList(host.memberId)).commands;
         command = { name: "", description: "", template: "" };
         suggested = false;
         if (alive) container.innerHTML = "";
@@ -238,7 +189,7 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
     const action = target.dataset.res;
     const id = Number(target.dataset.id);
 
-    if (action === "skill-menu") openActions(target, [...(host.memberId !== null ? [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" as const }] : []), { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
+    if (action === "skill-menu") openActions(target, [{ id: "skill-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "skill-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else if (action === "command-menu") openActions(target, [{ id: "command-edit", label: t("members.profile.editResource"), icon: "pencil" }, { id: "command-delete", label: t("members.profile.delete"), icon: "trash" }], choice => choose(choice, id, target));
     else choose(action, id, target);
   };

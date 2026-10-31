@@ -79,6 +79,8 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     if ((event.target as Element).closest('[data-sidebar="close"], [data-go], [data-member], [data-room]')) close();
   });
   scrim.addEventListener("click", close);
+  // What takes the whole window from a menu of the drawer has no use for the drawer behind it.
+  window.addEventListener("raphael:close-sidebar", close);
   document.addEventListener("keydown", event => {
     if (!document.documentElement.hasAttribute("data-sidebar-open")) return;
     if (event.key === "Escape" && !document.querySelector("#app-popover, .mb-scrim")) { event.preventDefault(); close(); }

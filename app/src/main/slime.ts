@@ -211,16 +211,31 @@ const OFF_SEASON = new Date(2000, 5, 1);
 export const SLIME_CHARACTER_COUNT = CHARACTER_IDS.length;
 export const SLIME_COLOR_COUNT = COLOR_IDS.length;
 
+/** A slime on a card, standing still and bareheaded, whatever the season. */
+export const bareSlimeHTML = (avatar: string): string => slimeSVG(parseSlime(avatar) ?? { color: "sky" }, { now: OFF_SEASON });
+
+const IN_MENU = ' role="menuitem" tabindex="-1"';
+
+/** Every character, each as a button; `item` makes them a menu's items. */
+export function slimeCharactersHTML(avatar: string | null | undefined, esc: (text: string) => string, item = ""): string {
+  const current = parseSlime(avatar), who = current && "character" in current ? current.character : null;
+  return CHARACTER_IDS.map(id => {
+    const name = esc(t(CHARACTERS[id].name));
+    return `<button type="button"${item} class="mb-preset mb-preset-slime" data-slime-character="${id}" aria-pressed="${id === who}" aria-label="${name}" title="${name}">${slimeSVG({ character: id }, { now: OFF_SEASON })}</button>`;
+  }).join("");
+}
+
+/** Every colour of a plain slime, each as a button. */
+export function slimeColorsHTML(avatar: string | null | undefined, esc: (text: string) => string, item = ""): string {
+  const current = parseSlime(avatar), color = current && "color" in current ? current.color : null;
+  return COLOR_IDS.map((id, index) =>
+    `<button type="button"${item} class="mb-slime-color" data-slime-color="${id}" aria-pressed="${id === color}" aria-label="${esc(t("members.slimeColor", { p0: index + 1 }))}" style="--slime-color:${COLORS[id]}"></button>`).join("");
+}
+
 /** The slimes of the picture menu: who, then a plain slime of a colour. */
 export function slimePickerHTML(avatar: string | null | undefined, esc: (text: string) => string): string {
-  const current = parseSlime(avatar);
-  const who = current && "character" in current ? current.character : null, color = current && "color" in current ? current.color : null;
-  return `<div class="mb-presets mb-slime-characters" role="group">${CHARACTER_IDS.map(id => {
-    const name = esc(t(CHARACTERS[id].name));
-    return `<button type="button" role="menuitem" tabindex="-1" class="mb-preset mb-preset-slime" data-slime-character="${id}" aria-pressed="${id === who}" aria-label="${name}" title="${name}">${slimeSVG({ character: id }, { now: OFF_SEASON })}</button>`;
-  }).join("")}</div>` +
-    `<div class="mb-slime-colors" role="group">${COLOR_IDS.map((id, index) =>
-      `<button type="button" role="menuitem" tabindex="-1" class="mb-slime-color" data-slime-color="${id}" aria-pressed="${id === color}" aria-label="${esc(t("members.slimeColor", { p0: index + 1 }))}" style="--slime-color:${COLORS[id]}"></button>`).join("")}</div>`;
+  return `<div class="mb-presets mb-slime-characters" role="group">${slimeCharactersHTML(avatar, esc, IN_MENU)}</div>` +
+    `<div class="mb-slime-colors" role="group">${slimeColorsHTML(avatar, esc, IN_MENU)}</div>`;
 }
 
 /** A press in that menu: the avatar it makes, with the menu showing it where it stands, or null when the press was on neither. */

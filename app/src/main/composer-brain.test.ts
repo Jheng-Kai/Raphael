@@ -33,6 +33,10 @@ function mount(member: Member = { id: 0, name: "Raphael", model: "" } as Member)
   return { slot, brain, emit, member, name: () => slot.querySelector(".mp-tname")!.textContent, open: () => slot.querySelector<HTMLElement>(".mp-trigger")!.click() };
 }
 
+/** The card opens on the model; a press on it turns to the sources, and a press on one to its models. */
+const browse = (): void => { q(".cb-pick")!.click(); };
+const toModels = (source = "p"): void => { browse(); q(`[data-cb-source="${source}"]`)!.click(); };
+
 beforeEach(() => { closeMenu(); document.body.innerHTML = ""; vi.clearAllMocks(); state.agent_model = "@p:global"; state.clis = []; });
 
 test("the picker sits in its slot and follows the open conversation's member", async () => {
@@ -72,7 +76,7 @@ test("a CLI's models that arrive after the first read reach a menu already open,
   await flush();
   open();
   await flush();
-  q('[data-cb-source="cli:codex"]')!.click();
+  toModels("cli:codex");
   expect(q(".cb-pane")!.textContent).toContain("正在讀取模型");
   expect(q(".cb-pane")!.textContent).not.toContain("尚無可用模型");
   state.clis = [CODEX([RUNNABLE])];
@@ -89,7 +93,7 @@ test("a CLI that stays silent is said to be so, with a way to try again", async 
     await vi.advanceTimersByTimeAsync(0);
     open();
     await vi.advanceTimersByTimeAsync(0);
-    q('[data-cb-source="cli:codex"]')!.click();
+    toModels("cli:codex");
     await vi.advanceTimersByTimeAsync(41_000);
     expect(q(".cb-pane")!.textContent).toContain("讀不到模型");
     state.clis = [CODEX([RUNNABLE])];
@@ -99,35 +103,34 @@ test("a CLI that stays silent is said to be so, with a way to try again", async 
   } finally { vi.useRealTimers(); }
 });
 
-test("Raphael's choice is the global setting, and the menu says it reaches other members", async () => {
+test("Raphael's choice is the global setting", async () => {
   const { open, name } = mount();
   await flush();
   open();
   await flush();
-  expect(q(".cb-menu .menu-head")!.textContent).toContain("預設");
+  toModels();
   q('[data-model="@p:mine"]')!.click();
   await flush();
   expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
   expect(api.membersUpdate).not.toHaveBeenCalled();
   expect(name()).toBe("Mine");
-  expect(q('[data-model="@p:mine"]')!.getAttribute("aria-checked")).toBe("true");
+  expect(q(".cb-pick")!.textContent).toContain("Mine");
 });
 
-test("a member's choice is its own, the global setting is untouched, and following the default is a choice too", async () => {
-  const { open, name, member } = mount({ id: 3, name: "Ada", model: "@p:mine" } as Member);
+test("a member's choice is its own and the global setting is untouched; one with none shows the default as what it runs on", async () => {
+  const { open, name, member } = mount({ id: 3, name: "Ada", model: "" } as Member);
   await flush();
   open();
   await flush();
-  expect(q(".cb-menu .menu-head")!.textContent).toContain("Ada");
-  q('[data-model="@p:global"]')!.click();
-  await flush();
-  expect(api.membersUpdate).toHaveBeenLastCalledWith(3, { model: "@p:global?effort=low" });
-  expect(api.settingsSet).not.toHaveBeenCalled();
-  expect(member.model).toBe("@p:global?effort=low");
-  q('.cb-lead')!.click();
-  await flush();
-  expect(api.membersUpdate).toHaveBeenLastCalledWith(3, { model: "" });
   expect(name()).toBe("Global");
+  expect(q(".cb-menu")!.textContent).not.toContain("跟隨");
+  toModels();
+  q('[data-model="@p:mine"]')!.click();
+  await flush();
+  expect(api.membersUpdate).toHaveBeenLastCalledWith(3, { model: "@p:mine" });
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  expect(member.model).toBe("@p:mine");
+  expect(name()).toBe("Mine");
 });
 
 test("a depth is saved with its model, and the button says it", async () => {
@@ -146,6 +149,59 @@ test("a depth is saved with its model, and the button says it", async () => {
   expect(q('[data-effort="high"]')!.getAttribute("data-on")).toBe("true");
 });
 
+test("one view at a time: the model and its depth, then the sources, then a source's models, each with a way back and a title", async () => {
+  state.clis = [CODEX([RUNNABLE]), { ...CODEX([]), id: "gemini", name: "Gemini", available: false, installed: false }];
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  const showing = (): string => (q<HTMLElement>(".cb-now")!.hidden ? "" : "now") + (q<HTMLElement>(".cb-body")!.hidden ? "" : "list");
+  expect(showing()).toBe("now");
+  expect(q(".cb-source")).toBeNull();
+  expect(q(".cb-now .mc-range")).not.toBeNull();
+  browse();
+  expect(showing()).toBe("list");
+  expect(q(".cb-head h3")!.textContent).toBe("選擇模型");
+  expect(q('[data-cb-source="cli:codex"]')).not.toBeNull();
+  expect(q('[data-cb-source="cli:gemini"]')).toBeNull();
+  expect(q('[data-cb-act="sources"]')).toBeNull();
+  q('[data-cb-source="cli:codex"]')!.click();
+  expect(showing()).toBe("list");
+  expect(q(".cb-head h3")!.textContent).toBe("Codex");
+  q(".cb-back")!.click();
+  expect(q(".cb-head h3")!.textContent).toBe("選擇模型");
+  q(".cb-back")!.click();
+  expect(showing()).toBe("now");
+});
+
+test("choosing a model turns back to it, with its depth right there, and the menu stays", async () => {
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  expect(q(".cb-now")!.textContent).toContain("Global");
+  expect(q("[data-model]")).toBeNull();
+  toModels();
+  expect(q(".cb-source")).toBeNull();
+  expect(q('[data-model="@p:global"]')!.getAttribute("aria-checked")).toBe("true");
+  q('[data-model="@p:global"]')!.click();
+  await flush();
+  expect(q<HTMLElement>(".cb-now")!.hidden).toBe(false);
+  expect(q<HTMLElement>(".cb-body")!.hidden).toBe(true);
+  expect(q(".cb-now .mc-range")).not.toBeNull();
+});
+
+test("a list that arrives while the owner drags the depth leaves the slider where it is", async () => {
+  const { open, emit } = mount();
+  await flush();
+  open();
+  await flush();
+  const range = q<HTMLInputElement>(".mc-range")!;
+  emit("BrainsChanged");
+  await flush();
+  expect(q(".mc-range")).toBe(range);
+});
+
 test("a model without depths has no slider", async () => {
   state.agent_model = "@p:mine";
   const { open } = mount();
@@ -162,6 +218,7 @@ test("a save the core refuses leaves what the core holds, and says so", async ()
   await flush();
   open();
   await flush();
+  toModels();
   q('[data-model="@p:mine"]')!.click();
   await flush();
   expect(name()).toBe("Global");
@@ -175,6 +232,8 @@ test("a read that began before a choice cannot put the old choice back", async (
   let finish: (value: never) => void = () => {};
   api.core.mockImplementationOnce(() => new Promise(resolve => { finish = resolve as (value: never) => void; }));
   open();
+  await flush();
+  toModels();
   q('[data-model="@p:mine"]')?.click();
   await flush();
   finish({ settings: { agent_model: "@p:global" } } as never);

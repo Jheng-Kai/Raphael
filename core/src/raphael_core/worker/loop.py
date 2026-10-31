@@ -33,7 +33,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 from ..failures import RepeatFailures, REPEAT_NOTE, CORRECTIVE_NOTE, tool_failure, redact
-from ..members.activity import step
 
 from .guards import (
     MAX_ARGUMENT_CHARS,
@@ -255,10 +254,9 @@ async def run_task(
                     check_before("limit_tool", tool_calls, limits.tool_calls)
                     tool_calls += 1
                     try:
-                        with step(call.name):
-                            outcome = await _until(
-                                host.tool(call.id, call.name, call.arguments), cancelled, deadline, clock
-                            )
+                        outcome = await _until(
+                            host.tool(call.id, call.name, call.arguments), cancelled, deadline, clock
+                        )
                     except Stop as stop:
                         if stop.kind != WAITING:
                             raise

@@ -329,6 +329,18 @@
         "production_state"
       ]
     },
+    "raphael/core/set_my_job": {
+      "scenario_ids": ["S21.members-groups.set-my-job"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/show_page": {
+      "scenario_ids": ["S21.web-open.show-page"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/update_page": {
+      "scenario_ids": ["S21.web-open.update-page"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/skills_list": {
       "scenario_ids": ["S21.skills.list"],
       "expected_assertions": ["production_state"]

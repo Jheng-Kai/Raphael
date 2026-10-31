@@ -445,7 +445,7 @@ export function checkRendered(name, context = {}) {
   if (name === "member-brain-saved") {
     const saved = window.__look.calls.filter(call => call.method === "members.update" && typeof call.params.model === "string");
     require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "one member brain selection is persisted");
-    require(document.querySelector('.cb-menu [aria-checked="true"]'), "the menu shows the choice in place");
+    require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick b')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
     require(window.__look.data.members.find(member => member.id === 1).model === saved[0].params.model, "the member retains its own brain");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
     if (document.querySelector('.model-chooser')) require(document.querySelector('.model-chooser .mc-row[aria-checked="true"]')?.dataset.model === saved[0].params.model.split('?')[0], "the reopened shared chooser selects the persisted member brain");
@@ -903,13 +903,6 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, matched: true };
   }
-  if (name === "admin-description-draft") {
-    const input = document.querySelector('.composer textarea');
-    require(visible(input) && input.value.includes("整理未讀信並準備回覆"), "description opens the chief's ordinary composer");
-    require(input.value.includes("確認後才建立"), "description requests an editable proposal");
-    require(!window.__look.calls.some(call => call.method === 'members.create'), "description does not create a member directly");
-    return { check: name };
-  }
   if (name === "bot-renamed-centred") {
     const lines = [...document.querySelectorAll('.bot-renamed')].filter(visible);
     require(lines.length === 1 && lines[0].textContent === "已重新命名為 晨星", "one saved rename line");
@@ -950,24 +943,6 @@ export function checkRendered(name, context = {}) {
     require(!window.__look.data.members.some(item => item.id === 2) && !document.querySelector('[data-member="2"]'), "the member is gone from the team and the list");
     require(document.querySelector(".toast")?.textContent.includes("已刪除「小森」"), "a notice names who was deleted");
     return { check: name };
-  }
-  if (name === "conversation-made") {
-    const made = window.__look.calls.filter(call => call.method === "conversations.create").map(call => call.params?.member_id);
-    require(made.length === 2 && made.every(id => id === 1), "each 新對話 makes a conversation with the picked member, also from its empty one");
-    const latest = Math.max(...window.__look.data.conversations.filter(item => item.member_id === 1).map(item => item.id));
-    require(window.__look.calls.filter(call => call.method === "agent.history.list").at(-1)?.params?.conversation_id === latest, "the newest conversation is the one open");
-    require(document.querySelector(".conversation-caption")?.textContent === "新對話", "the open conversation is the new one");
-    return { check: name, made };
-  }
-    if (name === "conversation-deleted") {
-      const next=window.__look.data.conversations.find(item=>item.member_id===0&&item.is_default&&item.kind!=="quick");
-      require(next && window.__look.calls.filter(call => call.method === "agent.history.list").at(-1)?.params?.conversation_id === next.id, "deletion opens the new server default instead of cached quick history");
-    const rows = [...document.querySelectorAll(".mb-det [data-conversation-open]")].map(row => row.textContent);
-    require(!rows.some(text => text.includes("這週的研究與安排")), "the deleted conversation is gone");
-    require(!rows.some(text => text.includes("新對話")), "no empty 新對話 takes its place");
-    require(window.__look.data.conversations.filter(item => item.member_id === 0 && item.is_default).length === 1, "another conversation became the main one");
-    require(document.querySelector(".toast")?.textContent.includes("已刪除「這週的研究與安排」"), "a notice names what was deleted");
-    return { check: name, rows };
   }
   if (name === "work-dots" || name === "pending-work") {
     const section = document.querySelector(`${name === "pending-work" ? '.tn.is-pending ' : ''}.work-section.is-live`);
@@ -1647,14 +1622,77 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll(".cb-menu .cb-pane [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-pane [role="status"]'), "the models took the place of the message without reopening");
     return { check: name };
   }
+  if (name === "composer-model-small" || name === "composer-model-sources" || name === "composer-model-turned") {
+    const menu = document.querySelector(".cb-menu"), now = menu.querySelector(".cb-now"), list = menu.querySelector(".cb-body");
+    require(visible(now) !== visible(list), "the card shows one view at a time");
+    if (name === "composer-model-small") {
+      require(visible(now) && !menu.querySelector(".cb-source, [data-model]"), "it opens on the model and its depth, no list");
+      require(menu.querySelector(".cb-pick b")?.textContent.trim() && now.getBoundingClientRect().height < 200, "the small card says what is chosen");
+    } else {
+      const head = list.querySelector(".cb-head"), title = head.querySelector("h3 span").getBoundingClientRect(), card = list.getBoundingClientRect();
+      require(visible(head.querySelector(".cb-back")), "a way back");
+      const centre = (head.querySelector("h3").getBoundingClientRect().left + head.querySelector("h3").getBoundingClientRect().right) / 2;
+      require(Math.abs(centre - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
+      if (name === "composer-model-sources") require(menu.querySelectorAll(".cb-source").length >= 3 && menu.querySelector(".cb-group h4") && !menu.querySelector("[data-model]"), "the sources under their kinds, and no models yet");
+      else require(!menu.querySelector(".cb-source"), "one source's models");
+    }
+    require(menu.getBoundingClientRect().bottom <= document.querySelector(".composer .cmp-model .mp-trigger").getBoundingClientRect().top + 1, "the card opens above the button, wherever the composer stands");
+    const bottom = menu.getBoundingClientRect().bottom, was = window.__cbBottom;
+    window.__cbBottom = bottom;
+    if (was !== undefined) require(Math.abs(was - bottom) <= 1, "the card keeps standing on the composer when it turns");
+    require(!/跟隨|連接其他來源/.test(menu.textContent), "nothing about following a default or adding a source");
+    return { check: name };
+  }
+  if (name === "conversation-deleted") {
+      const next=window.__look.data.conversations.find(item=>item.member_id===0&&item.is_default&&item.kind!=="quick");
+      require(next && window.__look.calls.filter(call => call.method === "agent.history.list").at(-1)?.params?.conversation_id === next.id, "deletion opens the new server default instead of cached quick history");
+    const rows = [...document.querySelectorAll(".mb-det [data-conversation-open]")].map(row => row.textContent);
+    require(!rows.some(text => text.includes("這週的研究與安排")), "the deleted conversation is gone");
+    require(!rows.some(text => text.includes("新對話")), "no empty 新對話 takes its place");
+    require(window.__look.data.conversations.filter(item => item.member_id === 0 && item.is_default).length === 1, "another conversation became the main one");
+    require(document.querySelector(".toast")?.textContent.includes("已刪除「這週的研究與安排」"), "a notice names what was deleted");
+    return { check: name, rows };
+  }
+  if (name === "new-conversation-rests") {
+    require(document.querySelector(".mb-det [data-conversation-new]").disabled, "it rests while the open conversation is unwritten");
+    return { check: name };
+  }
+  if (name === "member-maker" || name === "member-maker-chosen") {
+    const dialog = document.querySelector(".cr-dialog"), box = dialog.closest(".mb-scrim").getBoundingClientRect(), side = document.getElementById("nav").getBoundingClientRect();
+    if (!matchMedia("(max-width: 859px)").matches) require(box.left >= side.right - 1 && visible(document.getElementById("nav")), "it stands where the conversation stands, the sidebar beside it");
+    const face = dialog.querySelector(".cr-face svg.slime").getBoundingClientRect(), maker = dialog.querySelector(".cr-maker").getBoundingClientRect();
+    require(face.width >= 100 && Math.abs(face.left + face.width / 2 - maker.left - maker.width / 2) <= 2, "the slime is large, in the middle");
+    require(!dialog.querySelector('img, input[type="file"], [data-pick]'), "a member is a slime: no pictures to choose");
+    require(dialog.querySelectorAll(".cr-colors [data-slime-color]").length >= 8 && dialog.querySelectorAll(".cr-characters [data-slime-character]").length >= 20, "every colour and character is on the page");
+    require(dialog.querySelectorAll(".cr-suggestion").length >= 3, "it offers members to start from");
+    require(dialog.querySelectorAll("input, textarea").length === 1, "it asks only for a name");
+    const start = dialog.querySelector('[data-dlg="create"]');
+    if (name === "member-maker") require(start.disabled && document.activeElement === dialog.querySelector("#mb-new-name"), "the name has the focus and there is nothing to press yet");
+    else {
+      require(!start.disabled, "a name makes it pressable");
+      require(dialog.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true" && dialog.querySelectorAll('[data-slime-color][aria-pressed="true"]').length === 0, "one slime is chosen");
+    }
+    return { check: name };
+  }
+  if (name === "member-maker-made") {
+    const made = window.__look.calls.filter(call => call.method === "members.create");
+    require(made.length === 1 && made[0].params.name === "哥布達" && made[0].params.avatar === "slime:gobta", "the member is made once, with its slime");
+    require(visible(document.querySelector(".composer .cmp-input")), "its conversation is open");
+    const greeting = [...document.querySelectorAll(".page-agent .ra-body")].filter(visible);
+    require(greeting.length === 1 && greeting[0].textContent.includes("哥布達") && greeting[0].textContent.includes("？"), "it speaks first and asks what it is for");
+    require(![...document.querySelectorAll(".page-agent .owner-message")].some(visible), "nothing is put in the owner's mouth");
+    require(!visible(document.querySelector(".page-agent .work-toggle")), "no steps are claimed for what it said");
+    return { check: name };
+  }
   if (name === "composer-model-menu" || name === "composer-model-depth") {
     const menu = document.querySelector(".cb-menu"), box = menu.getBoundingClientRect(), composer = document.querySelector(".composer").getBoundingClientRect();
     require(!document.querySelector(".model-chooser"), "no separate dialog");
     require(box.bottom <= composer.top + 1 || box.top >= composer.bottom - 1 || box.bottom <= innerHeight, "the menu opens from the composer, inside the window");
     require(box.left >= 0 && box.right <= innerWidth && box.top >= 0, "the menu fits the window");
-    require(menu.querySelectorAll(".cb-source").length >= 3, "it lists every source");
-    const range = menu.querySelector(".mc-range");
-    require(range && menu.querySelectorAll(".mc-stop").length >= 2, "the depth of thought is a slider with named stops");
+    require(!visible(menu.querySelector(".cb-body")) && menu.querySelector(".cb-pick b")?.textContent.includes("GPT-6.1"), "choosing a model turned the card back to it");
+    const range = menu.querySelector(".cb-now .mc-range");
+    require(range && menu.querySelectorAll(".mc-stop").length >= 2, "its depth of thought is a slider right there");
+    require([...menu.querySelectorAll(".mc-stop")].filter(visible).length === 1, "only the stop it is on is named");
     if (name === "composer-model-depth") {
       const last = [...menu.querySelectorAll(".mc-stop")].at(-1);
       require(Number(range.value) === Number(range.max), "the slider stands at the chosen stop");
@@ -1900,12 +1938,6 @@ export function checkRendered(name, context = {}) {
       }
       require(sets.length === 0 && data.primaryId === 1, "nothing is set before 設為主要 is pressed");
       return { check: name, choices: choices.length, picked: picked[0].dataset.id };
-    }
-    if (name === "primary-member-picker" || name === "primary-conversation-picker") {
-      const rows = document.querySelectorAll(name === 'primary-member-picker' && !document.querySelector('.mb-chat-picker') ? '#app-popover [data-value]' : '.mb-chat-choices [data-dlg="conversation"]');
-      require(JSON.stringify(order(rows)) === JSON.stringify(swapped(data.members.filter(m => !m.hidden).map(m => m.id))), "picker exchanges only Raphael and the primary");
-      require(sets.length === 0, "opening a picker sets nothing");
-      return { check: name, members: order(rows) };
     }
     if (name === "primary-mentions") {
       const rows = [...document.querySelectorAll('#app-popover[data-team-mentions] [data-value]')].slice(1, data.members.length + 1);

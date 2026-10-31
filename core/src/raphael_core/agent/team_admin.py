@@ -61,7 +61,7 @@ ID = {"type": "integer", "minimum": 1}
 MEMBER = {field: {"type": "string"} for field in
           ("name", "role", "blurb", "personality", "instructions", "group", "avatar_preset")}
 MEMBER["group"]["description"] = "Group name, created if missing. Empty means ungrouped."
-MEMBER["avatar_preset"]["description"] = "An available preset avatar from team_overview; otherwise omit for a distinct preset or silhouette."
+MEMBER["avatar_preset"]["description"] = "A slime, slime:color:<sky|lavender|coral|tangerine|ochre|leaf|teal|ocean|orchid|charcoal>. Omit and the member gets a colour of its own."
 for field, limit in (("name", 16), ("role", 24), ("blurb", 200), ("personality", 2000), ("instructions", 2000), ("group", 24)):
     MEMBER[field]["maxLength"] = limit
 

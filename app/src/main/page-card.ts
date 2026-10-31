@@ -8,7 +8,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { esc, iconButton, toaster } from "./ui";
+import { btn, esc, iconButton, toaster } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -30,8 +30,34 @@ const clampHeight = (height: unknown): number => {
   return Number.isFinite(value) ? Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(value))) : 320;
 };
 
-/** A click inside the frame activates its parents too, so a page cannot speak for the owner on its own. */
-const pressedJustNow = (): boolean => navigator.userActivation?.isActive === true;
+/** The app hears nothing once the pointer is over a frame of another origin (measured in the real app: no event, and no
+ *  `:hover`), so where it last heard the pointer is the nearest thing it knows: a fast move covers this much between two
+ *  events. */
+const POINTER_REACH = 96;
+let lastInput: { kind: "move" | "press" | "tab" | "key"; x: number; y: number } | null = null;
+let hearing = false;
+
+function hearInput(): void {
+  if (hearing) return;
+  hearing = true;
+  const heard = (kind: "move" | "press") => (event: Event): void => {
+    const { clientX: x, clientY: y } = event as PointerEvent;
+    lastInput = { kind, x, y };
+  };
+  window.addEventListener("pointermove", heard("move"), { capture: true, passive: true });
+  window.addEventListener("pointerdown", heard("press"), { capture: true, passive: true });
+  window.addEventListener("keydown", event => { lastInput = { kind: event.key === "Tab" ? "tab" : "key", x: 0, y: 0 }; }, { capture: true, passive: true });
+}
+
+/** No press at all, or none in this frame: a press elsewhere in the app activates it too, and a page can take the focus by
+ *  itself (both seen in the real app). The pointer it cannot move. */
+function pressOf(frame: HTMLIFrameElement): "none" | "unsure" | "sure" {
+  if (navigator.userActivation?.isActive !== true || document.activeElement !== frame) return "none";
+  if (lastInput?.kind === "tab") return "sure";
+  if (lastInput?.kind !== "move") return "unsure";
+  const box = frame.getBoundingClientRect(), { x, y } = lastInput;
+  return x >= box.left - POINTER_REACH && x <= box.right + POINTER_REACH && y >= box.top - POINTER_REACH && y <= box.bottom + POINTER_REACH ? "sure" : "unsure";
+}
 
 const themeNow = (): "dark" | "light" => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
 
@@ -43,11 +69,13 @@ interface Live {
   opened: PageOpened | null;
   ready: boolean;
   expanded: boolean;
+  /** The owner said no to what it wanted to send: from now on only a sure press speaks, and it does not ask again. */
+  refused: boolean;
 }
 
 /** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. */
 function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
-  if (target.moveBefore) target.moveBefore(frame, null);
+  if (target.moveBefore && frame.isConnected) target.moveBefore(frame, null);
   else target.append(frame);
 }
 
@@ -60,7 +88,8 @@ export interface PagesHost {
 
 export function mountPages(thread: HTMLElement, o: { send(text: string): void }): PagesHost {
   const frames = new Map<string, Live>();
-  let lastSend = 0;
+  let lastSend = 0, asking = false;
+  hearInput();
 
   const cardOf = (live: Live): HTMLElement | null => thread.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(live.id)}"]`);
 
@@ -95,7 +124,7 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
     frame.setAttribute("sandbox", "allow-scripts allow-forms");
     frame.setAttribute("referrerpolicy", "no-referrer");
     frame.className = "pg-frame";
-    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, expanded: false };
+    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, expanded: false, refused: false };
     frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
     frames.set(id, live);
     return live;
@@ -132,19 +161,37 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
     };
   }
 
-  function speak(text: unknown): void {
-    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT || !pressedJustNow()) return;
-    const now = Date.now();
-    if (now - lastSend < SEND_GAP_MS) return;
-    lastSend = now;
-    o.send(text.trim());
+  /** A press that cannot be told from the page acting alone is the owner's to confirm, with the words in front of them. */
+  function whenPressed(live: Live, title: string, shown: string, act: () => void): void {
+    const press = pressOf(live.frame);
+    if (press === "sure") { act(); return; }
+    if (press === "none" || asking || live.refused) return;
+    asking = true;
+    openDialog({
+      title: t(title as "page.askSend"), body: `<p class="pg-ask-words">${esc(shown)}</p>`, cls: "mb-confirm pg-ask",
+      actions: { secondary: btn(esc(t("common.cancel")), "", ' data-dlg="cancel"'), primary: { label: esc(t("page.askYes")), attrs: ' data-dlg="yes"' } },
+      onAct(action, _target, dialog) {
+        if (action === "yes") act(); else live.refused = true;
+        dialog.close();
+      },
+      onClose() { asking = false; },
+    });
   }
 
-  function openLink(url: unknown): void {
-    if (typeof url !== "string" || !pressedJustNow()) return;
+  function speak(live: Live, text: unknown): void {
+    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT) return;
+    const now = Date.now();
+    if (now - lastSend < SEND_GAP_MS) return;
+    const words = text.trim();
+    whenPressed(live, "page.askSend", words, () => { lastSend = Date.now(); o.send(words); });
+  }
+
+  function openLink(live: Live, url: unknown): void {
+    if (typeof url !== "string") return;
     let safe: URL;
     try { safe = new URL(url); } catch { return; }
-    if (safe.protocol === "https:") void api.openExternalUrl(safe.href).catch(error => toaster.info(describeError(error)));
+    if (safe.protocol !== "https:") return;
+    whenPressed(live, "page.askOpen", safe.href, () => { void api.openExternalUrl(safe.href).catch(error => toaster.info(describeError(error))); });
   }
 
   const post = (live: Live, message: object): void => { live.frame.contentWindow?.postMessage(message, "*"); };
@@ -171,11 +218,11 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
       case "ping":
         return answer({});
       case "ui/open-link":
-        openLink(params.url);
+        openLink(live, params.url);
         return answer({});
       case "ui/message": {
         const content = Array.isArray(params.content) ? params.content : [params.content];
-        speak(content.map((part: { type?: string; text?: string } | undefined) => (part?.type === "text" ? part.text ?? "" : "")).join("\n"));
+        speak(live, content.map((part: { type?: string; text?: string } | undefined) => (part?.type === "text" ? part.text ?? "" : "")).join("\n"));
         return answer({});
       }
       case "tools/call":
@@ -202,8 +249,8 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
     }
     if (data.raphaelPage !== 1) return;
     if (data.type === "height") { live.height = clampHeight(data.height); applyHeight(live); }
-    else if (data.type === "send") speak(data.text);
-    else if (data.type === "open") openLink(data.url);
+    else if (data.type === "send") speak(live, data.text);
+    else if (data.type === "open") openLink(live, data.url);
   });
 
   /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. */
@@ -213,7 +260,7 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
       title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
       actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
       onAct(_act, _target, shown) { shown.close(); },
-      onClose() {
+      onClosing() {
         live.expanded = false;
         const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
         if (home) moveFrame(live.frame, home);
@@ -233,8 +280,13 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void })
   });
 
   // A page draws in the app's theme, which it is told when it opens.
-  new MutationObserver(() => { for (const live of frames.values()) void open(live); })
-    .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  // The same theme set again (opening Settings does) must not reload a page and lose what the owner did in it.
+  let theme = themeNow();
+  new MutationObserver(() => {
+    if (themeNow() === theme) return;
+    theme = themeNow();
+    for (const live of frames.values()) void open(live);
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
   return { sync, carry };
 }
