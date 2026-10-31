@@ -29,7 +29,7 @@ from ..agent.narration import NarratedLoop
 from ..agent.persona import cli_system_prompt, member_system_prompt, system_prompt
 from ..agent.policy import Action, Confirmations, NotApproved, Tier, ToolRegistry
 from ..agent.speaker import Speaker
-from ..agent.team_admin import DEFINITIONS as ADMIN_TOOLS, LEADERSHIP
+from ..agent.team_admin import LEADERSHIP
 from ..background.snapshot import take_snapshot
 from ..brain import db
 from ..brain.openrouter import OpenRouterClient
@@ -53,12 +53,11 @@ class Scenario:
     required: dict = field(default_factory=dict)
     contains: tuple = ()
     attachment: str = ""
-    raphael_only: bool = False
     approval: bool | None = None
 
 
 SCENARIOS = (
-    Scenario("members", "建立兩位成員：研究員青禾與編輯明月。請實際建立並簡短回報。", {"member_create": 2}, ("青禾", "明月"), raphael_only=True),
+    Scenario("members", "建立兩位成員：研究員青禾與編輯明月。請實際建立並簡短回報。", {"member_create": 2}, ("青禾", "明月")),
     Scenario("routine-create", "建立每天上午九點提醒我練習寫作的例行任務。", {"routine_create": 1}),
     Scenario("routine-list", "列出我的例行任務。", {"routine_list": 1}, ("寫作",)),
     Scenario("html", "請讀取附件，逐字引用其標題。", contains=("守護星光",), attachment="html"),
@@ -68,8 +67,8 @@ SCENARIOS = (
     Scenario("memory", "請記住：我喜歡在早上練習寫作。", {"memory_update": 1}),
     Scenario("open", "請開啟 https://example.com/ 。", {"open": 1}),
     Scenario("search", "請上網搜尋臺北今日的新聞並簡短說明。", {"web_search": 1}),
-    Scenario("approval-yes", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, raphael_only=True, approval=True),
-    Scenario("approval-no", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, raphael_only=True, approval=False),
+    Scenario("approval-yes", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, approval=True),
+    Scenario("approval-no", "請刪除成員 7，先讓我確認。", {"member_delete": 1}, approval=False),
 )
 
 
@@ -229,9 +228,6 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
     began = time.perf_counter()
     result = {"brain": model, "member": member, "scenario": scenario.name, "status": "FAIL", "tools": [], "latency_ms": 0, "cost_usd": None, "reason": ""}
     cli = brain_ref(model)
-    if scenario.raphael_only and member != 0:
-        result.update(status="SKIP", reason="Raphael-only scenario; member exposure checked in every cell")
-        return result
     if cli:
         try:
             available = bool(brains.command(cli[0])) and brains.logged_in(cli[0]) is True
@@ -244,10 +240,6 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
                       capabilities=frozenset({"chief"}) if member == 0 else frozenset())
     files = attachments(scenario.attachment)
     tools = take_snapshot(None, memory=True, attachments=bool(files), speaker=speaker, interactive=True, max_tier=Tier.T3).definitions
-    names = {tool["function"]["name"] for tool in tools}
-    if member and names & (set(ADMIN_TOOLS) | {"create_member"}):
-        result["reason"] = "member_exposed_to_administration"
-        return result
     recorder = Recorder(tools)
     ledger = Ledger(SpendTracker(conn))
     user = scenario.prompt + text_context(files)
@@ -262,8 +254,7 @@ async def cell(model, member, scenario, *, brains, client, sessions, conn, budge
         system = system_prompt("zh-TW", "answer", files_now, narrated=True)
     else:
         system = member_system_prompt("zh-TW", "answer", name=speaker.name, role=speaker.role, instructions="", personality="", memory_snapshot=files_now, narrated=True)
-    if member == 0:
-        system += LEADERSHIP
+    system += LEADERSHIP
     loop = None
     try:
         common = dict(model=model, ledger=ledger, language="zh-TW", plain=member != 0, system=system, user=user, tools=tools, progress=lambda _: None, thinking=lambda _: None, execute=recorder)

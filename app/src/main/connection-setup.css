@@ -1,0 +1,29 @@
+/* The window that asks for an app's own key, or the id and secret of a developer app of the owner's own
+   (connection-setup.ts). It is the app's shared dialog (.mb-dialog), with a plain column in it: what is needed,
+   where to get it, the few steps, the fields, and the one line that says Composio keeps what is typed. */
+.mb-dialog.cn-setup-dialog { width: min(520px, 100%); }
+.cn-setup-dialog .mb-dlg-body { gap: var(--sp-4); }
+.cn-setup { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
+.cn-setup p, .cn-wait { margin: 0; }
+.cn-wait { font-size: var(--fs-sm); color: var(--text-2); }
+.cn-lead { color: var(--text); text-wrap: pretty; }
+.cn-where { display: flex; flex-direction: column; gap: var(--sp-2); }
+.cn-where h3, .cn-label { margin: 0; font-size: var(--fs-xs); font-weight: 600; color: var(--text); }
+.cn-label i { font-style: normal; font-weight: 400; color: var(--text-3); }
+.cn-link { display: flex; }
+.cn-steps { display: flex; flex-direction: column; gap: var(--sp-1); margin: 0; padding-left: 1.4em; color: var(--text-2); }
+.cn-redirect { display: flex; flex-direction: column; gap: var(--sp-1); }
+.cn-redirect-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.cn-redirect-row .field { flex: 1; min-width: 0; width: auto; color: var(--text); text-overflow: ellipsis; }
+.cn-redirect-row .btn { flex: none; }
+.cn-fields { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cn-field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.cn-hint { font-size: var(--fs-xs); line-height: 1.45; color: var(--text-3); }
+.cn-field .field { width: 100%; }
+.cn-keep { display: flex; align-items: flex-start; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--text-2); }
+.cn-keep > .i { flex: none; margin-top: 2px; color: var(--text-3); }
+.cn-setup .note { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+/* The line of a failure wraps whole: a sentence that says what to do is never cut off at the dialog's edge. */
+.cn-setup .note .st { flex: 1 1 14em; min-width: 0; align-items: flex-start; white-space: normal; }
+.cn-setup .note .st .dot { margin-top: 0.45em; flex: none; }
+.cn-setup [data-setup-status]:empty { display: none; }

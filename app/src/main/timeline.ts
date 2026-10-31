@@ -49,6 +49,7 @@ const BUILTIN_TITLES: Record<string, MessageKey> = {
   web_search: "agent.tool.webSearch",
   local_time: "agent.tool.time",
   find_tools: "agent.tool.findTools",
+  ask_member: "agent.tool.askMember",
 };
 const COMMAND_TITLES: Record<string, MessageKey> = {
   open: "agent.cmd.open",
@@ -134,20 +135,33 @@ export function toolAccess(name: string, service = ""): "read" | "write" {
   return first !== undefined && READ_WORDS.has(first) ? "read" : "write";
 }
 
+const BUILTIN_READS: ReadonlySet<string> = new Set([...READ_WORDS, "help", "overview"]);
+/**
+ * Whether one of the app's own tools (the server the core calls "Raphael") only reads, by the words of
+ * its name at either end: `session_search` and `self_check` read, `routine_update` changes. A guess for
+ * its words alone, like `toolAccess`.
+ */
+function builtinAccess(name: string): "read" | "write" {
+  const words = (name.match(WORD) ?? []).map((word) => word.toLowerCase());
+  return words.length > 0 && (BUILTIN_READS.has(words[0]) || BUILTIN_READS.has(words[words.length - 1])) ? "read" : "write";
+}
+
 /**
  * What a step did, in the language of the window. Raphael's own lookups and the commands for this PC
  * have words of their own; a service's tool, whose name is the server's and in its language, is
  * 「Notion：讀取」 or 「Notion：修改」 by whether it only reads (`toolAccess`). Its name is the step's
- * tooltip (`stepToolTip`).
+ * tooltip (`stepToolTip`). A tool of the app's own, which every member has as much as Raphael, names
+ * nobody: 「修改」 alone, so that a member's turn never looks like Raphael's doing.
  */
 export function stepTitle(step: AgentStep): string {
   if (step.kind === "model") return t("agent.stepThinking");
   if (!step.tool) return t("agent.stepUnknown");
   if (step.kind === "command") return plain(COMMAND_TITLES[step.tool] ?? "agent.cmd.other");
   if (step.kind === "computer") return plain(COMPUTER_TITLES[step.tool] ?? "agent.computer.other");
-  if (step.server === RAPHAEL && BUILTIN_TITLES[step.tool]) return plain(BUILTIN_TITLES[step.tool]);
-  const service = !step.server || step.server === RAPHAEL ? t("agent.title") : step.server;
-  return t(toolAccess(step.tool, step.server ?? "") === "read" ? "agent.tool.read" : "agent.tool.write", { p0: service });
+  if (!step.server || step.server === RAPHAEL) {
+    return plain(BUILTIN_TITLES[step.tool] ?? (builtinAccess(step.tool) === "read" ? "agent.tool.readOnly" : "agent.tool.changeOnly"));
+  }
+  return t(toolAccess(step.tool, step.server) === "read" ? "agent.tool.read" : "agent.tool.write", { p0: step.server });
 }
 
 /** The tool's own name, for the tooltip of a step whose words do not name it (a service's tool); blank for one that has words of its own. */
@@ -159,10 +173,10 @@ export function stepToolTip(step: AgentStep): string {
   return step.server === RAPHAEL && BUILTIN_TITLES[step.tool] ? "" : step.tool;
 }
 
-/** Where a step happened: the service, Raphael, or this PC. */
+/** Where a step happened: the service, or this PC. The app's own tools and model calls happened nowhere named: they are every member's. */
 export function stepPlace(step: AgentStep): string {
   if (step.kind === "command" || step.kind === "computer") return t("agent.thisPc");
-  if (step.kind === "model" || step.server === RAPHAEL || !step.server) return t("agent.title");
+  if (step.kind === "model" || step.server === RAPHAEL || !step.server) return "";
   return step.server;
 }
 
@@ -272,14 +286,15 @@ export function noteTaskEnds(turns: readonly AgentTurn[], state: TimelineState):
   }
 }
 
-/** The picture of a step: the service's mark, Raphael's own for a lookup, the PC for a command. It names the place in its label and tooltip. */
+/** The picture of a step: the service's mark, a plain one for the app's own tool, the PC for a command. A service or the PC is named in its label and tooltip. */
 function stepIcon(step: AgentStep): string {
   const place = esc(stepPlace(step));
-  const named = `role="img" aria-label="${place}" title="${place}"`;
+  const named = place ? `role="img" aria-label="${place}" title="${place}"` : `aria-hidden="true"`;
   if (step.kind === "command" || step.kind === "computer") return `<span class="step-ic" ${named}>${ico("monitor")}</span>`;
   if (step.kind === "model") return `<span class="step-ic" ${named}>${ico("sparkle")}</span>`;
   if (!step.server || step.server === RAPHAEL) {
-    const own = step.tool === "weather" ? ico("cloud") : step.tool === "web_search" ? ico("globe") : step.tool === "local_time" ? ico("clock") : ico("search");
+    const own = step.tool === "weather" ? ico("cloud") : step.tool === "web_search" ? ico("globe") : step.tool === "local_time" ? ico("clock")
+      : step.tool === "ask_member" ? ico("chat") : builtinAccess(step.tool ?? "") === "write" ? ico("pencil") : ico("search");
     return `<span class="step-ic" ${named}>${own}</span>`;
   }
   const mark = serviceIconOf({ name: step.server });

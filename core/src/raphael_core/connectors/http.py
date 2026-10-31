@@ -41,6 +41,8 @@ class PrivateHttp:
         return response
 
     async def json(self, method: str, url: str, **kwargs: Any) -> dict:
+        # `hide`: values the owner gave for this very request (a key); a message that echoes one is redacted of it.
+        hide = [value for value in kwargs.pop("hide", ()) if isinstance(value, str) and value]
         response = await self.response(method, url, **kwargs)
         if response.status_code >= 300:
             # Only a bounded, redacted provider message crosses the private boundary.
@@ -58,7 +60,7 @@ class PrivateHttp:
                     kind = "toolkit_not_allowed"
                 if isinstance(detail.get("message"), str):
                     diagnostic = classify({"kind": kind, "status": response.status_code, "message": detail["message"]},
-                                          secrets=kwargs.get("headers", {}).values())
+                                          secrets=[*kwargs.get("headers", {}).values(), *hide])
             except (ValueError, AttributeError):
                 pass
             raise ConnectorFailure(kind, response.status_code, diagnostic)

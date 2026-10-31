@@ -331,9 +331,9 @@ def native_diagnosis(messages, offered, seen):
         reason = re.search(r'"kind":\s*"([a-z_]+)"\s*,\s*"reason":\s*"([^"\\]*)"', task)
         if reason is None:
             raise ValueError("Native diagnosis never received the classified card failure")
-        if reason.groups() != ("auth_expired", "not_configured"):
+        if reason.group(1) != "auth_expired" or "Composio's API key is missing" not in reason.group(2):
             raise ValueError("Native diagnosis received a different connection failure")
-        return "reply", "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。我已檢查設定，會在連線完成後繼續原本的工作。"
+        return "reply", "要連上 Gmail，還需要 Composio 金鑰：請到設定 › 連接 貼上它。我已檢查設定，會在連線完成後繼續原本的工作。"
     if not seen and "connect_app" in offered:
         return "connect_app", {"app": "gmail"}
     return "reply", "請從卡片連線 Gmail，完成後我會繼續。"

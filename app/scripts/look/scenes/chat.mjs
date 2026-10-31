@@ -6,6 +6,8 @@ const composer = [click(".cmp-mode"), wait("#app-popover")];
 const dictationText = { before: "Please use Open Mouse", after: "Please use OpenMausBot" };
 // A key made up for the scenes: it is typed into a secret card and must reach nothing but `integrations.card_save`.
 const lookKey = "sk-look-4c9f2b7e81d3";
+// And one for the forms that add an app with its own key: it must reach nothing but the one call that adds the app.
+const setupKey = "zk-look-0123456789";
 const secretField = '[data-secret-card="card-notion"] input[type="password"]';
 const pcCard = '[data-computer-card="card-pc"]';
 // The permission card of a step that needs the owner's yes, and the email card a member wrote for them (小晴's draft).
@@ -23,6 +25,14 @@ const quickAnswer = { id: 91, session_id: "look-quick-umbrella", member_id: 0, c
   question: "明天早上要帶傘嗎？", route: "answer", source: "voice", prefix: "答", text: "明天早上降雨機率七成，出門記得帶傘。",
   detail: null, status: "done", cost_usd: 0.0008, model: "openai/gpt-6-luna", steps: [], attachments: [],
   messages: [{ seq: 1, kind: "progress", text: "《告。正在查看明天早上的天氣。》", at_ms: 1792807161000 }] };
+// A member's turn as the core keeps it: the member's own built-in tools (server "Raphael" for all of them), a connected
+// service and a step that is no step to the reader. Nothing in its steps may read as Raphael's doing.
+const memberWork = { id: 502, session_id: "look-member-work", member_id: 1, conversation_id: 11, created_at_ms: 1792807154000,
+  question: "把每週報告改到星期五，再看一下筆記。", route: "answer", source: "app", prefix: "", text: "已改到星期五早上九點。",
+  detail: null, status: "done", cost_usd: 0, model: "openai/gpt-6-luna", attachments: [],
+  messages: [{ seq: 1, kind: "reply", text: "已改到星期五早上九點。", at_ms: 1792807160000 }],
+  steps: [["session_search", "Raphael"], ["find_tools", "Raphael"], ["search", "Notion"], ["routine_update", "Raphael"], ["self_check", "Raphael"], ["ask_member", "Raphael"],
+    ["fetch", "Notion"]].map(([tool, server], index) => ({ kind: "tool", tool, server, outcome: "ok", at_ms: 1792807155000 + index * 800, ms: 300 + index * 120, reason: null })) };
 const rosterRefresh = { action: "main-event", event: { type: "MembersChanged" } };
 const stopSlot = [wait('.composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice svg'), check("composer-stop-slot")];
 const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), key("Enter"), rosterRefresh, ...stopSlot, check("pending-work")];
@@ -74,16 +84,37 @@ export default [
       wait('[data-connector="card-gmail"][data-card-state="failed"]')],
     { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "invalid_request",
       cardFailureText: "Gmail 無法接受連線請求的格式，需要更新連線功能。" }),
+  scene("connector-key", "An app that needs the owner's own key says so on its card, with the button that opens the form",
+    [wait('[data-connector="card-acme"]'), check("connector-key")], { connectorCard: "key" }),
+  scene("connector-app", "An app that needs a developer app of the owner's own says so on its card",
+    [wait('[data-connector="card-orbit"]'), check("connector-app")], { connectorCard: "app" }),
+  scene("connector-key-form", "The card's button opens the same form as the store's; nothing is typed into the chat",
+    [wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'), wait('.cn-setup-dialog [data-setup-field]'),
+      type('.cn-setup-dialog [data-setup-field]', setupKey), check("card-setup-form")], { connectorCard: "key" }),
+  scene("connector-key-sent", "The key goes to the core in the card's one call and the card follows the core's states",
+    [wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'), wait('.cn-setup-dialog [data-setup-field]'),
+      type('.cn-setup-dialog [data-setup-field]', setupKey), click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'),
+      wait('[data-connector="card-acme"][data-card-state="connected"]'), check("card-setup-sent")], { connectorCard: "key", cardSignIn: "approve" }),
+  scene("connector-key-rejected", "A key that was not accepted: the card says so and offers the form again, and the member names what to do",
+    [member(1), wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'),
+      wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey), click('.cn-setup-dialog [data-dlg="add"]'),
+      waitGone('.cn-setup-dialog'), wait('[data-connector="card-acme"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-reply]'),
+      check("card-key-rejected")],
+    { connectorCard: "key", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "key_rejected",
+      cardFailureText: "Acme Ledger 沒有接受這把金鑰。請在卡片上按「填入金鑰」再貼一次，或到「設定 › 連接 › 商店」的 Acme Ledger 重新加入。" }),
   scene("connector-reconnected", "Reconnect finishes the sign-in; the card counts the tools and the task resumes once below it",
     [wait('[data-connector="card-gmail"]'), click('[data-connector="card-gmail"] [data-act="card-connect"]'),
       wait('[data-connector="card-gmail"][data-card-state="connected"]'), wait('[data-resumed="121"]'), check("connector-reconnected")],
     { connectorCard: "expired", cardSignIn: "approve" }),
   scene("connector-failed-continued", "A failed connection returns its reason and a self-check continuation to the same conversation",
-    [member(1), { action: "member-column", collapsed: false }, wait('[data-connector="card-gmail"]'), click('[data-connector="card-gmail"] [data-act="card-connect"]'),
+    [member(1), wait('[data-connector="card-gmail"]'), click('[data-connector="card-gmail"] [data-act="card-connect"]'),
       wait('[data-connector="card-gmail"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-reply]'),
-      { action: "wait-text", selector: '.mb-col [data-member="1"] .mb-row-p', text: "Gmail 還沒登入" },
-      check("failure-owner-copy")],
-    { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureText: "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。我已檢查設定，會在連線完成後繼續原本的工作。" }),
+      // The sidebar opens last: below 860px it is a drawer over the chat, and the card must be pressed before it covers it.
+      { action: "member-column", collapsed: false },
+      { action: "wait-text", selector: '.mb-col [data-member="1"] .mb-row-p', text: "要連上 Gmail" },
+      check("failure-owner-copy"), check("card-composio-missing")],
+    { connectorCard: "gmail", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "needs_composio_key",
+      cardFailureText: "要連上 Gmail，還需要 Composio 金鑰：請到設定 › 連接 貼上它。我已檢查設定，會在連線完成後繼續原本的工作。" }),
   scene("chat-secret-masked", "A task that needs a connection's key shows its secret card; the key typed into the masked field draws no characters",
     [wait('[data-secret-card="card-notion"]'), type(secretField, lookKey), check("secret-masked")], { secretCard: "notion" }),
   scene("chat-secret-saved-not-resumed", "The key is saved and its task did not continue: the card says both and offers Try again without asking for the key again",
@@ -190,6 +221,8 @@ export default [
   scene("member-avatar", "Member avatar picker above details", [...details, click('[data-det="avatar"]'), wait("#app-popover")]),
   scene("member-edit", "Edit member dialog", [...details, click('[data-det="edit"]'), wait(".mb-dialog")]),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
+  scene("work-member-builtin", "A member's own tools in its work steps say what was done and never name Raphael; a connected service keeps its name",
+    [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait(".work-body:not([hidden]) .step-list .step"), check("work-steps-own-words")], { turns: [memberWork] }),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-value]"), check("permission-menu")]),
   scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),

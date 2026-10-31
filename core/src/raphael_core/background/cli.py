@@ -11,16 +11,18 @@ CEILING_PATIENCE = 3
 
 
 class RoomCliSessions:
-    """Room turns receive their full transcript and never resume a private member conversation."""
+    """Room turns receive their full transcript and never resume a private member conversation.
+    A loop keeps its own native session in memory, only to start the same CLI again while it runs."""
     def __init__(self):
         self.locks = {}
         self.conversations = SimpleNamespace(resolve=lambda member, conversation: conversation)
+        self._sessions = {}
 
-    def get(self, *args):
-        return None
+    def get(self, member, brain, conversation_id=None):
+        return self._sessions.get((member, brain, conversation_id))
 
-    def put(self, *args):
-        pass
+    def put(self, member, brain, session, conversation_id=None):
+        self._sessions[(member, brain, conversation_id)] = session
 
 
 def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
@@ -49,7 +51,11 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
             loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
             loop.tools.extend(item for item in outcome.tools if item["function"]["name"].startswith("computer__"))
             outcome.tools = list(loop.tools)
-            loop.catalog_changed = True
+            loop.reload_note, loop.catalog_changed = cli_loop.COMPUTER_CHANGED, True
+        elif outcome.tools:
+            # Tools find_tools showed: the loop lists them, and the CLI starts again to read its list.
+            loop.tools.extend(outcome.tools)
+            loop.reload_note, loop.catalog_changed = cli_loop.TOOLS_FOUND, True
         return outcome
 
     loop = CliLoop(brains=brains, sessions=RoomCliSessions(), member_id=task.member_id,

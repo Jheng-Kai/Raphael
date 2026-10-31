@@ -277,17 +277,19 @@ async def test_the_roster_names_the_primary_to_each_kind_of_speaker(rig):
     for_raphael = says(roster_prompt(rig.service, rig.service.speaker(0), "en"))
     for text in (for_alice, for_bob, for_raphael):
         assert text.startswith('"Alice" (id %d).' % alice) and "This member is the chief of staff" in text
-    # the primary dispatches what it is given and sends administration to Raphael
-    assert "That is you" in for_alice and "handoff" in for_alice and "You administer members" in for_alice
+    # the primary dispatches what it is given
+    assert "That is you" in for_alice and "handoff" in for_alice and "do only your own work yourself" in for_alice
     # another member forwards work to the colleague it belongs to, and what it cannot place to the primary
     assert "That is you" not in for_bob and "hand it to the primary contact" in for_bob and "ask_member" in for_bob
-    # Raphael keeps the chief of staff's duties and the administration
-    assert "That is you" not in for_raphael and "Only the chief administers members" in for_raphael
+    # Raphael, when he is not the primary, is told what every member is
+    assert "That is you" not in for_raphael and "hand it to the primary contact" in for_raphael
+    # administration is nobody's alone: every speaker has the same tools
+    assert not any("administer" in text for text in (for_alice, for_bob, for_raphael))
 
 
 async def test_raphael_is_told_he_is_the_primary_by_default_and_gives_no_second_chief(rig):
     bob = await make(rig, "Bob")
-    for who, expected in ((0, "You administer members, groups and meetings."), (bob, "")):
+    for who, expected in ((0, "do only your own work yourself."), (bob, "")):
         text = says(roster_prompt(rig.service, rig.service.speaker(who), "en"))
         assert text.startswith('"Raphael" (id 0).') and (text.endswith(expected) if expected else "That is you" not in text)
     assert "handoff" in says(roster_prompt(rig.service, rig.service.speaker(0), "en"))

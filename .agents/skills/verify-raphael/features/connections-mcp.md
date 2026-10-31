@@ -111,7 +111,7 @@ the current filters. Connected entries remain separate context, outside that cou
 Popular and other available apps share bounded 18-card pages. Failure/loading of Composio leaves the built-in catalog available.
 Both catalogs render through the same compact row component: a bare mark, a name,
 one summary line, a right-aligned outlined Add button and a bottom divider. Added,
-connecting and unavailable states use the same row/action slots, with no managed
+connecting and needs-a-key states use the same row/action slots, with no managed
 card CSS or primary Add variant. Every row's name opens the shared store detail;
 managed entries omit unavailable example/server sections. Managed sign-in does not
 expose a cancellation RPC, so its shared Cancel control is disabled while waiting;
@@ -542,6 +542,42 @@ fake brain with the real core, policy, cards, Composio and Settings join flow, f
 Raphael and a new member. It stops before consent and never reads account data.
 The browser's provider page still needs separate visual inspection; pending alone
 is not proof of an external page. No CLI brain or OpenRouter is used.
+
+## Apps that ask for the owner's own key or developer app (2026-10-31)
+
+Owner report: most of the store could not be added. Measured on the real catalog (1,714 toolkits): about 9% had a
+shared sign-in; 1,407 take only an API key or token, 88 are OAuth-only without Composio's shared login (X/Twitter
+among them) and need a developer app of the owner's own. Nothing in the store is a dead end now.
+
+- Core: `connectors/toolkits.py` reads each toolkit's `auth_config_details` into one plan (`sign_in`, `key` or
+  `own_app`; the fields, the guide, the service's page, the redirect address) and the catalog list carries `needs`
+  (no `can_connect`). `connectors.toolkit {toolkit}` returns the plan, never a value. `connectors.connect
+  {toolkit, fields?}` creates the toolkit's auth config at Composio (`POST /auth_configs`, `use_custom_auth`), then for
+  a key creates the account at once (`POST /connected_accounts`, `state.val`), and for a developer app opens the
+  normal browser sign-in with the auth config in the session (`auth_configs`). Missing or wrong fields are
+  `needs_key`, `needs_own_app`, `key_rejected`; a Composio key that is missing or refused is `missing_key`. Giving the app
+  back deletes the account and the auth config and starts the session again (a session update only adds auth configs).
+- Window: `connection-setup.ts` is the one form (store 加入 and the chat card's 填入金鑰 / 設定開發者 app): masked
+  fields for what the service asks, where to get it (guide, else the service's page, else that there is none), plain
+  steps, the redirect address with a copy button for a developer app, and one line that Composio keeps it. A row of the
+  store says 需要 API key / 需要自己的開發者 app in words; no 加入 is disabled for want of anything. Without a Composio key
+  the store row says so and its button adds the key.
+- Chat: `find_app` results and the card carry `needs`; a failed card is `needs_composio_key`, `needs_key`,
+  `needs_own_app` or `key_rejected`, with a button to the form or to Settings, and the member is told exactly what is
+  missing and where to add it (not a bare "not configured").
+- Evidence: `core/tests/test_connector_setup.py`, `core/tests/test_toolkits.py`, `app/src/main/connection-setup.test.ts`;
+  real request shapes were proved against Composio with a made-up key on `0codekit` (account ACTIVE, the session read
+  back with its `auth_configs`, eight tools, then account and auth config deleted) and the own-app auth config shape
+  with made-up values on `twitter` (created, deleted). Composio does not test a key against the service when it is
+  stored, so a wrong key shows only when a tool runs.
+
+```powershell
+npm run look -- plugins-store-needs plugins-store-needs-page plugins-setup-key plugins-setup-noguide plugins-setup-own-app plugins-setup-added plugins-setup-rejected plugins-setup-composio-key plugins-setup-plan-failed connector-key connector-app connector-key-form connector-key-sent connector-key-rejected connector-failed-continued --theme both --width 1120,720,1920x1080
+```
+
+`plugins-store-needs` requires the words on each row and no disabled 加入; the `setup-*` checks require masked
+fields, the guide or its fallback, the redirect address for a developer app, a key that is in no page text and no call
+but the one that adds the app, and an emptied masked field after a refusal; `card-*` checks require the same for the chat.
 
 ## Executable round 10 matrix
 

@@ -767,7 +767,7 @@ describe("what the tab does", () => {
     vi.mocked(toaster.info).mockReset();
     api.toolsetsList.mockResolvedValue({ groups: GROUPS });
     api.connectorsStatus.mockResolvedValue({ connectors: [], composio_configured: true, google_configured: false });
-    api.connectorsCatalog.mockResolvedValue({ categories: [], items: CATALOG.map(s => ({ slug: s.id, name: s.name, description: s.summary["zh-TW"], logo: "", categories: [], can_connect: true, no_auth: false })) });
+    api.connectorsCatalog.mockResolvedValue({ categories: [], items: CATALOG.map(s => ({ slug: s.id, name: s.name, description: s.summary["zh-TW"], logo: "", categories: [], needs: "sign_in", no_auth: false })) });
     api.connectorsCategories.mockResolvedValue({ items: [] });
     api.integrationsCatalog.mockResolvedValue({ services: CATALOG });
     api.integrationsAudit.mockResolvedValue({ entries: AUDIT });

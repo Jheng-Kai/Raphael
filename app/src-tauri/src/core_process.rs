@@ -78,6 +78,7 @@ pub fn timeout_for(method: &str) -> Duration {
         "chatgpt.models" => 30,
         "connectors.catalog"
         | "connectors.categories"
+        | "connectors.toolkit"
         | "connectors.status"
         | "connectors.disconnect"
         | "connectors.tools"

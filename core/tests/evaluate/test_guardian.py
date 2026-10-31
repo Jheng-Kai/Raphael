@@ -90,7 +90,7 @@ async def test_html_reaches_member_without_tool_selection(conn, tmp_path):
     assert result["status"] == "PASS", result
     assert "守護星光" in client.requests[0]["messages"][1]["content"]
     offered = {tool["function"]["name"] for tool in client.requests[0]["tools"]}
-    assert "member_create" not in offered and "member_delete" not in offered
+    assert {"member_create", "member_delete"} <= offered  # a member has the tools Raphael has
 
 
 async def test_turn_cap_blocks_before_next_api_request(conn, tmp_path):
@@ -113,7 +113,7 @@ async def test_cli_fake_brain_calls_real_authenticated_mcp(conn, tmp_path, monke
                 headers = {"Authorization": "Bearer " + token}
                 listing = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
                 names = {tool["name"] for tool in listing.json()["result"]["tools"]}
-                assert "routine_list" in names and "member_create" not in names
+                assert "routine_list" in names and "member_create" in names
                 response = await http.post(endpoint, headers=headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "routine_list", "arguments": {}}})
                 assert response.status_code == 200
                 assert "寫作" in response.text

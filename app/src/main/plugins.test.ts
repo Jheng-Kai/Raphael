@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   connectorsTools: vi.fn(), connectorsSetTools: vi.fn(), connectorsConnect: vi.fn(),
   connectorsGoogleConnect: vi.fn(), connectorsDisconnect: vi.fn(), connectorsSetKey: vi.fn(),
   integrationsInventory: vi.fn(), membersList: vi.fn(), membersSkillsList: vi.fn(),
+  connectorsToolkit: vi.fn(), openExternalUrl: vi.fn(),
 }));
 vi.mock("./api", () => api);
 vi.mock("./ui", async original => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() } }));
@@ -18,7 +19,7 @@ import { connectionsHTML, createConnections, emptyConnectionsView } from "./conn
 import { closeMenu, toaster } from "./ui";
 
 let connectors: ManagedConnector[];
-const toolkit: Toolkit = { slug: "notion", name: "Notion", description: "Workspace notes", logo: "https://logos.composio.dev/notion.svg", categories: ["docs", "other"], can_connect: true, no_auth: false };
+const toolkit: Toolkit = { slug: "notion", name: "Notion", description: "Workspace notes", logo: "https://logos.composio.dev/notion.svg", categories: ["docs", "other"], needs: "sign_in", no_auth: false };
 const tools = [
   { slug: "NOTION_SEARCH", name: "Search", description: "Find notes", kind: "read", enabled: true },
   { slug: "NOTION_CREATE", name: "Create", description: "Add a note", kind: "write", enabled: true },
@@ -336,8 +337,8 @@ test("a managed catalog failure leaves built-ins available and a late key reply 
 });
 
 
-test.each(["available", "added", "connecting", "unavailable"])("both store sources share their row and action markup when %s", state => {
-  const base = { ...storePlugin({ ...toolkit, logo: "" }, []), server_id: state === "added" ? "existing" : null, can_connect: state !== "unavailable" };
+test.each(["available", "added", "connecting", "needs-key"])("both store sources share their row and action markup when %s", state => {
+  const base = { ...storePlugin({ ...toolkit, logo: "", needs: state === "needs-key" ? "key" : "sign_in" }, []), server_id: state === "added" ? "existing" : null };
   const render = (managed: boolean) => {
     const item = { ...base, source: managed ? "composio" as const : undefined };
     const root = document.createElement("div");
@@ -353,7 +354,62 @@ test.each(["available", "added", "connecting", "unavailable"])("both store sourc
     expect(cancel.disabled).toBe(true); cancel.removeAttribute("disabled");
   }
   expect(managed.outerHTML).toBe(own.outerHTML);
-  if (state === "unavailable") expect(managed.querySelector<HTMLButtonElement>('[data-conn="join"]')!.disabled).toBe(true);
+  if (state === "needs-key") {
+    // What it asks for is on the row in words, and 加入 is a live button: nothing is dead or explained only by a hover title.
+    expect(managed.querySelector(".sub .need")?.textContent).toBe("Needs an API key");
+    const join = managed.querySelector<HTMLButtonElement>('[data-conn="join"]')!;
+    expect(join.disabled).toBe(false); expect(join.hasAttribute("title")).toBe(false);
+  } else expect(managed.querySelector(".sub .need")).toBeNull();
+});
+
+const keyApp: Toolkit = { ...toolkit, slug: "acme", name: "Acme", logo: "", needs: "key" };
+const keyPlan = { slug: "acme", name: "Acme", needs: "key", scheme: "API_KEY", redirect_url: null, guide_url: "https://docs.acme.example/keys", app_url: "https://acme.example",
+  fields: [{ name: "generic_api_key", label: "API Key", description: "Your Acme key", required: true, secret: true, default: null }] };
+
+test("加入 on an app that needs a key asks in its form first: the key crosses one call and the field is emptied", async () => {
+  api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
+  api.connectorsToolkit.mockResolvedValue(keyPlan);
+  api.connectorsConnect.mockResolvedValue({ connected: true });
+  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  expect(root.querySelector(".sub .need")?.textContent).toBe("Needs an API key");
+  click("join", "acme"); await settle();
+  expect(api.connectorsConnect).not.toHaveBeenCalled(); // nothing is asked of Composio before the form is filled in
+  expect(api.integrationsConnect).not.toHaveBeenCalled();
+  const dialog = document.querySelector(".cn-setup-dialog")!;
+  const field = dialog.querySelector<HTMLInputElement>('[data-setup-field="generic_api_key"]')!;
+  expect(field.type).toBe("password");
+  field.value = "zk-test-0123";
+  dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.click(); await settle();
+  expect(api.connectorsConnect).toHaveBeenCalledTimes(1);
+  expect(api.connectorsConnect).toHaveBeenCalledWith("acme", { generic_api_key: "zk-test-0123" });
+  expect(document.querySelector(".cn-setup-dialog")).toBeNull();
+  expect(field.value).toBe("");
+  expect(document.body.innerHTML + JSON.stringify(c.view())).not.toContain("zk-test-0123");
+  expect(c.view().tab).toBe("installed"); c.reset();
+});
+
+test("a key Composio refuses is told in the form; the missing Composio key offers the place to add it", async () => {
+  api.connectorsCatalog.mockResolvedValue({ items: [keyApp], categories: [] });
+  api.connectorsToolkit.mockResolvedValue(keyPlan);
+  const { c, root, click } = setup(); await c.load(); click("tab", "store"); await settle();
+  for (const [error, words] of [["key_rejected", "Acme did not accept this key"], ["missing_key", "no working Composio key"]] as const) {
+    api.connectorsConnect.mockRejectedValueOnce(new Error(error));
+    click("join", "acme"); await settle();
+    const dialog = document.querySelector(".cn-setup-dialog")!;
+    dialog.querySelector<HTMLInputElement>("[data-setup-field]")!.value = "zk-test-0123";
+    dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.click(); await settle();
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain(words);
+    expect(dialog.querySelector<HTMLInputElement>("[data-setup-field]")!.value).toBe("");
+    expect(dialog.querySelector<HTMLButtonElement>('[data-dlg="add"]')!.disabled).toBe(false);
+    expect(document.body.innerHTML).not.toContain("zk-test-0123");
+    if (error === "missing_key") {
+      dialog.querySelector<HTMLButtonElement>('[data-dlg="composio"]')!.click(); await settle();
+      expect(document.querySelector(".cn-setup-dialog")).toBeNull();
+      expect(c.view().keyOpen).toBe(true);
+      c.reset();
+    } else dialog.querySelector<HTMLButtonElement>('[data-dlg="cancel"]')!.click();
+  }
+  expect(root).toBeTruthy();
 });
 
 test("managed store rows open the shared detail and join through their own provider", async () => {

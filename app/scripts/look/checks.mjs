@@ -598,7 +598,7 @@ export function checkRendered(name, context = {}) {
     require(visible(reply) && visible(preview), "the reply and its sidebar preview are visible");
     const copy = { reply: reply.textContent.trim(), preview: preview.textContent.trim() };
     for (const [surface, text] of Object.entries(copy)) {
-      require(text.includes("Gmail") && text.includes("還沒登入"), `${surface} explains the connection failure naturally`);
+      require(text.includes("Gmail") && text.includes("Composio 金鑰"), `${surface} says exactly what is missing for the connection`);
       require(!/[a-z]+_[a-z_]+|[（(]\s*(?:credits|usage_?limit|rate_?limit|overloaded|server|auth_?expired|network|permission_?denied|not_?found|tool_?broken|timeout|refused|unknown)\s*[）)]|;|not_?configured/i.test(text), `${surface} exposes no machine diagnostic or ASCII semicolon`);
     }
     require(!reply.querySelector("em"), "machine underscores cannot become italics in the reply");
@@ -2589,6 +2589,18 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, chips: chips.length };
   }
+  if (name === "work-steps-own-words") {
+    // A member's own tools say what was done in a word and never whose; only a connected service names itself.
+    const body = document.querySelector('.page-agent:not([hidden]) .work-body');
+    const rows = [...body.querySelectorAll('.step-list .step')].filter(visible);
+    const words = rows.map(row => row.querySelector('.step-t').textContent);
+    require(visible(body) && words.join("|") === "讀取|Notion：讀取|修改|讀取|詢問同事|Notion：讀取", `each row says what was done: ${words.join("|")}`);
+    require(!rows.some(row => row.textContent.includes("拉斐爾") || row.querySelector('[title*="拉斐爾"], [aria-label*="拉斐爾"]')), "no row or picture names Raphael");
+    const named = rows.filter(row => row.querySelector('.step-ic[aria-label]'));
+    require(named.length === 2 && named.every(row => row.querySelector('.step-ic').getAttribute('aria-label') === "Notion"), "a connected service keeps its name on its picture");
+    require(rows.length - named.length === 4 && rows.filter(row => !named.includes(row)).every(row => row.querySelector('.step-ic').getAttribute('aria-hidden') === 'true'), "the app's own tools have a plain picture without a name");
+    return { check: name, words };
+  }
   if (name === "bot-ask-centred" || name === "bot-ask-expanded") {
     const event = document.querySelector('[data-handoff="x71"]');
     const [line] = eventLines(1);
@@ -2626,6 +2638,112 @@ export function checkRendered(name, context = {}) {
     require(own.textContent.includes("專案每週三檢查原型") && !shared.textContent.includes("專案每週三檢查原型"), "the member's own entry stays in its own file");
     return { check: name };
   }
+  if (name === "plugins-store-needs") {
+    // The store says in words what each app asks for, on its row, before anything is pressed; no 加入 is dead.
+    const expected = { "acme-ledger": "需要 API key", "parcel-desk": "需要 API key", "orbit-ads": "需要自己的開發者 app" };
+    for (const [slug, words] of Object.entries(expected)) {
+      const open = document.querySelector(`[data-conn="open-store"][data-id="${slug}"]`);
+      require(open, `${slug} is in the store`);
+      const need = open.querySelector('.sub .need');
+      require(visible(need) && need.textContent === words, `${slug}'s row says "${words}" in visible words, not only in a title (${need?.textContent})`);
+      const join = open.closest('.cs-card').querySelector('[data-conn="join"]');
+      require(join && !join.disabled && !join.hasAttribute('title'), `${slug}'s 加入 is a live button with nothing hidden in a hover title`);
+    }
+    const dead = [...document.querySelectorAll('.cs-card [data-conn="join"]')].filter(button => button.disabled);
+    require(dead.length === 0, `no 加入 in the store is disabled (${dead.length})`);
+    return { check: name, rows: Object.keys(expected).length };
+  }
+  if (name === "plugins-store-needs-page") {
+    const line = document.querySelector('.cs-page .cs-needs'), join = document.querySelector('.cs-page [data-conn="join"]');
+    require(visible(line) && line.textContent.startsWith("需要 API key") && line.textContent.includes("Acme Ledger"), `the page says what the app needs (${line?.textContent})`);
+    require(join && !join.disabled && join.textContent.includes("加入"), "加入 on the page is live");
+    return { check: name, words: line.textContent };
+  }
+  if (name === "setup-added") {
+    const key = "zk-look-0123456789", calls = window.__look.calls;
+    require(!document.querySelector('.cn-setup-dialog'), "the form closed once the app was added");
+    const sent = calls.filter(call => call.method === "connectors.connect");
+    require(sent.length === 1 && sent[0].params.fields.generic_api_key === key && sent[0].params.toolkit === "acme-ledger", "the key crossed one call, connectors.connect, and no other");
+    require(!JSON.stringify(calls.filter(call => call.method !== "connectors.connect")).includes(key) && !document.body.textContent.includes(key), "the key is on no page text and in no other call");
+    require(visible(document.querySelector('[data-conn="open"][data-id="composio:acme-ledger"]')), "the app is among the connected ones");
+    return { check: name };
+  }
+  if (name.startsWith("setup-") || name === "card-setup-form") {
+    // The form that asks for an app's own key, or its own developer app (connection-setup.ts).
+    const key = "zk-look-0123456789", calls = window.__look.calls;
+    const dialog = document.querySelector('.cn-setup-dialog'), frame = dialog.getBoundingClientRect();
+    require(visible(dialog), "the form is open");
+    require(frame.left >= 0 && frame.top >= 0 && frame.right <= window.innerWidth + 1 && frame.bottom <= window.innerHeight + 1, "the form fits the window");
+    const add = dialog.querySelector('[data-dlg="add"]'), cancel = dialog.querySelector('[data-dlg="cancel"]');
+    for (const button of [add, cancel]) {
+      const box = button.getBoundingClientRect();
+      require(visible(button) && box.top >= frame.top && box.bottom <= frame.bottom + 1 && box.right <= frame.right + 1, "the footer actions are inside the form");
+    }
+    const body = dialog.querySelector('.mb-dlg-body');
+    require(body.scrollWidth <= body.clientWidth + 1, "nothing in the form runs sideways");
+    const status = dialog.querySelector('[data-setup-status]'), alertText = status?.querySelector('[role="alert"]')?.textContent ?? "";
+    const input = dialog.querySelector('[data-setup-field]');
+    const seen = JSON.stringify(calls.filter(call => !["connectors.connect", "integrations.card_connect"].includes(call.method)));
+    require(!document.body.textContent.includes(key) && !seen.includes(key), "the key is on no page text and in no call but the one that adds the app");
+    if (["setup-key", "card-setup-form"].includes(name)) {
+      require(dialog.querySelector('.mb-dlg-head h2').textContent.includes("Acme Ledger"), "the form is named for the app");
+      require(dialog.querySelector('.cn-lead').textContent.includes("API key") && dialog.querySelector('.cn-keep').textContent.includes("Composio"), "it says what is needed and that Composio keeps it");
+      const fields = [...dialog.querySelectorAll('[data-setup-field]')];
+      require(fields.length === 1 && fields[0].type === "password" && fields[0].dataset.setupField === "generic_api_key" && fields[0].value === key, "exactly the key the app asks for, in a masked field");
+      require(visible(dialog.querySelector('[data-dlg="guide"]')) && dialog.querySelectorAll('.cn-steps li').length === 3, "it says where to get it, in plain steps");
+      require(!add.disabled && dialog.querySelectorAll('button:disabled').length === 0, "no control in the form is dead");
+      require(!calls.some(call => ["connectors.connect", "integrations.card_connect"].includes(call.method)), "nothing was sent before 加入");
+      if (name === "card-setup-form") require(!(document.querySelector('.composer textarea')?.value ?? "").includes(key), "nothing was typed into the chat");
+    }
+    if (name === "setup-noguide") {
+      const where = dialog.querySelector('.cn-where');
+      require(where.textContent.includes("目錄沒有附上取得方式") && visible(where.querySelector('[data-dlg="home"]')) && !where.querySelector('[data-dlg="guide"]'), "no guide: it says so and offers the service's own page");
+    }
+    if (name === "setup-own-app") {
+      require(dialog.querySelector('.cn-lead').textContent.includes("開發者 app") && dialog.querySelector('.cn-keep').textContent.includes("Client ID"), "it says the service needs the owner's own developer app");
+      require(dialog.querySelector('.cn-redirect input').value === "https://backend.composio.dev/api/v1/auth-apps/add" && visible(dialog.querySelector('[data-dlg="copy"]')), "it shows the address to register and a button to copy it");
+      const id = dialog.querySelector('[data-setup-field="client_id"]'), secret = dialog.querySelector('[data-setup-field="client_secret"]');
+      require(id.type === "text" && id.value === "look-client-id" && secret.type === "password" && secret.value === key, "the id is plain and the secret is masked");
+      require(visible(dialog.querySelector('[data-dlg="guide"]')), "it links to the provider's developer portal");
+    }
+    if (name === "setup-rejected") {
+      require(alertText.includes("沒有接受這把金鑰"), `the form says the key was not accepted (${alertText})`);
+      require(input.value === "" && !input.disabled && !add.disabled && add.textContent.trim() === "加入", "the masked field is empty and the form can try again");
+      require(calls.filter(call => call.method === "connectors.connect").length === 1, "one try reached the core");
+    }
+    if (name === "setup-composio-key") {
+      require(alertText.includes("Composio 金鑰"), `the form says the Composio key is the problem (${alertText})`);
+      require(visible(dialog.querySelector('[data-dlg="composio"]')) && dialog.querySelector('[data-dlg="composio"]').textContent.includes("加入 Composio 金鑰"), "it offers the place to add it");
+    }
+    if (name === "setup-plan-failed") {
+      require(dialog.querySelector('.cn-setup').textContent.includes("讀不到 Acme Ledger 需要什麼") && visible(dialog.querySelector('[data-dlg="retry"]')), "it says it could not read what the app needs and offers to try again");
+    }
+    return { check: name, alert: alertText };
+  }
+  if (name === "card-setup-sent" || name === "card-key-rejected" || name === "card-composio-missing") {
+    const key = "zk-look-0123456789", calls = window.__look.calls;
+    const card = [...document.querySelectorAll('.connector-card')].find(visible);
+    require(card, "the connector card is visible");
+    const state = card.querySelector('.cc-state')?.textContent.trim() ?? "", action = [...card.querySelectorAll('button')].filter(visible);
+    require(!document.body.textContent.includes(key), "the key is on no page text");
+    if (name === "card-composio-missing") {
+      require(card.dataset.cardState === "failed" && state.includes("還沒有 Composio 金鑰"), `the card says what is missing (${state})`);
+      require(action.length === 1 && action[0].dataset.act === "card-settings" && action[0].textContent.trim() === "開啟連接設定", "the card offers the place to add it");
+      return { check: name, state };
+    }
+    const sent = calls.filter(call => call.method === "integrations.card_connect");
+    require(sent.length === 1 && sent[0].params.id === card.dataset.connector && sent[0].params.fields.generic_api_key === key, "the key crossed one call, integrations.card_connect");
+    require(!JSON.stringify(calls.filter(call => call.method !== "integrations.card_connect")).includes(key), "no other call carries the key");
+    require(!(document.querySelector('.composer textarea')?.value ?? "").includes(key), "nothing was typed into the chat");
+    if (name === "card-setup-sent") require(card.dataset.cardState === "connected", "the card follows the core to connected");
+    else {
+      require(card.dataset.cardState === "failed" && state === "這把金鑰沒有被接受，請再填一次", `the card says the key was not accepted (${state})`);
+      require(action.length === 1 && action[0].dataset.act === "card-setup" && action[0].textContent.trim() === "填入金鑰", "the card offers the form again");
+      const reply = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible).at(-1);
+      require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("設定 › 連接 › 商店"), "the member names what to do and where");
+    }
+    return { check: name, state };
+  }
   if (name.startsWith("connector-")) {
     // A connector card (connector-card.ts): the app's own bare mark, its name, where its sign-in stands and at most
     // one framed action, all inside the card, below the reply that asked for it.
@@ -2652,6 +2770,8 @@ export function checkRendered(name, context = {}) {
       "connector-slack-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
       "connector-authorizing": ["authorizing", "等你在瀏覽器登入", "取消", false],
       "connector-expired": ["pending", "授權已過期", "重新連結", true],
+      "connector-key": ["pending", "需要你的 API key", "填入金鑰", true],
+      "connector-app": ["pending", "需要你自己的開發者 app", "設定開發者 app", true],
       "connector-reconnected": ["connected", "已重新連結 · 2 個工具", null, false],
     }[name];
     require(expected, `no expectation for ${name}`);

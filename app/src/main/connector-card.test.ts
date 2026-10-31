@@ -69,6 +69,31 @@ describe("a connector card", () => {
     expect(visible(connectorCardHTML(card({ state: "failed", error: "unheard-of" })))).toContain(t("card.error"));
   });
 
+  test("an app that needs the owner's own key or developer app says so, and its one button opens the form", () => {
+    const key = card({ app: "acme", name: "Acme", needs: "key", toolkit: "acme" });
+    const pending = connectorCardHTML(key);
+    expect(visible(pending)).toBe("Acme 需要你的 API key 填入金鑰");
+    expect(actions(pending)).toEqual(["card-setup"]);
+    expect(pending).toContain('data-toolkit="acme" data-needs="key" data-name="Acme"');
+    expect(pending).not.toContain("<input"); // the key is never asked for in the chat
+    const own = connectorCardHTML(card({ app: "orbit", name: "Orbit", needs: "own_app", toolkit: "orbit" }));
+    expect(visible(own)).toBe("Orbit 需要你自己的開發者 app 設定開發者 app");
+    // A failure names what is missing and offers the form again, never a bare "retry".
+    const rejected = connectorCardHTML({ ...key, state: "failed", error: "key_rejected" });
+    expect(visible(rejected)).toBe("Acme 這把金鑰沒有被接受， 請再填一次 填入金鑰");
+    expect(actions(rejected)).toEqual(["card-setup"]);
+    expect(actions(connectorCardHTML({ ...key, state: "cancelled" }))).toEqual(["card-setup"]);
+    expect(actions(connectorCardHTML({ ...key, state: "authorizing" }))).toEqual(["card-cancel"]);
+  });
+
+  test("with no Composio key the failed card says so and opens the settings, not a vague retry", () => {
+    const failed = connectorCardHTML(card({ state: "failed", error: "needs_composio_key" }));
+    // What is missing, and the button to the place that adds it; the member's reply says where in words.
+    expect(visible(failed)).toBe("Gmail 還沒有 Composio 金鑰 開啟連接設定");
+    expect(actions(failed)).toEqual(["card-settings"]);
+    expect(visible(connectorCardHTML(card({ state: "failed", error: "not_configured" })))).toContain("Google 登入還沒設定好");
+  });
+
   test("speaks only the window's language", () => {
     setLocale("en");
     expect(visible(connectorCardHTML(card({ app: "googlecalendar", name: "Google Calendar" })))).toBe("Google Calendar Connect");

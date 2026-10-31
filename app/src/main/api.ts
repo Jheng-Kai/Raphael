@@ -312,7 +312,14 @@ export const connectorsCatalog = (): Promise<{ items: import("./plugins-data").T
 export const connectorsCategories = (): Promise<{ items: Array<{ id: string; name: string }> }> => connectorCall("connectors.categories");
 export const connectorsTools = (id: string): Promise<{ items: import("./plugins-data").ConnectorTool[] }> => connectorCall("connectors.tools", { id });
 export const connectorsSetTools = (id: string, changes: { disabled_tools?: string[]; enabled?: boolean }): Promise<unknown> => connectorCall("connectors.set_tools", { id, ...changes });
-export const connectorsConnect = (toolkit: string): Promise<{ connected: boolean; error?: string }> => connectorCall("connectors.connect", { toolkit });
+/** What adding the toolkit asks of the owner and where they find it: the fields, never a value. */
+export const connectorsToolkit = (toolkit: string): Promise<import("./plugins-data").ToolkitPlan> => connectorCall("connectors.toolkit", { toolkit });
+/**
+ * Adds an app of the store. `fields` are what its form asked for (the owner's own key, or a developer app's id and secret):
+ * they go to the core in this call, which hands them to Composio, and to nothing else.
+ */
+export const connectorsConnect = (toolkit: string, fields?: Record<string, string>): Promise<{ connected: boolean; error?: string }> =>
+  connectorCall("connectors.connect", fields ? { toolkit, fields } : { toolkit });
 export const connectorsGoogleConnect = (): Promise<{ connected: boolean; error?: string }> => connectorCall("connectors.google.connect");
 export const connectorsDisconnect = (id: string): Promise<unknown> => connectorCall("connectors.disconnect", { id });
 export const connectorsSetKey = (key: string): Promise<{ configured: boolean }> => connectorCall("connectors.set_key", { key });
@@ -325,8 +332,8 @@ export const integrationsConnect = (target: { catalog_id: string } | { id: strin
 /** Ends the wait for a login; the call that waits then answers `cancelled`. */
 export const integrationsConnectCancel = (): Promise<{ cancelled: boolean }> => core("integrations.connect_cancel");
 /** Starts the sign-in of a chat's connector card; the card's new states arrive as `AgentTurn`. */
-export const cardConnect = (id: string): Promise<{ card: import("./types").ConnectorCard; started: boolean }> =>
-  core("integrations.card_connect", { id });
+export const cardConnect = (id: string, fields?: Record<string, string>): Promise<{ card: import("./types").ConnectorCard; started: boolean }> =>
+  core("integrations.card_connect", fields ? { id, fields } : { id });
 /** Ends a card's sign-in that is under way. */
 export const cardCancel = (id: string): Promise<{ cancelled: boolean }> => core("integrations.card_cancel", { id });
 /** The key typed into a secret card goes to the core's vault and nowhere else: not to `agent.ask`, a history or a log. */

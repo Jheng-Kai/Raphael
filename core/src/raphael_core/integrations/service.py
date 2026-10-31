@@ -785,6 +785,10 @@ class IntegrationsService:
                             description=tool.description,
                             schema=tool.input_schema,
                             tier=self.managed.tier(server.id, tool.name) if server.managed_by else self._tier_for(tool),
+                            # Composio's router is one door to every app connected through it: the tool that
+                            # executes what the search found shares no word with any request, so a turn's
+                            # narrowing by its words must never leave the three of them out.
+                            pinned=server.managed_by == "composio",
                         )
                     )
         return tools

@@ -6,13 +6,17 @@ A card is a row of `connect_cards`, bound to the turn whose task asked for the a
 
     pending ── Connect ──> authorizing ──> connected
        ^                       |  |
-       |                       |  +──> failed (denied, timeout, scope, state, not_configured, ...)
+       |                       |  +──> failed (denied, timeout, scope, state, needs_composio_key, needs_key, ...)
        +── Connect again <─────+─────> cancelled (the owner's Cancel)
     pending, failed or cancelled ── CARD_WAIT_MS ──> expired
 
-`integrations.card_connect {id}` answers at once and signs in in the background: through the owner's
+`integrations.card_connect {id, fields?}` answers at once and signs in in the background: through the owner's
 own Google authorization when it is configured (a loopback callback with PKCE and a `state`), else
-through Composio; with neither, the card fails with `not_configured` and no browser opens. Connected
+through Composio; with neither, the card fails with `needs_composio_key` and no browser opens. An app that
+signs in with the owner's own key or developer app (`needs` "key", "own_app") is given its `fields` by the
+window's form: they go to `connectors.connect` in memory and nowhere else (no row, no event, no log, no
+reply), and the model never sees them. A card that failed for want of something says exactly what and where
+(`needs_composio_key`, `needs_key`, `needs_own_app`, `key_rejected`), to the owner and to the member. Connected
 means the app's read tools can be called now, so a sign-in that granted less (a partial consent) is
 `scope`, never connected. `integrations.card_cancel {id}` ends a sign-in under way.
 
@@ -25,6 +29,7 @@ told of a change by `agent.turn`.
 import asyncio
 import json
 import logging
+import re
 import secrets
 import sqlite3
 from collections.abc import Awaitable, Callable, Iterable
@@ -36,7 +41,8 @@ from .apps import APPS, App, catalog_apps
 from .composio import KEY
 from .google import PREFIX
 from .service import GOOGLE_SERVER
-from ..failures import classify
+from .toolkits import SIGN_IN
+from ..failures import Failure, classify
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +62,12 @@ MOVES: dict[str, tuple[str, ...]] = {
 _FAILURES = {
     "denied": "denied", "access_denied": "denied", "timeout": "timeout", "expired": "timeout",
     "state": "state", "missing_scopes": "scope", "scope": "scope", "not_configured": "not_configured",
-    "missing_key": "not_configured", "needs_own_oauth_app": "not_configured",
+    "missing_key": "needs_composio_key", "needs_key": "needs_key", "needs_own_app": "needs_own_app",
+    "key_rejected": "key_rejected",
 }
+# The failures that are the owner's to put right, each with a place in the window to do it.
+SETUP = frozenset(("needs_composio_key", "needs_key", "needs_own_app", "key_rejected"))
+WHERE = "Settings > Connections > Store"
 _COLUMNS = ("id, turn_id, member_id, conversation_id, app, language, reconnect, state, error, tool_count, done,"
             " created_at_ms, expires_at_ms, resumed_at_ms, app_name, provider, app_logo")
 
@@ -215,8 +225,12 @@ class ConnectorCards:
             if all(token in text for token in tokens):
                 provider = self._provider(app)
                 name = "composio" if provider and provider[0] == "connectors.connect" else app.provider
-                matches.append({"id": app.id, "name": app.name, "provider": name,
-                                "connected": bool(self.ready_tools(app))})
+                match = {"id": app.id, "name": app.name, "provider": name, "connected": bool(self.ready_tools(app))}
+                needs = self._needs_of(app)
+                # What adding it asks of the owner, so that the member can say so plainly before showing the card.
+                if needs != SIGN_IN and not match["connected"]:
+                    match["needs"] = needs
+                matches.append(match)
                 if len(matches) == 20:
                     break
         return {"apps": matches}
@@ -258,8 +272,24 @@ class ConnectorCards:
                                app=app.id, language=language, reconnect=self._expired(app), done=done,
                                app_name=app.name, provider=app.provider, app_logo=app.logo)
 
+    def _needs_of(self, app: App) -> str:
+        """What adding the app asks of the owner (`toolkits`): a sign-in, their own key, or a developer app of
+        their own. Only an app of Composio's catalog can ask for more than a sign-in."""
+        if app.provider != "composio":
+            return SIGN_IN
+        try:
+            return self._connectors.needs_cached(app.composio) or SIGN_IN
+        except Exception:
+            return SIGN_IN
+
+    def view(self, card: Card) -> dict:
+        """The card as the window draws it: its own state, and what pressing Connect needs to be given."""
+        app = APPS.get(card.app) or App(card.app, card.name, "", card.app, card.provider)
+        needs = self._needs_of(app)
+        return {**card.view(), "needs": needs, **({"toolkit": app.composio} if needs != SIGN_IN else {})}
+
     def views(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
-        return {turn_id: [card.view() for card in cards] for turn_id, cards in self.store.for_turns(turn_ids).items()}
+        return {turn_id: [self.view(card) for card in cards] for turn_id, cards in self.store.for_turns(turn_ids).items()}
 
     def cards_of(self, turn_id: int) -> list[Card]:
         return self.store.for_turns([turn_id]).get(turn_id, [])
@@ -274,20 +304,27 @@ class ConnectorCards:
         return card
 
     async def _connect(self, params: dict) -> dict:
-        """Start the sign-in of a card that waits (a connected or expired card stays as it is)."""
+        """Start the sign-in of a card that waits (a connected or expired card stays as it is). `fields`, for an
+        app that wants the owner's own key or developer app, are what its form asked for: they are handed on and
+        not kept."""
         card = self._card(params)
+        fields = params.get("fields")
+        if fields is not None and (not isinstance(fields, dict) or len(fields) > 12
+                                   or any(not isinstance(k, str) or not isinstance(v, str) for k, v in fields.items())):
+            raise invalid_params("fields must be a map of text")
         if self._login is not None and not self._login[1].done():
-            return {"card": card.view(), "started": False}
+            return {"card": self.view(card), "started": False}
         moved = self.store.move(card.id, "authorizing")
         if moved is None:
-            return {"card": card.view(), "started": False}
+            return {"card": self.view(card), "started": False}
         self._owner_cancelled = False
-        task = asyncio.create_task(self._sign_in(moved))
+        task = asyncio.create_task(self._sign_in(moved, fields))
+        fields = None
         self._login = (moved.id, task)
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         self._changed(moved)
-        return {"card": moved.view(), "started": True}
+        return {"card": self.view(moved), "started": True}
 
     async def _cancel(self, params: dict) -> dict:
         card = self._card(params)
@@ -308,7 +345,37 @@ class ConnectorCards:
             return "connectors.connect", {"toolkit": app.composio}
         return None
 
-    async def _sign_in(self, card: Card) -> None:
+    async def _missing(self, kind: str, app: App) -> Failure:
+        """What a card that could not connect tells the member: exactly what is missing and where the owner adds it
+        (the same words the window shows), so that what the member says is never only "not set up"."""
+        name = app.name
+        if kind == "needs_composio_key":
+            return Failure("auth_expired", f"No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Settings > "
+                                           f"Connections (Composio key, made at composio.dev); then {name} can be added from the card or from {WHERE}.")
+        if kind == "key_rejected":
+            return Failure("auth_expired", f"{name} did not accept the key the owner entered. The owner checks it and enters it again "
+                                           f"from the card or with Add on {name} in {WHERE}.")
+        asks, link = "an API key", ""
+        try:
+            plan = await self._connectors.toolkit({"toolkit": app.composio})
+            # The labels are the catalog's words; only plain ones go into what the member reads.
+            labels = [re.sub(r"[^\w .()/-]", "", field["label"])[:40].strip() for field in plan["fields"] if field["required"]]
+            labels = [label for label in labels if label]
+            if kind == "needs_own_app":
+                asks = "a developer app of their own (" + (", ".join(labels) or "client id and secret") + ")"
+            elif labels:
+                asks = ", ".join(labels)
+            where = plan["guide_url"] or plan["app_url"]
+            link = f" The owner gets it at {where}." if where else ""
+        except Exception:
+            pass
+        if kind == "needs_own_app":
+            return Failure("auth_expired", f"{name} needs {asks}: its provider gives Composio no shared sign-in.{link} The owner adds it "
+                                           f"from the card or with Add on {name} in {WHERE}, then signs in in the browser.")
+        return Failure("auth_expired", f"{name} needs the owner's own key ({asks}); Composio keeps it.{link} The owner enters it from the "
+                                       f"card or with Add on {name} in {WHERE}.")
+
+    async def _sign_in(self, card: Card, fields: dict | None = None) -> None:
         app = APPS.get(card.app) or App(card.app, card.name, "", card.app, card.provider)
         diagnostic = None
         try:
@@ -316,10 +383,17 @@ class ConnectorCards:
                 if not self.ready_tools(app):
                     provider = self._provider(app)
                     if provider is None:
-                        raise _Failed("not_configured")
-                    result = await self._router.call(*provider)
+                        raise _Failed("needs_composio_key")
+                    method, params = provider
+                    if method == "connectors.connect" and fields:
+                        params = {**params, "fields": fields}
+                    fields = None
+                    result = await self._router.call(method, params)
+                    params = None
                     if not result.get("connected"):
                         raw = str(result.get("error") or "unknown")
+                        if method == "connectors.connect" and raw == "auth":
+                            raw = "missing_key"  # Composio refused its own key: as good as none
                         raise _Failed(_FAILURES.get(raw, classify(raw).kind),
                                       classify(result["failure"]) if result.get("failure") else None)
                 tools = self.ready_tools(app)
@@ -350,6 +424,8 @@ class ConnectorCards:
             except Exception as exc:
                 await self._failed(ended, classify(exc))
         elif ended is not None and ended.state == "failed":
+            if diagnostic is None and ended.error in SETUP:
+                diagnostic = await self._missing(ended.error, app)
             await self._failed(ended, diagnostic or classify(ended.error))
 
     async def _failed(self, card, failure):

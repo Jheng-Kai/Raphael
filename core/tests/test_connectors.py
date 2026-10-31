@@ -754,13 +754,14 @@ async def test_catalog_projection_cache_and_missing_managed_oauth(tmp_path, conn
     await router.call("connectors.set_key", {"key": "ak_private"})
     catalog = await router.call("connectors.catalog")
     assert catalog["stores_tool_payloads"] is True
-    assert catalog["items"][0]["can_connect"] is True
+    assert catalog["items"][0]["needs"] == "sign_in" and "can_connect" not in catalog["items"][0]
     assert catalog["items"][0]["auth_schemes"] == ["oauth2"]
     before = len(fake.requests)
     assert await router.call("connectors.catalog") == catalog
     assert len(fake.requests) == before
     assert (await router.call("connectors.categories"))["items"][0]["id"] == "productivity"
-    assert (await router.call("connectors.connect", {"toolkit": "xero"}))["error"] == "needs_own_oauth_app"
+    # An OAuth service with no shared login is added with the owner's own developer app: asked for, never a dead end.
+    assert (await router.call("connectors.connect", {"toolkit": "xero"}))["error"] == "needs_own_app"
 
 
 async def test_store_catalog_pages_cache_expiry_and_failed_refresh_are_atomic(tmp_path, conn):
