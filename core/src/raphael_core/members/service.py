@@ -238,6 +238,8 @@ class MembersService:
         self._conn = conn
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
+        from .activity import Activity
+        self.activity = getattr(background, "activity", None) or Activity(notify)
         self._background = background
         self._memory = memory
         self._language = language
@@ -573,6 +575,7 @@ class MembersService:
             "created": member.created_at_ms,
             "unread": member.id in unread,
             "waiting": member.id in waiting,
+            "activity": self.activity.state(member.id),
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
@@ -602,6 +605,7 @@ class MembersService:
             "created": 0,
             "unread": 0 in unread,
             "waiting": 0 in waiting,
+            "activity": self.activity.state(0),
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }

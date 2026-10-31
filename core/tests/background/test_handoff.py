@@ -87,6 +87,10 @@ async def test_a_result_reaches_the_room_after_its_worker_already_replied_there(
     task_id=accepted.data['task_id']
     await until(lambda:rig.task(task_id).state in ('done','failed'))
     assert rig.task(task_id).state=='done'
+    await until(lambda: not rig.service.activity.running)
+    activity = [data['state'] for method, data in rig.notifications
+                if method == 'member.activity' and data['member_id'] == target.id]
+    assert activity == ['thinking', 'done', 'idle']
     assert rig.conn.execute("SELECT disposition FROM task_outbox WHERE event_id=?",(f'{task_id}:result',)).fetchone()[0]=='delivered'
     result=rig.conn.execute('SELECT member_id,reply_to,text FROM room_messages WHERE request_id=?',(f'handoff-{task_id}',)).fetchone()
     assert tuple(result)==(target.id,asked,'Consulted answer')

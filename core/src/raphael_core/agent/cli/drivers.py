@@ -264,18 +264,18 @@ class Driver:
                 elif event.get("type") == "content_block_start":
                     block = event.get("content_block", {})
                     if block.get("type") == "tool_use":
-                        yield Event("tool_start", data={"name": block.get("name", "tool")})
+                        yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
             elif kind == "assistant":
                 for block in packet.get("message", {}).get("content", []):
                     if block.get("type") == "text" and not partial:
                         yield Event("text_delta", block.get("text", ""))
                     elif block.get("type") == "tool_use":
-                        yield Event("tool_start", data={"name": block.get("name", "tool")})
+                        yield Event("tool_start", data={"id": block.get("id"), "name": block.get("name", "tool")})
                 partial = False
             elif kind == "user":
                 for block in packet.get("message", {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "tool_result":
-                        yield Event("tool_end", data={"ok": not block.get("is_error", False)})
+                        yield Event("tool_end", data={"id": block.get("tool_use_id"), "ok": not block.get("is_error", False)})
             elif kind == "result":
                 if packet.get("session_id"):
                     self.session = packet["session_id"]
@@ -404,6 +404,7 @@ class Driver:
                     if method == "item/started":
                         final_text = ""
                     yield Event("tool_start" if method.endswith("started") else "tool_end", data={
+                        "id": item.get("id"), "server": item.get("server"),
                         "name": item.get("tool", item["type"]), "effect": item["type"] == "fileChange",
                         "ok": item.get("status") == "completed"})
             elif method == "thread/tokenUsage/updated":
