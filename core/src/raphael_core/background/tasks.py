@@ -38,12 +38,16 @@ from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
 from ..agent.conversations import Conversations
+from ..worker.stall_guards import stalled
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
 # What a `done_when` says when the work is to leave a file, and the file names it gives.
 ARTIFACT_WORDS = re.compile(r'(?i)\b(html|xlsx|pdf|artifact|file)\b|檔案|產物')
 FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)')
+# A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
+# are a promise or a line, not that.
+WRITTEN_WORK_CHARS = 200
 
 
 def _asker_key(turn_id: int) -> str:
@@ -318,14 +322,15 @@ class TaskStore:
                                (str(root),task_id,call_id,artifact.relative_to(root).as_posix()))
         return digest
 
-    def completion_reason(self, task, *, verifiable=True):
-        """Validate executor receipts and required artifacts; prose alone never proves work. Work with
-        nowhere to look for a file (`verifiable` false: its member has no computer) is not asked for one."""
+    def completion_reason(self, task, *, verifiable=True, said=""):
+        """Validate executor receipts and required artifacts; a promise never proves work. Work with
+        nowhere to look for a file (`verifiable` false: its member has no computer) is not asked for one,
+        and work that asks for none may be done in what it `said`, at length and with nothing left to do."""
         evidence = self.evidence(task.id)
-        if not evidence:
-            return 'work_without_action'
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
         requires_artifact = verifiable and bool(ARTIFACT_WORDS.search(task.done_when))
+        if not evidence:
+            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         if requires_artifact and not artifacts:
             return 'missing_artifact'
         for item in artifacts:

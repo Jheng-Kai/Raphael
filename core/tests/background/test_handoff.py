@@ -558,6 +558,39 @@ async def test_failed_nested_work_cannot_be_reported_as_success(make_rig):
     assert child['reason']=='work_without_action'
 
 
+async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(make_rig):
+    rig=make_rig()
+    target,source=setup(rig)
+    design='設計規格：' + '辦公室有四張桌子，每張桌子上有成員的史萊姆，鏡頭可以環顧。' * 12
+    rig.client.replies.append(report(design))
+    result=rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.report_text)==('done',design)
+    later=colleague(rig,source,target,'Later')
+    rig.client.replies.append(report('明早我會完成。'))
+    result=rig.service.handoff(RAPHAEL,args(later,stage_id='later'),source_turn_id=source.id,language='zh-TW')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('failed','work_without_action')
+    assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
+
+
+async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave(make_rig,tmp_path):
+    rig=make_rig()
+    target,source=setup(rig)
+    own,team=tmp_path/'own',tmp_path/'team'
+    own.mkdir(); team.mkdir()
+    rig.service.use_workspaces(lambda member:[own,team])
+    (team/'office.html').write_text('<html></html>',encoding='utf-8')
+    rig.client.replies.append(report('The page is in the team folder.'))
+    result=rig.service.handoff(RAPHAEL,args(target,done_when='office.html exists'),source_turn_id=source.id,language='en')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('done',None)
+    assert [item['uri'] for item in rig.service._store.evidence(task.id)]==['office.html']
+
+
 async def test_required_artifact_and_modified_artifact_cannot_complete(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig)

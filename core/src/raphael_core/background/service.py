@@ -1806,12 +1806,14 @@ class BackgroundService:
             if terminal.reason:
                 self._conclude(task,run,'failed','',phrase(language,'error'),None,terminal.reason)
                 return
+            # What it said stays with why it does not count: the one who gave the work reads both, and the words may be most of it.
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
-                self._conclude(task,run,'failed','',phrase(language,'error'),None,'child_work_incomplete')
+                self._conclude(task,run,'failed','',phrase(language,'work_children_open'),report.text or None,'child_work_incomplete')
                 return
             if task.mode == 'work' and (failure := self._store.completion_reason(
-                    task, verifiable=self._record_artifacts(task, current.created_at_ms))):
-                self._conclude(task,run,'failed','',phrase(language,'error'),None,failure)
+                    task, verifiable=self._record_artifacts(task, current.created_at_ms), said=report.text)):
+                said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
+                self._conclude(task,run,'failed','',phrase(language,said_why),report.text or None,failure)
                 return
             self._conclude(task, run, "done", report.prefix, report.text, report.detail, None,
                            replies=report.messages)
@@ -1854,27 +1856,31 @@ class BackgroundService:
         if not ARTIFACT_WORDS.search(task.done_when) and not FILE_NAMES.search(task.done_when):
             return True
         try:
-            root = self._workspace_of(task.member_id)
+            places = self._workspace_of(task.member_id)
         except Exception:  # whatever says where the files are, it is not the work's failure
-            root = None
-        if root is None or not root.is_dir():
+            places = None
+        # The member's own files, and the folder its team shares.
+        roots = [root for root in (places if isinstance(places, (list, tuple)) else [places]) if root is not None and root.is_dir()]
+        if not roots:
             return False
         wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
         found, seen = [], 0
-        for base, folders, names in os.walk(root):
-            folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
-            for name in names:
-                seen += 1
-                path = Path(base) / name
-                try:
-                    made = path.stat().st_mtime
-                except OSError:
-                    continue
-                if made * 1000 >= since_ms - 1000 and (not wanted or name.lower() in wanted):
-                    found.append((made, path))
-            if seen > ARTIFACT_SCAN:
-                break
-        for _, path in sorted(found, reverse=True)[:ARTIFACT_KEEP]:
+        for root in roots:
+            for base, folders, names in os.walk(root):
+                folders[:] = [folder for folder in folders if folder not in ARTIFACT_SKIP]
+                for name in names:
+                    seen += 1
+                    path = Path(base) / name
+                    try:
+                        made = path.stat().st_mtime
+                    except OSError:
+                        continue
+                    if made * 1000 >= since_ms - 1000 and (not wanted or name.lower() in wanted):
+                        found.append((made, str(path), root))
+                if seen > ARTIFACT_SCAN:
+                    break
+        for _, path, root in sorted(found, reverse=True)[:ARTIFACT_KEEP]:
+            path = Path(path)
             try:
                 self._store.verify_artifact(task.id, "artifact", path, workspace=root,
                                             mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
