@@ -344,6 +344,30 @@ export interface AgentTurn {
   permissions?: PermissionCard[];
   /** The email drafts this turn shows: the editable card, or for a draft handed on, its centred line (`agent.drafts`). */
   drafts?: MailDraft[];
+  /** The pages this turn shows in the conversation (`agent.pages`). */
+  pages?: PageCard[];
+}
+
+/** A page a member made or a plugin brought, as a turn carries it; `pages.open` gives its address. */
+export interface PageCard {
+  id: string;
+  title: string;
+  rev: number;
+  height: number;
+  source: "html" | "mcp";
+  server: string | null;
+  fallback: string;
+}
+
+export interface PageOpened {
+  url: string;
+  title: string;
+  rev: number;
+  height: number;
+  source: "html" | "mcp";
+  server: string | null;
+  tool_input?: object;
+  tool_result?: object;
 }
 
 /**

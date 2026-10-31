@@ -5,6 +5,7 @@ import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffLineHTML } from "./handoff-line";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
+import { pageCardsHTML } from "./page-card";
 import { permissionCardsHTML } from "./permission-card";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
@@ -828,7 +829,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
-    permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) +
+    permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +

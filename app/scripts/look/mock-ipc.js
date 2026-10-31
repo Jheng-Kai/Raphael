@@ -142,6 +142,12 @@ export function installMock(fixture, config = {}, target = window) {
     data.turns.push(mail);
     if (!data.conversations.some(item => item.id === data.colleagueConversation.id)) data.conversations.push(structuredClone(data.colleagueConversation));
   }
+  if (variant.pageTurn) {
+    const base = data.turns.find(turn => turn.member_id === 1);
+    data.turns.push({ ...structuredClone(base), id: 801, question: "幫我找一個輕量後背包。", text: "這款符合你的需求,可以直接在下面操作。", status: "done", route: "answer", steps: [],
+      messages: [{ seq: 1, kind: "reply", text: "這款符合你的需求,可以直接在下面操作。", at_ms: data.now }], attachments: [],
+      pages: [{ id: "page-product", title: "輕量後背包", rev: 0, height: 320, source: "html", server: null, fallback: "輕量後背包 NT$ 1,280,防潑水、重量 480 公克。" }] });
+  }
   if (variant.colleagues) {
     // 小森 asked 小晴 from its own chat; 小晴's main chat shows each question where it came.
     data.conversations.push(data.colleagueConversation);
@@ -328,6 +334,10 @@ export function installMock(fixture, config = {}, target = window) {
   async function core(method, p = {}) {
     switch (method) {
       case "links.preview": return { url: p.url, site: new URL(p.url).hostname, title: "", description: "", thumbnail: null };
+      case "pages.open":
+        if (variant.pageGone) throw { kind: "not_found", message: "gone" };
+        // Not a file of the dev server, which would write its own client into the page.
+        return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 0, height: 320, source: "html", server: null };
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         const session = `look-desktop-${++desktopSequence}`;

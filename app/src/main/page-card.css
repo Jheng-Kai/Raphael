@@ -1,0 +1,22 @@
+/* A page in the conversation is as tall as its content, so there is never a scrollbar inside the reply. */
+.pg-card { display: grid; grid-template-columns: minmax(0, 1fr); justify-self: start; width: min(calc(560px + 200 * var(--pa-u)), 100%); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--content); }
+.pg-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-3); border-bottom: 1px solid var(--line); background: var(--panel); }
+.pg-head b { min-width: 0; overflow: hidden; font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pg-head small { flex: none; color: var(--text-3); font-size: var(--fs-xs); }
+.pg-head .sp { flex: 1; }
+.pg-body { position: relative; height: var(--pg-h, 320px); background: var(--content); }
+.pg-body[data-state="loading"] { background: var(--panel); animation: pg-loading 1.6s ease-in-out infinite; }
+.pg-frame { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+.pg-body[data-state="loading"] .pg-frame { visibility: hidden; }
+.pg-failed { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; gap: var(--sp-2); padding: var(--sp-3); }
+.pg-failed[hidden], .pg-body[hidden] { display: none; }
+.pg-failed p { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+@keyframes pg-loading { 50% { opacity: 0.6; } }
+
+.mb-dialog.pg-view-dialog .mb-dlg-body { padding: 0; overflow: hidden; }
+.pg-view { height: 75vh; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-body[data-state="loading"] { animation: none; }
+}
+.pg-card:has(.pg-failed:not([hidden])) .pg-expand { visibility: hidden; }

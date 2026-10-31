@@ -1594,6 +1594,34 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, members: members.length };
   }
+  if (name === "page-card") {
+    const card = document.querySelector(".pg-card"), frame = card?.querySelector("iframe");
+    require(frame?.getAttribute("sandbox") === "allow-scripts allow-forms", "the page runs sandboxed with an opaque origin");
+    require(card.querySelector(".pg-body").dataset.state === "ready", "the page has loaded");
+    const height = frame.getBoundingClientRect().height;
+    require(height >= 180 && height !== 320, `the page is as tall as its content, not the reserved height: ${height}`);
+    const line = card.closest(".tn, [data-key]").getBoundingClientRect(), box = card.getBoundingClientRect();
+    require(box.left >= line.left && box.right <= line.right + 1, "the page stays inside the reply");
+    return { check: name, height };
+  }
+  if (name === "page-spoke") {
+    const asked = window.__look.calls.filter(call => call.command === "agent_ask_text");
+    require(asked.length === 1 && JSON.stringify(asked[0]).includes("把輕量後背包加入購物車"), "the press became the owner's one next message");
+    return { check: name };
+  }
+  if (name === "page-expanded") {
+    const frame = document.querySelector(".pg-view iframe")?.getBoundingClientRect();
+    require(frame && frame.width >= Math.min(1100, innerWidth * 0.6) && frame.height > innerHeight * 0.6, "the same page fills the large dialog");
+    require(!document.querySelector(".pg-card .pg-body iframe"), "there is one frame, moved, not a second one");
+    return { check: name };
+  }
+  if (name === "page-gone") {
+    const failed = document.querySelector(".pg-failed");
+    require(failed && !failed.hidden && failed.textContent.includes("NT$ 1,280"), "it says what it knows of the page");
+    require(failed.querySelector('[data-page-act="retry"]'), "and offers to try again");
+    require(document.querySelector(".pg-body").hidden, "no empty box is left");
+    return { check: name };
+  }
   if (name === "slime-states") {
     const face = id => document.querySelector(`.mb-row[data-member="${id}"] svg.slime`);
     const wanted = { 1: ["thinking", "slime-thinking-body"], 2: ["working", "slime-working-body"], 3: ["computer", "slime-computer-body"] };

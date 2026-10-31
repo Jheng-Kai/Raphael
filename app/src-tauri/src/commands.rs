@@ -392,6 +392,8 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_control",
     "computer.viewer_close",
     "computer.revoke",
+    "pages.open",
+    "pages.tool_call",
     "home.overview",
     "connectors.catalog",
     "connectors.categories",

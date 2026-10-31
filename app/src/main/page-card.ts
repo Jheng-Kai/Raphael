@@ -1,0 +1,240 @@
+// A page a member shows in the conversation, a product page or a small tool, or one a plugin brings (`agent/pages.py`).
+// It runs from the core's own loopback host in a sandbox with an opaque origin, so it reaches neither the app nor the
+// core: it can only post messages to the frame's parent, and everything it asks for is checked here. A thread redraw
+// moves the live frame to the new card, so a page does not reload and lose what the owner did in it.
+import "./page-card.css";
+import * as api from "./api";
+import { describeError } from "./format";
+import { t } from "./i18n";
+import { openDialog } from "./member-dialogs";
+import type { AgentTurn, PageCard, PageOpened } from "./types";
+import { esc, iconButton, toaster } from "./ui";
+
+const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
+const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
+const MCP_PROTOCOL = "2026-01-26";
+
+/** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
+export function pageCardsHTML(turn: AgentTurn): string {
+  return (turn.pages ?? []).map(page =>
+    `<section class="pg-card" data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px" aria-label="${esc(page.title)}">` +
+    `<header class="pg-head"><b>${esc(page.title)}</b>${page.server ? `<small>${esc(page.server)}</small>` : ""}<span class="sp"></span>` +
+    iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand") + `</header>` +
+    `<div class="pg-body" data-state="loading"></div>` +
+    `<div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><button type="button" class="btn sm" data-page-act="retry">${esc(t("page.retry"))}</button></div>` +
+    `</section>`).join("");
+}
+
+const clampHeight = (height: unknown): number => {
+  const value = Number(height);
+  return Number.isFinite(value) ? Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.ceil(value))) : 320;
+};
+
+/** A click inside the frame activates its parents too, so a page cannot speak for the owner on its own. */
+const pressedJustNow = (): boolean => navigator.userActivation?.isActive === true;
+
+const themeNow = (): "dark" | "light" => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+
+interface Live {
+  id: string;
+  rev: number;
+  frame: HTMLIFrameElement;
+  height: number | null;
+  opened: PageOpened | null;
+  ready: boolean;
+  expanded: boolean;
+}
+
+/** Only an atomic move keeps a frame running; a plain append reloads it, which is still better than losing it. */
+function moveFrame(frame: HTMLIFrameElement, target: HTMLElement): void {
+  if (target.moveBefore) target.moveBefore(frame, null);
+  else target.append(frame);
+}
+
+export interface PagesHost {
+  /** Every card in the thread has its frame. */
+  sync(): void;
+  /** Before a line is replaced: moves its frames to the new line, once that line is in the document. */
+  carry(from: Element, to: Element): () => void;
+}
+
+export function mountPages(thread: HTMLElement, o: { send(text: string): void }): PagesHost {
+  const frames = new Map<string, Live>();
+  let lastSend = 0;
+
+  const cardOf = (live: Live): HTMLElement | null => thread.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(live.id)}"]`);
+
+  function setBodyState(live: Live, state: "loading" | "ready" | "failed"): void {
+    const card = cardOf(live);
+    if (!card) return;
+    card.querySelector<HTMLElement>(".pg-body")!.dataset.state = state;
+    card.querySelector<HTMLElement>(".pg-body")!.hidden = state === "failed";
+    card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
+  }
+
+  function applyHeight(live: Live): void {
+    if (live.height !== null) cardOf(live)?.style.setProperty("--pg-h", `${live.height}px`);
+  }
+
+  async function open(live: Live): Promise<void> {
+    live.ready = false;
+    setBodyState(live, "loading");
+    try {
+      const opened = await api.pagesOpen(live.id, themeNow());
+      if (frames.get(live.id) !== live) return;
+      live.opened = opened;
+      live.frame.title = opened.title;
+      live.frame.src = opened.url;
+    } catch {
+      if (frames.get(live.id) === live) setBodyState(live, "failed");
+    }
+  }
+
+  function make(id: string, rev: number): Live {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "allow-scripts allow-forms");
+    frame.setAttribute("referrerpolicy", "no-referrer");
+    frame.className = "pg-frame";
+    const live: Live = { id, rev, frame, height: null, opened: null, ready: false, expanded: false };
+    frame.addEventListener("load", () => { if (live.opened) setBodyState(live, "ready"); });
+    frames.set(id, live);
+    return live;
+  }
+
+  function sync(): void {
+    const seen = new Set<string>();
+    for (const card of thread.querySelectorAll<HTMLElement>(".pg-card[data-page]")) {
+      const id = card.dataset.page!, rev = Number(card.dataset.pageRev);
+      seen.add(id);
+      const body = card.querySelector<HTMLElement>(".pg-body")!;
+      const live = frames.get(id);
+      if (!live) {
+        const fresh = make(id, rev);
+        body.append(fresh.frame);
+        void open(fresh);
+        continue;
+      }
+      if (!live.expanded && live.frame.parentElement !== body) body.append(live.frame);
+      applyHeight(live);
+      if (live.ready || live.opened) setBodyState(live, "ready");
+      if (live.rev !== rev) { live.rev = rev; void open(live); }
+    }
+    for (const id of [...frames.keys()]) if (!seen.has(id)) frames.delete(id);
+  }
+
+  function carry(from: Element, to: Element): () => void {
+    const moves = [...from.querySelectorAll<HTMLElement>(".pg-card[data-page]")].flatMap(card => {
+      const frame = card.querySelector("iframe"), target = to.querySelector<HTMLElement>(`.pg-card[data-page="${CSS.escape(card.dataset.page!)}"] .pg-body`);
+      return frame && target ? [{ frame, target }] : [];
+    });
+    return () => {
+      for (const { frame, target } of moves) moveFrame(frame, target);
+    };
+  }
+
+  function speak(text: unknown): void {
+    if (typeof text !== "string" || !text.trim() || text.length > SEND_LIMIT || !pressedJustNow()) return;
+    const now = Date.now();
+    if (now - lastSend < SEND_GAP_MS) return;
+    lastSend = now;
+    o.send(text.trim());
+  }
+
+  function openLink(url: unknown): void {
+    if (typeof url !== "string" || !pressedJustNow()) return;
+    let safe: URL;
+    try { safe = new URL(url); } catch { return; }
+    if (safe.protocol === "https:") void api.openExternalUrl(safe.href).catch(error => toaster.info(describeError(error)));
+  }
+
+  const post = (live: Live, message: object): void => { live.frame.contentWindow?.postMessage(message, "*"); };
+
+  function hostContext(): object {
+    return { theme: themeNow(), displayMode: "inline", availableDisplayModes: ["inline"], locale: document.documentElement.lang };
+  }
+
+  /** The MCP Apps side of a plugin's page: a small JSON-RPC over the same window messages. */
+  async function rpc(live: Live, message: { id?: string | number; method?: string; params?: Record<string, unknown> }): Promise<void> {
+    const { id, method, params = {} } = message;
+    const answer = (result: unknown): void => { if (id !== undefined) post(live, { jsonrpc: "2.0", id, result }); };
+    const refuse = (code: number, words: string): void => { if (id !== undefined) post(live, { jsonrpc: "2.0", id, error: { code, message: words } }); };
+    switch (method) {
+      case "ui/initialize":
+        return answer({ protocolVersion: MCP_PROTOCOL, hostInfo: { name: "raphael", version: "1" }, hostCapabilities: { openLinks: {}, serverTools: {} }, hostContext: hostContext() });
+      case "ui/notifications/initialized":
+        post(live, { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: live.opened?.tool_input ?? {} } });
+        post(live, { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: live.opened?.tool_result ?? { content: [] } });
+        return;
+      case "ui/notifications/size-changed":
+        live.height = clampHeight(params.height);
+        return applyHeight(live);
+      case "ping":
+        return answer({});
+      case "ui/open-link":
+        openLink(params.url);
+        return answer({});
+      case "ui/message": {
+        const content = Array.isArray(params.content) ? params.content : [params.content];
+        speak(content.map((part: { type?: string; text?: string } | undefined) => (part?.type === "text" ? part.text ?? "" : "")).join("\n"));
+        return answer({});
+      }
+      case "tools/call":
+        if (typeof params.name !== "string" || !params.name) return refuse(-32602, "tools/call needs {name, arguments?}.");
+        try {
+          return answer(await api.pagesToolCall(live.id, params.name, (params.arguments ?? {}) as object));
+        } catch (error) {
+          return refuse(-32000, describeError(error));
+        }
+      default:
+        return refuse(-32601, "Method not found");
+    }
+  }
+
+  window.addEventListener("message", event => {
+    const live = event.source ? [...frames.values()].find(item => item.frame.contentWindow === event.source) : undefined;
+    const data = event.data as { raphaelPage?: number; jsonrpc?: string; type?: string; text?: unknown; url?: unknown; height?: unknown } | null;
+    if (!live || !data || typeof data !== "object") return;
+    if (data.jsonrpc === "2.0") {
+      if (live.opened?.source === "mcp") void rpc(live, data as Parameters<typeof rpc>[1]);
+      return;
+    }
+    if (data.raphaelPage !== 1) return;
+    if (data.type === "height") { live.height = clampHeight(data.height); applyHeight(live); }
+    else if (data.type === "send") speak(data.text);
+    else if (data.type === "open") openLink(data.url);
+  });
+
+  /** Larger in the shared dialog, the frame moved there and back, so nothing the owner did in it is lost. */
+  function expand(live: Live, card: HTMLElement): void {
+    const title = card.getAttribute("aria-label") ?? "";
+    const dialog = openDialog({
+      title: esc(title), body: `<div class="pg-view"></div>`, cls: "rich-view-dialog pg-view-dialog",
+      actions: { primary: { label: esc(t("common.close")), attrs: ' data-dlg="close"' } },
+      onAct(_act, _target, shown) { shown.close(); },
+      onClose() {
+        live.expanded = false;
+        const home = cardOf(live)?.querySelector<HTMLElement>(".pg-body");
+        if (home) moveFrame(live.frame, home);
+      },
+    });
+    live.expanded = true;
+    moveFrame(live.frame, dialog.el.querySelector<HTMLElement>(".pg-view")!);
+  }
+
+  thread.addEventListener("click", event => {
+    const target = (event.target as Element).closest<HTMLElement>("[data-page-act]");
+    const card = target?.closest<HTMLElement>(".pg-card");
+    const live = card ? frames.get(card.dataset.page!) : undefined;
+    if (!target || !card || !live) return;
+    if (target.dataset.pageAct === "expand") expand(live, card);
+    else void open(live);
+  });
+
+  // A page draws in the app's theme, which it is told when it opens.
+  new MutationObserver(() => { for (const live of frames.values()) void open(live); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  return { sync, carry };
+}
+
+export type { PageCard };

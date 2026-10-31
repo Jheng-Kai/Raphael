@@ -8,6 +8,16 @@ export function finiteMotionSettled() {
 }
 
 /** Wait for real entrance transitions without changing their paint measurements or infinite activity indicators. */
+async function waitForPageFrame(page) {
+  const deadline = Date.now() + 10000;
+  for (;;) {
+    const frame = page.frames().find(item => item !== page.mainFrame() && item.url().startsWith("data:text/html"));
+    if (frame) return frame;
+    if (Date.now() > deadline) throw new Error("No page frame appeared");
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
 export async function settleMotion(page) {
   try { await page.waitForFunction(finiteMotionSettled, { timeout: 5000 }); }
   catch (error) {
@@ -143,6 +153,18 @@ export async function perform(page, step) {
       await element.hover(); await new Promise(resolve => setTimeout(resolve, 160));
       await element.dispose();
       return { check: "window-control", control: step.control, restore: !!step.restore, hovered, pressed, focus };
+    }
+    case "frame-wait":
+    case "frame-click": {
+      // A page in the conversation runs in its own origin, so reaching it needs the frame, and a press must be a real one.
+      const frame = await waitForPageFrame(page);
+      const element = await frame.waitForSelector(step.selector, { visible: true, timeout: 10000 });
+      if (step.action === "frame-click") {
+        await element.click();
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      await element.dispose();
+      break;
     }
     case "main-event": {
       // Replay only the existing native event boundary; navigation and cards remain real.

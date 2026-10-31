@@ -61,6 +61,7 @@ import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceO
 import { exchangeLineHTML } from "../exchange-line";
 import { carryTyped } from "../secret-card";
 import { carryMail } from "../mail-card";
+import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { permissionFor } from "../permission-card";
 import { describeError } from "../format";
@@ -567,6 +568,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let searches = 0;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
+  const pagesHost = mountPages(thread, { send: text => sendFromPage(text) });
   /** The newest turn drawn: a turn after it comes in from below. */
   let newestDrawn = 0;
   let drewOnce = false;
@@ -810,6 +812,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * movement is not replayed, its pictures not loaded again), a changed one is replaced where it
    * is, and the lines that are new are put in their places without moving the others.
    */
+  function sendFromPage(text: string): void {
+    const typed = input.value;
+    input.value = text;
+    void send().finally(() => { if (typed && !input.value) { input.value = typed; fit(); } });
+  }
+
   function drawThread(): void {
     hideSelection();
     const wanted = lines();
@@ -835,7 +843,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           // A key being typed into a secret card goes to the same card in the new line.
           const restore = carryTyped(node, made);
           const restoreMail = carryMail(node, made);
+          const restorePages = pagesHost.carry(node, made);
           node.before(made);
+          restorePages();
           node.remove();
           restore();
           restoreMail();
@@ -855,6 +865,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) previews.sync();
     else previews.pause();
     desktop.sync();
+    pagesHost.sync();
     measureMessages();
   }
 

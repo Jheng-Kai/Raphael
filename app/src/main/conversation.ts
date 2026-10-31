@@ -33,7 +33,7 @@ export function visibleTurn(turn: AgentTurn): boolean {
     (turn.status !== "running" && turn.status !== "confirm" && (turn.detail || turn.text).trim()));
   return !!(turn.question.trim() || turn.text.trim() || turn.detail?.trim() ||
     turn.messages?.some(message => message.text.trim()) || turn.attachments?.length || turn.handoffs?.length ||
-    turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length ||
+    turn.connectors?.length || turn.secrets?.length || turn.computers?.length || turn.permissions?.length || turn.drafts?.length || turn.pages?.length ||
     turn.status === "running" || turn.status === "confirm" || turn.task || turn.steps?.length);
 }
 

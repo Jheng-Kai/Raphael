@@ -56,6 +56,7 @@ import type {
   Status,
   StatsSummary,
   WireAttachment,
+  PageOpened,
 } from "./types";
 
 /** Calls `method` of the core. Only the methods of the main window go through (commands.rs). */
@@ -425,6 +426,8 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
+export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
+export const pagesToolCall = (id: string, tool: string, args: object): Promise<object> => core("pages.tool_call", { id, tool, arguments: args });
 
 
 export const deviceSettingsGet = (): Promise<DeviceSettings> => invoke("device_settings_get");
