@@ -87,7 +87,7 @@ async def test_a_wait_longer_than_the_task_has_left_ends_it_instead_of_sleeping_
         (asking("usage_limit", 429, 4 * 3600, "The usage limit has been reached"), "usage_limit"),
         (OpenRouterError(402, "credits", "no credit"), "credits"),
         (OpenRouterError(400, "context_overflow", "maximum context length"), "context_overflow"),
-        (OpenRouterError(413, "payload_too_large", "too big"), "payload_too_large"),
+        (OpenRouterError(413, "payload_too_large", "too big"), "context_overflow"),  # the worker makes it smaller
         (OpenRouterError(400, "content_policy", "flagged"), "content_policy"),
     ],
 )

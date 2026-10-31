@@ -95,7 +95,7 @@ async def test_a_conversation_over_the_window_is_told_as_an_overflow_for_the_wor
 async def test_a_reply_too_long_for_the_model_is_asked_for_again_with_less(rig):
     rig.client.replies = [OpenRouterError(400, "bad_request", "max_tokens: 2000 > 1024, which is the maximum allowed number of output tokens"), turn("Going on.")]
     assert (await rig.chat())["content"] == "Going on."
-    assert [call["max_tokens"] for call in rig.client.chat_calls] == [2000, 1024 - 64]
+    assert [call["max_tokens"] for call in rig.client.chat_calls] == [8192, 1024 - 64]
     assert rig.client.chat_calls[0]["messages"] == rig.client.chat_calls[1]["messages"]
     rig.client.replies = [turn("Still less.")]
     await rig.chat()

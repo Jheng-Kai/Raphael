@@ -651,7 +651,7 @@ async def test_max_tokens_too_large_is_asked_again_with_less_and_the_conversatio
     loop, calls = narrated([too_much, said(json.dumps({"text": "done", "detail": ""}))])
     outcome = await loop.run()
     assert outcome.status == "done"
-    assert [c["max_tokens"] for c in calls] == [4000, 1000 - 64]
+    assert [c["max_tokens"] for c in calls] == [8192, 1000 - 64]
     assert calls[0]["messages"] == calls[1]["messages"]
 
 

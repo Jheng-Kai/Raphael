@@ -29,9 +29,10 @@ async def test_a_member_waits_for_the_desktop_with_one_line_and_looks_at_the_scr
     vm, target, runtime, hub = await shared(desktop, tmp_path)
     holding = {("turn", 0, 1)}
     hub.scope_busy = lambda owner: owner in holding
-    shot, click = tool(hub, "get_desktop_state"), tool(hub, "click")
+    shot = tool(hub, "get_desktop_state")
     with vm_scope(("turn", 0, 1)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
+    click = tool(hub, "click")  # the driver's tools are offered from the first look at the screen on
 
     async def done():
         await asyncio.sleep(0.1)
@@ -73,9 +74,10 @@ async def test_a_holder_that_has_not_touched_the_screen_for_a_minute_has_let_go_
     clock = [0.0]
     vm.clock = lambda: clock[0]
     hub.scope_busy = lambda owner: owner == ("turn", 0, 1)  # still at work, but not at the screen
-    shot, click = tool(hub, "get_desktop_state"), tool(hub, "click")
+    shot = tool(hub, "get_desktop_state")
     with vm_scope(("turn", 0, 1)):
         assert (await hub.call(shot.key, {}, approver="auto")).ok
+    click = tool(hub, "click")
     clock[0] = 61.0
     with vm_scope(("turn", 2, 3)):
         taken = await hub.call(shot.key, {}, approver="auto")
