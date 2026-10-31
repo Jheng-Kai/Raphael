@@ -163,6 +163,35 @@ test.each([[0, 4], [3, 31]])("voice processing for member %s is stoppable before
   expect(api.agentStop).not.toHaveBeenCalled(); expect(api.agentVoice).not.toHaveBeenCalled();
 });
 
+test("while the owner speaks the one button sends, and Stop appears only once it is sent", async () => {
+  mount(); await flush(); await choose(0, 1);
+  const button = $<HTMLButtonElement>(".cmp-voice");
+  expect($(".composer").dataset.taskState).toBe("idle");
+  expect(button.querySelector(".av")).not.toBeNull();
+  // The owner presses the microphone; the app says it is listening.
+  press(); await flush();
+  emit({ type: "Dictation", phase: "listening", agent: true, member_id: 0 });
+  // Recording: the same real button, now the send glyph with the send label; no Stop square yet.
+  expect($(".composer").dataset.taskState).toBe("recording");
+  expect($(".cmp-voice")).toBe(button);
+  expect(button.tagName).toBe("BUTTON"); expect(button.type).toBe("button"); expect(button.disabled).toBe(false);
+  expect(button.getAttribute("aria-label")).toBe("送出");
+  expect(button.dataset.tooltip).toBe("送出"); expect(button.hasAttribute("title")).toBe(false);
+  expect(button.querySelector(".cmp-plane")).not.toBeNull(); expect(button.querySelector(".av")).toBeNull();
+  expect(button.querySelector('[d*="M6 6"], .i')).toBeNull();
+  // Pressing it sends what was said: the question key goes down and up, and nothing is cancelled.
+  api.agentVoice.mockClear(); press(); await flush();
+  expect(api.agentVoice.mock.calls.map(call => call[0])).toEqual(["down", "up"]);
+  expect(api.cancelSession).not.toHaveBeenCalled();
+  // Sent: now the same button is Stop, and it stops that.
+  emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
+  expect($(".cmp-voice")).toBe(button);
+  expectStop("ack");
+  expect(button.querySelector(".cmp-plane")).toBeNull();
+  press(); await flush();
+  expect(api.cancelSession).toHaveBeenCalledExactlyOnceWith();
+});
+
 test("a quick voice request stays out of formal threads and returns with Stop after navigation", async () => {
   mount(); await flush(); await choose(0, 4);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });

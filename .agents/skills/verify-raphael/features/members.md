@@ -239,7 +239,8 @@ npm run look -- member-delete --theme both --width 1120,720,1920x1080
 
 ## Recording Stop regression (2026-10-29)
 
-While recording, clicking the composer voice/Stop releases recording through the
+While recording, the composer's one button shows the send glyph (not Stop, see
+[Conversation](conversation.md#the-composers-one-button-send-while-speaking-stop-once-sent-2026-10-31)); clicking it releases recording through the
 native question-key path, transcribes and sends. It never calls cancelSession.
 Only Escape uses the two-press cancellation gesture. The recording flyer/is-voice
 state survives task redraws; pending/member/background tasks still use Stop.

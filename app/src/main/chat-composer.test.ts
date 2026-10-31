@@ -2,7 +2,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 const api=vi.hoisted(()=>({roomTranscribe:vi.fn(),core:vi.fn()}));
 vi.mock("./api",()=>api);
-import { createChatComposer, wavBytes } from "./chat-composer";
+import { createChatComposer, drawTaskSlot, wavBytes } from "./chat-composer";
 import { setLocale } from "./i18n";
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "ask" } } : {});});
@@ -91,6 +91,20 @@ test("task Stop owns the slot through ack, running and waiting, independently of
  view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stopTask).toHaveBeenCalledOnce();
  expect(send).toHaveBeenCalledOnce();view.setTaskState("idle");expect(view.el.dataset.taskState).toBe("idle");
  expect(view.el.querySelector<HTMLElement>(".cmp-voice")!.dataset.tooltip).not.toBe("Stop");
+});
+
+test("the slot's one button is the send glyph while recording and Stop only once something is sent, never a second control",()=>{
+ const view=createChatComposer({placeholder:()=>"Message",send:vi.fn().mockResolvedValue(undefined)});document.body.append(view.el);
+ const button=view.el.querySelector<HTMLButtonElement>(".cmp-voice")!,sendLabel=view.el.querySelector(".cmp-send")!.getAttribute("aria-label");
+ drawTaskSlot(view.el,"recording");
+ expect(view.el.dataset.taskState).toBe("recording");expect(view.el.querySelector(".cmp-voice")).toBe(button);
+ expect(button.querySelector(".cmp-plane")).not.toBeNull();expect(button.querySelector(".av")).toBeNull();
+ expect(button.getAttribute("aria-label")).toBe(sendLabel);expect(button.dataset.tooltip).toBe(sendLabel);expect(button.hasAttribute("title")).toBe(false);
+ expect(button.type).toBe("button");expect(button.disabled).toBe(false);expect(button.classList.contains("task-action")).toBe(true);
+ drawTaskSlot(view.el,"recording",true);expect(button.disabled).toBe(false);
+ drawTaskSlot(view.el,"ack");
+ expect(button.querySelector(".cmp-plane")).toBeNull();expect(button.querySelector("svg")).not.toBeNull();expect(button.getAttribute("aria-label")).toBe("Stop");
+ drawTaskSlot(view.el,"idle");expect(view.el.querySelector(".cmp-voice")).toBe(button);
 });
 
 test("one Escape discards pending transcription and a late result cannot affect a new recording",async()=>{

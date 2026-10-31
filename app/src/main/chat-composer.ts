@@ -13,18 +13,24 @@ import type { WireAttachment } from "./types";
 import { esc, ico, iconButton, openMenu, sendGlyph, toaster } from "./ui";
 import "./agent.css";
 
-export type ComposerTaskState = "idle" | "ack" | "running" | "waiting";
+/** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
+export type ComposerTaskState = "idle" | "ack" | "running" | "waiting" | "recording";
 
+/**
+ * The one button of the composer's right-hand slot (`.cmp-voice`): the voice emblem while idle; while recording the send
+ * glyph, since pressing it sends what was said; the Stop square only once something has been sent, for as long as that runs.
+ * It is the same 32px button in every state, so a press never moves it.
+ */
 export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping = false): void {
   el.dataset.taskState = state;
-  const button = el.querySelector<HTMLButtonElement>(".cmp-voice")!;
+  const button = el.querySelector<HTMLButtonElement>(".cmp-voice")!, sends = state === "recording";
   button.classList.toggle("task-action", state !== "idle");
-  button.dataset.tooltip = state === "idle" ? button.getAttribute("aria-label") ?? t("agent.voice") : t("rooms.stop");
+  button.dataset.tooltip = state === "idle" ? button.getAttribute("aria-label") ?? t("agent.voice") : t(sends ? "chat.send" : "rooms.stop");
   if (state !== "idle") {
-    button.innerHTML = ico("stop");
-    button.setAttribute("aria-label", t(stopping ? "rooms.stopping" : "rooms.stop"));
+    button.innerHTML = sends ? sendGlyph() : ico("stop");
+    button.setAttribute("aria-label", t(sends ? "chat.send" : stopping ? "rooms.stopping" : "rooms.stop"));
     button.removeAttribute("title");
-    button.disabled = stopping;
+    button.disabled = stopping && !sends;
   }
   cancelGesture(el.ownerDocument).sync();
 }

@@ -622,7 +622,7 @@ describe("a member's thread", () => {
     agent.hide();
   });
 
-  test.each([0,3])("clicking the recording Stop for member %s ends capture instead of cancelling it", async id => {
+  test.each([0,3])("clicking the recording's send button for member %s ends capture and sends it instead of cancelling it", async id => {
     vi.useFakeTimers();
     api.agentHistoryList.mockResolvedValue({turns:[]});
     const agent=mount("toggle");await flush();if(id)await pick(id);
@@ -652,13 +652,15 @@ describe("a member's thread", () => {
     agent.hide();
   });
 
-  test.each(["hold", "toggle"] as const)("a member has an accessible Stop during %s recording", async mode => {
+  test.each(["hold", "toggle"] as const)("a member has an accessible send button during %s recording, and Stop only once it is sent", async mode => {
     api.agentHistoryList.mockResolvedValue({turns:[]});
     const agent=mount(mode);await flush();await pick(3);
     const button=$(".cmp-voice");
     send({type:"Dictation",phase:"listening",agent:true,member_id:3});
     expect(button.classList.contains("vm-away")).toBe(false);
-    expect(button.getAttribute("aria-label")).toBe("停止");
+    // Speaking: the one button is the send glyph, labelled 送出; pressing it sends what was said.
+    expect(button.getAttribute("aria-label")).toBe("送出");expect(button.querySelector(".cmp-plane")).not.toBeNull();expect(button.querySelector(".av")).toBeNull();expect($(".composer").dataset.taskState).toBe("recording");
+    expect(button.tagName).toBe("BUTTON");expect((button as HTMLButtonElement).disabled).toBe(false);
     send({type:"Hotkey",kind:"cancel_key"});
     expect(button.dataset.cancelArmed).toBeUndefined();
     await flush();

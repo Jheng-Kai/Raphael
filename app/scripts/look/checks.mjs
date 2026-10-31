@@ -675,7 +675,7 @@ export function checkRendered(name, context = {}) {
   }
   if(name === "cancel-native-result" || name === "cancel-overlay-result" || name === "cancel-recording-result") {
     const command=name==="cancel-overlay-result"?"overlay_cancel":"window_hotkey";
-    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind==="cancel")).length===1,name === "cancel-recording-result" ? "one Escape cancels recording or STT once" : "only the second Escape cancels once");
+    require(window.__look.calls.filter(call=>call.command===command&&(command!=="window_hotkey"||call.kind===(name==="cancel-recording-result"?"cancel_key":"cancel"))).length===1,name === "cancel-recording-result" ? "one Escape cancels recording or STT once" : "only the second Escape cancels once");
     require(!document.querySelector('[data-cancel-armed]'),"the armed state ends with cancellation");return {check:name};
   }
   if(name === "deleted-view") {
@@ -1455,7 +1455,36 @@ export function checkRendered(name, context = {}) {
       return { check: name, chips };
     }
     throw new Error(`${name}: unknown mention check`);
-  }  if (name.startsWith("composer-history-")) {
+  }  if (name === "composer-voice-idle" || name === "composer-voice-recording" || name === "composer-voice-sent") {
+    // The composer's right-hand slot is one real button that keeps its place and size: the voice emblem at rest, the send glyph
+    // while the owner speaks (pressing it sends what was said), the Stop square only once it is sent and for as long as it runs.
+    const form = [...document.querySelectorAll('.composer')].find(visible), button = form.querySelector('.cmp-voice'), send = form.querySelector('.cmp-send');
+    const box = button.getBoundingClientRect(), rect = { x: box.x, y: box.y, width: box.width, height: box.height };
+    if (name === "composer-voice-idle") {
+      require(form.dataset.taskState === "idle" && visible(button.querySelector('.av')), "at rest the button is the voice emblem");
+      window.__voiceRect = rect;
+      return { check: name, rect };
+    }
+    require(window.__voiceRect, "the button at rest was measured first");
+    for (const key of ["x", "y", "width", "height"]) require(Math.abs(rect[key] - window.__voiceRect[key]) <= 0.5, `the button keeps its place and size (${key}: ${rect[key]} against ${window.__voiceRect[key]})`);
+    require(button.tagName === 'BUTTON' && button.type === 'button' && !button.disabled && !visible(send), "one real button alone fills the slot, and it is enabled");
+    require(!button.hasAttribute('title') && button.dataset.tooltip === button.getAttribute('aria-label'), "its one tooltip is its accessible label");
+    if (name === "composer-voice-recording") {
+      require(form.dataset.taskState === "recording", `the composer is recording: ${form.dataset.taskState}`);
+      const plane = button.querySelector('svg.cmp-plane');
+      require(visible(plane) && !button.querySelector('svg.i') && !button.querySelector('.av'), "the send glyph, not the Stop square and not the emblem");
+      require(button.getAttribute('aria-label') === send.getAttribute('aria-label'), `its label is the send label: ${button.getAttribute('aria-label')}`);
+      require(Math.round(plane.getBoundingClientRect().width) === 24 && getComputedStyle(button).color === getComputedStyle(send).color && getComputedStyle(button).backgroundColor === 'rgba(0, 0, 0, 0)', "it looks as the send button does");
+      require(!window.__look.calls.some(call => call.command === "window_hotkey" && ["agent_down", "agent_up", "cancel"].includes(call.kind)), "nothing has been pressed or sent yet");
+      return { check: name, label: button.getAttribute('aria-label'), rect };
+    }
+    require(["ack", "running"].includes(form.dataset.taskState), `once it is sent the composer has a turn to stop: ${form.dataset.taskState}`);
+    require(button.getAttribute('aria-label') === "停止" && visible(button.querySelector('svg.i')) && !button.querySelector('svg.cmp-plane') && !button.querySelector('.av'), "now the same button is Stop");
+    const keys = window.__look.calls.filter(call => call.command === "window_hotkey").map(call => call.kind);
+    require(keys.filter(kind => kind === "agent_down").length === 1 && keys.filter(kind => kind === "agent_up").length === 1 && !keys.includes("cancel"), `pressing it sent the recording once and cancelled nothing: ${keys}`);
+    return { check: name, keys, rect };
+  }
+  if (name.startsWith("composer-history-")) {
     // The up arrow brings back what was typed (read once, from the core, when the walk begins), the down arrow walks forward to the
     // draft, and nothing is sent by either; a recalled address is a chip.
     const typedHistory = ["請 @小森 看一下這份報告", "整理這週的研究重點", "明天早上要帶傘嗎？"], draft = "還沒寫完的草稿";

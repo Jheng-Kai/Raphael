@@ -501,7 +501,7 @@ Raphael/member/room threads and composers share --layout-thread-max = 28 * 32 =
 toggle always works. Opening from a pointer preserves pointer focus; keyboard
 opening focuses Close with the existing keyboard-only focus treatment.
 No empty conversation uses profile_ready to hide its ordinary composer.
-Recording Stop releases/transcribes/sends, while only Escape uses two-press cancel.
+The composer's send button (shown while recording) releases/transcribes/sends, while only Escape uses two-press cancel.
 
 The ordinary details scene retains its deliberate keyboard-focus screenshot after
 asserting pointer behavior. Raphael-details also asserts pointer opening and captures
@@ -718,6 +718,26 @@ npm run look -- composer-history-recall composer-history-send composer-history-m
 
 The fixture states the history (`typedHistory`) or derives it from its typed turns as the core does. These scenes do not prove
 a restart or a real database; the core tests do.
+
+## The composer's one button: send while speaking, Stop once sent (2026-10-31)
+
+The composer's right-hand slot is one real button (`.cmp-voice`, 32px, the same in every state, so a press never moves it): the
+voice emblem at rest; while the owner speaks into the composer (`data-task-state="recording"`) the send glyph, labelled with the send
+label, because pressing it ends the recording and sends what was said (the question key goes down and up; nothing is cancelled,
+and Escape still cancels at once); the Stop square only once something has been sent (`ack`, `running`, `waiting`, including the
+native voice processing before a turn exists), for as long as that runs, and it stops that. `.cmp-send` stays hidden in the
+non-idle states, so one control alone fills the slot, and `.cmp-voice` stays the selector the native `voice-keys` journey clicks.
+A room's composer is unchanged: its recording is its own browser recorder, whose end puts the transcript into the field to be
+read and sent, so its button stays Stop until then (`chat-composer.test.ts`).
+
+```powershell
+npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+```
+
+`composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
+no second control); `composer-voice-sent` presses it and checks the same button is Stop once the recording is sent, with one
+question key down and up and no cancellation. The unit tests are `agent-stop.test.ts` (the whole sequence in the real page),
+`agent-members.test.ts` and `chat-composer.test.ts` (`drawTaskSlot`). The fixture cannot prove a microphone or the native key.
 
 ## Rich replies
 

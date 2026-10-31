@@ -1775,7 +1775,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The displayed slot and its action always refer to the same reply in this conversation. */
   function composerTask() {
     const member = memberId();
-    if(listening&&voiceMember===member)return {key:`listening:${listeningRun}`,state:"running" as const,stop:()=>api.cancelSession()};
+    // Speaking: the button ends the recording and sends it, so it is not Stop (that comes once something has been sent); Esc cancels.
+    if(listening&&voiceMember===member)return {key:`listening:${listeningRun}`,state:"recording" as const,stop:()=>api.cancelSession()};
     const sent = [...outgoing].reverse().find(belongs);
     if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
     const turn = [...own()].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
