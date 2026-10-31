@@ -181,3 +181,25 @@ test("a read that began before a choice cannot put the old choice back", async (
   await flush();
   expect(name()).toBe("Mine");
 });
+
+test("the menu survives another window taking the focus for a moment, and closes when the owner has really left", async () => {
+  vi.useFakeTimers();
+  try {
+    const { open } = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    open();
+    await vi.advanceTimersByTimeAsync(0);
+    const focused = vi.spyOn(document, "hasFocus");
+    focused.mockReturnValue(false);
+    window.dispatchEvent(new Event("blur"));
+    await vi.advanceTimersByTimeAsync(400);
+    focused.mockReturnValue(true);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(q(".cb-menu")).not.toBeNull();
+    focused.mockReturnValue(false);
+    window.dispatchEvent(new Event("blur"));
+    await vi.advanceTimersByTimeAsync(800);
+    expect(q(".cb-menu")).toBeNull();
+    focused.mockRestore();
+  } finally { vi.useRealTimers(); }
+});

@@ -185,15 +185,23 @@ export async function drive(name, context) {
       throw new Error(`${what}: saved ${await savedModel()}, composer ${await composerName()}`);
     };
     await chat(page);
+    // A menu closes when the window loses focus or changes size, which a window driven in the background can do.
+    await page.evaluate(() => {
+      const log = window.__menuClosers = [];
+      for (const type of ["blur", "resize", "focus"]) window.addEventListener(type, () => log.push(`${type}@${Math.round(performance.now())}${document.querySelector(".cb-menu") ? " open" : ""}`), true);
+      new MutationObserver(() => { const open = !!document.querySelector(".cb-menu"); if (open !== window.__menuWas) { window.__menuWas = open; log.push(`${open ? "opened" : "closed"}@${Math.round(performance.now())} focus=${document.hasFocus()} anchor=${document.querySelector(".composer .cmp-model .mp-trigger")?.isConnected}`); } }).observe(document.body, { childList: true });
+    });
+    context.menuLog = () => page.evaluate(() => window.__menuClosers);
     await click(page, ".composer .cmp-model .mp-trigger");
     await wait(page, ".cb-menu");
     await click(page, '.cb-menu [data-cb-source="cli:codex"]');
     try { await page.waitForSelector('.cb-menu [data-model^="cli:codex:"]', { timeout: 30000 }); }
     catch (error) {
       await capture("composer-codex-missing");
+      result.menuLog = await context.menuLog();
       const listed = (await context.rpc("brains.cli", {})).clis.map(cli => ({ id: cli.id, installed: cli.installed, logged_in: cli.logged_in, available: cli.available, models: cli.models.length, notes: cli.notes }));
       result.brains = listed;
-      result.pane = await page.$eval(".cb-menu .cb-pane", el => el.textContent.slice(0, 120));
+      result.pane = await page.$eval(".cb-menu .cb-pane", el => el.textContent.slice(0, 120)).catch(() => "the menu is closed");
       throw new Error(`The real Codex's models never reached the composer: ${JSON.stringify(listed)} / ${result.pane}`, { cause: error });
     }
     await capture("composer-codex-models");
@@ -202,7 +210,8 @@ export async function drive(name, context) {
     const id = models.find(model => model.endsWith("gpt-5.6-luna")) ?? models.at(-1);
     await click(page, `.cb-menu [data-model="${id}"]`);
     await until(async () => (await savedModel()).startsWith(id), "the composer's choice did not reach the core");
-    await wait(page, ".cb-menu .mc-range");
+    try { await wait(page, ".cb-menu .mc-range"); }
+    catch (error) { result.menuLog = await context.menuLog(); throw error; }
     await perform(page, { action: "slider-stop", selector: ".cb-menu .mc-range", level: "low" });
     await until(async () => (await savedModel()) === `${id}?effort=low`, "the slider's depth did not reach the core");
     await capture("composer-depth");

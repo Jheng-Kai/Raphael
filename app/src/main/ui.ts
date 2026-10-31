@@ -401,6 +401,8 @@ function closeMenuLevel(): void {
 const menuItems = (el: HTMLElement): HTMLButtonElement[] =>
   Array.from(el.querySelectorAll<HTMLButtonElement>("button")).filter((b) => !b.disabled && b.offsetParent !== null);
 
+const MENU_LEAVE_MS = 700;
+
 function listenForMenuEvents(): void {
   if (menuListening) return;
   menuListening = true;
@@ -443,7 +445,13 @@ function listenForMenuEvents(): void {
       items[items.length - 1].focus();
     }
   });
-  window.addEventListener("blur", closeMenu);
+  // Leaving the window closes a menu. Another window taking the focus for a moment does not, and neither does a press
+  // inside a frame of this window, which is a blur too (measured: a real one came back in 450 ms and closed a menu).
+  let leaving: ReturnType<typeof setTimeout> | undefined;
+  window.addEventListener("blur", () => {
+    clearTimeout(leaving);
+    leaving = setTimeout(() => { if (!document.hasFocus()) closeMenu(); }, MENU_LEAVE_MS);
+  });
   window.addEventListener("resize", closeMenu);
   // A click of the person's own on a ⋯ puts its menu under it again, however an earlier right click placed it.
   document.addEventListener("click", (e) => {
