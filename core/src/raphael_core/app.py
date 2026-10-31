@@ -869,7 +869,7 @@ class App(Router):
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
         from .computer.local_tools import LocalTools
         self.vm_tools = self.tool_hub
-        self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm)
+        self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
             self.tool_hub,

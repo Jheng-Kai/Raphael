@@ -173,3 +173,17 @@ async def test_driver_discovery_and_validation_remove_session(desktop, tmp_path)
     tool = next(t for t in hub.offered() if t.name == 'get_desktop_state')
     assert 'session' not in str(tool.schema) and 'session' not in str(hub.schemas[key])
     assert (await hub.call(key, {'session': 'ended'}, approver='auto')).kind == 'bad_arguments'
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell")
+async def test_statements_of_different_shapes_each_print_whole():
+    # Live: a load figure and then a process list in one command, and the list printed as blank lines.
+    from raphael_core.computer.local_host import LocalHost
+    result = await LocalHost().execute("[pscustomobject]@{Load=5}; [pscustomobject]@{Name='proc-測試'; Id=9}; $kept = 7; $kept", timeout_seconds=60)
+    assert result["exit_code"] == 0
+    assert "Load" in result["stdout"] and "proc-測試" in result["stdout"] and "Id" in result["stdout"]
+    assert result["stdout"].rstrip().endswith("7")
+    failed = await LocalHost().execute("Write-Output before; exit 7", timeout_seconds=60)
+    assert failed["exit_code"] == 7 and "before" in failed["stdout"]
+    broken = await LocalHost().execute("Get-Date |", timeout_seconds=60)
+    assert broken["exit_code"] != 0 or broken["stderr"]

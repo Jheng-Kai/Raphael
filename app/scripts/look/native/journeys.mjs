@@ -11,6 +11,7 @@ export const journeys = [
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
+  { name: "owner-words", description: "The real core and the real Codex CLI, on what the owner really asks: an event goes on today's calendar, and a question about this PC's CPU runs read-only commands after the card" },
   { name: "member-job", description: "The real core and the real Codex CLI: a member made with only a name speaks first, and the owner's answer becomes its job" },
   { name: "pages", description: "A stored page from the core's real host under the real CSP: isolated, speaks only on a real press, survives a redraw, expands, follows the theme, comes back after a reload" },
   { name: "model-picker", description: "Real public OpenRouter catalog, real picker/settings/member persistence and fake next-turn provider metadata" },
@@ -415,6 +416,60 @@ export async function drive(name, context) {
     await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:haiku" });
     await until(async () => (await composerName()).includes("Haiku"), "a change of the setting did not reach the composer");
     await capture("change-reaches-composer");
+    return;
+  }
+  if (name === "owner-words") {
+    await keepFocus(page);
+    let codex;
+    for (let i = 0; i < 150 && !codex; i++) {
+      const models = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models ?? [];
+      codex = models.find(model => model.id.endsWith("gpt-6-luna")) ?? models.at(-1);
+      if (!codex) await pause(200);
+    }
+    if (!codex) throw new Error("The real Codex listed no models");
+    await context.rpc("settings.set", { key: "agent_model", value: `${codex.id}?effort=low` });
+    const { member } = await context.rpc("members.create", { name: "NativeMis", role: "MIS" });
+    const ask = async (text, onCard) => {
+      const conversation = await newConversation(context, member.id);
+      await type(page, ".composer .cmp-input", text);
+      await click(page, ".cmp-send");
+      for (let i = 0; i < 1800; i++) {
+        if (await page.$('.page-agent [data-act="perm-once"]:not([disabled])')) {
+          if (!onCard) throw new Error(`A card was shown for: ${text}`);
+          await onCard();
+          await page.waitForFunction(() => !document.querySelector('.page-agent [data-act="perm-once"]:not([disabled])'), { timeout: 15000 });
+        }
+        const turn = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation && row.question === text && ["done", "error"].includes(row.status));
+        if (turn) return turn;
+        await pause(250);
+      }
+      throw new Error(`No answer to: ${text}`);
+    };
+    const calendar = await ask("幫我把下午三點看牙醫加到今天的行程");
+    await capture("calendar-answered");
+    const added = (await snapshot()).calendar_events;
+    result.calendar = { status: calendar.status, events: added.length, text: calendar.text.slice(0, 80) };
+    if (calendar.status !== "done" || !added.some(row => row.title.includes("牙醫"))) throw new Error(`The event did not reach the calendar: ${JSON.stringify(result.calendar)}`);
+    if (!added.some(row => new Date(row.start_ms).getHours() === 15)) throw new Error(`The event is not at three: ${JSON.stringify(added.map(row => row.start_ms))}`);
+    const commands = [];
+    const cpu = await ask("幫我看一下為甚麼我電腦 CPU 使用率這麼高", async () => {
+      const command = await page.$eval(".page-agent .local-command", el => el.textContent);
+      commands.push(command);
+      await capture(`card-${commands.length}`);
+      if (/\b(remove|stop|set|new|start|restart|invoke|clear|rename|move|copy|add|disable|enable|format-volume)-\w+|\b(taskkill|del|rmdir|rm|reg|shutdown|net)\s/i.test(command)) {
+        await click(page, '.page-agent [data-act="perm-deny"]');
+        throw new Error(`Not a read-only command, refused: ${command}`);
+      }
+      await click(page, '.page-agent [data-act="perm-once"]');
+    });
+    await capture("cpu-answered");
+    const data = await snapshot();
+    const computer = data.tool_audit.filter(row => row.server === "computer").length, local = data.tool_audit.filter(row => row.server === "local").length;
+    result.cpu = { status: cpu.status, commands: commands.length, local, computer, text: cpu.text.slice(0, 120) };
+    if (cpu.status !== "done" || !commands.length || !local) throw new Error(`The local command did not answer: ${JSON.stringify(result.cpu)}`);
+    if (computer) throw new Error("The question about this PC went to a computer");
+    if (JSON.stringify(cpu.steps ?? []).includes(commands[0].slice(0, 30))) throw new Error("A command reached the public steps");
+    if (cpu.member_id !== member.id || calendar.member_id !== member.id) throw new Error("The member was not the one asked");
     return;
   }
   if (name === "member-job") {

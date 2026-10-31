@@ -153,7 +153,7 @@ async def test_a_job_of_hundreds_of_rounds_stays_inside_the_window_and_keeps_goi
     assert provider.refusals == 0
     assert max(size_of(sent) for sent in provider.conversations) <= window
     # Results stayed for many rounds at a time: a paid summary is the exception, not every round.
-    assert 1 <= len(provider.summaries) <= 20
+    assert 1 <= len(provider.summaries) <= 400 // 5
     last = provider.conversations[-1]
     assert last[0]["content"] == "S" and last[1]["role"] == "user" and "THE OWNER'S REQUEST" in last[1]["content"]
     assert "DONE read_file" in last[1]["content"]
@@ -302,6 +302,22 @@ async def test_results_stay_while_they_fit_whatever_the_number_of_rounds():
     keeper.saw(5_000, messages)
     await keeper.fit(messages)
     assert messages == before
+
+
+async def test_the_checkpoint_reads_old_results_as_they_came_not_what_is_left_of_them():
+    # Live on a real model: old results cut to one line first left a job unable to say what it had read.
+    read = []
+
+    async def summarize(system, user, max_tokens):
+        read.append(user)
+        return "## Completed actions\n1. READ the parts — read"
+
+    messages = opened(*rounds(40, body="the code word is HARBOR " + "r" * 3000))
+    keeper = ContextKeeper(summarize, window=32_000)
+    keeper.saw(30_000, messages)
+    await keeper.fit(messages)
+    assert read and read[0].count("the code word is HARBOR") > 20
+    assert keeper.used(messages) < keeper.trigger
 
 
 async def test_over_budget_old_results_become_lines_and_the_rest_stay():

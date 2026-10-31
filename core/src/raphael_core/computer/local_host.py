@@ -7,6 +7,16 @@ from pathlib import Path
 from ..agent.cli.process import Child
 
 OUTPUT_LIMIT = 20_000
+# Windows PowerShell prints all that a command outputs as one table, in the columns of what came first: a load figure and
+# then a process list leaves the list as blank lines. So each statement prints by itself, line by line as it comes. A
+# command that does not parse runs as written, which reports why.
+RUNNER = (
+    "$raphael_text = $env:RAPHAEL_LOCAL_COMMAND; Remove-Item Env:RAPHAEL_LOCAL_COMMAND; $raphael_errors = $null; "
+    "$raphael_ast = [System.Management.Automation.Language.Parser]::ParseInput($raphael_text, [ref]$null, [ref]$raphael_errors); "
+    "if ($raphael_errors.Count -or $raphael_ast.ParamBlock -or $raphael_ast.BeginBlock -or $raphael_ast.ProcessBlock) { Invoke-Expression $raphael_text } "
+    "else { foreach ($raphael_statement in $raphael_ast.EndBlock.Statements) { "
+    ". ([scriptblock]::Create($raphael_statement.Extent.Text)) | Out-String -Stream -Width 240 } }"
+)
 
 
 class Output:
@@ -44,9 +54,9 @@ class LocalHost:
         if os.name != "nt":
             raise OSError("windows_required")
         shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
-        script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; " + command
+        script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; " + RUNNER
         child = CommandChild([str(shell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
-                             environ=worker_environment(), cwd=cwd or str(Path.home()), errors=errors)
+                             environ={**worker_environment(), "RAPHAEL_LOCAL_COMMAND": command}, cwd=cwd or str(Path.home()), errors=errors)
         stdout = output if output is not None else Output()
         timed_out = False
         try:

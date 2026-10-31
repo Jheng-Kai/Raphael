@@ -8,14 +8,17 @@ Every result stays as it came while the conversation fits. What counts is what t
 the last prompt came to (`saw`), plus an estimate of what was added since. When that passes the
 trigger (`fit`):
 
-1. Without a model: identical results are left to the newest copy, and results older than the newest
-   half of the budget become one line that says what the call was and how it went (`one_line`). A
-   call that failed or was refused says so, so that it is never read as done. Those rounds lose their
-   reasoning items too: they grow without bound and only the latest rounds need them. The newest
-   round, which the model has not read yet, is never touched.
-2. If that was not enough: a model writes a checkpoint of the older rounds, updating the last one
-   (`SUMMARY_SYSTEM`), and it replaces them, at the end of the owner's request. The system message
-   and the request stay, and so does a tail of the newest rounds; calls and results stay paired.
+1. A model writes a checkpoint of the older rounds from their results as they came, updating the last
+   one (`SUMMARY_SYSTEM`), and it replaces them, at the end of the owner's request. The system message
+   and the request stay, and so does a tail of the newest rounds; calls and results stay paired. What a
+   job learned from a result is in the result: live, a job cut its old results down first, had nothing
+   left of them, and could not say what it had read.
+2. With no model to ask (none, or one that failed a moment ago) or if that was not enough: identical
+   results are left to the newest copy, and results older than the newest half of the budget become one
+   line that says what the call was and how it went (`one_line`). A call that failed or was refused says
+   so, so that it is never read as done. Those rounds lose their reasoning items too: they grow without
+   bound and only the latest rounds need them. The newest round, which the model has not read yet, is
+   never touched.
 
 A summary call that fails, or a summary that forgets what was done, costs nothing but quality: a
 static checkpoint is made from the rounds themselves, so that what was done is never simply lost, and
@@ -645,20 +648,22 @@ class ContextKeeper:
         """Shrink `messages` in place if the next prompt is due to: see the module."""
         if self.used(messages, tools) < self.trigger:
             return
+        now = self._clock()
+        asked = self._summarize is not None and now >= self._paused_until and now >= self._blocked_until
+        if asked:
+            before = self.used(messages, tools)
+            if await self._fold(messages, self._room(self.tail)):
+                after = self.used(messages, tools)
+                if after < before * SAVED_ENOUGH and after < self.trigger:
+                    self._ineffective = 0
+                    return
+                self._ineffective += 1
+                if self._ineffective >= 2:
+                    self._blocked_until = self._clock() + ANTI_THRASH_S
+                    self._ineffective = 1  # the next try is a probe: one more that does not help blocks again
         shorten_results(messages, _tail_start(messages, self._room(self.trigger * KEEP_SHARE)))
-        before = self.used(messages, tools)
-        if before < self.trigger * ENOUGH_SHARE or self._clock() < self._blocked_until:
-            return
-        if not await self._fold(messages, self._room(self.tail)):
-            return  # nothing to fold yet, and nothing paid for: that is no summary that failed to help
-        after = self.used(messages, tools)
-        if after < before * SAVED_ENOUGH and after < self.trigger:
-            self._ineffective = 0
-            return
-        self._ineffective += 1
-        if self._ineffective >= 2:
-            self._blocked_until = self._clock() + ANTI_THRASH_S
-            self._ineffective = 1  # the next try is a probe: one more that does not help blocks again
+        if not asked and self.used(messages, tools) >= self.trigger * ENOUGH_SHARE and self._clock() >= self._blocked_until:
+            await self._fold(messages, self._room(self.tail))
 
     async def overflowed(self, messages: MutableSequence[dict[str, Any]], window: int | None = None) -> bool:
         """The provider refused the prompt as too long, and may have said what its window is. Shrink
