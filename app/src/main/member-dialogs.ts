@@ -350,15 +350,9 @@ export interface AvatarPickerOptions {
   current?: string | null;
 }
 
-export const slimeLabels = {
-  shape: (index: number): string => esc(t("members.slimeShape", { p0: index })),
-  color: (index: number): string => esc(t("members.slimeColor", { p0: index })),
-};
-
 /** The small popover of a picture: the slimes, the preset grid if there are presets, and 「從電腦選…」. */
 export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): void {
-  let current = o.current;
-  const slimes = o.slimes ? slimePickerHTML(current, slimeLabels) : "";
+  const slimes = o.slimes ? slimePickerHTML(o.current, esc) : "";
   const grid = o.presets.length || o.slimes
     ? slimes + (o.presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
       o.presets
@@ -382,9 +376,9 @@ export function openAvatarPicker(anchor: HTMLElement, o: AvatarPickerOptions): v
   el.addEventListener("click", (e) => {
     const target = (e.target as Element).closest<HTMLElement>("button");
     if (!target) return;
-    // A shape and a colour are chosen together, so a press on either leaves the menu where it is.
-    const slime = pickSlime(target, current);
-    if (slime) { current = slime; o.onPreset?.(slime); return; }
+    // Trying slimes is the point of this menu, so a press on one leaves it where it is.
+    const slime = pickSlime(target);
+    if (slime) { o.onPreset?.(slime); return; }
     closeMenu();
     if (target.dataset.preset !== undefined) o.onPreset?.(target.dataset.preset);
     else actions[Number(target.dataset.pick)]?.run();

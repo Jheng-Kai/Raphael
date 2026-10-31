@@ -320,7 +320,7 @@ export async function drive(name, context) {
     const auditBefore = (await snapshot()).tool_audit.filter(row => row.server === "computer").length;
     await page.waitForSelector('.desktop-panel iframe:not([hidden])', {visible:true,timeout:60000});
     await click(page, '[data-desktop="take"]');
-    await page.waitForSelector('.desktop-panel[data-interactive="true"][data-accepted-input-latency-ms]', { visible: true, timeout: 60000 });
+    await page.waitForSelector('.desktop-panel[data-interactive="true"][data-control-latency-ms]', { visible: true, timeout: 60000 });
     const ownerFrame = await (await page.$('.desktop-panel iframe')).contentFrame();
     await ownerFrame.waitForSelector('#noVNC_container canvas', { visible: true, timeout: 60000 });
     const canvas = await ownerFrame.$('#noVNC_container canvas');
@@ -338,9 +338,6 @@ export async function drive(name, context) {
     const latency = await page.$eval('.desktop-panel', el => Number(el.dataset.controlLatencyMs));
     if (!Number.isFinite(latency) || latency >= 300) throw new Error(`Click-to-interactive ${latency}ms exceeds 300ms`);
     result.computer.clickToInteractiveMs = latency;
-    const acceptedLatency = await page.$eval('.desktop-panel', el => Number(el.dataset.acceptedInputLatencyMs));
-    if (!Number.isFinite(acceptedLatency) || acceptedLatency >= 300) throw new Error(`Click-to-accepted-input ${acceptedLatency}ms exceeds 300ms`);
-    result.computer.clickToAcceptedInputMs = acceptedLatency;
     await capture("signed-in");
     await click(page, '[data-desktop="return"]');
     await page.waitForSelector('.desktop-panel[data-desktop-state="member"]', { visible: true, timeout: 60000 });

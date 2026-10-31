@@ -1643,10 +1643,9 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slime-picker") {
     const menu = document.querySelector(".mb-avpop");
-    require(menu && menu.querySelector('[data-slime-shape="oni"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen shape");
-    require(menu.querySelector('[data-slime-color="coral"]').getAttribute("aria-pressed") === "true", "and on the chosen colour");
-    require(menu.querySelectorAll('[aria-pressed="true"]').length === 2, "nothing else looks chosen");
-    require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:oni:coral", "the member keeps both");
+    require(menu && menu.querySelector('[data-slime-character="shion"]').getAttribute("aria-pressed") === "true", "the menu stays open on the chosen slime");
+    require(menu.querySelectorAll('[aria-pressed="true"]').length === 1, "nothing else looks chosen");
+    require(window.__look.data.members.find(row => row.id === 1)?.avatar === "slime:shion", "the member keeps it");
     return { check: name };
   }
   if (name === "conversation-picker") {

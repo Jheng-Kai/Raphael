@@ -3,7 +3,7 @@ const computer = (state = "running") => ({ running:"fresh", runningMember:1, des
   {id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
 ]} });
 const entry = [member(1), wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
-const take = [...entry, click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-accepted-input-latency-ms]')];
+const take = [...entry, click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
 export default [
   scene("desktop-panel", "One live computer in the existing member side panel with only a system event in chat", [...entry,check("computer-panel"),check("desktop-frame")],computer()),
   scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [...entry,check("computer-takeover")],computer("waiting_control")),

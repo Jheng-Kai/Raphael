@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // The dialogs of the members (member-dialogs.ts): 新增成員 as the mockup draws it, the question before
 // a delete, the routine the core offers, and a group's places.
-import { SLIME_COLOR_COUNT, SLIME_SHAPE_COUNT } from "./slime";
+import { SLIME_CHARACTER_COUNT, SLIME_COLOR_COUNT } from "./slime";
 import { closeMenu } from "./ui";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { type NewMemberResult, confirmDelete, editSources, offerRoutine, openNewMember, pictureType, pickPicture } from "./member-dialogs";
@@ -135,24 +135,24 @@ describe("新增成員", () => {
   test("with no presets, the choices are the slimes and a picture from the PC", () => {
     const { $ } = open();
     $('[data-dlg="avatar"]').click();
-    expect(document.querySelectorAll("#app-popover .mb-preset-slime")).toHaveLength(SLIME_SHAPE_COUNT);
+    expect(document.querySelectorAll("#app-popover .mb-preset-slime")).toHaveLength(SLIME_CHARACTER_COUNT);
     expect(document.querySelectorAll("#app-popover .mb-slime-color")).toHaveLength(SLIME_COLOR_COUNT);
     expect([...document.querySelectorAll("#app-popover button:not(.mb-preset-slime):not(.mb-slime-color)")].map((b) => b.textContent)).toEqual(["從電腦選…"]);
   });
 
-  test("a shape and a colour are chosen together, in a menu that stays open", async () => {
+  test("trying slimes leaves the menu open, and the last one pressed is the choice", async () => {
     const { $, create } = open();
     $('[data-dlg="avatar"]').click();
-    document.querySelector<HTMLElement>('#app-popover [data-slime-shape="oni"]')!.click();
-    expect(document.querySelector('#app-popover [data-slime-shape="oni"]')!.getAttribute("aria-pressed")).toBe("true");
     document.querySelector<HTMLElement>('#app-popover [data-slime-color="coral"]')!.click();
     expect(document.querySelector('#app-popover [data-slime-color="coral"]')!.getAttribute("aria-pressed")).toBe("true");
+    document.querySelector<HTMLElement>('#app-popover [data-slime-character="shion"]')!.click();
+    expect(document.querySelector('#app-popover [data-slime-character="shion"]')!.getAttribute("aria-pressed")).toBe("true");
     expect($(".mb-new-av svg.slime")).not.toBeNull();
     closeMenu();
     $<HTMLInputElement>("#mb-new-name").value = "日文老師";
     $('[data-dlg="create"]').click();
     await flush();
-    expect(create.mock.calls[0]![0].member.avatar).toBe("slime:oni:coral");
+    expect(create.mock.calls[0]![0].member.avatar).toBe("slime:shion");
   });
 
   test("the computer picker stays inside its dialog so its synthetic click cannot dismiss the profile", () => {

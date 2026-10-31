@@ -2,7 +2,6 @@
 // summary (`已建立 COO、PM、RD`) once the owner confirms.
 
 import { pickSlime, slimePickerHTML } from "./slime";
-import { slimeLabels } from "./member-dialogs";
 import { avatarHTML } from "./avatar";
 import { hasDetail, highlightHTML } from "./conversation";
 import { t } from "./i18n";
@@ -230,7 +229,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
   function openDraftAvatarMenu(anchor: HTMLElement, draft: MemberDraft): void {
     const presets = host.presets();
     const grid = presets.length >= 0
-      ? slimePickerHTML(draft.avatar_preset, slimeLabels) + (presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
+      ? slimePickerHTML(draft.avatar_preset, esc) + (presets.length ? `<div class="mb-presets" role="group" aria-label="${esc(t("settings.avatar"))}">` +
         presets
           .map(
             (preset, i) =>
@@ -247,7 +246,7 @@ export function createDraftPanel(host: DraftPanelHost): DraftPanelController {
       label: t("settings.avatar"),
     });
     pop.addEventListener("click", (e) => {
-      const slime = pickSlime((e.target as Element).closest<HTMLElement>("button") ?? pop, draft.avatar_preset);
+      const slime = pickSlime((e.target as Element).closest<HTMLElement>("button") ?? pop);
       if (slime) { draft.avatar_preset = slime; draw(); return; }
       const target = (e.target as Element).closest<HTMLElement>("button[data-preset]");
       if (!target) return;
