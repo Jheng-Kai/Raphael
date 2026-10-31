@@ -60,6 +60,7 @@ import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, turnMatches, visibleTurn } from "../conversation";
 import { exchangeLineHTML } from "../exchange-line";
 import { carryTyped } from "../secret-card";
+import { openConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
@@ -1850,6 +1851,24 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /**
+   * 填入金鑰 or 設定開發者 app on a connector card: the form that asks for what the app needs opens over the page. What is typed
+   * goes from it to the core in this one call (`integrations.card_connect`) and nowhere else, never into the chat; the card's
+   * new states come back as `AgentTurn`, and a failed card names what is missing and offers the form again.
+   */
+  async function cardSetup(act: HTMLElement): Promise<void> {
+    const id = act.dataset.card ?? "";
+    const needs = act.dataset.needs === "own_app" ? "own_app" : "key";
+    await openConnectionSetup({ slug: act.dataset.toolkit ?? "", name: act.dataset.name ?? "", needs }, {
+      connect: async (fields) => {
+        const result = await api.cardConnect(id, fields);
+        // Not started while the card still waits: another card's sign-in holds the browser.
+        return result.started || !["pending", "failed", "cancelled"].includes(result.card.state) ? { connected: true } : { connected: false, error: "busy" };
+      },
+      composioKey: () => app.go("settings", "connections"),
+    });
+  }
+
+  /**
    * Save the key typed into a secret card. It is read from the field here, the field is emptied before the
    * call, and the key goes to the core's vault through `integrations.card_save` and to nothing else. The
    * card's new states come back as `AgentTurn`.
@@ -2038,6 +2057,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       case "card-connect":
       case "card-cancel":
         void cardAction(act);
+        break;
+      case "card-setup":
+        void cardSetup(act);
         break;
       case "card-settings":
         app.go("settings", "connections");

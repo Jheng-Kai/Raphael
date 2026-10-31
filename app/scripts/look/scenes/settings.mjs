@@ -5,6 +5,8 @@ const add = [...connections, click('[data-k="conn-add"]')];
 const custom = [...add, click('.menu [data-value="custom"]')];
 const serverDetail = [...connections, click('[data-conn="open"][data-id="notes"]')];
 const store = [...connections, { ...click('[data-conn="tab"][data-id="store"]'), measure: { name: "store-render-paint", budgetMs: 250, maxLongTaskMs: 50 } }, wait('.cs-card'), waitGone('[data-cs-pending]')];
+// A key made up for the scenes: it is typed into a masked field and must reach nothing but the one call that adds the app.
+const setupKey = "zk-look-0123456789";
 const usage = [...settings("models"), click('[data-models-tab="usage"]'), wait(".run-tile"), wait(".run-bill-total"), check("usage-summary")];
 const cliMenu = [...settings("models"), scroll(".cli-accounts"), click('[data-cli-menu="codex"]')];
 const cliDisconnected = [...cliMenu, click('#app-popover [data-pick="disconnect"]'), wait('[data-cli="codex"]')];
@@ -92,6 +94,37 @@ export default [
     ...connections, click('[data-conn="tab"][data-id="store"]'), wait('[data-conn="configure-composio"]'), click('[data-conn="configure-composio"]'), wait('#conn-key'),
     type('#conn-key', 'ck_look-synthetic'), click('[data-conn="save-key"]'), wait('.cs-key-form [role="alert"]'), check("plugins-key-consumer"), check("plugins-store-rows"),
   ], { composioConfigured: false }),
+  scene("plugins-store-needs", "A row says in words what the app asks for before anything is pressed: its own key, or its own developer app", [
+    ...store, click('[data-conn="store-group"][data-id="productivity"]'), wait('[data-conn="join"][data-id="acme-ledger"]'), check("plugins-store-needs"), check("plugins-store-rows"),
+  ]),
+  scene("plugins-store-needs-page", "The page of an app that asks for a key says so beside its 加入, which is never dead", [
+    ...store, click('[data-conn="open-store"][data-id="acme-ledger"]'), wait('.cs-page .cs-needs'), check("plugins-store-needs-page"),
+  ]),
+  scene("plugins-setup-key", "加入 on an app that needs a key asks for exactly that key in a masked field, says where to get it and that Composio keeps it", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey), check("setup-key"),
+  ]),
+  scene("plugins-setup-noguide", "When the catalog has no guide the form says so and offers the service's own page", [
+    ...store, click('[data-conn="join"][data-id="parcel-desk"]'), wait('.cn-setup-dialog [data-setup-field]'), check("setup-noguide"),
+  ]),
+  scene("plugins-setup-own-app", "An app that needs its own developer app shows the redirect address to register and asks for its id and secret", [
+    ...store, click('[data-conn="join"][data-id="orbit-ads"]'), wait('.cn-setup-dialog [data-setup-field]'),
+    type('.cn-setup-dialog [data-setup-field="client_id"]', "look-client-id"), type('.cn-setup-dialog [data-setup-field="client_secret"]', setupKey), check("setup-own-app"),
+  ]),
+  scene("plugins-setup-added", "The key goes to the core in one call; the dialog closes and the app is among the connected ones", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
+    click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'), wait('[data-conn="open"][data-id="composio:acme-ledger"]'), check("setup-added"),
+  ]),
+  scene("plugins-setup-rejected", "A key Composio does not accept says so in the dialog, empties the masked field and keeps the form to try again", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
+    click('.cn-setup-dialog [data-dlg="add"]'), wait('.cn-setup-dialog [data-setup-status] [role="alert"]'), check("setup-rejected"),
+  ], { connectFails: "key_rejected" }),
+  scene("plugins-setup-composio-key", "With no working Composio key the form says that and offers the place to add it", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey),
+    click('.cn-setup-dialog [data-dlg="add"]'), wait('.cn-setup-dialog [data-dlg="composio"]'), check("setup-composio-key"),
+  ], { connectFails: "missing_key" }),
+  scene("plugins-setup-plan-failed", "When what the app needs cannot be read the dialog says so and offers to try again", [
+    ...store, click('[data-conn="join"][data-id="acme-ledger"]'), wait('.cn-setup-dialog [data-dlg="retry"]'), check("setup-plan-failed"),
+  ], { toolkitPlanFails: true }),
   scene("plugins-connecting", "Built-in sign-in works without Composio", [...store, click('[data-conn="join"][data-id="github"]'), wait('.cs-card .sub.wait'), check("plugins-builtin-join"), check("plugins-store-rows")], { composioConfigured: false, pluginsConnecting: true }),
   scene("connections-hover", "MCP server hover", [...connections, hover('[data-k="cs-open:notes"]')]),
   scene("server-menu", "MCP server detail actions", [...serverDetail, click('[data-conn="server-menu"][data-id="notes"]')]),

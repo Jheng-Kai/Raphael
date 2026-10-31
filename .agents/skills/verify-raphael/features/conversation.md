@@ -562,6 +562,11 @@ service/brain or the speaking member, with Raphael's existing localized name.
 `failure-owner-copy` checks both visible surfaces in `connector-failed-continued`
 and the native self-diagnosis journey, including underscores rendered as italics.
 The native fake brain writes a fixed natural reply independently of this helper.
+A connection that fails for want of something names exactly what and where: with no
+Composio key the card is `needs_composio_key` (not the old vague `not_configured`) and
+the member says to add the Composio key in Settings > Connections; an app that needs the
+owner's own key or developer app has its own card states and form (see
+connections-mcp.md, 2026-10-31); `card-composio-missing` and `card-key-rejected` check both.
 
 ```powershell
 npm run verify -- --core

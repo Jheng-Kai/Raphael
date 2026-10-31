@@ -810,7 +810,7 @@ export async function drive(name, context) {
     if (!/^[a-z0-9_-]{1,100}$/.test(app)) throw new Error("Select a real catalog slug with RAPHAEL_NATIVE_APP");
     const catalog = await context.rpc("connectors.catalog", {});
     if (catalog.ok === false) throw new Error(`Real catalog unavailable: ${catalog.error}`);
-    if (!catalog.items.some(item => item.slug === app && item.can_connect)) throw new Error(`Catalog app ${app} is absent or has no managed sign-in`);
+    if (!catalog.items.some(item => item.slug === app && item.needs === "sign_in")) throw new Error(`Catalog app ${app} is absent or asks for more than a sign-in`);
     result.providerChoice = "Deterministic native fake brain; production find_app, connect_app, policy, persistence and Composio login";
     const pendingAccounts = async () => (await context.rpc("connectors.status", { refresh: false }))
       .connectors?.find(item => item.id === `composio:${app}`)?.accounts ?? [];
@@ -1067,8 +1067,8 @@ export async function drive(name, context) {
     if (result.stored.connect_cards.length !== 1) throw new Error("Failure recovery minted another connection card");
     const failedCard = result.stored.connect_cards[0];
     if (continuation.member_id !== failedCard.member_id || continuation.conversation_id !== failedCard.conversation_id) throw new Error("Failure continuation escaped the originating member conversation");
-    if (failedCard.error !== "not_configured") throw new Error("Connection card did not preserve the real failure reason");
-    await perform(page, { action: "wait-text", selector: `.mb-col [data-member="${member.id}"] .mb-row-p`, text: "Gmail 還沒登入" });
+    if (failedCard.error !== "needs_composio_key") throw new Error("Connection card did not preserve the real failure reason");
+    await perform(page, { action: "wait-text", selector: `.mb-col [data-member="${member.id}"] .mb-row-p`, text: "要連上 Gmail" });
     result.ownerCopy = await page.evaluate(checkRendered, "failure-owner-copy");
     result.assertions = { failure_kind: failedCard.error, reason: failedCard.error, self_check: true,
       same_member: continuation.member_id === failedCard.member_id,

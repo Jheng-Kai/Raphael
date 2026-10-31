@@ -10,6 +10,7 @@ import { type InventoryView, appOf, countText, isConnected, whyNot } from "./app
 import {
   type SkillItem, type SkillPage, loadSkillItems, sameSkill, skillChanged, skillDialogHTML, skillErrorText, skillPage, skillsSectionHTML,
 } from "./connection-skills";
+import { openConnectionSetup } from "./connection-setup";
 import { confirmDelete } from "./member-dialogs";
 import { managedGroup, pluginTool, storePlugin, type ManagedConnector } from "./plugins-data";
 import { openMcpImport } from "./mcp-import";
@@ -508,21 +509,32 @@ function joinControl(s: StoreService, v: ConnectionsView, deferIcon = false): st
   if (s.server_id) return `<span class="cs-state">${st("ok", t("conn.installed"))}</span>`;
   // Managed sign-in has no cancellation RPC; keep the shared action disabled until it completes.
   if (here) return btn(esc(t("conn.cancel")), "sm", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`);
-  return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${s.can_connect === false ? ` title="${esc(t("plugins.unavailable"))}"` : ""}${v.login || s.can_connect === false ? " disabled" : ""}`);
+  return btn(`${deferIcon ? '<span class="i" aria-hidden="true"></span>' : ico("plus")}${esc(t("conn.join"))}`, "sm", ` data-conn="join" data-id="${esc(s.id)}" aria-label="${esc(t("conn.joinAria", { p0: s.name }))}"${v.login ? " disabled" : ""}`);
+}
+
+/** What adding the entry asks of the owner, in words, for the row and the page to show before anything is pressed. */
+const needWords = (s: StoreService): string => s.needs === "key" ? t("setup.needsKey") : s.needs === "own_app" ? t("setup.needsOwnApp") : "";
+const needHTML = (text: string): string => `<b class="need">${esc(text)}</b>`;
+
+/** The line under an entry's name: what adding it asks first, in words, then what it does; or the wait for its login. */
+function subLine(s: StoreService, here: boolean): string {
+  const line = here ? t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(s.summary);
+  const need = here ? "" : needWords(s);
+  return need ? `${needHTML(need)}${line ? ` · ${esc(line)}` : ""}` : esc(line);
 }
 
 const storeMark = (s: StoreService): string => entryIcon(s, "md").replace(/<img /g, '<img decoding="async" ');
 
 function cardHTML(s: StoreService, v: ConnectionsView, deferDetails = false): string {
   const here = v.login?.target === s.id;
-  const line = here ? t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(s.summary);
   const mark = deferDetails ? "" : storeMark(s);
+  const need = here ? "" : needWords(s);
   return (
     `<div class="cs-card"${deferDetails ? ` data-cs-pending="${esc(s.id)}"` : ""}>` +
     btn(
-      `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(s.name)}</span><span class="sub${here ? " wait" : ""}">${deferDetails ? "&nbsp;" : esc(line)}</span></span>`,
+      `<span class="ic">${mark}</span><span class="tx"><span class="nm">${esc(s.name)}</span><span class="sub${here ? " wait" : ""}">${deferDetails ? (need ? needHTML(need) : "&nbsp;") : subLine(s, here)}</span></span>`,
       "cs-main",
-      ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}" title="${esc(`${s.name}: ${words(s.summary)}`)}"`,
+      ` data-conn="open-store" data-id="${esc(s.id)}" data-k="cs-store:${esc(s.id)}" title="${esc(`${s.name}: ${need ? `${need} · ` : ""}${words(s.summary)}`)}"`,
     ) +
     `${joinControl(s, v, deferDetails)}</div>`
   );
@@ -628,13 +640,16 @@ function storePageHTML(s: StoreService, v: ConnectionsView): string {
       btn(esc(t("conn.manage")), "", ` data-conn="manage" data-id="${esc(s.server_id)}"`)
     : here
       ? `<span class="cs-wait" role="status">${esc(t(s.auth === "none" ? "conn.connecting" : "conn.loggingIn"))}</span>` + btn(esc(t("conn.cancel")), "", ` data-conn="cancel-login"${s.source ? " disabled" : ""}`)
-      : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login || s.can_connect === false ? " disabled" : ""}`);
+      : btn(`${ico("plus")}${esc(t("conn.join"))}`, "pri", ` data-conn="join" data-id="${esc(s.id)}"${v.login ? " disabled" : ""}`);
   const failed = loginErrorHTML(v, s.id);
+  const need = s.server_id ? "" : needWords(s);
+  const needs = need ? `<p class="cs-needs"><b>${esc(need)}</b> · ${esc(t(s.needs === "own_app" ? "setup.leadOwnApp" : "setup.leadKey", { p0: s.name }))}</p>` : "";
   const examples = (s.examples[getLocale()] ?? s.examples.en ?? []).map((text) => `<li>${ico("chat")}<span>${esc(text)}</span></li>`).join("");
   return (
     backHTML() +
     `<div class="cs-head">${entryIcon(s, "xl")}<div class="tx"><h2 class="big">${esc(s.name)}</h2><div class="by">${esc(t("conn.by", { p0: s.publisher }))}</div></div>` +
     `<div class="cs-join">${action}</div></div>` +
+    needs +
     failed +
     (examples ? `<div class="cs-sec"><h3>${esc(t("conn.try"))}</h3><ul class="cs-say">${examples}</ul></div>` : "") +
     `<div class="cs-sec"><h3>${esc(t("conn.about"))}</h3><p class="cs-desc">${esc(words(s.about))}</p></div>` +
@@ -1219,6 +1234,36 @@ export function createConnections(host: ConnectionsHost): Connections {
     await load(false);
   }
 
+  /**
+   * Adds an app that asks for the owner's own key, or a developer app of their own: its form asks first (the values go to
+   * the core in one call and to nothing else), then the core adds it, and for a developer app the browser signs in.
+   */
+  async function addWithForm(entry: StoreService, needs: "key" | "own_app"): Promise<void> {
+    if (login) return;
+    const added = await openConnectionSetup({ slug: entry.id, name: entry.name, needs }, {
+      connect: async (fields) => {
+        login = { target: entry.id, name: entry.name };
+        loginError = null;
+        redraw();
+        try {
+          return await api.connectorsConnect(entry.id, fields);
+        } catch (error) {
+          return { connected: false, error: error instanceof Error ? error.message : "error" };
+        } finally {
+          login = null;
+          redraw();
+        }
+      },
+      composioKey: () => { keyOpen = true; keyError = ""; redraw(); focusOn("#conn-key"); },
+    });
+    if (added) {
+      tab = "installed";
+      open = null;
+      notify(t("conn.connected", { p0: entry.name }));
+    }
+    await load(false);
+  }
+
   function followEvent(event: MainEvent): void {
     if (event.type === "ConnectionsChanged" && host.visible()) { void load(false); return; }
     // a skill was imported, switched, edited or deleted, in the member's own tab or by Raphael: the list follows it
@@ -1334,8 +1379,7 @@ export function createConnections(host: ConnectionsHost): Connections {
           if (placeholder) {
             if (!placeholder.querySelector(".ic")) { placeholder.outerHTML = cardHTML(entry, current); continue; }
             placeholder.querySelector<HTMLElement>(".ic")!.innerHTML = storeMark(entry);
-            placeholder.querySelector<HTMLElement>(".sub")!.textContent = current.login?.target === entry.id
-              ? t(entry.auth === "none" ? "conn.connecting" : "conn.loggingIn") : words(entry.summary);
+            placeholder.querySelector<HTMLElement>(".sub")!.innerHTML = subLine(entry, current.login?.target === entry.id);
             const addIcon = placeholder.querySelector<HTMLElement>('[data-conn="join"] > span.i');
             if (addIcon) addIcon.outerHTML = ico("plus");
             placeholder.removeAttribute("data-cs-pending");
@@ -1481,7 +1525,10 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       case "join": {
         const entry = entryById(id);
-        if (entry && entry.can_connect !== false && !entry.server_id) void signIn({ catalog_id: entry.id }, entry.name, false);
+        if (!entry || entry.server_id) break;
+        // An app that asks for the owner's own key or developer app asks in its form first; the rest sign in at once.
+        if (entry.needs === "key" || entry.needs === "own_app") void addWithForm(entry, entry.needs);
+        else void signIn({ catalog_id: entry.id }, entry.name, false);
         break;
       }
       case "relogin": {

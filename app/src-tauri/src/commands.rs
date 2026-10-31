@@ -402,6 +402,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "home.overview",
     "connectors.catalog",
     "connectors.categories",
+    "connectors.toolkit",
     "connectors.connect",
     "connectors.status",
     "connectors.disconnect",
@@ -2675,6 +2676,7 @@ mod tests {
         for method in [
             "connectors.catalog",
             "connectors.categories",
+            "connectors.toolkit",
             "connectors.connect",
             "connectors.status",
             "connectors.disconnect",

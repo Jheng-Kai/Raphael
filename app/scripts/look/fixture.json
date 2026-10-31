@@ -627,6 +627,24 @@
       "connectors": [{ "id": "card-slack", "app": "slack", "name": "Slack", "logo": "https://logos.composio.dev/api/slack",
         "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
     },
+    "key": {
+      "id": 124, "session_id": "look-connect-key", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "查一下 Acme Ledger 裡這個月的發票。", "route": "answer", "source": "app",
+      "prefix": "", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "Acme Ledger 需要你自己的 API key，填好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-acme", "app": "acme-ledger", "name": "Acme Ledger", "logo": "https://logos.composio.dev/api/slack", "needs": "key", "toolkit": "acme-ledger",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
+    "app": {
+      "id": 125, "session_id": "look-connect-app", "member_id": 0, "conversation_id": 1,
+      "created_at_ms": 1792807185000, "question": "看一下 Orbit Ads 上週的廣告成效。", "route": "answer", "source": "app",
+      "prefix": "", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "detail": null, "status": "done", "cost_usd": 0,
+      "model": "fixture", "steps": [], "attachments": [],
+      "messages": [{ "seq": 1, "kind": "reply", "text": "Orbit Ads 需要你自己的開發者 app，設定好後就繼續這項工作。", "at_ms": 1792807186000 }],
+      "connectors": [{ "id": "card-orbit", "app": "orbit-ads", "name": "Orbit Ads", "logo": "https://logos.composio.dev/api/slack", "needs": "own_app", "toolkit": "orbit-ads",
+        "state": "pending", "error": null, "reconnect": false, "tool_count": null, "expires_at_ms": 1792893585000, "resumed": false }]
+    },
     "calendar": {
       "id": 122,
       "session_id": "look-connect-calendar",
@@ -753,13 +771,36 @@
     { "id": "communication", "name": "通訊" }
   ],
   "pluginCatalog": [
-    { "slug": "notion", "name": "Notion", "description": "搜尋筆記、整理頁面與專案資料", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false },
-    { "slug": "github", "name": "GitHub", "description": "管理儲存庫、議題與程式碼審查", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
-    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "https://logos.composio.dev/api/slack", "categories": ["communication"], "can_connect": true, "no_auth": false },
-    { "slug": "gmail", "name": "Gmail", "description": "搜尋郵件、撰寫草稿與回覆", "logo": "", "categories": ["communication"], "can_connect": true, "no_auth": false },
-    { "slug": "linear", "name": "Linear", "description": "追蹤專案與團隊議題", "logo": "", "categories": ["development"], "can_connect": true, "no_auth": false },
-    { "slug": "googledrive", "name": "Google Drive", "description": "查找檔案、整理共用文件", "logo": "", "categories": ["productivity"], "can_connect": true, "no_auth": false }
+    { "slug": "notion", "name": "Notion", "description": "搜尋筆記、整理頁面與專案資料", "logo": "", "categories": ["productivity"], "needs": "sign_in", "no_auth": false },
+    { "slug": "github", "name": "GitHub", "description": "管理儲存庫、議題與程式碼審查", "logo": "", "categories": ["development"], "needs": "sign_in", "no_auth": false },
+    { "slug": "slack", "name": "Slack", "description": "搜尋團隊訊息、分享工作進度", "logo": "https://logos.composio.dev/api/slack", "categories": ["communication"], "needs": "sign_in", "no_auth": false },
+    { "slug": "gmail", "name": "Gmail", "description": "搜尋郵件、撰寫草稿與回覆", "logo": "", "categories": ["communication"], "needs": "sign_in", "no_auth": false },
+    { "slug": "linear", "name": "Linear", "description": "追蹤專案與團隊議題", "logo": "", "categories": ["development"], "needs": "sign_in", "no_auth": false },
+    { "slug": "googledrive", "name": "Google Drive", "description": "查找檔案、整理共用文件", "logo": "", "categories": ["productivity"], "needs": "sign_in", "no_auth": false },
+    { "slug": "acme-ledger", "name": "Acme Ledger", "description": "查詢帳目與發票", "logo": "", "categories": ["productivity"], "needs": "key", "no_auth": false },
+    { "slug": "parcel-desk", "name": "Parcel Desk", "description": "追蹤包裹與出貨單", "logo": "", "categories": ["productivity"], "needs": "key", "no_auth": false },
+    { "slug": "orbit-ads", "name": "Orbit Ads", "description": "管理廣告活動與報表", "logo": "", "categories": ["productivity"], "needs": "own_app", "no_auth": false }
   ],
+  "toolkitPlans": {
+    "acme-ledger": {
+      "slug": "acme-ledger", "name": "Acme Ledger", "needs": "key", "scheme": "API_KEY",
+      "fields": [{ "name": "generic_api_key", "label": "API Key", "description": "Your Acme Ledger API key, from Settings > Developers.", "required": true, "secret": true, "default": null }],
+      "redirect_url": null, "guide_url": "https://docs.acme-ledger.example/api-keys", "app_url": "https://www.acme-ledger.example"
+    },
+    "parcel-desk": {
+      "slug": "parcel-desk", "name": "Parcel Desk", "needs": "key", "scheme": "API_KEY",
+      "fields": [{ "name": "generic_api_key", "label": "API Key", "description": "", "required": true, "secret": true, "default": null }],
+      "redirect_url": null, "guide_url": null, "app_url": "https://www.parcel-desk.example"
+    },
+    "orbit-ads": {
+      "slug": "orbit-ads", "name": "Orbit Ads", "needs": "own_app", "scheme": "OAUTH2",
+      "fields": [
+        { "name": "client_id", "label": "Client ID", "description": "The client ID of your Orbit Ads developer app.", "required": true, "secret": false, "default": null },
+        { "name": "client_secret", "label": "Client Secret", "description": "The client secret of the same app.", "required": true, "secret": true, "default": null }
+      ],
+      "redirect_url": "https://backend.composio.dev/api/v1/auth-apps/add", "guide_url": "https://developers.orbit-ads.example/apps", "app_url": "https://www.orbit-ads.example"
+    }
+  },
   "pluginTools": {
     "composio:notion": [
       { "slug": "NOTION_SEARCH", "name": "搜尋頁面", "description": "在工作區搜尋筆記與資料庫", "kind": "read", "enabled": true },

@@ -17,6 +17,7 @@ from .google import PREFIX, READ_TOOLS, TOOLS, GoogleClient, permitted, scopes_f
 from .http import ConnectorFailure
 from .mcp import GoogleTools, ManagedMcp
 from .store import STATUSES, Connector, ConnectorStore
+from .toolkits import KEY as NEEDS_KEY, OWN_APP, SIGN_IN, check_values, credentials_of, needs_of_row, plan_of, view_of
 
 META_READ = {"COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"}
 META_EXECUTE = "COMPOSIO_MULTI_EXECUTE_TOOL"
@@ -100,7 +101,7 @@ class ConnectorsService:
                 server.enabled = False
 
     def register(self, router) -> None:
-        methods = {"catalog": self.catalog, "categories": self.categories, "connect": self.connect,
+        methods = {"catalog": self.catalog, "categories": self.categories, "toolkit": self.toolkit, "connect": self.connect,
                    "status": self.status, "disconnect": self.disconnect, "tools": self.tools,
                    "set_tools": self.set_tools, "set_key": self.set_key,
                    "google.configure": self.google_configure, "google.connect": self.google_connect}
@@ -139,6 +140,7 @@ class ConnectorsService:
 
     def _view(self, entry: Connector) -> dict:
         view = asdict(entry)
+        view.pop("auth_config_id", None)
         if entry.kind == "google":
             view["enabled_tools"] = [name for name in TOOLS if self.tool_available(GOOGLE_SERVER, name)]
         return {**view, "stores_tool_payloads": entry.kind == "composio",
@@ -173,7 +175,8 @@ class ConnectorsService:
                     items.append({"slug": item["slug"], "name": item.get("name", item["slug"]),
                         "description": meta.get("description", ""), "logo": meta.get("logo", ""),
                         "categories": meta.get("categories", []), "tools_count": meta.get("tools_count", 0),
-                        "can_connect": bool(item.get("no_auth") or item.get("composio_managed_auth_schemes")),
+                        # Every app can be added; `needs` says what the owner brings (see `toolkits`).
+                        "needs": needs_of_row(item),
                         "no_auth": bool(item.get("no_auth")),
                         "auth_schemes": [str(x).lower() for x in item.get("auth_schemes", [])]})
                 next_cursor = data.get("next_cursor")
@@ -233,10 +236,13 @@ class ConnectorsService:
     def _config(self):
         active = {c.id.split(":", 1)[1]: c for c in self.store.connectors.values()
                   if c.kind == "composio" and c.status == "ACTIVE" and c.enabled}
-        return {"toolkits": {"enable": sorted(active)},
-                "tools": {slug: {"disable": c.disabled_tools} for slug, c in active.items()},
-                "manage_connections": {"enable": False}, "workbench": {"enable": False},
-                "proxy_execute": {"enable": False}}
+        config = {"toolkits": {"enable": sorted(active)},
+                  "tools": {slug: {"disable": c.disabled_tools} for slug, c in active.items()},
+                  "manage_connections": {"enable": False}, "workbench": {"enable": False},
+                  "proxy_execute": {"enable": False}}
+        # An app added with a key, or with a developer app of the owner's own, signs in through its auth config.
+        own = {slug: c.auth_config_id for slug, c in active.items() if c.auth_config_id}
+        return {**config, "auth_configs": own} if own else config
 
     async def _session(self):
         data = None
@@ -291,17 +297,124 @@ class ConnectorsService:
         self.hub._config.save()
         self.hub._changed()
 
+    def needs_cached(self, slug: str) -> str | None:
+        """What an app of the catalog needs, from the list the store last read (None: it was never read)."""
+        if self._store_catalog is None:
+            return None
+        return next((item["needs"] for item in self._store_catalog[1]["items"] if item["slug"] == slug), None)
+
+    async def toolkit(self, params):
+        """What adding the toolkit asks of the owner and where they find it: the fields, never a value."""
+        slug = _slug(params)
+        data = await self.composio.request("GET", "/toolkits/" + segment(slug))
+        return view_of(slug, str(data.get("name") or slug), plan_of(data))
+
+    async def _auth_config(self, slug, name, plan, values) -> str:
+        """The auth config Composio keeps for this app: the owner's key goes to Composio here and nowhere else
+        (the owner's developer app, when it is that). Its id is all that stays."""
+        body = {"toolkit": {"slug": slug}, "auth_config": {
+            "type": "use_custom_auth", "authScheme": plan["scheme"] or "API_KEY", "name": f"Raphael {name}"[:60],
+            "credentials": credentials_of(plan, values, "app")}}
+        try:
+            data = await self.composio.request("POST", "/auth_configs", json=body, hide=values.values())
+        except ConnectorFailure as error:
+            raise ConnectorFailure("key_rejected" if error.kind == "invalid_request" else error.kind, error.status) from None
+        ident = (data.get("auth_config") or {}).get("id")
+        if not isinstance(ident, str) or not ident:
+            raise ConnectorFailure("protocol")
+        return ident
+
+    async def _forget_auth_config(self, ident: str) -> None:
+        """Give an auth config back to Composio (one that was made for an add that did not finish, or whose app is gone)."""
+        if ident:
+            try:
+                await self.composio.request("DELETE", "/auth_configs/" + segment(ident))
+            except ConnectorFailure:
+                pass
+
     async def connect(self, params):
         slug = _slug(params)
         details = await self.composio.request("GET", "/toolkits/" + segment(slug))
-        if not (details.get("no_auth") or details.get("composio_managed_auth_schemes")):
-            raise ConnectorFailure("needs_own_oauth_app")
+        plan = plan_of(details)
+        if details.get("no_auth") or details.get("composio_managed_auth_schemes"):
+            return await self._connect_link(slug, details, params)
+        values = params.get("fields")
+        problem = check_values(plan, {} if values is None else values)
+        if problem == "bad_fields":
+            raise invalid_params("fields must be text for the fields the app asks for")
+        if problem and plan["needs"] != SIGN_IN:
+            # Nothing was given (or too little): the window asks for it before it asks to connect.
+            raise ConnectorFailure("needs_key" if plan["needs"] == NEEDS_KEY else "needs_own_app")
+        before = self.store.connectors.get("composio:" + slug)
+        auth_id = await self._auth_config(slug, str(details.get("name") or slug), plan, values or {})
+        connected = False
+        try:
+            if plan["needs"] == NEEDS_KEY:
+                result = await self._connect_key(slug, details, plan, values, auth_id)
+            else:
+                result = await self._connect_link(slug, details, params, auth_id=auth_id)
+            connected = bool(result.get("connected"))
+            return result
+        finally:
+            if not connected:
+                await self._forget_auth_config(auth_id)
+            elif before is not None and before.auth_config_id and before.auth_config_id != auth_id:
+                await self._forget_auth_config(before.auth_config_id)
+
+    async def _connect_key(self, slug, details, plan, values, auth_id):
+        """Add an app that signs in with the owner's own key: Composio makes the account from it, here, at once."""
+        await self._session()
+        state = {"authScheme": plan["scheme"] or "API_KEY", "val": {**credentials_of(plan, values, "account"), "status": "ACTIVE"}}
+        try:
+            made = await self.composio.request("POST", "/connected_accounts", hide=list(values.values()), json={
+                "auth_config": {"id": auth_id}, "connection": {"user_id": self.store.user_id, "state": state}})
+        except ConnectorFailure as error:
+            raise ConnectorFailure("key_rejected" if error.kind == "invalid_request" else error.kind, error.status) from None
+        state = values = None  # the key leaves this call with the request
+        account_id = made.get("id")
+        if not isinstance(account_id, str) or not account_id:
+            raise ConnectorFailure("protocol")
+        status = "INITIALIZING"
+        try:
+            for _ in range(10):
+                account = await self.composio.request("GET", "/connected_accounts/" + segment(account_id))
+                status = account.get("status")
+                if status not in STATUSES:
+                    raise ConnectorFailure("protocol")
+                if status != "INITIALIZING":
+                    break
+                await self.sleep(1)
+            if status != "ACTIVE":
+                raise ConnectorFailure("key_rejected")
+        except BaseException:
+            try:
+                await self.composio.request("DELETE", "/connected_accounts/" + segment(account_id), params={"revoke_on_delete": "true"})
+            except ConnectorFailure:
+                pass
+            raise
+        ident = "composio:" + slug
+        entry = self.store.connectors.setdefault(ident, Connector(ident, "composio"))
+        entry.name = details.get("name", slug)
+        entry.description = (details.get("meta") or {}).get("description", "")
+        entry.logo = (details.get("meta") or {}).get("logo", "")
+        entry.status, entry.auth_config_id = "ACTIVE", auth_id
+        entry.accounts = [{"id": account_id, "status": "ACTIVE"}]
+        self._save()
+        await self._load_tools(entry)
+        await self._patch()
+        return {"connected": True, "connector": self._view(entry)}
+
+    async def _connect_link(self, slug, details, params, *, auth_id=""):
+        """Add an app the owner signs in to in the browser: Composio's own login, or the OAuth app of the owner's own
+        (`auth_id`, an auth config Composio keeps with its id and secret)."""
         body = {"toolkit": slug}
         if "alias" in params:
             body["alias"] = _text(params, "alias")
         await self._session()
         before = self._config()
         pending = {**before, "toolkits": {"enable": sorted(set(before["toolkits"]["enable"]) | {slug})}}
+        if auth_id:
+            pending["auth_configs"] = {**before.get("auth_configs", {}), slug: auth_id}
         connected = False
         try:
             # The toolkit must be permitted before the provider can issue a login link.
@@ -336,6 +449,9 @@ class ConnectorsService:
                     entry.status = "ACTIVE" if prior_active else status
                     self._save()
                     if status == "ACTIVE":
+                        if auth_id:
+                            entry.auth_config_id = auth_id
+                        self._save()
                         await self._load_tools(entry)
                         await self._patch()
                         connected = True
@@ -487,8 +603,15 @@ class ConnectorsService:
                 entry.accounts.remove(account)
                 self._save()
             del self.store.connectors[entry.id]
-            await self._session()
-            await self._patch()
+            if entry.auth_config_id:
+                # A session keeps what it was told of an auth config (an update adds to it, never takes away): it starts again without.
+                self.store.session_id, self.store.config_version = "", None
+            try:
+                await self._session()
+                await self._patch()
+            finally:
+                # What Composio kept for this app goes back with it, even when the session could not be told yet.
+                await self._forget_auth_config(entry.auth_config_id)
         self._save()
         return {"disconnected": True}
 

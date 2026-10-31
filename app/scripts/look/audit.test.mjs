@@ -68,7 +68,7 @@ describe("rendered look checks", () => {
   });
   it("rejects machine diagnostics in failure replies and sidebar previews, including Markdown italics", () => {
     const win = new Window();
-    const natural = "Gmail 還沒登入或缺少金鑰，請到設定 › 連接完成連線。";
+    const natural = "要連上 Gmail，還需要 Composio 金鑰：請到設定 › 連接 貼上它。";
     win.document.body.innerHTML = `<div class="tn"><div class="ra"><div class="chat-message" data-expandable>${natural}</div></div></div><div class="mb-col"><div data-member="1" aria-current="true"><span class="mb-row-p">${natural}</span></div></div>`;
     const reply = win.document.querySelector('.chat-message'), preview = win.document.querySelector('.mb-row-p');
     for (const element of [reply, preview]) element.getBoundingClientRect = () => ({ width: 200, height: 40 });

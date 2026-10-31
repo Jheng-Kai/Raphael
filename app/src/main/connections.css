@@ -158,6 +158,10 @@
 .cs-main .nm { font-size: var(--fs-xs); }
 .cs-main .sub { font-size: var(--fs-2xs); line-height: 1.45; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-main .sub.wait { color: var(--accent-text); }
+/* What an app asks for (its own key, or its own developer app) comes first on its row, in words, never only a title. */
+.cs-main .sub .need { font-weight: 600; color: var(--text-2); }
+.cs-needs { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text-2); text-wrap: pretty; }
+.cs-needs b { color: var(--text); font-weight: 600; }
 .cs-card > .btn { flex: none; padding-inline: var(--sp-2); }
 .cs-card > .cs-state { flex: none; font-size: var(--fs-xs); }
 .cs-card .cs-state .st { font-size: var(--fs-xs); color: var(--text-3); }

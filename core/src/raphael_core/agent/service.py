@@ -514,7 +514,8 @@ class Resumption:
         if self.failure is not None:
             parts.append("The earlier card or continuation failed; nothing is connected or saved unless explicitly listed below. "
                          "Read this classified reason, run self_check once, then fix what you can or report what only the owner "
-                         "can do and why. Do not create another connection/secret card on your own. "
+                         "can do and why; when the reason names what is missing and where the owner adds it, tell them exactly that "
+                         "in their language, never only that something is not set up. Do not create another connection/secret card on your own. "
                          "If consent was denied, do not try another way to perform that action.\n" +
                          wrap_untrusted("card_failure", json.dumps(self.failure.wire()), ok=False))
         if self.apps:
@@ -2700,8 +2701,11 @@ class AgentService:
             return {"app": app.name, "connected": True, "note": f"{app.name} is connected already: use its tools."}
         ask.waiting_apps.append(app.name)
         self._turn_changed(ask.turn_id, ask.speaker.id)
-        return {"app": app.name, "card": card.state, "note": (
-            f"A card to connect {app.name} is shown to the owner in this chat. End this turn now with one short "
+        needs = self._cards.view(card)["needs"]
+        asks = {"key": f" {app.name} signs in with the owner's own key, which the card asks for (Composio keeps it; you never see it): say so.",
+                "own_app": f" {app.name} needs a developer app of the owner's own, which the card walks them through: say so."}.get(needs, "")
+        return {"app": app.name, "card": card.state, "needs": needs, "note": (
+            f"A card to connect {app.name} is shown to the owner in this chat.{asks} End this turn now with one short "
             "sentence. This request resumes by itself, once, after the owner connects; never claim its data now.")}
 
     def _show_secret(self, ask: _Ask, args: Mapping[str, Any]) -> dict:

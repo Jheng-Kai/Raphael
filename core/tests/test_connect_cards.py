@@ -153,7 +153,7 @@ async def test_an_expired_card_starts_no_sign_in(tmp_path, conn, fixture):
 async def test_without_a_google_or_composio_setup_the_card_fails_and_no_browser_opens(tmp_path, conn, fixture):
     rig = Rig(tmp_path, conn, fixture)
     _, card = await rig.connect(rig.card())
-    assert (card.state, card.error) == ("failed", "not_configured") and fixture.opened == 0
+    assert (card.state, card.error) == ("failed", "needs_composio_key") and fixture.opened == 0
 
 
 async def test_composio_connects_the_same_card_when_it_is_the_setup(tmp_path, conn):

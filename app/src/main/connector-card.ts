@@ -17,8 +17,15 @@ const FAILURES: Record<string, MessageKey> = {
   scope: "card.scope",
   state: "card.state",
   not_configured: "card.notConfigured",
+  needs_composio_key: "card.needsComposioKey",
+  needs_key: "card.needsKey",
+  needs_own_app: "card.needsOwnApp",
+  key_rejected: "card.keyRejected",
   interrupted: "card.interrupted",
 };
+
+/** The app asks for the owner's own key, or a developer app of their own, before it can be connected. */
+const asksMore = (card: ConnectorCard): boolean => card.needs === "key" || card.needs === "own_app";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -39,7 +46,7 @@ export function appMarkHTML(app: string, logo?: string): string {
 /** What the card says of where its sign-in stands. */
 export function cardStateText(card: ConnectorCard): string {
   switch (card.state) {
-    case "pending": return card.reconnect ? plain("card.expiredAuth") : "";
+    case "pending": return card.reconnect ? plain("card.expiredAuth") : card.needs === "key" ? plain("card.needsKey") : card.needs === "own_app" ? plain("card.needsOwnApp") : "";
     case "authorizing": return plain("card.authorizing");
     case "connected": return t(card.reconnect ? "card.reconnected" : "card.connected", { p0: card.tool_count ?? 0 });
     case "cancelled": return plain("card.cancelled");
@@ -51,13 +58,17 @@ export function cardStateText(card: ConnectorCard): string {
 /** The card's one action, if its state has one. */
 function actionHTML(card: ConnectorCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
+  // What it asks for is asked in the form, never in the chat: the key goes from that form to the core and nowhere else.
+  const form = (): string => btn(esc(plain(card.needs === "own_app" ? "card.setupApp" : "card.enterKey")), "sm pri",
+    `${on("card-setup")} data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"`);
+  const connect = (label: MessageKey): string => asksMore(card) ? form() : btn(esc(plain(label)), "sm pri", on("card-connect"));
   switch (card.state) {
-    case "pending": return btn(esc(plain(card.reconnect ? "card.reconnect" : "card.connect")), "sm pri", on("card-connect"));
+    case "pending": return connect(card.reconnect ? "card.reconnect" : "card.connect");
     case "authorizing": return btn(esc(plain("card.cancel")), "sm", on("card-cancel"));
-    case "cancelled": return btn(esc(plain("card.connect")), "sm pri", on("card-connect"));
-    case "failed": return card.error === "not_configured"
+    case "cancelled": return connect("card.connect");
+    case "failed": return card.error === "not_configured" || card.error === "needs_composio_key"
       ? btn(esc(plain("card.openConnections")), "sm", on("card-settings"))
-      : btn(esc(plain("card.retry")), "sm pri", on("card-connect"));
+      : connect("card.retry");
     default: return "";
   }
 }
@@ -70,7 +81,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
   return `<div class="connector-card" data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}" role="group" aria-label="${esc(card.name)}">` +
     appMarkHTML(card.app, card.logo) +
     `<div class="cc-meta"><div class="cc-name">${esc(card.name)}</div>` +
-    (state ? `<div class="cc-state" aria-live="polite">${busy}${done}<span>${esc(state)}</span></div>` : "") + `</div>` +
+    (state ? `<div class="cc-state" aria-live="polite">${busy}${done}<span>${clausesHTML(state)}</span></div>` : "") + `</div>` +
     (action ? `<div class="cc-actions">${action}</div>` : "") +
     `</div>`;
 }

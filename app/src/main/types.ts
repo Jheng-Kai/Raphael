@@ -451,6 +451,10 @@ export interface ConnectorCard {
   tool_count: number | null;
   expires_at_ms: number;
   resumed: boolean;
+  /** What connecting it asks of the owner: a sign-in only (the default), their own key, or a developer app of their own. */
+  needs?: AppNeeds;
+  /** The Composio toolkit the form for `needs` is read from. */
+  toolkit?: string;
 }
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
@@ -1127,11 +1131,15 @@ export interface ConnectionGroup {
 /** The words of the window, in each language the user can choose. */
 export type Words = Record<"zh-TW" | "en" | "ja", string>;
 
+/** What an app of the store asks of the owner before it can be added (`connectors/toolkits.py`). */
+export type AppNeeds = "sign_in" | "key" | "own_app";
+
 /** A service of the store (`integrations.catalog`). */
 export interface StoreService {
   source?: "composio";
   logo?: string;
-  can_connect?: boolean;
+  /** What adding it asks of the owner: only a sign-in (the default), their own API key, or a developer app of their own. */
+  needs?: AppNeeds;
   id: string;
   name: string;
   publisher: string;

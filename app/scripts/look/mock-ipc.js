@@ -591,10 +591,17 @@ export function installMock(fixture, config = {}, target = window) {
         }
         state.emit({ type: "ConnectionsChanged" }); return { connector };
       }
+      case "connectors.toolkit": {
+        if (variant.toolkitPlanFails) return { ok: false, error: "network" };
+        return data.toolkitPlans[p.toolkit] ?? { ok: false, error: "gone" };
+      }
       case "connectors.connect": {
         if (variant.connectorLinkRefused) return { ok: false, error: "toolkit_not_allowed" };
         if (variant.pluginsConnecting) return new Promise(() => {});
         const entry = data.pluginCatalog.find(s => s.slug === p.toolkit);
+        // An app that asks for a key or a developer app is not added without it; the fixture never keeps what was given.
+        if (entry.needs !== "sign_in" && !p.fields) return { ok: false, error: entry.needs === "key" ? "needs_key" : "needs_own_app" };
+        if (variant.connectFails) return { ok: false, error: variant.connectFails };
         data.managedConnectors.push({ id: `composio:${entry.slug}`, kind: "composio", name: entry.name, description: entry.description, status: "ACTIVE", enabled: true, enabled_tools: [], disabled_tools: [] });
         state.emit({ type: "ConnectionsChanged" }); return { connected: true };
       }
@@ -605,6 +612,7 @@ export function installMock(fixture, config = {}, target = window) {
         const card = turn?.connectors.find(item => item.id === p.id);
         if (!card) throw new Error(`Fixture card not found: ${p.id}`);
         if (!["pending", "failed", "cancelled"].includes(card.state)) return { card: copy(card), started: false };
+        if (card.needs && card.needs !== "sign_in" && !p.fields) throw new Error("Fixture: this card needs the form's fields");
         Object.assign(card, { state: "authorizing", error: null });
         notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         if (variant.cardSignIn === "approve") {

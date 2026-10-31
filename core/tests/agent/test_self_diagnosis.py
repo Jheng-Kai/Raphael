@@ -50,13 +50,14 @@ def test_native_fake_reply_reads_the_wire_but_does_not_use_failure_copy(monkeypa
     from raphael_core.native_journeys import native_diagnosis
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     monkeypatch.setattr(Failure, "sentence", lambda *args: pytest.fail("The fake brain must write its own reply"))
-    task = '[native-diagnosis] card_failure {"kind": "auth_expired", "reason": "not_configured"}'
+    reason = "No app can be added yet: Composio's API key is missing or was refused. The owner adds it in Settings > Connections."
+    task = '[native-diagnosis] card_failure {"kind": "auth_expired", "reason": "%s"}' % reason
     messages = [{"role": "user", "content": task}]
     assert native_diagnosis(messages, {"self_check"}, 0) == ("self_check", {})
     action, text = native_diagnosis(messages, {"self_check"}, 1)
-    assert action == "reply" and "Gmail 還沒登入" in text and "我已檢查設定" in text
+    assert action == "reply" and "要連上 Gmail" in text and "Composio 金鑰" in text and "我已檢查設定" in text
     assert "auth_expired" not in text and "not_configured" not in text and ";" not in text
-    messages[0]["content"] = task.replace("not_configured", "another_reason")
+    messages[0]["content"] = task.replace("missing", "another_reason")
     with pytest.raises(ValueError, match="different connection failure"):
         native_diagnosis(messages, {"self_check"}, 1)
 
