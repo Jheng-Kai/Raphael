@@ -107,7 +107,10 @@ class Rig:
             if self.model_error:
                 return httpx.Response(self.model_error[0], json=self.model_error[1], headers={"x-request-id": "req_synthetic"})
             return httpx.Response(200, json={"models": [
-                {"slug": "chosen-model", "display_name": "Chosen Model", "visibility": "list"},
+                {"slug": "chosen-model", "display_name": "Chosen Model", "visibility": "list",
+                 "default_reasoning_level": "medium", "supported_reasoning_levels": [
+                     {"effort": "low", "description": "Fast"}, {"effort": "medium", "description": "Balanced"},
+                     {"effort": "high", "description": "Deep"}, {"effort": "unheard-of", "description": "Future"}]},
                 {"slug": "hidden-model", "display_name": "Hidden", "visibility": "hide"}]})
         if path == "/v1/responses":
             body = json.loads(request.content)
@@ -318,6 +321,16 @@ async def test_items_are_read_from_the_stream_or_from_the_closing_event(rig, clo
     turn = loop(rig, execute)
     outcome = await turn.run()
     assert outcome.status == "done" and turn.reply(outcome).text == "Dentist at ten."
+
+
+async def test_a_plan_model_offers_the_depths_it_lists_and_a_chosen_depth_reaches_the_request(rig):
+    await rig.sign_in()
+    await rig.router.call("chatgpt.models", {})
+    entry = next(item for item in rig.registry.catalog_entries() if item.id == "@chatgpt:chosen-model")
+    assert entry.reasoning_efforts == ("low", "medium", "high") and entry.default_effort == "medium"
+    rig.responses = [sse([message("Done.")])]
+    await rig.client.chat_text(model="@chatgpt:chosen-model?effort=high", system="Be brief.", user="Hi.", timeout_s=5, max_tokens=50)
+    assert rig.body_checks[-1]["reasoning"] == {"effort": "high"}
 
 
 async def test_unknown_tool_stays_behind_the_shared_gate(rig):

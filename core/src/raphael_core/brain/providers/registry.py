@@ -405,7 +405,9 @@ class ProviderRegistry:
                 audio = is_transcription(config["kind"], row["id"])
                 entries.append(CatalogEntry(f"@{pid}:{row['id']}", "stt" if audio else "llm", row["name"], config["name"],
                     ModelPrice(input_per_mtok=row["price_in"], output_per_mtok=row["price_out"]), False,
-                    row["context"], None, frozenset() if audio else frozenset(caps)))
+                    row["context"], None, frozenset() if audio else frozenset(caps),
+                    reasoning_efforts=tuple(row.get("reasoning_efforts") or ()) or None if not audio else None,
+                    default_effort=row.get("default_effort")))
         return entries
 
     async def refresh_catalog(self):

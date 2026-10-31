@@ -64,6 +64,14 @@ def _refused_error(data):
         error[field] in markers for field in ("type", "code"))
 
 
+def chosen_efforts(kind, model_id):
+    """The depths a request to this model really carries (`_request` and the Anthropic body); the other kinds drop the field."""
+    reasons = (kind == "anthropic" and model_id.startswith("claude")
+        or kind in ("openai", "azure_openai") and model_id.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+        or kind == "google" and model_id.startswith(("gemini-2.5-", "gemini-3")))
+    return ["low", "medium", "high"] if reasons else []
+
+
 def is_transcription(kind, model_id):
     return kind in ("openai", "groq") and (model_id.startswith("whisper") or "transcribe" in model_id)
 
@@ -97,6 +105,7 @@ def model_info(raw: dict, *, kind: str) -> dict:
     name = raw.get("display_name") or raw.get("displayName") or raw.get("name")
     return {
         "id": model_id, "name": name if isinstance(name, str) else model_id,
+        "reasoning_efforts": chosen_efforts(kind, model_id),
         "context": next((value for field in ("context_length", "inputTokenLimit", "max_model_len")
                          if (value := token_count(raw.get(field))) and value > 0), None),
         "vision": "image" in inputs or raw.get("vision") is True or vision,

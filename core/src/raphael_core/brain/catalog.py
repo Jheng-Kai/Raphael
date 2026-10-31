@@ -161,6 +161,7 @@ class CatalogEntry:
     created_at_ms: int | None  # when OpenRouter added it
     capabilities: frozenset[str]  # those of CAPABILITIES[kind] that it has
     reasoning_efforts: tuple[str, ...] | None = None
+    default_effort: str | None = None
 
     @property
     def free(self) -> bool:
@@ -221,6 +222,15 @@ def choice_problem(
 
 
 # --- reading the model list ---------------------------------------------------------------------
+
+
+def listed_efforts(model: dict, kind: str) -> tuple[str, ...] | None:
+    """The depths a model of the list offers. One that reasons without naming them takes OpenRouter's usual three."""
+    reasoning = model.get("reasoning")
+    listed = reasoning.get("supported_efforts") if isinstance(reasoning, dict) else None
+    if isinstance(listed, list) and all(isinstance(e, str) for e in listed):
+        return tuple(listed)
+    return ("low", "medium", "high") if "reasoning" in _capabilities(model, kind) else None
 
 
 def _number(value: object) -> float | None:
@@ -414,9 +424,7 @@ def _entry(model: Mapping, kind: str, makers: Mapping[str, str]) -> CatalogEntry
         context_length=_positive_int(model.get("context_length")) if kind == LLM else None,
         created_at_ms=None if created is None else created * _MS_PER_SECOND,
         capabilities=_capabilities(model, kind),
-        reasoning_efforts=tuple(model["reasoning"]["supported_efforts"]) if isinstance(model.get("reasoning"), dict)
-        and isinstance(model["reasoning"].get("supported_efforts"), list)
-        and all(isinstance(e, str) for e in model["reasoning"]["supported_efforts"]) else None,
+        reasoning_efforts=listed_efforts(model, kind),
     )
 
 
@@ -470,6 +478,7 @@ def entry_to_json(entry: CatalogEntry) -> dict[str, Any]:
         "created_at_ms": entry.created_at_ms,
         "capabilities": sorted(entry.capabilities),
         "reasoning_efforts": list(entry.reasoning_efforts) if entry.reasoning_efforts is not None else None,
+        "default_effort": entry.default_effort,
     }
 
 
@@ -503,6 +512,7 @@ def entry_from_json(data: object) -> CatalogEntry | None:
         capabilities=frozenset(c for c in capabilities if c in CAPABILITIES[kind]),
         reasoning_efforts=tuple(data["reasoning_efforts"]) if isinstance(data.get("reasoning_efforts"), list)
         and all(isinstance(e, str) for e in data["reasoning_efforts"]) else None,
+        default_effort=data["default_effort"] if isinstance(data.get("default_effort"), str) else None,
     )
 
 
@@ -535,6 +545,7 @@ def entry_view(entry: CatalogEntry) -> dict[str, Any]:
         "created_at_ms": entry.created_at_ms,
         "capabilities": {name: name in entry.capabilities for name in CAPABILITIES[entry.kind]},
         "reasoning_efforts": list(entry.reasoning_efforts) if entry.reasoning_efforts is not None else None,
+        "default_effort": entry.default_effort,
         # What the model reads, as the list names it: the image picker offers the language models
         # whose list holds "image".
         "input_modalities": input_modalities(entry),

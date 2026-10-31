@@ -5,6 +5,7 @@ import time
 
 import httpx
 
+from ..model_ref import EFFORTS
 from ..openrouter import ChatTurn, ChatToolCall, Completion, OpenRouterError, TextCompletion, ToolCall, ToolPlan
 from .chatgpt_auth import RESOURCE, failure
 
@@ -58,9 +59,13 @@ class ChatGPTProvider:
                 continue
             if not isinstance(row.get("slug"), str) or not row["slug"] or not isinstance(row.get("display_name"), str):
                 raise OpenRouterError(200, "invalid_request", "Invalid ChatGPT model metadata")
+            levels = row.get("supported_reasoning_levels")
+            efforts = [level["effort"] for level in levels if isinstance(level, dict) and level.get("effort") in EFFORTS] if isinstance(levels, list) else []
+            default = row.get("default_reasoning_level")
             rows.append({"id": row["slug"], "slug": row["slug"], "name": row["display_name"],
                 "display_name": row["display_name"], "tools": True, "vision": True,
-                "context": None, "price_in": None, "price_out": None})
+                "context": None, "price_in": None, "price_out": None,
+                "reasoning_efforts": efforts, "default_effort": default if default in efforts else None})
         self.auth.model_rows = rows
         return rows
 
