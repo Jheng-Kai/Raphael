@@ -90,6 +90,8 @@ DEFAULTS: dict[str, Any] = {
     # Shared by every member and the worker; read at each action, never cached per conversation.
     "action_mode": "direct",
     "computer_vm_mode": "shared",
+    "local_commands_mode": "ask",
+    "local_commands_seen": False,
     "computer_vm_idle_minutes": 15,
     # The most one background task may spend, in US$ (one of WORKER_COST_CAPS).
     "worker_cost_cap_usd": 0.20,
@@ -165,6 +167,7 @@ URL_MAX_CHARS = 300
 WORKER_COST_CAPS = (0.10, 0.20, 0.50, 1.00)
 _CHOICES: dict[str, tuple[Any, ...]] = {
     "computer_vm_mode": ("shared", "per-bot"),
+    "local_commands_mode": ("ask", "always", "never"),
     "action_mode": ("ask", "direct", "plan"),
     "worker_cost_cap_usd": WORKER_COST_CAPS,
     "stt_engine": STT_ENGINES,

@@ -238,7 +238,9 @@ impl PendingAsk {
     fn remaining(&self) -> AskPrompt {
         let spent = u64::try_from(self.shown.elapsed().as_millis()).unwrap_or(u64::MAX);
         let mut prompt = self.prompt.clone();
-        prompt.timeout_ms = prompt.timeout_ms.saturating_sub(spent);
+        if prompt.timeout_ms != 0 {
+            prompt.timeout_ms = prompt.timeout_ms.saturating_sub(spent).max(1);
+        }
         prompt
     }
 }
@@ -2104,7 +2106,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 }
                 // The main window hears of it (`open_ask`) and shows it on its card; the overlay
                 // too, unless the 拉斐爾 page is in front. `await_answer` keeps following the window.
-                self.question_on_overlay(|overlay| overlay.ask(&prompt));
+                if prompt.timeout_ms != 0 {
+                    self.question_on_overlay(|overlay| overlay.ask(&prompt));
+                }
                 Some((prompt, wait))
             }
             Err(bad) => {
@@ -2145,7 +2149,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         let answer = loop {
             tokio::select! {
                 answer = &mut wait => break answer.unwrap_or(Answer::NO),
-                () = &mut deadline => {
+                () = &mut deadline, if prompt.timeout_ms != 0 => {
                     log::info!("agent: the question timed out");
                     break Answer::NO;
                 }
@@ -2200,6 +2204,9 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         let in_front = self.app_shows_question();
         let prompt = {
             let mut state = lock(&self.state);
+            if state.ask.as_ref().is_some_and(|ask| ask.prompt.timeout_ms == 0) {
+                return;
+            }
             let current = state.agent == Some(AgentStage::Asking)
                 && state
                     .session
@@ -6675,6 +6682,22 @@ mod tests {
                 typed.await.unwrap();
             }
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn local_chat_consent_has_no_deadline_or_overlay_and_keeps_zero_on_reopen() {
+        let (c, heard) = questioning(question("local-command", 0));
+        let typed = c.ask_typed("Check CPU").unwrap();
+        until_stage(&c, AgentStage::Asking).await;
+        tokio::time::advance(Duration::from_secs(3600)).await;
+        settle().await;
+        assert!(!typed.is_finished());
+        assert!(matches!(&heard.lock().unwrap()[0], QuestionNews::Open(p) if p.timeout_ms == 0));
+        assert_eq!(lock(&c.state).ask.as_ref().unwrap().remaining().timeout_ms, 0);
+        assert!(!c.overlay().events().iter().any(|event| event.starts_with("ask:")));
+        c.on_confirm_in_app("local-command", true);
+        typed.await.unwrap();
+        assert_eq!(c.core().call_params("agent.confirm")["approved"], json!(true));
     }
 
     #[tokio::test(start_paused = true)]

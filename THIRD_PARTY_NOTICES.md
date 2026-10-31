@@ -1,5 +1,15 @@
 # Third-party notices
 
+## NousResearch/hermes-agent (MIT)
+
+`core/src/raphael_core/computer/local_patterns.py` adapts `DANGEROUS_PATTERNS`
+from NousResearch/hermes-agent `tools/approval.py` (the pattern definitions are in
+`tools/approval_detection.py` at revision `c419cf7c`), with additional Windows
+forms. Upstream: https://github.com/NousResearch/hermes-agent.
+The upstream copyright and MIT license are reproduced in
+`licenses/hermes-agent-MIT.txt`. Pattern matching is best effort; Raphael's
+owner confirmation gate remains authoritative.
+
 Raphael is MIT licensed. The following separately licensed work is used for the
 optional Docker desktop and conversation pages. No OpenMausBot `enterprise/` code is included.
 

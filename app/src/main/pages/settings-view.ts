@@ -45,6 +45,11 @@ export const APPEARANCES: Choice[] = [
   { value: "light", get label() { return t("settings.015"); } },
   { value: "dark", get label() { return t("settings.016"); } },
 ];
+export const LOCAL_COMMAND_MODES: Choice[] = [
+  { value: "ask", get label() { return t("local.ask"); } },
+  { value: "always", get label() { return t("local.always"); } },
+  { value: "never", get label() { return t("local.never"); } },
+];
 /** What one background task may spend (brain/settings.py, WORKER_COST_CAPS). */
 export const WORKER_COST_CAPS: Choice[] = [
   { value: "0.1", label: "US$0.10" },
@@ -153,6 +158,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "agent", label: "mem.title", also: "settings.searchMemory" },
   { pane: "agent", label: "rules.title" },
   { pane: "agent", label: "settings.computerUse" },
+  { pane: "agent", label: "local.title" },
   { pane: "agent", label: "services.title" },
   { pane: "agent", label: "services.search", words: ["Brave", "Tavily", "Exa", "SearXNG"] },
   { pane: "agent", label: "services.read", words: ["Jina", "Firecrawl"] },
@@ -631,7 +637,8 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  const desktop = v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : [];
+  const desktop = [row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
+    ...(v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : [])];
   if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
   return [...desktop, ...apps.map((app) =>
     row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),

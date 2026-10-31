@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { connectionMarkHTML } from "./secret-card";
 import type { AgentTurn, PermissionCard } from "./types";
-import { btn, esc, ico } from "./ui";
+import { btn, esc, ico, iconBtn } from "./ui";
 
 const plain = (key: MessageKey): string => (t as (key: MessageKey) => string)(key);
 
@@ -42,7 +42,8 @@ export function permissionStateText(card: PermissionCard): string {
 }
 
 /** Who asks: the connection's name, or the computer when the step is on it. */
-const nameOf = (card: PermissionCard): string => (card.kind === "tool" && card.service ? card.service : t("card.pcTitle"));
+const localCard = (card: PermissionCard): boolean => card.kind === "local_access" || card.kind === "local_command";
+const nameOf = (card: PermissionCard): string => ((card.kind === "tool" || localCard(card)) && card.service ? card.service : t("card.pcTitle"));
 
 /** The mark: the connection's own, bare, or the computer's icon. */
 const markOf = (card: PermissionCard): string =>
@@ -53,9 +54,10 @@ function actionHTML(card: PermissionCard, answerable: boolean): string {
   if (!waitsForYes(card)) return "";
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}" data-source="${esc(card.source)}"${answerable ? "" : " disabled"}`;
   return `<div class="cc-actions">` +
-    btn(esc(t("perm.deny")), "sm", on("perm-deny")) +
+    (card.kind === "local_access" ? btn(esc(t("local.never")), "sm", on("perm-never")) : "") +
+    btn(esc(t(localCard(card) ? card.kind === "local_access" ? "local.deny" : "local.skip" : "perm.deny")), "sm", on("perm-deny")) +
     (card.always ? btn(esc(t("perm.always")), "sm", on("perm-always")) : "") +
-    btn(esc(t("perm.once")), "sm pri", on("perm-once")) + `</div>`;
+    btn(esc(t(card.kind === "local_command" ? "local.allow" : "perm.once")), "sm pri", on("perm-once")) + `</div>`;
 }
 
 /**
@@ -69,11 +71,13 @@ export function permissionCardHTML(card: PermissionCard, answerable = true): str
   return `<div class="connector-card permission-card${waiting ? " has-form" : ""}" data-permission-card="${esc(card.id)}" data-card-state="${esc(card.state)}"` +
     ` data-source="${esc(card.source)}" data-kind="${esc(card.kind)}" data-digest="${esc(card.digest)}" role="group" aria-label="${esc(t("perm.title"))}">` +
     markOf(card) +
-    `<div class="cc-meta"><div class="cc-name">${esc(nameOf(card))}</div>` +
-    `<div class="cc-state cc-ask" aria-live="polite">${done}<span>${waiting ? esc(text) : clausesHTML(text)}</span></div>` +
+    `<div class="cc-meta"><div class="cc-name">${esc(nameOf(card))}${localCard(card) ? iconBtn("gear", t("local.manage"), ' data-act="local-settings"') : ""}</div>` +
+    (localCard(card) ? (card.kind === "local_access" && waiting ? `<div class="cc-state cc-ask">${esc(t("local.consent"))}</div>` : "") +
+      (!waiting ? `<div class="cc-state">${done}<span>${esc(text)}</span></div>` : "") + `<pre class="local-command">${esc(card.summary)}</pre>`
+      : `<div class="cc-state cc-ask" aria-live="polite">${done}<span>${waiting ? esc(text) : clausesHTML(text)}</span></div>`) +
     // A settled card keeps the action it was about; a waiting one says which rule had it asked.
     (waiting ? (card.reason ? `<div class="cc-state cc-hint"><span>${esc(card.reason)}</span></div>` : "")
-      : `<div class="cc-state cc-hint cc-was"><span>${esc(card.summary)}</span></div>`) +
+      : localCard(card) ? "" : `<div class="cc-state cc-hint cc-was"><span>${esc(card.summary)}</span></div>`) +
     `</div>` + actionHTML(card, answerable) + `</div>`;
 }
 

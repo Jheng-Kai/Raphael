@@ -118,6 +118,8 @@ answered, a city or a key: only routes, kinds, latencies and costs.
 """
 
 import asyncio
+from pathlib import Path
+from ..computer.local_tools import ask_context, command_context, is_local
 import hashlib
 import json
 import logging
@@ -1915,6 +1917,8 @@ class AgentService:
                         loop.response = outcome
                         if outcome["status"] == "confirm":
                             self._followups[outcome["confirm"]["id"]].loop = loop
+                            if isinstance(loop, CliLoop) and is_local(planned.tool.key):
+                                loop.approval_wait_s = float("inf")
                             raise Stop(WAITING)
                         raise Stop("finished")
                     result = outcome[-1]
@@ -2286,6 +2290,7 @@ class AgentService:
         """The tier the user has given the tool of `call` now; None if it has none any more."""
         return self._gate.tier_now(call.tool.key, call.arguments)
 
+    @command_context(lambda self, ask, calls, results, *args, **kwargs: ask_context(ask, results))
     async def _carry_out(
         self, ask: _Ask, calls: list[PlannedCall], results: list[ToolResult], ledger: Ledger,
         *, screenings: list[Screening] | None = None,
@@ -2386,6 +2391,8 @@ class AgentService:
         """What the owner's safety rules say of a call of a plugin's tool or a team tool: PASS for a
         tool its server says only reads. Member contact preferences can require the owner's yes."""
         tool = call.tool
+        if is_local(tool.key):
+            return PASS
         if tool.key in GROWTH_TOOLS:
             # Local journalled writes are reversible. After external ingestion the memory
             # boundary marks what is written, rather than granting a model permission.
@@ -2412,6 +2419,7 @@ class AgentService:
         return await self._gate.screen(proposed, language=ask.language, ledger=ledger)
 
     @tool_step(lambda self, ask, call, *args, **kwargs: call.tool.key)
+    @command_context(lambda self, ask, *args, **kwargs: ask_context(ask))
     async def _make_call(
         self,
         ask: _Ask,
@@ -2877,6 +2885,9 @@ class AgentService:
         if computer_request:
             from ..computer.grants import request_question
             question = request_question(language, ask.speaker.name or "Raphael", shown)
+        local = is_local(call.tool.key)
+        if local:
+            question = call.arguments.get("command", "")
         text = asked_with(language, screening, question)
         if call.tool.key in CONFIRM_TOOLS and self._team is not None:
             text = asked_with(language, screening,
@@ -2891,6 +2902,10 @@ class AgentService:
                 exact = question
             card = _CardSpec("tool", call.tool.server, call.tool.name, exact, rule_lead(language, screening),
                              self._always_offered(call, screening))
+            if local:
+                first = not self._settings.get("local_commands_seen")
+                card = _CardSpec("app" if first else "step", ask.speaker.name or "Raphael", call.tool.name,
+                                 question, str(call.arguments.get("cwd") or Path.home()), first and not ask_context(ask)[1])
         action = Action(call.tool.key, dict(call.arguments))
         reply = self._open_question(ask, action, "answer", text, ledger, card=card)
         self._followups[reply["confirm"]["id"]] = _Followup(
@@ -3606,17 +3621,19 @@ class AgentService:
         effect, 一律允許; the answer is still `agent.confirm`."""
         language = ask.language
         tier = max(Tier.T2, self._gate.tier(action.tool))
+        local = is_local(action.tool)
         prefix = PREFIXES[language].question
-        turn_id = self._record(ask, route, prefix, text, "confirm", None, ledger)
-        pending = self._confirmations.open(ask.session_id, turn_id, action, tier, language)
+        turn_id = self._record(ask, route, prefix, "" if local else text, "confirm", None, ledger)
+        pending = self._confirmations.open(ask.session_id, turn_id, action, tier, language,
+                                           wait_s=float("inf") if local else None)
         confirm = {
             "id": pending.id,
             "tier": tier.name,
             "prefix": prefix,
-            "text": text,
+            "text": {"en": "Local commands", "zh-TW": "本機指令", "ja": "ローカルコマンド"}[language] if local else text,
             "yes": phrase(language, "yes"),
             "no": phrase(language, "no"),
-            "timeout_ms": CONFIRM_TIMEOUT_MS,
+            "timeout_ms": 0 if local else CONFIRM_TIMEOUT_MS,
         }
         # A call that cannot be undone (T3) keeps the gold card that is held to confirm: a click is not enough for it.
         if (card is not None and self._permissions is not None and turn_id and tier < Tier.T3
@@ -3625,7 +3642,7 @@ class AgentService:
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                 source="ask", kind=card.kind, service=card.service, tool=card.tool, summary=card.summary,
                 reason=card.reason, digest=pending.digest, always=card.always, language=language,
-                wait_ms=round(pending.wait_s * 1000))
+                wait_ms=0 if local else round(pending.wait_s * 1000))
             confirm["digest"] = pending.digest
             if card.always:
                 labels = answer_labels(language)
@@ -3658,6 +3675,9 @@ class AgentService:
         if type(approved) is not bool:
             raise invalid_params("approved must be true or false")
         always = params.get("always", False)
+        never = params.get("never", False)
+        if type(never) is not bool:
+            raise invalid_params("never must be true or false")
         if type(always) is not bool:
             raise invalid_params("always must be true or false")
         drafts = params.get("drafts")
@@ -3669,6 +3689,10 @@ class AgentService:
         digest = params.get("digest")
         if digest is not None and not isinstance(digest, str):
             raise invalid_params("digest must be text")
+        waiting_local = self._followups.get(confirm_id)
+        if waiting_local is not None and is_local(waiting_local.call.tool.key):
+            if params.get("source", "app") not in _AT_THIS_COMPUTER:
+                raise invalid_params("Local commands are approved at this computer only")
         run = None if self._computer is None else self._computer.for_question(confirm_id)
         if run is not None:
             # A question of a run on the desktop: the run goes on, and says what comes next. An answer for
@@ -3697,6 +3721,10 @@ class AgentService:
             return self._outcome(pending, "negative", self._computer_refusal(pending, "expired"), "expired")
         if resolution.outcome is Outcome.DENIED:
             followup = self._followups.get(pending.id)
+            if followup is not None and is_local(followup.call.tool.key):
+                self._settings.set("local_commands_seen", True)
+                if never:
+                    self._settings.set("local_commands_mode", "never")
             self._card_state(pending.id, "denied")
             if followup is not None:
                 # The owner said no: nothing else that needs their yes is asked, or made, in this request.
@@ -3716,7 +3744,13 @@ class AgentService:
             if always and followup.always_ok:
                 # 一律允許: the narrow rule for this tool, which a card offers where it can take effect.
                 tool = followup.call.tool
-                made = self._gate.always_allow(tool.key, tool.server, tool.name, language)
+                if is_local(tool.key):
+                    self._settings.set("local_commands_mode", "always")
+                    made = True
+                else:
+                    made = self._gate.always_allow(tool.key, tool.server, tool.name, language)
+            if is_local(followup.call.tool.key):
+                self._settings.set("local_commands_seen", True)
             self._card_state(pending.id, "always" if made else "allowed")
             if isinstance(followup.loop, CliLoop) and followup.call.tool.key == "cli_permission":
                 followup.loop.permission_always = bool(approved and always)
@@ -3929,6 +3963,8 @@ class AgentService:
 
     async def _cancel(self, params: dict) -> dict:
         session_id = _str(params, "session_id")
+        if hasattr(self._plugins, "stop_session"):
+            self._plugins.stop_session(session_id)
         self._stop_speaking()
         self._forget_old_cancels()
         self._cancelled[session_id] = self._clock()
@@ -3949,6 +3985,8 @@ class AgentService:
     def stop_session(self, session_id: str) -> bool:
         """End the request of a session that still thinks and deny its question, like Esc but
         without the memory that would cancel its next request. Whether anything was stopped."""
+        if hasattr(self._plugins, "stop_session"):
+            self._plugins.stop_session(session_id)
         task = self._inflight.get(session_id)
         stopped = task is not None and not task.done()
         if stopped:

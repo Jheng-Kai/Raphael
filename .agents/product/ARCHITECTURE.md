@@ -1,5 +1,40 @@
 # Raphael architecture and checked boundaries
 
+## Owner-PC command boundary (2026-11-01)
+
+`computer/local_tools.py` wraps the existing `VmTools` hub with two pinned tools:
+`local__local_exec` and `local__local_job`. Production API snapshots, authenticated
+CLI MCP and worker snapshots share the adapter, ToolGate, SettingsStore,
+Confirmations and metadata-only tool_audit. No shell implementation lives in the UI.
+The existing shared permission card renders local consent and commands in chat and
+background questions. Persisted cards retain existing app/step kinds; the view
+exposes local_access/local_command. A chat expiry of zero means no timer throughout
+the core and shell; background local questions use 1800 seconds, including the CLI
+bridge's own waiting future. The main window holds no-timer consent; it is not an
+overlay prompt. External chat answers cannot approve.
+
+`local_host.py` is the Windows adapter. It uses the existing Child Job Object/tree
+cleanup, worker_environment filtering and no-window spawn. PowerShell has no profile,
+is noninteractive, uses UTF-8, closes stdin and defaults cwd to the owner's home.
+Each stream retains at most 10000 bytes plus a truncation marker. Nonzero exits are
+results; timeout and host errors are separately audited. Background jobs retain
+bounded live stdout/stderr, belong to one conversation/member or task and cancel on
+session/task stop or app close. They are process-local and never resume after restart.
+
+The local setting is independent of sandbox computer grants and the global tool
+mode. Always does not bypass explicit command approval for dangerous patterns,
+opaque scripts/subscription CLIs or a turn that consumed outside content. Secret
+store patterns refuse even an explicit approval. Patterns are best effort, not a
+shell sandbox. Hermes patterns are adapted offline from c419cf7c under MIT with
+the notice and license retained. The exact command is persisted only in its card;
+public progress and audit retain operation metadata only. Driver discovery removes
+session from offered and validation schemas and rejects runtime session injection.
+
+Offline tests cover fake API/CLI models actually calling the tool, worker and routine
+approval/resume, scoped jobs, cancellation, environment filtering and harmless
+read-only PowerShell. Docker, native shell, real subscriptions and live model tool
+selection remain separate acceptance boundaries.
+
 ## ChatGPT plan provider (backend, 2026-10-30)
 
 `@chatgpt:<slug>` resolves through ProviderRegistry to the public Responses API.

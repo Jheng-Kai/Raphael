@@ -6,6 +6,22 @@ import type { AgentTurn, PermissionCard } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("local command consent names the member, preserves exact code and offers four real answers", () => {
+  const local = card({ kind: "local_access" as PermissionCard["kind"], service: "Alex", tool: "local_exec", summary: 'Get-Process | Where-Object CPU -gt 1\nWrite-Output "<cpu>"' });
+  const html = permissionCardHTML(local);
+  expect(html).toContain("Alex");
+  expect(html).toContain("允許所有成員在你的電腦執行指令？");
+  expect(html).toContain("&lt;cpu&gt;");
+  expect(html).toContain("<pre");
+  expect(actions(html)).toEqual(["local-settings", "perm-never", "perm-deny", "perm-always", "perm-once"]);
+});
+
+test("later local commands have Allow and Skip without a standing-approval button", () => {
+  const html = permissionCardHTML(card({ kind: "local_command" as PermissionCard["kind"], service: "Alex", always: false, tool: "local_exec", summary: "Get-Process" }));
+  expect(actions(html)).toEqual(["local-settings", "perm-deny", "perm-once"]);
+  expect(html).toContain("略過");
+});
+
 const card = (over: Partial<PermissionCard> = {}): PermissionCard => ({
   id: "q1", source: "ask", kind: "tool", service: "Gmail", tool: "send_email", summary: "是否讓「Gmail」執行「send_email」（to: a@example.com）？",
   reason: null, digest: "d".repeat(64), always: true, state: "pending", expires_at_ms: 0, ...over,

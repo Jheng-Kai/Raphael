@@ -2,6 +2,47 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("local-command-setting") || name === "local-command-menu") {
+    const picker = document.querySelector('[data-k="local-commands"]');
+    require(visible(picker) && picker.classList.contains('sel'), 'local commands use the shared settings dropdown');
+    if (name === "local-command-menu") {
+      require([...document.querySelectorAll('.menu [data-value]')].map(item => item.dataset.value).join(',') === 'ask,always,never', 'the shared setting offers ask, always and never');
+    }
+    if (name === "local-command-setting-saved") {
+      const saved = window.__look.calls.filter(call => call.method === 'settings.set' && call.params.key === 'local_commands_mode');
+      require(saved.length === 1 && ['always', 'never'].includes(saved[0].params.value), 'the choice reaches shared core settings');
+    }
+    return {check:name, label:picker.textContent};
+  }
+  if (name === "local-command-card" || name === "local-command-settled") {
+    const card = document.querySelector('[data-permission-card="perm-local"]'), box = card?.getBoundingClientRect();
+    require(visible(card), 'the shared local command card is visible');
+    const thread = card.closest('.ra-body') ?? card.closest('.bgq-list').parentElement;
+    const column = thread.getBoundingClientRect();
+    require(box.left >= column.left - 1 && box.right <= column.right + 1, 'R-UI-29: the command card fits its reply column');
+    const command = card.querySelector('.local-command');
+    require(command.textContent.includes('Get-Process | Sort-Object CPU') && command.textContent.includes('LoadPercentage'), 'the exact multiline command survives escaping');
+    require(command.scrollWidth <= command.clientWidth + 1, 'long command lines wrap inside the card');
+    require(visible(card.querySelector('[data-act="local-settings"]')), 'command access can be managed from the card');
+    const answers = [...card.querySelectorAll('.cc-actions button')];
+    if (name === "local-command-card") {
+      require(answers.length === (card.dataset.kind === 'local_access' ? 4 : 2), 'first consent has four real answers; later commands have two');
+      require(answers.every(button => !button.disabled), 'the card is answerable');
+      require(answers.at(-1).classList.contains('pri'), 'the primary answer comes last');
+    } else {
+      require(card.dataset.cardState !== 'pending' && !answers.length, 'the answer settles the same card');
+      require(window.__look.calls.some(call => call.command === 'agent_question_answer'), 'the answer reaches the native question boundary');
+    }
+    for (const button of answers) {
+      const b = button.getBoundingClientRect();
+      require(b.left >= box.left && b.right <= box.right + 1 && b.bottom <= box.bottom + 1, 'all answer controls fit the card');
+    }
+    const outside = thread.cloneNode(true);
+    outside.querySelectorAll('.permission-card').forEach(node => node.remove());
+    require(!outside.textContent.includes('Get-Process'), 'R-AG-13: the command is absent from public timeline text');
+    require(![...document.querySelectorAll('.ask-card')].some(visible), 'the command has one shared permission card');
+    return {check:name, kind:card.dataset.kind, state:card.dataset.cardState, answers:answers.map(button=>button.textContent)};
+  }
   if (name === 'appearance-focus') {
     const focused = document.activeElement, style = getComputedStyle(focused);
     require(focused?.matches('.menu [data-value]') && document.documentElement.hasAttribute('data-keys'), 'theme menu supports actual keyboard focus');

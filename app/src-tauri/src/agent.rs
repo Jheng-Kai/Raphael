@@ -130,7 +130,8 @@ pub fn ask_timeout_ms(timeout_ms: Option<&Value>) -> u64 {
         })
     });
     match named {
-        Some(0) | None => ASK_TIMEOUT_DEFAULT_MS,
+        Some(0) => 0,
+        None => ASK_TIMEOUT_DEFAULT_MS,
         Some(named) => named.min(ASK_TIMEOUT_MAX_MS),
     }
 }
@@ -351,12 +352,13 @@ mod tests {
         assert_eq!(wait(json!(30_000)), 30_000);
         assert_eq!(wait(json!(5_000)), 5_000);
         assert_eq!(wait(json!(1)), 1);
+        assert_eq!(wait(json!(0)), 0);
         assert_eq!(wait(json!(45_000.0)), 45_000);
         assert_eq!(wait(json!(ASK_TIMEOUT_MAX_MS)), ASK_TIMEOUT_MAX_MS);
         // too long, or no time worth the name
         assert_eq!(wait(json!(ASK_TIMEOUT_MAX_MS + 1)), ASK_TIMEOUT_MAX_MS);
         assert_eq!(wait(json!(u64::MAX)), ASK_TIMEOUT_MAX_MS);
-        for odd in [json!(0), json!(-5), json!(0.4), json!("30000"), json!(null)] {
+        for odd in [json!(-5), json!(0.4), json!("30000"), json!(null)] {
             assert_eq!(wait(odd.clone()), ASK_TIMEOUT_DEFAULT_MS, "{odd}");
         }
         assert_eq!(ask_timeout_ms(None), ASK_TIMEOUT_DEFAULT_MS);

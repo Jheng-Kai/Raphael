@@ -379,9 +379,9 @@ export interface PageOpened {
  */
 export interface PermissionCard {
   id: string;
-  source: "ask" | "run";
+  source: "ask" | "run" | "background";
   /** A connection's tool, the first use of an app on the computer, or a step on the computer that sends, deletes or buys. */
-  kind: "tool" | "app" | "step";
+  kind: "tool" | "app" | "step" | "local_access" | "local_command";
   /** The connection's name (empty for the computer). */
   service: string;
   tool: string;
@@ -562,6 +562,7 @@ export interface BrainSettings {
   owner_about?: string;
   owner_photo?: string;
   action_mode?: "ask" | "direct";
+  local_commands_mode?: "ask" | "always" | "never";
   agent_fallbacks?: string[];
   cleanup_fallbacks?: string[];
   router_fallbacks?: string[];

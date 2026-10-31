@@ -68,6 +68,7 @@ import {
 import { AUTO_MICROPHONE } from "../microphone";
 import {
   APPEARANCES,
+  LOCAL_COMMAND_MODES,
   HOTKEY_ROWS,
   agentCity,
   quickModels,
@@ -301,6 +302,12 @@ export function createSettings(app: AppContext): SettingsPage {
     const v = view();
     const d = v.device;
     switch (k) {
+      case "local-commands":
+        return {
+          choices: LOCAL_COMMAND_MODES,
+          current: brain?.local_commands_mode ?? "ask",
+          pick: (value) => { if (LOCAL_COMMAND_MODES.some(c => c.value === value)) void changeBrain("local_commands_mode", value); },
+        };
       case "mic": {
         const anchor = el.querySelector<HTMLElement>('.sel[data-k="mic"]');
         return {

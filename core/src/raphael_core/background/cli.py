@@ -5,6 +5,7 @@ from ..agent.cli import loop as cli_loop
 from ..agent.cli.loop import CliLoop
 from ..protocol import RpcError
 from ..worker.loop import WRAP_UP, Stop, ToolOutcome
+from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
 
 # How many calls a task that reached a ceiling may make after being asked to report, before it is ended.
 CEILING_PATIENCE = 3
@@ -44,6 +45,9 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
                 run.ceiling = stop
                 return ToolOutcome(False, "limit", instruction=WRAP_UP)
             if stop:
+                ref = run.snapshot.refs.get(name)
+                if ref is not None and is_local(ref.key):
+                    loop.approval_wait_s = BACKGROUND_WAIT_S
                 raise Stop(stop, data.get("detail")) from None
             raise
         outcome = tool_outcome(result)

@@ -1,5 +1,13 @@
 # Raphael product rules
 
+## Owner-PC commands (2026-11-01)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PC-01 | 2026-11-01 | Every member and API/CLI/background path uses the owner-PC command tool first for this PC's CPU, memory, processes, disk, network, files, installed programs and logs. Service work uses the connected app; desktops serve seeing/clicking. Disabled commands explain the shared Settings location. | pytest, authorized live | hard | core/tests/agent/test_local_commands.py::test_cpu_question_calls_local_command_without_a_desktop; core/tests/members/test_local_commands.py::test_named_member_cpu_question_uses_local_card_and_not_desktop |
+| R-PC-02 | 2026-11-01 | Local commands have shared ask (default), always and never modes. First consent offers Always allow, Allow once, Never and Deny once; later cards offer Allow, Skip and settings. Chat approvals have no timer; background approvals expire in 30 minutes. Only this PC approves. Always still asks for dangerous/opaque commands and turns that consumed outside content; secret stores are refused. Exact commands stay on cards and out of public timeline text and audit payloads (R-AG-13). | pytest, vitest, look, authorized native | hard | core/tests/agent/test_local_commands.py::test_first_chat_consent_is_shared_has_no_timer_and_refuses_remote_answers; core/tests/background/test_local_commands.py::test_routine_command_waits_thirty_minutes_and_resumes_only_from_app |
+| R-PC-03 | 2026-11-01 | The core owns each noninteractive, hidden UTF-8 PowerShell process tree, closes stdin, filters the worker environment, bounds output with head/tail, enforces timeout and isolates background job output/stop by conversation or task. Stop/app close kills descendants. CLI subscription commands use the same approval card. Model-supplied cua-driver session IDs are neither offered nor forwarded. | pytest, authorized native | hard | core/tests/computer/test_local_commands.py::test_adapter_filters_environment_and_kills_on_timeout_and_cancel; core/tests/computer/test_local_commands.py::test_driver_discovery_and_validation_remove_session |
+
 Public paraphrases of decisions dated 2026-10-20 through 2026-10-25. Later rules take precedence. Each row is one requirement. Explicit conflicts remain `human` with both versions. `hard` violations fail judge regardless of score; `human` needs product/native acceptance. This ledger records requirements, not claims of compliance. Mechanical references use `repository/path::exact test title`.
 
 Owner follow-up (2026-10-30), R-UI-45 supersedes the week strip and painted hover:
