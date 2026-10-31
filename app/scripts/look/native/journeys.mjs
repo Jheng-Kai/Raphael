@@ -486,6 +486,7 @@ export async function drive(name, context) {
     if (!codex) throw new Error("The real Codex listed no models");
     await context.rpc("settings.set", { key: "agent_model", value: `${codex.id}?effort=medium` });
     await context.computerSignin(0);  // the owner has let Raphael use a computer; those it makes have one too
+    await newConversation(context);
     const text = "幫我做一個 3D 的 Bots 辦公室：先想好需要哪些角色，把團隊成員建立起來，分派給他們一起完成。成品是一個用瀏覽器打開就能看的 three.js 網頁，放在團隊資料夾，裡面每位成員有自己的辦公桌和史萊姆造型，可以用滑鼠環顧。做好後告訴我檔案在哪裡，以及每個人做了什麼。";
     await type(page, ".composer .cmp-input", text);
     await click(page, ".cmp-send");
