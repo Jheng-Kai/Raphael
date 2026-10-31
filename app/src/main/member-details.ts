@@ -26,12 +26,11 @@ import {
   cleanName,
   faceHTML,
   isMemberNameTaken,
-  memberOf,
   scheduleText,
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { btn, esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
 export type DetailsTab = "details" | "memory" | "routines" | "skills" | "commands" | "voice";
 
@@ -85,7 +84,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   let countEpoch = 0;
   let resources: ReturnType<typeof mountMemberResources> | null = null;
   let resourceKey = "";
-  let memoryDraft = "";
   const conversationHost = document.createElement("div");
   let conversationMember: number | null = null;
   let conversationList: ReturnType<typeof mountConversationList> | null = null;
@@ -110,13 +108,13 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     const result = await Promise.allSettled([
       api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
       id === RAPHAEL_ID ? Promise.resolve({commands: []}) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
-      api.core<{ memories: unknown[] }>("memory.list", { member_id: id, space: "own" }),
+      api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
     ]);
     if (epoch !== countEpoch || id !== host.member().id) return;
     counts = {
       skills: result[0].status === "fulfilled" ? result[0].value?.skills?.length ?? 0 : 0,
       commands: result[1].status === "fulfilled" ? result[1].value?.commands?.length ?? 0 : 0,
-      memory: result[2].status === "fulfilled" ? result[2].value?.memories?.length ?? 0 : 0,
+      memory: result[2].status === "fulfilled" ? result[2].value?.entries ?? 0 : 0,
     };
     draw();
   }
@@ -137,14 +135,11 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   const memoryHost = {
     visible: () => el.isConnected && !el.hidden && tab === "memory",
     redraw: () => draw(),
-    undo: host.app.undo,
     memberId: () => host.member().id,
     ownerName: () => host.member().name,
-    memberName: (id: number) => memberOf(host.list(), id)?.name ?? "",
-    expanded: true,
   };
-  const shared = createMemory({ ...memoryHost, space: "shared", onMoved: () => void own.load() });
-  const own = createMemory({ ...memoryHost, space: "own", onMoved: () => void shared.load() });
+  const shared = createMemory({ ...memoryHost, space: "shared" });
+  const own = createMemory({ ...memoryHost, space: "own" });
   const memories = [shared, own];
 
   // ---------- drawing ----------
@@ -282,10 +277,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         resources = mountMemberResources(body, {memberId: member.id, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
       }
     } else {
-      const input = body.querySelector<HTMLInputElement>("#mb-memory-new");
-      if (input) memoryDraft = input.value;
       body.innerHTML = tab === "details" ? detailsHTML(member) : tab === "routines" ? routinesHTML() :
-        `<div class="mb-addrow mb-panel-memory-add"><input id="mb-memory-new" class="mb-fin" maxlength="1200" value="${esc(memoryDraft)}" placeholder="${esc(t("members.panelMemoryHint"))}" aria-label="${esc(t("members.panelMemoryHint"))}">${btn(esc(t("members.panelMemoryAdd")), "", ' data-det="memory-add"')}</div>` + memoryHTML(shared.view()) + memoryHTML(own.view());
+        memoryHTML(shared.view()) + memoryHTML(own.view());
     }
     drawConversations();
     if (sameMember && typingIn && typingIn !== "mb-det-name" && typingIn !== "mb-det-role") el.querySelector<HTMLElement>(`#${CSS.escape(typingIn)}`)?.focus({ preventScroll: true });
@@ -405,17 +398,6 @@ export function createDetails(host: DetailsHost): DetailsPanel {
         break;
       case "edit": host.edit?.(member); break;
       case "hide": host.hide?.(member); break;
-      case "memory-add": {
-        const input = body.querySelector<HTMLInputElement>("#mb-memory-new");
-        const value = input?.value.trim();
-        if (!value) break;
-        (act as HTMLButtonElement).disabled = true;
-        void api.core("memory.create", {member_id: member.id, space: "own", body: value}).then(async () => {
-          memoryDraft = ""; if (input) input.value = "";
-          await own.load(); await loadCounts();
-        }).catch(err => toaster.info(describeError(err))).finally(() => { (act as HTMLButtonElement).disabled = false; });
-        break;
-      }
       case "avatar":
         avatarMenu(act);
         break;
@@ -497,7 +479,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     },
     showMember() {
       tab = "details";
-      memoryDraft = ""; counts = {skills: 0, commands: 0, memory: 0};
+      counts = {skills: 0, commands: 0, memory: 0};
       void loadCounts();
       routines = "loading";
       for (const list of memories) list.reset();

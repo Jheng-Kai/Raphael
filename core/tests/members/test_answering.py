@@ -72,14 +72,14 @@ async def typed(rig, text, member_id, *, source="app", language="zh-TW"):
 def said(text, *, detail="", memory=None, search=""):
     data = {"text": text, "detail": detail}
     if memory is not None:
-        data.update(memory=memory, need={"read": [], "search": search})
+        data.update(memory=memory, need={"search": search})
     return completion(data)
 
 
 def raphael_said(text, prefix="答", say_ja="台北です。"):
     return completion(
         {"prefix": prefix, "text": text, "detail": "", "say_ja": say_ja, "memory": [],
-         "need": {"read": [], "search": ""}}
+         "need": {"search": ""}}
     )  # fmt: skip
 
 
@@ -544,14 +544,11 @@ async def test_a_decision_in_one_members_thread_never_reaches_another(setup, cli
     b = member(team, name="小研究")
     # In A's thread the owner decides something, and asks A to remember it for everyone.
     client.decisions.append(decision("chat"))
-    note = {
-        "op": "write", "name": "user-budget", "type": "user", "description": "我們決定預算是三萬",
-        "body": "我們決定預算是三萬元。", "expires": "", "space": "shared",
-    }  # fmt: skip
+    note = {"target": "user", "action": "add", "content": "我們決定預算是三萬元。", "old_text": ""}
     client.chats.append(live_said("", memory=[note]))
     await typed(rig, "記住，我們決定預算是三萬", a.id)
-    assert team.memory.shared.all() == []  # a decision is not macro knowledge: it stayed with A
-    assert team.memory.store_for(a.id).get("user-budget") is not None
+    assert team.memory.shared.read() == ""  # a decision is not macro knowledge: it stayed with A
+    assert "三萬" in team.memory.own(a.id).read()
     # B is asked, and looks back in its past: none of it is there.
     client.decisions.append(decision("discuss"))
     client.chats.append(chat("先找找之前的決定。", ("history_search", {"query": "預算"})))
@@ -560,7 +557,7 @@ async def test_a_decision_in_one_members_thread_never_reaches_another(setup, cli
     first, again = client.chat_calls[-2:]
     for call in (first, again):
         assert "三萬" not in json.dumps(call["messages"], ensure_ascii=False)
-    assert "三萬" not in str(team.memory.index(b.id))
+    assert "三萬" not in str(team.memory.snapshot(b.id))
     # B's search finds B's own question, never A's turn.
     searched = team.memory.search("預算", member_id=b.id).data["turns"]
     assert searched and not any("三萬" in t["question"] + t["answer"] for t in searched)

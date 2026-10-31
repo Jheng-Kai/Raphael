@@ -96,18 +96,26 @@ only explicit --autostart stays hidden. Every launch opens at the designed 1280x
 centred; window-state restores nothing (owner, 2026-10-30). Conversation content never depends on profile_ready.
 
 
-## Growing member memory (phase 2, 2026-10-29)
+## Member memory as living files (2026-10-31, supersedes the notes of phase 2)
 
-`memory/growth.py` is the shared host implementation for memory tools and silent,
-permission-scoped ephemeral FTS5 retrieval. `memory/brain.py` runs capture, tidy
-and folding on the selected member brain; CLI uses the production CliLoop with
-no tools and a separate ephemeral session, preserving normal native sessions.
-The API harness and RaphaelMcp consume one definition registry (A-03/A-04).
-Private capture remains in the member home. External-content proposals live in
-bot-state, outside all member search/prompt sources; only owner RPC approval may
-apply them, with revision checks. Reads never call notification or mutation paths.
-The existing Memory pane handles pending review; no second UI or model loop is
-introduced for member conversations (A-01).
+`memory/store.py` is one `MemoryFile` per file, adapted from Hermes: `bots/<id>/MEMORY.md`
+for each member (Raphael too) and one `shared/USER.md`. `bots/<id>/SOUL.md` is written by
+the core from the member's details, which stay in the database (the details pane is its
+editor, many consumers read it), and no member may write it. A file is entries separated
+by a blank line, with a character limit, edited by atomic add/replace/remove batches under
+a per-file lock across threads and processes; `BotHomes` does the allowlisted atomic write
+and keeps the revision journal outside the homes. `memory/growth.py` holds the one
+`memory_update` tool (API and CLI consume one definition registry, A-03/A-04), the daily
+logs and silent, permission-scoped ephemeral FTS5 retrieval over logs and turns.
+`MemoryService.snapshot` is what a turn reads, once, at its start: the system prompt for an
+API brain and the turn's message for a CLI brain, since a resumed session keeps its first
+instructions. `memory/brain.py` runs the reflection pass, the consolidation and folding on
+the selected member brain; CLI uses the production CliLoop with no tools and a separate
+ephemeral session. `memory/legacy.py` moves what the row-per-note store left into the files
+at every start until none is left, and backs it up under `bot-state/<id>/notes-backup/`.
+There is no review queue: `memory/scan.py` refuses instructions and secrets, a turn that
+read outside content writes only marked entries, and the reflection pass reads only the
+owner's words of such a turn. Reads never call notification or mutation paths (A-01).
 
 
 ## Growing skills (phase 3, 2026-10-29)

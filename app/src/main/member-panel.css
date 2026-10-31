@@ -10,7 +10,6 @@
 .mb-panel-row-copy { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .mb-panel-row-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-2xs); font-weight: 400; }
 .mb-panel-back.btn { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1) 0; border: 0; background: transparent; }
-.mb-panel-memory-add { margin: var(--sp-3) 0 var(--sp-5); }
 .mb-chat-picker { max-width: 480px; }
 .mb-chat-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); margin-top: var(--sp-3); max-height: 52vh; overflow-x: hidden; overflow-y: auto; }
 .mb-chat-choice.btn { display: flex; justify-content: flex-start; align-items: center; gap: var(--sp-3); width: 100%; text-align: left; border: 0; background: transparent; padding: var(--sp-2); }

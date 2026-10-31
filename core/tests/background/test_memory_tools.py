@@ -1,5 +1,5 @@
-"""Tests for what a background task may do with Raphael's memory: read a note and search the past
-turns, through the gate, and never write; and the index it is shown."""
+"""Tests for what a background task may do with a member's memory: search the past turns, through the
+gate; edit the files, marked once it has read outside content; and the files it is shown."""
 
 import json
 
@@ -37,7 +37,7 @@ class NoModel:
 @pytest.fixture
 def memory(conn, tmp_path):
     service = MemoryService(conn, tmp_path / "memory", NoModel(), MemoryKeyStore())
-    service.store.write("person-amy", type="person", description="Amy 是同事", body="Amy 負責設計。")
+    service.own(0).edit_document("Amy 負責設計。\n", None)
     return service
 
 
@@ -51,59 +51,69 @@ async def rig(conn, plugins, memory):
 def test_a_private_task_gets_growth_tools_but_not_legacy_write_aliases():
     names = [d["function"]["name"] for d in take_snapshot(None, memory=True).definitions]
     assert names == [
-        "weather", "web_search", "local_time", "web_read", "memory_read", "history_search", "self_check", "raphael_help",
+        "weather", "web_search", "local_time", "web_read", "history_search", "self_check", "raphael_help",
         "memory_update", "memory_log", "session_search", "session_read",
     ]  # fmt: skip
-    assert "memory_write" not in names and "memory_delete" not in names
-    assert "memory_read" not in [d["function"]["name"] for d in take_snapshot(None).definitions]
+    assert not {"memory_read", "memory_write", "memory_delete"} & set(names)
+    assert "history_search" not in [d["function"]["name"] for d in take_snapshot(None).definitions]
     refs = take_snapshot(None, memory=True).refs
-    assert refs["memory_read"].kind == BUILTIN and refs["memory_read"].tier.name == "T0"
-
-
-async def test_a_task_reads_a_note_through_the_gate_and_the_audit(rig):
-    reply = await rig.tool("memory_read", {"names": ["person-amy"]})
-    assert reply["ok"]
-    assert json.loads(reply["content"])["memories"][0]["body"] == "Amy 負責設計。"
-    assert rig.audit() == [("Raphael", "memory_read", "T0", "auto", "ok", rig.task_id)]
+    assert refs["history_search"].kind == BUILTIN and refs["history_search"].tier.name == "T0"
 
 
 async def test_a_task_searches_the_past_turns(rig, conn):
     AgentHistory(conn).add(session_id="s", question="上次的會議", route="chat", prefix="答", text="三樓。", status="done")
     reply = await rig.tool("history_search", {"query": "會議"})
     assert reply["ok"] and "三樓。" in reply["content"]
+    assert rig.audit() == [("Raphael", "history_search", "T0", "auto", "ok", rig.task_id)]
 
 
-async def test_retrieved_external_history_keeps_background_writes_pending(rig, memory, conn):
+async def test_a_task_edits_its_file_and_the_model_is_told_how_full_it_is(rig, memory):
+    result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "The review is ready."}]})
+    assert result["ok"] and "/2,200 chars" in json.loads(result["content"])["usage"]
+    assert "The review is ready." in memory.own(0).read()
+
+
+async def test_a_full_file_tells_the_task_what_to_free(rig, memory):
+    memory.own(0).edit_document("x" * 2190, None)
+    result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "One more fact about the review."}]})
+    assert not result["ok"] and result["kind"] == "full" and "would exceed the limit by" in result["instruction"]
+
+
+async def test_retrieved_external_history_marks_what_a_task_writes(rig, memory, conn):
     from raphael_core.agent.history import Step
     history = AgentHistory(conn)
     identifier = history.add(session_id="s", question="Read amber report", route="chat", prefix="", text="Amber result", status="done")
     history.add_steps(identifier, [Step(kind="tool", tool="web_read", server="Raphael", outcome="ok", ms=1)])
     assert (await rig.tool("session_search", {"query": "amber"}))["ok"]
-    result = await rig.tool("memory_update", {"op": "add", "name": "reference-result", "body": "The review is ready."})
-    assert result["ok"] and json.loads(result["content"])["applied"] is False
-    assert memory.store.get("reference-result") is None and len(memory.pending(0)) == 1
+    result = await rig.tool("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "The review is ready."}]})
+    assert result["ok"]
+    assert "（待確認）The review is ready." in memory.own(0).read()
     assert rig.steps()[0].detail == "external_content"
 
 
 @pytest.mark.parametrize(
     ("name", "arguments"),
-    [("memory_read", {}), ("memory_read", {"names": "person-amy"}), ("history_search", {"query": " "})],
+    [("history_search", {}), ("history_search", {"query": " "}), ("memory_update", {}), ("memory_update", {"target": "memory", "operations": "x"})],
 )
 async def test_a_memory_lookup_with_bad_arguments_fails_with_its_kind(rig, name, arguments):
     reply = await rig.tool(name, arguments)
     assert (reply["ok"], reply["kind"]) == (False, "bad_arguments")
 
 
-async def test_a_task_may_not_write_a_note(rig, memory):
-    reply = await rig.tool("memory_write", {"name": "user-x", "body": "x"})
-    assert reply["ok"] is False
-    assert [m.name for m in memory.store.all()] == ["person-amy"]
+async def test_the_old_note_tools_are_gone(rig, memory):
+    for name in ("memory_read", "memory_write", "memory_delete"):
+        reply = await rig.tool(name, {"name": "user-x", "body": "x"})
+        assert reply["ok"] is False
+    assert memory.own(0).read().strip() == "Amy 負責設計。"
 
 
-def test_the_task_is_shown_the_index_of_the_notes_as_data():
+def test_the_task_is_shown_the_files_as_data():
+    from raphael_core.memory.store import MemorySnapshot
+
     moment = {"date": "2026-10-23", "time": "09:00", "weekday": "Friday", "utc_offset": "UTC+08:00"}
-    _, user = _prompts("en", "整理 Amy 的設計稿", moment, [], RunLimits(), memory_index="- [person] Amy 是同事 (10/22) → person-amy")
-    assert "<memory_index>\n- [person] Amy 是同事 (10/22) → person-amy\n</memory_index>" in user
-    assert user.index("<memory_index>") < user.index("<task>")
+    files = MemorySnapshot(shared="主人叫 Jack", own="Amy 負責設計。", shared_usage="1% — 7/1,375 chars", own_usage="1% — 7/2,200 chars")
+    _, user = _prompts("en", "整理 Amy 的設計稿", moment, [], RunLimits(), memory_snapshot=files)
+    assert '<own_memory file="MEMORY.md" usage="1% — 7/2,200 chars">\nAmy 負責設計。\n</own_memory>' in user
+    assert user.index("<shared_memory") < user.index("<own_memory") < user.index("<task>")
     _, without = _prompts("en", "x", moment, [], RunLimits())
-    assert "memory_index" not in without
+    assert "shared_memory" not in without

@@ -20,15 +20,15 @@ ui_language, target_app}`. The router (Jev, and the language model when Jev fail
   way, with no lookup. Every one of them reads the one continuous conversation
   (`memory.conversation`): the summary of the earlier turns and the latest turns as they were said
   (a discussion all the turns after the summary, an answer and small talk the last few);
-- with a memory (`raphael_core.memory`), every answer also reads the memory's index, and its reply
-  may write or delete a note (`memory_write`, `memory_delete`, T1: at once, with no yes) when the
-  owner asks it to remember or forget something, or corrects it: Raphael then says 《了。已記下。》
-  (the reply's `notice`, which the overlay shows after the line). That is taken only from the
-  owner's own turn: a reply that was shown what the web or a connected service returned writes
-  nothing. The reply may also ask to read a note in full or to search the past turns (`memory_read`,
-  `history_search`, T0) before it answers, which it then does with what was found. A request to
-  remember that the router took for a task or a command is answered as small talk, where the
-  note is written; an unclear request goes to the narrated harness, which can write it too;
+- with a memory (`raphael_core.memory`), every answer also reads the memory files as they are when
+  the turn begins, and its reply may edit them (`memory_update`, T1: at once, with no yes), as when
+  the owner asks it to remember or forget something, or corrects it: Raphael then says 《了。已記下。》
+  (the reply's `notice`, which the overlay shows after the line). What a reply writes after it was
+  shown what the web or a connected service returned goes in marked as unconfirmed, and changes
+  nothing else. The reply may also ask to search the past turns (`history_search`, T0) before it
+  answers, which it then does with what was found. A request to remember that the router took for
+  a task or a command is answered as small talk, where the file is edited; an unclear request goes
+  to the narrated harness, which can edit it too;
 - when the user has connected plugins (`integrations`), an answer may use the tools that are on:
   one call to the language model picks the tools it needs from those alone (`plugins`), the
   program makes the calls, and the results are given to the call that words the answer as data,
@@ -150,7 +150,7 @@ from ..brain.spend import SpendTracker
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
 from ..memory.conversation import Conversation, asks_to_remember
-from ..memory.store import MemoryIndex
+from ..memory.store import MemorySnapshot
 from ..memory.growth import TOOLS as GROWTH_TOOLS, WRITE_TOOLS as GROWTH_WRITES
 from ..services.attachment_store import AttachmentStore
 from .attachment_inputs import text_context
@@ -166,7 +166,7 @@ from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .cli.discovery import CliBrains, brain_ref
-from .cli.loop import MEMORY_TOOLS, CliLoop, Sessions as CliSessions
+from .cli.loop import CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
 from .persona import NEW_MEMBER, PLAN_MODE
 from ..brain.owner import owner_context
@@ -1270,7 +1270,7 @@ class AgentService:
         its own conversation and memory, and speaks as itself."""
         member_id = ask.speaker.id
         context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
-        index = None if self._memory is None else self._memory.index(member_id)
+        memory = None if self._memory is None else self._memory.snapshot(member_id)
 
         async def word(results: list[ToolResult], looked_up: bool) -> Reply:
             return await self._voice.reply(
@@ -1284,7 +1284,7 @@ class AgentService:
                 ledger=ledger,
                 background=background,
                 summary=context.summary,
-                memory_index=index,
+                memory_snapshot=memory,
                 looked_up=looked_up,
                 speaker=ask.speaker,
                 say_ja=ask.voiced and ask.language != "ja",
@@ -1304,15 +1304,13 @@ class AgentService:
         return again, found
 
     def _look_up(self, ask: _Ask, reply: Reply, shown: list[int]) -> list[ToolResult]:
-        """The lookups the reply asked for (`memory_read`, `history_search`), through the gate,
-        each a step of the request. The turns the model already reads are not found again."""
+        """The lookup the reply asked for (`history_search`), through the gate, a step of the request.
+        The turns the model already reads are not found again."""
         memory = self._memory
         assert memory is not None
         member_id = ask.speaker.id
         results: list[ToolResult] = []
         wanted: list[tuple[str, Callable[[], ToolResult]]] = []
-        if reply.read:
-            wanted.append(("memory_read", lambda: memory.read(reply.read, member_id)))
         if reply.search:
             wanted.append(
                 (
@@ -1333,57 +1331,32 @@ class AgentService:
         return results
 
     def _remember(self, ask: _Ask, reply: Reply, seen: list[ToolResult], *, approval: Approval | None = None, action: Action | None = None) -> "Applied | None":
-        """Write or delete the notes the reply asked for, if it may: only from the owner's own
-        turn, so not when the model was shown what the web or a connected service returned (that
-        could have put the words in its mouth). Each change goes through the gate and is a step of
-        the request. None when there was nothing to do. A member's notes go to its own memory; a
-        request one member handed another is not the owner's turn, and writes none."""
+        """Make the edits of the memory files the reply asked for. After what the web or a connected
+        service returned (which could have put the words in its mouth) they go in marked, and touch nothing
+        else (`memory.store`). The change goes through the gate and is a step of the request. None when
+        there was nothing to do. A request one member handed another is not the owner's turn, and writes
+        none."""
         if self._memory is None or not reply.memory:
             return None
         if ask.nested:
             logger.info("Notes were not written: the request came from another member")
             return None
-        if ask.memory_untrusted or ask.attachments or any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen):
-            from ..memory.reflection import Applied
-            from ..memory.service import explicitly_shared
-            applied = Applied()
-            for item in reply.memory:
-                share = explicitly_shared(ask.text)
-                store = self._memory.shared if share and item.space == "shared" else self._memory.store_for(ask.speaker.id)
-                op = "remove" if item.op == "DELETE" else "replace" if store.get(item.name) else "add"
-                result = self._memory.update_memory(ask.speaker.id, {"op": op, "name": item.name,
-                    "type": item.type, "description": item.description, "body": item.body, "until": item.expires,
-                    "space": item.space}, untrusted=True, share=share)
-                if not result.ok:
-                    applied.refused.append(result.error)
-                ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER,
-                    "ok" if result.ok else "blocked", time.perf_counter(), result.error, "pending_approval" if result.ok else None))
-            if not reply.text:
-                reply.text = {"zh-TW": "記憶變更已放入待確認，確認後才會生效。", "en": "The memory change is pending your approval.", "ja": "記憶の変更は確認待ちです。"}[ask.language]
-            return applied
-        allowed = []
-        for item in reply.memory:
-            tool = "memory_delete" if item.op == "DELETE" else "memory_write"
-            try:
-                self._gate.check(action or Action(tool, {}), approval)
-            except (UnknownTool, NotApproved):
-                ask.steps.append(
-                    self._step("tool", tool, BUILTIN_SERVER, "blocked", time.perf_counter(), "blocked")
-                )
-                continue
-            allowed.append(item)
+        from ..memory.reflection import Applied
+        from ..memory.service import explicitly_shared, keeps_private
+        try:
+            self._gate.check(action or Action("memory_update", {}), approval)
+        except (UnknownTool, NotApproved):
+            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", time.perf_counter(), "blocked"))
+            return Applied()
         began = time.perf_counter()
-        # A turn already written (every CLI call, a narrated one) is the note's provenance now.
-        from ..memory.service import explicitly_shared
-        applied = self._memory.apply_said(allowed, ask.turn_id or 0, ask.speaker.id, share=explicitly_shared(ask.text))
-        for _ in applied.written:
-            ask.steps.append(self._step("tool", "memory_write", BUILTIN_SERVER, "ok", began, None))
-        for _ in applied.deleted:
-            ask.steps.append(self._step("tool", "memory_delete", BUILTIN_SERVER, "ok", began, None))
+        untrusted = bool(ask.memory_untrusted or ask.attachments or any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen))
+        applied = self._memory.apply_edits(reply.memory, ask.speaker.id, untrusted=untrusted,
+                                           share=ask.scope == "room" or explicitly_shared(ask.text), private_request=keeps_private(ask.text))
+        applied.marked = untrusted
+        for _ in (*applied.written, *applied.deleted):
+            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "ok", began, None, "external_content" if untrusted else None))
         for _ in applied.refused:
-            ask.steps.append(
-                self._step("tool", "memory_write", BUILTIN_SERVER, "blocked", began, "blocked")
-            )
+            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", began, "blocked"))
         logger.info(
             "Notes from a turn: written=%d deleted=%d refused=%d",
             len(applied.written),
@@ -1402,9 +1375,7 @@ class AgentService:
         language = ask.language
         if (self._gate.ask_first and reply.memory and self._memory is not None and not ask.nested
                 and not any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen)):
-            item = reply.memory[0]
-            tool = "memory_delete" if item.op == "DELETE" else "memory_write"
-            call = PlannedCall(PluginTool(tool, BUILTIN_SERVER, tool, "Change a requested memory", {}, Tier.T1), asdict(item))
+            call = PlannedCall(PluginTool("memory_update", BUILTIN_SERVER, "memory_update", "Change a requested memory", {}, Tier.T1), asdict(reply.memory[0]))
             result = self._ask_plugin(ask, call, seen, ledger)
             self._followups[result["confirm"]["id"]].memory_reply = (route, reply, ledger)
             return result
@@ -1413,7 +1384,7 @@ class AgentService:
         if applied is not None and (applied.written or applied.deleted):
             if not text:
                 which = "understood"
-                text = phrase(language, "remembered" if applied.written else "forgotten")
+                text = phrase(language, ("remembered_unconfirmed" if applied.marked else "remembered") if applied.written else "forgotten")
             elif applied.written:
                 notice = "remembered"
         elif applied is not None and applied.refused and not text:
@@ -1428,8 +1399,6 @@ class AgentService:
             self._keep_japanese(result["turn_id"], reply.say_ja)
         if notice is not None:
             result["notice"] = notice
-        if applied is not None and applied.written and self._memory is not None:
-            self._memory.note_turn(applied.written, result["turn_id"], ask.speaker.id)
         return result
 
     # --- the owner's desktop ----------------------------------------------------------------------
@@ -1484,10 +1453,8 @@ class AgentService:
         untrusted, and a note is written only from the owner's own words (see `_remember`, and the
         reflection pass, which reads only the owner's question of an `operate` turn)."""
         context = self._conversation_of(speaker.id, conversation_id).context(quick=True)
-        index = "" if self._memory is None else (
-            self._memory.index() if speaker.is_raphael else self._memory.index(speaker.id)
-        )
-        if isinstance(index, MemoryIndex):  # the shared notes, then Raphael's own
+        index = "" if self._memory is None else self._memory.snapshot(speaker.id)
+        if isinstance(index, MemorySnapshot):  # USER.md, then the speaker's own file
             index = "\n".join(part for part in (index.shared, index.own) if part)
         persona = "" if speaker.is_raphael else (
             f"Speaker: {speaker.name}\nRole: {speaker.role}\n"
@@ -1751,20 +1718,20 @@ class AgentService:
             if prepare is not None:
                 await prepare(ask.speaker.id)
             context = self._memory_context(ask.speaker, ask.conversation_id, quick=ask.quick)
-            index = None if self._memory is None else self._memory.index(ask.speaker.id)
+            memory = None if self._memory is None else self._memory.snapshot(ask.speaker.id)
             say_ja = ask.voiced and ask.language != "ja"
             if brain_ref(settings.model):
                 system = cli_system_prompt(ask.language,
                     name=None if ask.speaker.is_raphael else ask.speaker.name,
                     role=ask.speaker.role, instructions=ask.speaker.instructions,
-                    personality=ask.speaker.personality, memory_index=index)
+                    personality=ask.speaker.personality, memory=memory is not None)
             elif ask.speaker.is_raphael:
-                system = system_prompt(ask.language, "answer", index, say_ja=say_ja, narrated=True)
+                system = system_prompt(ask.language, "answer", memory, say_ja=say_ja, narrated=True)
             else:
                 system = member_system_prompt(
                     ask.language, "answer", name=ask.speaker.name, role=ask.speaker.role,
                     instructions=ask.speaker.instructions, personality=ask.speaker.personality,
-                    memory_index=index, narrated=True,
+                    memory_snapshot=memory, narrated=True,
                 )
             system += roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
@@ -1794,6 +1761,8 @@ class AgentService:
                 # removed app stayed in its answers), so each turn carries the team as it is now.
                 user += "\n\nThe team as it is now, which replaces any earlier snapshot:" + roster_prompt(
                     self._team, ask.speaker, ask.language)
+                if memory is not None:
+                    user += "\n\nYour memory files as they are now, which replace any earlier copy:\n" + str(memory)
             if ask.attachments:
                 user += "\nFiles: " + json.dumps([
                     {"index": n, "name": neutralize(a.name), "mime": a.mime}
@@ -1826,8 +1795,6 @@ class AgentService:
             screenings: dict[str, Screening] = {}
 
             def plan(name: str, args: dict) -> PlannedCall | None:
-                if brain_ref(settings.model) and name in ("memory_write", "memory_delete") and self._memory is not None:
-                    return PlannedCall(PluginTool(name, BUILTIN_SERVER, name, "Change an explicitly requested memory", {}, Tier.T1), args)
                 if name not in snapshot.refs:
                     return None
                 if snapshot.pool is not None and name in snapshot.pool.by_alias:
@@ -1844,8 +1811,7 @@ class AgentService:
                 if isinstance(loop, CliLoop) and name == "cli_permission":
                     return await self._cli_permission(ask, args, ledger, loop)
                 ref = snapshot.refs.get(name)
-                memory_call = isinstance(loop, CliLoop) and name in ("memory_write", "memory_delete") and self._memory is not None
-                if ref is None and not memory_call:
+                if ref is None:
                     return ToolOutcome(False, "unknown_tool")
                 # Include results supplied after a permission pause, as well as ordinary rounds.
                 if loop.seen:
@@ -1954,8 +1920,8 @@ class AgentService:
                         result = await self._tool(ask, self._tools.read_attachment(
                             ask.attachments[number - 1], str(args.get("question") or ask.text), ledger, number=number
                         ), name)
-                    elif name in ("memory_read", "history_search"):
-                        reply = Reply("", "", None, read=args.get("names", []) if name == "memory_read" else [], search=str(args.get("query", "")) if name == "history_search" else "")
+                    elif name == "history_search":
+                        reply = Reply("", "", None, search=str(args.get("query", "")))
                         found = self._look_up(ask, reply, [t.id for t in context.turns if t.id is not None])
                         result = found[0] if found else ToolResult(name, False, None, "not_found")
                     else:
@@ -2009,8 +1975,6 @@ class AgentService:
                     conversation_id=ask.conversation_id, quota=self.quotas.record,
                     member_id=ask.speaker.id, event=lambda text: self._message(ask, "event", text),
                     expire=lambda: self._expire(self._confirmations.sweep()), spoken=ask.voiced and ask.language != "ja", **common)
-                if self._memory is not None:
-                    loop.tools.extend(MEMORY_TOOLS)
                 self._cli_loops.add(loop)
                 loop.on_done = self._cli_loops.discard
             else:
@@ -2388,9 +2352,9 @@ class AgentService:
         tool its server says only reads. Member contact preferences can require the owner's yes."""
         tool = call.tool
         if tool.key in GROWTH_TOOLS:
-            # Local journalled writes are reversible. External ingestion is staged
-            # by the memory boundary, rather than granting a model permission.
-            return PASS
+            # Local journalled writes are reversible. After external ingestion the memory
+            # boundary marks what is written, rather than granting a model permission.
+            return Screening(ASK) if self._gate.ask_first and tool.key in GROWTH_WRITES else PASS
         if self._gate.is_vm_tool(tool.key):
             return PASS
         if tool.key in HARNESS_TOOLS:
@@ -2466,8 +2430,6 @@ class AgentService:
             (ask.steps if steps is None else steps).append(self._step("tool", call.tool.key, BUILTIN_SERVER, "ok" if result.ok else "blocked", began, result.error))
             self._gate.record_builtin(call.tool.key, outcome="ok" if result.ok else "blocked", approver="user")
             return result
-        if call.tool.key in ("memory_write", "memory_delete"):
-            return self._cli_memory_call(ask, call, steps, approval, action)
         if call.tool.key in GROWTH_TOOLS:
             self._gate.check_for(action or Action(call.tool.key, call.arguments), call.tool.key, call.arguments, approval)
             if self._memory is None:
@@ -2492,44 +2454,27 @@ class AgentService:
                 step.tool in ("web_search", "web_read", "read_attachment", "computer", "ask_member")
                 or step.server not in (None, "", BUILTIN_SERVER) for step in ask.steps
             ) or loop and any(result.untrusted for result in loop.seen))
-            from ..memory.service import explicitly_shared
+            from ..memory.service import explicitly_shared, keeps_private
             if name == "memory_log":
                 result = (self._memory.log_memory(member, args, untrusted=external) if private else
                           ToolResult(name, False, None, "private_only"))
             else:
+                # A room's turn writes only what the room may read; an exchange only its own file.
                 if not private:
-                    args = {**args, "space": "shared"}
+                    args = {**args, "target": "user" if ask.scope == "room" else "memory"}
                 result = self._memory.update_memory(member, args, untrusted=external,
-                    share=ask.scope == "room" or explicitly_shared(ask.text))
+                    share=ask.scope == "room" or explicitly_shared(ask.text), private_request=keeps_private(ask.text))
             (ask.steps if steps is None else steps).append(self._step("tool", name, BUILTIN_SERVER,
-                "ok" if result.ok else "blocked", time.perf_counter(), result.error))
-            self._gate.record_builtin(name, outcome="ok" if result.ok else "blocked")
+                "ok" if result.ok else "blocked", time.perf_counter(), result.error, "external_content" if external and result.ok else None))
+            self._gate.record_builtin(name, outcome="ok" if result.ok else "blocked", approver="user" if approval is not None else "auto")
+            if name == "memory_update" and result.ok and result.data.get("changed"):
+                self._message(ask, "event", phrase(ask.language, "remembered_unconfirmed" if external else "remembered"))
             return result
         if call.tool.key in HARNESS_TOOLS:
             return await self._harness_call(ask, call, approval, action, steps=steps)
         if call.tool.key in TEAM_TOOLS:
             return await self._team_call(ask, call, ledger, approval=approval, action=action, steps=steps)
         return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps, ask=ask)
-
-    def _cli_memory_call(self, ask: _Ask, call: PlannedCall, steps: list[Step] | None, approval: Approval | None, action: Action | None) -> ToolResult:
-        from .answers import parse_reply
-        args = dict(call.arguments)
-        args["op"] = "delete" if call.tool.key == "memory_delete" else "write"
-        loop = next((loop for loop in self._cli_loops if loop.member_id == ask.speaker.id and loop.conversation_id == ask.conversation_id), None)
-        if loop is None:
-            return ToolResult(call.tool.key, False, None, "owner_request_required")
-        reply = parse_reply({"text": "Memory update", "memory": [args]}, ask.language, plain=True)
-        before = len(ask.steps)
-        applied = self._remember(ask, reply, loop.seen, approval=approval, action=action)
-        if steps is not None:
-            steps.extend(ask.steps[before:])
-            del ask.steps[before:]
-        if applied is None:
-            return ToolResult(call.tool.key, False, None, "blocked")
-        if applied.written or applied.deleted:
-            self._message(ask, "event", phrase(ask.language, "remembered" if applied.written else "forgotten"))
-            self._gate.record_builtin(call.tool.key, outcome="ok", approver="user" if approval is not None else "auto")
-        return ToolResult(call.tool.key, not applied.refused, {"written": applied.written, "deleted": applied.deleted}, "blocked" if applied.refused else None)
 
     async def _harness_call(
         self, ask: _Ask, call: PlannedCall, approval: Approval | None, action: Action | None,
@@ -3327,7 +3272,6 @@ class AgentService:
             applied = self._remember(followup.ask, replace(reply, memory=reply.memory[:1]), followup.results, approval=approval, action=pending.action)
             if applied is None or not (applied.written or applied.deleted):
                 return self._outcome(pending, "negative", phrase(language, "not_remembered"), "error")
-            self._memory.note_turn(applied.written, pending.turn_id, followup.ask.speaker.id)
             remaining = replace(reply, memory=reply.memory[1:])
             if not remaining.memory and not remaining.text:
                 remaining = replace(remaining, prefix="understood", text=phrase(language, "remembered" if applied.written else "forgotten"))

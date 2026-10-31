@@ -33,8 +33,8 @@ async def test_api_room_team_hands_off_and_wraps_up_through_shared_worker(make_r
     rig.service._notify = arrived
     alice = members.store.create_member(name="Alice", role="PM", personality="PRECISE-PLANNER")
     bob = members.store.create_member(name="Bob", role="CTO", personality="CAUTIOUS-ENGINEER")
-    memory.shared.write("user-brand", type="user", description="BRAND-GOLD", body="BRAND-GOLD", member=0)
-    memory.store_for(alice.id).write("reference-alice", type="reference", description="ALICE-PRIVATE", body="ALICE-PRIVATE")
+    memory.shared.edit_document("BRAND-GOLD\n", None)
+    memory.own(alice.id).edit_document("ALICE-PRIVATE\n", None)
     rig.client.replies.extend(report(text) for text in (
         "@Alice lead the release plan", "@Bob I propose shipping today", "@Alice I disagree: test first",
         "Agreed, I own testing",
@@ -108,7 +108,7 @@ async def test_a_meeting_discusses_with_the_shared_notes_alone(make_rig, conn, t
         messages = (await rig.rpc.call("rooms.messages", {"room_id": room["room_id"]}))["messages"]
         said = [call for call, message in zip(rig.client.chat_calls, messages[1:]) if message["kind"] == "message"]
         assert said and messages[-1]["kind"] == "wrapup"
-        assert all([tool["function"]["name"] for tool in call["tools"]] == ["memory_read"] for call in said)
+        assert all(call["tools"] == [] for call in said)
         assert all("only discusses who does what" in str(call["messages"]) for call in said)
     finally:
         await rooms.aclose()

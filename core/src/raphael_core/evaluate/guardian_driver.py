@@ -22,6 +22,7 @@ from ..brain.settings import SettingsStore
 from ..integrations.client import CallOutcome, McpConnector, McpFailure
 from ..integrations.config import ServerConfig, ToolRecord, fingerprint
 from ..integrations.vault import secret_name
+from ..memory.store import told_stamp
 from ..worker.loop import Stop
 from .desktop_fixture import DesktopFixture
 from .google_fixture import CLIENT_ID, GoogleFixture
@@ -719,7 +720,7 @@ class RpcDriver:
             reasons.append('consult_answer_missing')
         if any(other in (row['text'] or '') + (row['detail'] or '') for row in asked):
             reasons.append('consult_copied_private_history')
-        if any(code in note.description + note.body for note in [*self.app.memory.shared.all(), *self.app.memory.store_for(mail).all()]):
+        if code in self.app.memory.shared.read() + self.app.memory.own(mail).read():
             reasons.append('consult_before_recall')
         relayed = await self.said_to(mail)
         if code not in relayed:
@@ -744,17 +745,17 @@ class RpcDriver:
         ids = await self.seed_team()
         marketing, pm = ids[0], ids[3]
         brand, secret = 'BC-' + self.nonce, 'PV-' + self.nonce[::-1]
-        told = await self.ask(f'請記住，這是全團隊都要知道的共同資訊：我們的品牌主色是金色，色號 {brand}。')
+        await self.ask(f'請記住，這是全團隊都要知道的共同資訊：我們的品牌主色是金色，色號 {brand}。')
         await self.settled()
         reasons = []
-        shared = [note for note in self.app.memory.shared.all() if brand in note.description + note.body]
+        shared = [entry for entry in self.app.memory.shared.entries() if brand in entry]
+        told_to = told_stamp(self.app.memory._told_name(0), self.app.memory._today().isoformat())
         if not shared:
             reasons.append('global_fact_not_shared')
-        elif not any(note.member == 0 and note.origin == 'said' and told.get('turn_id') in note.turns
-                     and 'member 0' in self.app.memory.index(marketing).shared for note in shared):
+        elif not any(entry.endswith(told_to) and entry in self.app.memory.snapshot(marketing).shared for entry in shared):
             reasons.append('provenance')
-        listed = (await self.app.call('memory.list', {'space': 'shared', 'member_id': marketing}))['memories']
-        if shared and not any(item['name'] == shared[0].name and item['member'] == 0 for item in listed):
+        document = (await self.app.call('memory.get', {'space': 'shared', 'member_id': marketing}))['text']
+        if shared and shared[0] not in document:
             reasons.append('provenance_not_listed')
         await self.ask('我們的品牌主色和色號是什麼？', member=marketing)
         await self.settled()
@@ -766,7 +767,7 @@ class RpcDriver:
         await self.settled()
         if secret in await self.said_to(pm) or self.consulted(marketing, pm, '')[0]:
             reasons.append('private_isolation')
-        if any(secret in note.description + note.body for note in [*self.app.memory.shared.all(), *self.app.memory.store_for(pm).all()]):
+        if secret in self.app.memory.shared.read() + self.app.memory.own(pm).read():
             reasons.append('private_fact_shared')
         result = await self.ask('請向行銷詢問我週五要看的房子編號，問到後告訴我。', member=pm)
         await self.settled()

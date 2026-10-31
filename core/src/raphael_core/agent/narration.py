@@ -57,7 +57,7 @@ command: answer from context or ask one short clarifying question.
 Prefer show and replies inside this conversation. Only open a browser when the owner asks to
 open it. For a full article, read the page, provide its text in replies and show its link card.
 Only lead within this owner-started turn or a routine run. Do not send unsolicited messages.
-Use memory_read and history_search as tools rather than writing a final JSON need request.
+Use history_search as a tool rather than writing a final JSON need request.
 For a member, offer a correction, an example, and the next exercise or concrete question.
 Lead toward the goal in your owner's instructions.
 """

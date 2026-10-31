@@ -206,6 +206,22 @@ class _Picture:
     url: str
 
 
+def soul_document(speaker: Speaker) -> str:
+    """Who a member is, as a plain document. Only what the owner filled in has a heading. It says where it
+    comes from, since an edit of the file itself is replaced the next time the member changes."""
+    parts = [f"# {speaker.name or 'Raphael'}"]
+    if speaker.role:
+        parts.append(speaker.role)
+    if speaker.blurb:
+        parts.append(speaker.blurb)
+    if speaker.personality:
+        parts.append(f"## Personality\n\n{speaker.personality}")
+    if speaker.instructions:
+        parts.append(f"## Instructions\n\n{speaker.instructions}")
+    parts.append("<!-- Written from this member's details in Raphael. Change them there. -->")
+    return "\n\n".join(part.strip() for part in parts) + "\n"
+
+
 class MembersService:
     """The members (see the module). `conn` is the open database (used on the event loop only),
     `local_dir` the app's local folder (the pictures: `avatars\\`, and Raphael's own in `avatar\\`),
@@ -259,17 +275,16 @@ class MembersService:
             memory.skill_review = SkillReview(self, memory)
 
     def sync_homes(self) -> None:
-        """Refresh derived mirrors from the database, including the built-in member."""
-        from dataclasses import asdict
+        """Keep every member's home as it should be, the built-in member's too: its SOUL.md, written from
+        its details (the details pane is where the owner edits who it is, and the file is how it reads
+        anywhere else), its skills' mirror and a MEMORY.md."""
+        homes = self.capabilities.homes
         for identifier in [0, *(member.id for member in self.store.members())]:
-            speaker = self.speaker(identifier)
-            persona = {key: value for key, value in asdict(speaker).items()
-                       if key in ("name", "role", "personality", "instructions", "blurb", "reply_style")}
-            self.capabilities.homes.mirror(identifier, "SOUL.md", json.dumps(persona, ensure_ascii=False, indent=2) + "\n")
+            homes.soul(identifier, soul_document(self.speaker(identifier)))
             self.capabilities._mirror(identifier)
-            home = self.capabilities.homes.home(identifier)
-            if not (home / "MEMORY.md").exists():
-                self.capabilities.homes.keep(identifier, "MEMORY.md", "")
+            if not (homes.home(identifier) / "MEMORY.md").exists():
+                homes.keep(identifier, "MEMORY.md", "")
+            homes.safe(homes.state(identifier) / "SOUL.md").unlink(missing_ok=True)  # the old JSON mirror
 
     def register(self, router: Router) -> None:
         methods = {

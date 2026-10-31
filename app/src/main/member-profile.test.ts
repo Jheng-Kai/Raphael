@@ -53,6 +53,45 @@ test("a member is a slime and every pane groups content in cards", async () => {
   dialog.close();
 });
 
+test("記憶 is the member's whole document, and the dialog's one 儲存 writes it from the copy it opened", async () => {
+  const update = vi.fn().mockResolvedValue(true);
+  vi.mocked(api.core).mockImplementation(async (method: string, params?: unknown) => {
+    if (method === "memory.get") return { text: "第一段\n\n第二段\n", revision: "r1", chars: 8, entries: 2, limit: 2200, summary: null };
+    if (method === "memory.update") return { text: (params as { text: string }).text, revision: "r2", chars: 3, entries: 1, limit: 2200, summary: null };
+    return {};
+  });
+  const dialog = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  const box = dialog.el.querySelector<HTMLTextAreaElement>("#mp-memory")!;
+  expect(box.value).toBe("第一段\n\n第二段");
+  expect(dialog.el.querySelectorAll('[data-dlg="save"]')).toHaveLength(1);
+  fill(dialog.el, "#mp-memory", "第一段");
+  click(dialog.el, '[data-dlg="save"]'); await flush();
+  expect(api.core).toHaveBeenCalledWith("memory.update", { member_id: 7, space: "own", text: "第一段", revision: "r1" });
+  expect(update).toHaveBeenCalled();
+});
+
+test("the dialog writes no memory it did not change, and stays open on one that is refused", async () => {
+  const update = vi.fn().mockResolvedValue(true);
+  const refuse = { refuse: false };
+  vi.mocked(api.core).mockImplementation(async (method: string) => {
+    if (method === "memory.get") return { text: "第一段\n", revision: "r1", chars: 3, entries: 1, limit: 2200, summary: null };
+    if (method === "memory.update" && refuse.refuse) throw "Invalid params: changed: The memory changed while it was being edited.";
+    return {};
+  });
+  const first = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  click(first.el, '[data-dlg="save"]'); await flush();
+  expect(api.core).not.toHaveBeenCalledWith("memory.update", expect.anything());
+  expect(update).toHaveBeenCalledTimes(1);
+
+  refuse.refuse = true;
+  const second = openEditMemberDialog(host({ update }), member, "memory"); await flush();
+  fill(second.el, "#mp-memory", "我打的字");
+  click(second.el, '[data-dlg="save"]'); await flush();
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(second.el.querySelector<HTMLTextAreaElement>("#mp-memory")!.value).toBe("我打的字");
+  second.close();
+});
+
 test("profile routines use the shared editor with every recurrence and HH:MM validation", async () => {
   const dialog = openEditMemberDialog(host(), member);
   click(dialog.el, '#mp-tab-routines'); await flush();

@@ -15,9 +15,8 @@ tool an alias is stays here in the core. The snapshot holds:
   what it knows to an address of someone's making;
 - when the task came with files (an image, a PDF the owner handed over), `read_attachment`, which
   reads one of them by its number: never a path;
-- and, when there is a memory, its two tools that only read (`memory_read`, `history_search`): a
-  task may read a note or look up what was said before. It never writes one: a task reads what
-  services return, and a memory is written only from the owner's own words.
+- and, when there is a memory, `history_search`, which only reads: a task may look up what was said
+  before; what it writes after reading what services return goes in marked (`memory.store`).
 - the team tools (`agent.team`): `ask_member`, when there is someone to ask (for Raphael, a member;
   for a member, Raphael), and for Raphael `create_member`.
 
@@ -133,19 +132,6 @@ _DEFINITIONS: dict[str, dict[str, Any]] = {
     "local_time": {
         "description": "[Raphael] The date and the time on the user's computer.",
         "parameters": {"type": "object", "properties": {}},
-    },
-    "memory_read": {
-        "description": (
-            "[Raphael] Read your own notes and shared user facts in full, by their names (the names in "
-            "the index of notes you were given)."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "names": {"type": "array", "items": {"type": "string"}, "description": "Names."}
-            },
-            "required": ["names"],
-        },
     },
     "history_search": {
         "description": (

@@ -282,6 +282,13 @@ export function installMock(fixture, config = {}, target = window) {
   let keyRemoved = false;
   const notify = (type, extra = {}) => { setTimeout(() => state.emit({ type, ...extra }), 0); };
   const byMember = (items, p) => items.filter(item => item.member_id === (p.member_id ?? 0));
+  const memoryFile = p => p.space === "shared" ? "shared" : String(p.member_id ?? 0);
+  const memoryDocument = p => {
+    const text = data.memoryFiles?.[memoryFile(p)] ?? "";
+    const shared = p.space === "shared";
+    return { text, revision: `revision-${text.length}`, chars: text.trim().length, entries: text.split(/\n\s*\n/).filter(part => part.trim()).length,
+      limit: shared ? 1375 : 2200, summary: shared ? null : data.memorySummary };
+  };
   // As the core's Conversations.main: a member always has a main conversation; when it is deleted the latest one takes
   // over, and a new one is made only when none is left.
   const mainConversation = member => {
@@ -500,12 +507,10 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.question.open": return null;
       case "background.questions.list": return { questions: [] };
       case "quota.list": return { quotas: data.allowances.quotas };
-      case "memory.list": return { memories: p.space === "shared" ? data.sharedMemories : byMember(data.memories, p), summary: p.space === "shared" ? null : data.memorySummary };
-      case "memory.clear": if (p.space === "shared") data.sharedMemories = []; else data.memories = data.memories.filter(item => item.member_id !== (p.member_id ?? 0)); return { cleared: true };
+      case "memory.get": return memoryDocument(p);
+      case "memory.update": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: p.text }; return memoryDocument(p);
+      case "memory.clear": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: "" }; return { cleared: true };
       case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
-      case "memory.get": { const item = (p.space === "shared" ? data.sharedMemories : byMember(data.memories, p)).find(item => item.name === p.name); if (!item) throw new Error("Memory fixture not found"); return { ...item, body: item.body ?? item.text ?? item.description }; }
-      case "memory.update": { const item = data.memories.find(item => item.name === p.name && item.member_id === (p.member_id ?? 0)); if (!item) throw new Error("Memory fixture not found"); if (item.origin === "pending") data.memories = data.memories.filter(note => note !== item); else Object.assign(item, p); return { approved: true }; }
-      case "memory.delete": data.memories = data.memories.filter(item => item.name !== p.name || item.member_id !== (p.member_id ?? 0)); return { deleted: true };
       case "safety.rules.list": return { rules: data.safetyRules };
       case "routines.list": return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };

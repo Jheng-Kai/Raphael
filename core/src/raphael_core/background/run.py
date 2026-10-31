@@ -827,8 +827,8 @@ class TaskRun:
                 return await self._read_page(arguments)
             if name == "read_attachment":
                 return await self._read_attachment(arguments)
-            if name in ("memory_read", "history_search"):
-                return self._read_memory(name, arguments)
+            if name == "history_search":
+                return self._search_history(arguments)
             if name in TEAM_TOOLS:
                 if self._team is None:
                     return ToolResult(name, False, None, "blocked")
@@ -871,26 +871,19 @@ class TaskRun:
             )
         )
 
-    def _read_memory(self, name: str, arguments: dict) -> ToolResult:
-        """A note read or the past turns searched; never a write."""
+    def _search_history(self, arguments: dict) -> ToolResult:
+        """The past turns searched."""
         if self._memory is None:
-            return ToolResult(name, False, None, "blocked")
-        if name == "memory_read":
-            names = arguments.get("names")
-            if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-                return ToolResult(name, False, None, "bad_arguments")
-            return self._memory.read(names)
+            return ToolResult("history_search", False, None, "blocked")
         query = arguments.get("query")
         if not isinstance(query, str) or not query.strip():
-            return ToolResult(name, False, None, "bad_arguments")
+            return ToolResult("history_search", False, None, "bad_arguments")
         return self._memory.search(query.strip())
 
 
 class MemoryReader(Protocol):
     """What a task may do with the memory (`memory.service.MemoryService`, or a member's
-    `MemberMemory`): read and search."""
-
-    def read(self, names: Sequence[str]) -> ToolResult: ...
+    `MemberMemory`): search its past turns; the growth tools, where it has them."""
 
     def search(self, query: str, *, limit: int = 5, exclude: Sequence[int] = ()) -> ToolResult: ...
 

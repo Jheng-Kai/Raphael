@@ -67,6 +67,43 @@ Upstream: https://github.com/notofonts/noto-cjk
 The image installs the pinned Noto Sans CJK JP Regular font. Its pinned OFL-1.1
 license is installed at `/usr/local/share/licenses/noto-cjk/OFL.txt` in the image.
 
+## Hermes Agent, memory files (MIT)
+
+Upstream: https://github.com/NousResearch/hermes-agent, revision `c419cf7c`.
+
+Modified ports, with upstream file names:
+
+- `core/src/raphael_core/memory/store.py`: bounded curated memory files, whole-entry and substring matching,
+  atomic batches checked on their final result, the over-limit note that teaches consolidation and the per-turn
+  retry cap, from `tools/memory_tool_store.py`.
+- `core/src/raphael_core/memory/growth.py`: the `memory_update` tool description, from `MEMORY_SCHEMA` in
+  `tools/memory_tool.py`.
+- `core/src/raphael_core/memory/scan.py`: injection and exfiltration patterns, from `tools/threat_patterns.py`.
+- `core/src/raphael_core/bots/homes.py`: the separate lock file around a read-modify-write, from
+  `tools/memory_tool_store.py`.
+
+MIT License
+
+Copyright (c) 2025 Nous Research
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 # Rich content dependency notices
 
 Mermaid 11.12.2 is MIT; highlight.js 11.11.1 is BSD-3-Clause. Both load lazily.

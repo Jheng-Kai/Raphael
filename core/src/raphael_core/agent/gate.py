@@ -26,10 +26,9 @@ is unknown and cannot run; and it holds the door to the plugins' tools (`plugins
   for the global 先詢問 switch, and a rule that asks (Ask first) or forbids (Never) still wins over it.
   Without rules (or without a guard, as in most tests) every action passes it, with no call.
 
-The memory's tools are Raphael's own too: reading a note (`memory_read`) and searching the past
-turns (`history_search`) only read, so they are T0; writing and deleting a note (`memory_write`,
-`memory_delete`) change only Raphael's own memory, which the user sees and can undo in the settings,
-so they are T1: they run at once, with no yes asked for. So are the tools that reach the owner's team
+The memory's tools are Raphael's own too: searching the past turns (`history_search`) only reads, so
+it is T0; editing the files (`memory_update`, a harness tool) changes only what the user reads and edits
+in the settings, so it is T1: it runs at once, with no yes asked for. So are the tools that reach the owner's team
 (`team`): `ask_member`, which has another member answer, and `create_member`, which adds one at the
 owner's request (and which the safety rules judge first, like a plugin's tool that changes something).
 
@@ -67,9 +66,8 @@ WEB_TOOLS = ("weather", "web_search", "local_time", "web_read")
 # offered it only when it has files, and it reads only those, by their number: never a path.
 ATTACHMENT_TOOLS = ("read_attachment",)
 BUILTIN_SERVER = "Raphael"
-# The memory's tools (raphael_core.memory), by tier: the ones that read, and the ones that change it.
-MEMORY_READ_TOOLS = ("memory_read", "history_search")
-MEMORY_WRITE_TOOLS = ("memory_write", "memory_delete")
+# The memory's tool that only reads (raphael_core.memory). The edits are harness tools.
+MEMORY_READ_TOOLS = ("history_search",)
 
 
 class ToolGate:
@@ -104,8 +102,6 @@ class ToolGate:
         # The steps of a run on the owner's desktop (`raphael_core.computer`).
         for name, tier in COMPUTER_TIERS.items():
             self._registry.register(name, tier)
-        for name in MEMORY_WRITE_TOOLS:
-            self._registry.register(name, Tier.T1)
         # The tools that reach the owner's team (`team`): asking a member, adding one.
         for name in TEAM_TOOLS:
             self._registry.register(name, TEAM_TIER)

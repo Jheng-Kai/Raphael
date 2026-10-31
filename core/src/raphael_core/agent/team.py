@@ -25,7 +25,7 @@ something else costs nothing more; the background worker is offered them wheneve
 ask.
 
 What a member answers is data, not instructions: it may hold what the web or a service returned to
-that member, so a reply that was shown it writes no note (`ToolResult.untrusted`).
+that member, so what a reply that was shown it writes goes in marked (`ToolResult.untrusted`).
 
 Nothing here logs a name, a request or an answer.
 """
@@ -83,7 +83,7 @@ def names_raphael(text: str) -> bool:
 # the question was on.
 CONSULTED = (
     "Answer it from what you know: what the owner told you in your own conversation (shown here, "
-    "with history_search for earlier turns) and your notes (memory_read). It is the owner's own "
+    "with history_search for earlier turns) and your memory files. It is the owner's own "
     "information, shared within the owner's team. Give only what answers the question, never your "
     "conversation itself; if you do not know, say so plainly."
 )

@@ -11,7 +11,7 @@ from raphael_core.worker.loop import Call, ToolOutcome, Turn, run_task
 @pytest.mark.parametrize("name,expected", [
     ("local_time", "working"), ("unknown_plugin", "working"),
     ("web_search", "searching"), ("web_read", "searching"),
-    ("read_attachment", "searching"), ("memory_read", "searching"),
+    ("read_attachment", "searching"), ("history_search", "searching"),
     ("mcp__raphael__web_read", "searching"), ("WebSearch", "searching"),
     ("Read", "searching"), ("webSearch", "searching"),
     ("computer__click", "computer"), ("mcp__computer__screenshot", "computer"),

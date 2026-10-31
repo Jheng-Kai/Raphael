@@ -1,665 +1,518 @@
-"""Raphael's long-term memory: Markdown files on this PC, one memory to a file, and their index.
+"""A member's memory: living Markdown files that keep being edited, never a pile of notes.
 
-The folder is `paths.memory_dir()` (`%LOCALAPPDATA%\\Raphael\\memory` for the release: machine-local,
-never roaming). Each memory is `<name>.md`, where the name is an ASCII slug that starts with the
-memory's type (`preference-answer-length`), with a frontmatter and a body:
+Adapted from NousResearch/hermes-agent tools/memory_tool_store.py @ c419cf7c (MIT)
 
-    ---
-    name: preference-answer-length
-    description: "回答保持兩三句，除非主人要求詳細"
-    type: preference
-    created: 2026-10-22T21:40:00+08:00
-    updated: 2026-10-22T21:40:00+08:00
-    origin: said
-    member: 0
-    turns: [1234, 1240]
-    ---
-    主人偏好簡短的回答……
+    bots/<id>/SOUL.md     who the member is, written by the core from its details (`bots.homes.soul`)
+    bots/<id>/MEMORY.md   what the member has learned; no other member reads it (`<name> 的記憶`)
+    shared/USER.md        who the owner is, one file every member reads and writes (`共同記憶`)
 
-- `type` is one of `TYPES`: who the user is (`user`), how they want Raphael to answer or act
-  (`preference`), people they mention (`person`), plans and open loops (`ongoing`, which must carry
-  an `expires` date) and where things are (`reference`, never a credential).
-- `origin` is `said` when the user said it, `inferred` when the reflection pass deduced it.
-- `member` is the assistant whose conversation it came from (0 is Raphael): with `origin` and
-  `updated` it is a shared note's provenance, who was told it and when. A note of an assistant's
-  own memory needs none, and a write that names none keeps the one the note had.
-- `turns` are the ids of the turns (`agent_turns`) it came from, for "why do you remember that?".
-- `description` is one line, and it is the memory's line in the index.
-- `created` and `updated` are stamped here, never by a model.
+A file is a list of entries, a blank line between them, so that it reads as a document in any editor
+and the owner can edit it whole. An entry may run over several lines. Hermes separates its entries
+with a `§` line and needs a guard against free text written without one; here any paragraph is an
+entry, and a rewrite keeps every word whoever wrote the file.
 
-The index (`index`, also written to `MEMORY.md` for whoever opens the folder) is made from the
-frontmatter by this code, never by a model, so it can never drift from the files: one line a
-memory, `- [type] description (MM/DD) → name` (`(MM/DD, member N)` for a note with a `member`), by
-type and then in the order the memories were made,
-the `ongoing` ones whose date has passed left out. It is the same text until a memory changes, so
-the prompt that carries it stays the same from one turn to the next (and the provider's prompt
-cache keeps it). It is held to `INDEX_MAX_LINES` lines and `INDEX_MAX_CHARS` characters.
+The model edits by `add`, `replace` and `remove`, in one atomic batch (`MemoryFile.apply`):
 
-The limits are checked on every write and a write that breaks one is refused with a reason a model
-can act on (`MemoryRefused`), as Hermes does, rather than cut short in silence. Every write is also
-checked by `scan.refusal`: no secret and nothing that steers a model is ever written.
+- `add` keeps one line for one fact: the same words (whatever the spacing, the punctuation, the case)
+  are not added again, a fact that says more takes the place of the shorter one, and another wording of
+  an entry is refused with the entry, for the model to `replace` it.
+- `replace` changes the span `old_text` inside the one entry that holds it; the rest of the entry stays.
+  It is Hermes's `patch`: the whole-entry overwrite that was once called replace wiped the other facts
+  of an entry there, so to rewrite an entry its whole text is the span.
+- `remove` deletes the entry `old_text` is part of.
 
-Nothing here logs a memory's name, description or body.
+A file has a limit, in characters, and a batch that would pass it is refused with a note that says by
+how much and shows the entries, so that the model frees the room and adds in one batch: the limit is
+checked on the batch's result alone. A file over its limit (the owner's own edit, a migration) keeps
+every word and may only shrink until it is back under it. Failed attempts are counted through a turn:
+past MAX_FAILURES_PER_TURN the model is told to stop and answer, since a failed save must never hold up
+the reply.
+
+Every write holds the file's lock, reads the file again, and replaces it atomically through
+`bots.homes.BotHomes` (allowlisted paths, secrets masked, a revision journal outside the homes), so two
+members writing at once lose nothing, in one process or several.
+
+Outside content does not enter silently. Whatever is written is scanned (`scan.refusal`, at the write
+and again when a turn reads the file, where a line that fails is replaced by a [BLOCKED] note and stays
+in the file for the owner to see). What a turn writes after reading outside content (a web page, a file,
+a connected service, a colleague) goes in with a mark at its start (`UNCONFIRMED`), which the model reads
+as an unverified claim and the owner sees in the document; such a turn may add and may edit what is
+marked, and never touches an entry without the mark. The owner saying the same thing removes the mark.
+
+Nothing here logs an entry.
 """
 
 import hashlib
-import json
 import logging
-import os
 import re
-from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import date, datetime
-from pathlib import Path
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 from . import scan
-from .terms import tokens
+from .terms import normalized, parts, tokens
 
 logger = logging.getLogger(__name__)
 
-TYPES = ("user", "preference", "person", "ongoing", "reference")
-ORIGINS = ("said", "inferred")
-MAX_BODY_CHARS = 1200
-MAX_DESCRIPTION_CHARS = 80
-MAX_MEMORIES = 80
-INDEX_MAX_LINES = 80
-INDEX_MAX_CHARS = 6000
-NAME_MAX_CHARS = 64
-# The most turn ids a memory keeps: the latest ones.
-MAX_TURNS = 20
-INDEX_FILE = "MEMORY.md"
-_NAME = re.compile(rf"(?:{'|'.join(TYPES)})-[a-z0-9]+(?:-[a-z0-9]+)*")
-_SLUG_PART = re.compile(r"[^a-z0-9]+")
+MEMORY_CHAR_LIMIT = 2200
+USER_CHAR_LIMIT = 1375
+ENTRY_DELIMITER = "\n\n"
+# Failed attempts in one turn before the model is told to stop trying and answer.
+MAX_FAILURES_PER_TURN = 3
+# How alike two wordings are, by the characters and words they share, to be one fact (`relation`).
+NEAR = 0.85
+# Below this, two texts are too short to tell anything from what they share.
+_MIN_MARKS = 6
+_MIN_PARTS = 4
+# A word that turns what follows it around: 不喜歡茶 does not say 喜歡茶.
+_NEGATIONS = frozenset(("不", "沒", "未", "無", "非", "別", "not", "no", "never"))
+# A pass nobody watches may not take a file below this share of what it held (nor empty it).
+_UNATTENDED_KEEPS = 0.5
+
+_BLANK_LINE = re.compile(r"\n[ \t]*(?:\n[ \t]*)+")
+# Whom the owner told a shared entry to, and when, as the host stamps it at the entry's end.
+_TOLD = re.compile(r" — [^\n—]{1,60} · \d{4}-\d{2}-\d{2}$")
+
+# The mark of an entry nobody confirmed, in the language of the owner's screen.
+UNCONFIRMED = {"zh-TW": "（待確認）", "ja": "（未確認）", "en": "(unconfirmed) "}
+_UNCONFIRMED_MARKS = tuple(UNCONFIRMED.values())
 
 
-class MemoryRefused(Exception):
-    """A memory that may not be written or read as asked. `kind` says why in one word
-    ("bad_name", "bad_type", "bad_description", "too_long", "bad_expires", "secret", "injection",
-    "full", "not_found"); `str()` says it in a sentence a model can act on. Neither ever holds the
-    memory's text."""
+def is_unconfirmed(entry: str) -> bool:
+    """Whether the entry carries the mark of what came from outside and nobody confirmed."""
+    return entry.startswith(_UNCONFIRMED_MARKS)
+
+
+def without_mark(entry: str) -> str:
+    for mark in _UNCONFIRMED_MARKS:
+        if entry.startswith(mark):
+            return entry[len(mark):]
+    return entry
+
+
+def told_stamp(name: str, day: str) -> str:
+    """What a shared entry ends with: the member the owner told it to, and the day."""
+    return f" — {' '.join(name.split())[:60]} · {day}"
+
+
+def _fold(entry: str) -> str:
+    """The entry as it is compared: its words, without its mark, its stamp, spacing or punctuation."""
+    return "".join(char for char in normalized(_TOLD.sub("", without_mark(entry))) if char.isalnum())
+
+
+def _holds(longer: Sequence[str], shorter: Sequence[str]) -> bool:
+    """Whether `shorter` runs unbroken through `longer`, and no negation stands before it."""
+    size = len(shorter)
+    return size >= _MIN_PARTS and any(
+        list(longer[start:start + size]) == list(shorter) and (start == 0 or longer[start - 1] not in _NEGATIONS)
+        for start in range(len(longer) - size + 1))
+
+
+def relation(new: str, old: str, near: float = NEAR) -> str | None:
+    """What the text `new` is to the entry `old`: "same", "inside" (it says less), "wider" (it says
+    more), "near" (another wording: nearly the same characters and words in any order), or None."""
+    if _fold(new) == _fold(old):
+        return "same"
+    a, b = parts(_TOLD.sub("", without_mark(new))), parts(_TOLD.sub("", without_mark(old)))
+    if _holds(b, a):
+        return "inside"
+    if _holds(a, b):
+        return "wider"
+    x, y = set(a), set(b)
+    if min(len(x), len(y)) >= _MIN_MARKS and len(x & y) / len(x | y) >= near:
+        return "near"
+    return None
+
+
+def parse_entries(raw: str) -> list[str]:
+    """The entries of a file: stripped, each once, in order."""
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    return list(dict.fromkeys(entry for entry in (part.strip() for part in _BLANK_LINE.split(text)) if entry))
+
+
+def render_entries(entries: Sequence[str]) -> str:
+    return ENTRY_DELIMITER.join(entries) + "\n" if entries else ""
+
+
+def clean_entry(text: str) -> str:
+    """Text as one entry: no blank line inside it, so that it stays one."""
+    return _BLANK_LINE.sub("\n", text.replace("\r\n", "\n").replace("\r", "\n")).strip()
+
+
+# Typography a model re-types differently from the stored entry: every quote/backtick -> "'",
+# every dash/minus -> "-". Plus whitespace runs (re-wrapped lines, NBSP) -> one space.
+_MATCH_FOLD = str.maketrans({**dict.fromkeys("\"`‘’‚‛“”„‟", "'"),
+                             **dict.fromkeys("‐‑‒–—―−", "-")})
+
+
+def _normalize_for_match(text: str) -> str:
+    return " ".join(str(text).replace("\\n", " ").translate(_MATCH_FOLD).split())
+
+
+def _substring_matches(entries: Sequence[str], old_text: str) -> list[int]:
+    """Indices of entries containing `old_text`: byte-exact first, else typography-folded."""
+    if exact := [i for i, entry in enumerate(entries) if old_text in entry]:
+        return exact
+    needle = _normalize_for_match(old_text)
+    if not any(char.isalnum() for char in needle):  # punctuation/space alone would select a whole entry
+        return []
+    return [i for i, entry in enumerate(entries) if needle in _normalize_for_match(entry)]
+
+
+def _find_unique_match(entries: Sequence[str], old_text: str) -> tuple[int | None, bool]:
+    """`(index, ambiguous)` for the entries matching `old_text`. A whole-entry match wins, so a short
+    entry stays addressable when its text is inside a longer one."""
+    matches = [i for i, entry in enumerate(entries) if entry == old_text] or _substring_matches(entries, old_text)
+    if len(matches) > 1:
+        return None, True
+    return (matches[0] if matches else None), False
+
+
+def _closest(entries: Sequence[str], old_text: str) -> list[str]:
+    """The entries sharing the most terms with `old_text`: a stale old_text still shares most of them."""
+    wanted = set(tokens(old_text))
+    if not wanted:
+        return []
+    scored = sorted(((len(wanted & set(tokens(entry))) / len(wanted), i) for i, entry in enumerate(entries)),
+                    key=lambda pair: (-pair[0], pair[1]))
+    return [entries[i] for score, i in scored[:3] if score >= 0.3]
+
+
+def _span_occurrences(text: str, span: str) -> int:
+    """Occurrences of `span` in `text`, overlapping ones included: '00' occurs twice in '1000'."""
+    return sum(text.startswith(span, i) for i in range(len(text) - len(span) + 1))
+
+
+def _listed(title: str, entries: Sequence[str]) -> str:
+    return f"\n{title}:\n" + "\n".join(f"- {entry}" for entry in entries) if entries else ""
+
+
+def _refusal(*texts: str) -> tuple[str, str] | None:
+    """Why text may not enter the memory, as a kind and a sentence the model can act on. Neither
+    holds the text."""
+    refused = scan.refusal(*texts)
+    if refused is None:
+        return None
+    kind = refused.split(":", 1)[0]
+    return kind, ("A memory must never hold a password, a key, a token, a code or a card number."
+                  if kind == "secret" else
+                  "A memory must be a plain fact, not instructions, commands or links that send data away. "
+                  "It enters your prompt in every later turn. Nothing was written.")
+
+
+class Refused(Exception):
+    """One operation of a batch may not be applied: nothing of the batch is."""
 
     def __init__(self, kind: str, message: str) -> None:
         super().__init__(message)
         self.kind = kind
 
 
-@dataclass(frozen=True)
-class Memory:
-    name: str
-    description: str
-    type: str
-    body: str
-    created: str  # ISO 8601 with the offset
-    updated: str
-    origin: str = "said"
-    expires: str | None = None  # YYYY-MM-DD
-    turns: tuple[int, ...] = field(default=())
-    member: int | None = None
+class MemoryFile:
+    """One living file: the member's MEMORY.md, or with no member the owner's shared USER.md."""
 
-    def expired(self, today: date) -> bool:
-        """Whether its date has passed (only a memory with an `expires` date ever has)."""
-        if not self.expires:
-            return False
-        try:
-            return date.fromisoformat(self.expires) < today
-        except ValueError:
-            return False
-
-    def view(self) -> dict:
-        """The memory as the settings page and the RPC methods show it."""
-        return {
-            "name": self.name,
-            "description": self.description,
-            "type": self.type,
-            "body": self.body,
-            "created": self.created,
-            "updated": self.updated,
-            "origin": self.origin,
-            "expires": self.expires,
-            "turns": list(self.turns),
-            "member": self.member,
-        }
-
-
-def valid_name(name: object) -> bool:
-    return isinstance(name, str) and len(name) <= NAME_MAX_CHARS and bool(_NAME.fullmatch(name))
-
-
-def make_name(kind: str, hint: str | None, description: str = "") -> str:
-    """A name for a new memory of type `kind`: `hint` made into an ASCII slug that starts with the
-    type, or, when nothing of it is left (it was all Chinese, say), the type and a short hash of the
-    description."""
-    slug = _SLUG_PART.sub("-", (hint or "").lower()).strip("-")
-    for prefix in (f"{kind}-", *(f"{other}-" for other in TYPES)):
-        if slug.startswith(prefix):
-            slug = slug[len(prefix) :]
-            break
-    if not slug:
-        slug = hashlib.sha1(description.encode("utf-8")).hexdigest()[:8]
-    name = f"{kind}-{slug}"[:NAME_MAX_CHARS].rstrip("-")
-    return name if valid_name(name) else f"{kind}-{hashlib.sha1(name.encode()).hexdigest()[:8]}"
-
-
-def _one_line(text: str) -> str:
-    return " ".join(text.split())
-
-
-def _iso(now: datetime) -> str:
-    return now.isoformat(timespec="seconds")
-
-
-def _index_line(memory: Memory) -> str:
-    day = memory.updated[5:10].replace("-", "/") if len(memory.updated) >= 10 else ""
-    told = "" if memory.member is None else f", member {memory.member}"
-    return f"- [{memory.type}] {memory.description} ({day}{told}) → {memory.name}"
-
-
-def index_of(memories: Iterable[Memory], today: date) -> list[str]:
-    """The lines of the index of `memories`: by type, in the order they were made, the expired
-    ones left out. Not cut to the limits."""
-    order = {kind: n for n, kind in enumerate(TYPES)}
-    kept = [m for m in memories if not m.expired(today)]
-    kept.sort(key=lambda m: (order.get(m.type, len(TYPES)), m.created, m.name))
-    return [_index_line(m) for m in kept]
-
-
-def _fits(lines: Sequence[str]) -> bool:
-    return len(lines) <= INDEX_MAX_LINES and len("\n".join(lines)) <= INDEX_MAX_CHARS
-
-
-# --- the file format ---------------------------------------------------------------------------------
-
-
-def render(memory: Memory) -> str:
-    """A memory as the text of its file."""
-    lines = [
-        "---",
-        f"name: {memory.name}",
-        f"description: {json.dumps(memory.description, ensure_ascii=False)}",
-        f"type: {memory.type}",
-        f"created: {memory.created}",
-        f"updated: {memory.updated}",
-    ]
-    if memory.expires:
-        lines.append(f"expires: {memory.expires}")
-    lines.append(f"origin: {memory.origin}")
-    if memory.member is not None:
-        lines.append(f"member: {memory.member}")
-    lines.append(f"turns: {json.dumps(list(memory.turns))}")
-    lines.append("---")
-    return "\n".join(lines) + "\n" + memory.body.strip() + "\n"
-
-
-def parse(text: str, name: str) -> Memory | None:
-    """The memory in the text of the file `<name>.md`, or None when it is not one: no frontmatter,
-    a name that is not the file's, a type that is not one of TYPES. A file edited by hand is read
-    as far as it can be; what cannot be read of it is left at its default."""
-    lines = text.replace("\r\n", "\n").split("\n")
-    if not lines or lines[0].strip() != "---":
-        return None
-    try:
-        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
-    except StopIteration:
-        return None
-    fields: dict[str, str] = {}
-    for line in lines[1:end]:
-        key, sep, value = line.partition(":")
-        if sep:
-            fields[key.strip()] = value.strip()
-
-    def text_of(key: str) -> str:
-        value = fields.get(key, "")
-        if value.startswith('"'):
-            try:
-                loaded = json.loads(value)
-            except ValueError:
-                return value.strip('"')
-            return loaded if isinstance(loaded, str) else ""
-        return value
-
-    if fields.get("name", name) != name or fields.get("type") not in TYPES:
-        return None
-    turns: tuple[int, ...] = ()
-    try:
-        loaded = json.loads(fields.get("turns", "[]"))
-        if isinstance(loaded, list):
-            turns = tuple(t for t in loaded if type(t) is int)
-    except ValueError:
-        pass
-    origin = fields.get("origin", "said")
-    member = fields.get("member", "")
-    return Memory(
-        name=name,
-        description=_one_line(text_of("description")),
-        type=fields["type"],
-        body="\n".join(lines[end + 1 :]).strip(),
-        created=fields.get("created", ""),
-        updated=fields.get("updated", fields.get("created", "")),
-        origin=origin if origin in ORIGINS else "said",
-        expires=fields.get("expires") or None,
-        turns=turns,
-        member=int(member) if member.isascii() and member.isdigit() else None,
-    )
-
-
-# --- the store ---------------------------------------------------------------------------------------
-
-
-class MemoryStore:
-    """The memory folder `root`. Made on the first write; reading a folder that is not there finds
-    no memories. `now` is the local time with its offset. Use it on one thread (the event loop)."""
-
-    def __init__(self, root: Path, *, now: Callable[[], datetime] | None = None,
-                 on_change: Callable[[], None] | None = None, homes=None, member_id: int = 0) -> None:
+    def __init__(self, homes, member_id: int | None, *, on_change: Callable[[], None] | None = None) -> None:
         self.homes = homes
         self.member_id = member_id
+        self.name = "USER.md" if member_id is None else "MEMORY.md"
+        self.target = "user" if member_id is None else "memory"
+        self.limit = USER_CHAR_LIMIT if member_id is None else MEMORY_CHAR_LIMIT
         self._on_change = on_change
-        self.root = root
-        self._now = now or (lambda: datetime.now().astimezone())
-        self._cache_key: tuple | None = None
-        self._cache: list[Memory] = []
-        self._index_key: tuple | None = None
-        self._index = ""
-        # What changed, in the order it did (`mark`, `changed_since`): a count of the changes, the
-        # count at which each name was last written or deleted, and the count of the last clear.
-        self._changes = 0
-        self._changed: dict[str, int] = {}
-        self._cleared = 0
-
-    # --- what changed ------------------------------------------------------------------------------
-
-    def mark(self) -> int:
-        """A mark of the memory as it is now, for `changed_since`. A pass of the model takes one
-        before it reads the memory, and applies nothing to a memory that changed after it (the
-        owner edited, deleted or cleared it in the settings meanwhile, or a turn wrote it)."""
-        return self._changes
-
-    def changed_since(self, name: str, mark: int) -> bool:
-        """Whether the memory `name` was written or deleted after `mark`, or every memory was
-        cleared after it. Only the changes made through this store are counted (a file edited by
-        hand is not)."""
-        return self._cleared > mark or self._changed.get(name, 0) > mark
-
-    def _count_change(self, name: str | None) -> None:
-        """Count a change of the memory `name`, or of every memory (None: a clear)."""
-        self._changes += 1
-        if name is None:
-            self._cleared = self._changes
-        else:
-            self._changed[name] = self._changes
+        self._failures = 0
+        # Counts the clears, so that a pass that read the file before one applies nothing after it.
+        self.clears = 0
 
     # --- reading -----------------------------------------------------------------------------------
 
-    def _files(self) -> list[Path]:
-        homes = self.homes or getattr(self, "shared_homes", None)
-        if homes is not None:
-            try:
-                homes.safe(self.root)
-            except ValueError:
-                return []
+    def _path(self):
+        if self.member_id is None:
+            return self.homes.safe(self.homes.root / "shared" / self.name)
+        return self.homes.path(self.member_id, self.name)
+
+    def _raw(self) -> str:
+        """The file's text; "" when there is none. OSError or UnicodeError when it cannot be read: a
+        write must then refuse, since saving from an assumed-empty view would wipe the file. The BOM a
+        Windows editor leaves is no part of the first entry."""
+        path = self._path()
+        return path.read_text(encoding="utf-8-sig") if path.exists() else ""
+
+    def read(self) -> str:
+        """The live file, "" when it cannot be read."""
         try:
-            entries = list(os.scandir(self.root))
-        except OSError:  # no folder yet, or one that cannot be read
-            return []
-        return sorted(
-            Path(entry.path)
-            for entry in entries
-            if entry.is_file()
-            and not entry.is_symlink()
-            and entry.name.endswith(".md")
-            and entry.name.lower() != INDEX_FILE.lower()
-            and valid_name(Path(entry.name).stem)
-        )
+            return self._raw()
+        except (OSError, ValueError) as exc:  # a file that is not text, or a linked path
+            logger.warning("Could not read a memory file: %s", type(exc).__name__)
+            return ""
 
-    def _signature(self, files: Sequence[Path]) -> tuple:
-        signature = []
-        for path in files:
-            try:
-                stat = path.stat()
-            except OSError:
-                continue
-            signature.append((path.name, stat.st_mtime_ns, stat.st_size))
-        return tuple(signature)
+    def entries(self) -> list[str]:
+        return parse_entries(self.read())
 
-    def all(self) -> list[Memory]:
-        """Every memory there is, the expired ones too, by type and in the order they were made.
-        Read again from the folder only when a file changed (or was added or removed)."""
-        files = self._files()
-        key = self._signature(files)
-        if key == self._cache_key:
-            return list(self._cache)
-        found: list[Memory] = []
-        for path in files:
-            name = path.stem
-            if not valid_name(name):
-                continue
-            try:
-                memory = parse(path.read_text(encoding="utf-8"), name)
-            except (OSError, UnicodeDecodeError):
-                memory = None
-            if memory is not None:
-                found.append(memory)
-        order = {kind: n for n, kind in enumerate(TYPES)}
-        found.sort(key=lambda m: (order[m.type], m.created, m.name))
-        self._cache_key, self._cache = key, found
-        return list(found)
+    def revision(self) -> str:
+        """A mark of the file as it is now, for an edit made from a copy of it."""
+        return hashlib.sha256(self.read().encode("utf-8")).hexdigest()
 
-    def get(self, name: str) -> Memory | None:
-        if not valid_name(name):
-            return None
-        return next((m for m in self.all() if m.name == name), None)
-
-    def today(self) -> date:
-        return self._now().date()
-
-    def index(self) -> str:
-        """The index, as the prompt carries it: the same text for as long as no memory changes
-        (and the day does not pass a memory's date). Cut to the limits when files edited by hand
-        went past them."""
-        memories = self.all()
-        today = self.today()
-        key = (self._cache_key, today)
-        if key == self._index_key:
-            return self._index
-        lines = index_of(memories, today)
-        while lines and not _fits(lines):
-            lines.pop()
-        self._index_key, self._index = key, "\n".join(lines)
-        return self._index
+    def chars(self) -> int:
+        return len(ENTRY_DELIMITER.join(self.entries()))
 
     def fill(self) -> float:
-        """How full the memory is, from 0 to 1: the larger of its share of the most memories and
-        its index's share of the most lines and characters."""
-        memories = self.all()
-        lines = index_of(memories, self.today())
-        return max(
-            len(memories) / MAX_MEMORIES,
-            len(lines) / INDEX_MAX_LINES,
-            len("\n".join(lines)) / INDEX_MAX_CHARS,
-        )
+        return self.chars() / self.limit
 
-    def related(self, text: str, limit: int = 5, *, exclude: Iterable[str] = ()) -> list[Memory]:
-        """The memories that share the most words (and pairs of CJK characters) with `text`, best
-        first; none that shares nothing."""
-        wanted = set(tokens(text))
-        if not wanted:
-            return []
-        skip = set(exclude)
-        scored = []
-        for memory in self.all():
-            if memory.name in skip:
-                continue
-            terms = set(tokens(f"{memory.name.replace('-', ' ')} {memory.description} {memory.body}"))
-            score = len(wanted & terms)
-            if score:
-                scored.append((score, memory.updated, memory))
-        scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
-        return [memory for _, _, memory in scored[:limit]]
+    def usage(self) -> str:
+        return self._usage(self.chars())
+
+    def _usage(self, used: int) -> str:
+        return f"{min(999, used * 100 // self.limit)}% — {used:,}/{self.limit:,} chars"
+
+    def prompt_text(self) -> str:
+        """The file as a turn reads it. A line that fails the scan (it reached the file by hand) is a
+        note in the prompt alone: the file keeps it, for the owner to see and remove."""
+        return ENTRY_DELIMITER.join(self._sanitized(entry) for entry in self.entries())
+
+    def _sanitized(self, entry: str) -> str:
+        if scan.refusal(entry) is None:
+            return entry
+        logger.warning("A memory entry was kept out of the prompt")
+        return (f"[BLOCKED: an entry of {self.name} looks like instructions or holds a secret. It is not "
+                "shown; the owner can remove it.]")
+
+    # --- the turn's attempts -----------------------------------------------------------------------
+
+    def reset_failures(self) -> None:
+        self._failures = 0
+
+    def _failed(self, kind: str, message: str) -> dict:
+        """A refusal the model may retry, until it has tried enough for one turn."""
+        self._failures += 1
+        if self._failures > MAX_FAILURES_PER_TURN:
+            return {"success": False, "done": True, "kind": "retry_cap", "error": (
+                f"Memory edits failed {self._failures} times this turn. Stop retrying: leave the memory "
+                "as it is and continue with your reply. The fact can be saved in a later turn.")}
+        return {"success": False, "kind": kind, "error": message}
 
     # --- writing -----------------------------------------------------------------------------------
 
-    def check(
-        self,
-        *,
-        name: str,
-        type: str,
-        description: str,
-        body: str,
-        expires: str | None,
-    ) -> tuple[str, str, str | None]:
-        """The description, the body and the date of a memory as they would be written, or
-        MemoryRefused. Nothing is written."""
-        if not valid_name(name):
-            raise MemoryRefused(
-                "bad_name",
-                "The name must be the type and an ASCII slug, such as preference-answer-length.",
-            )
-        if type not in TYPES:
-            raise MemoryRefused("bad_type", f"The type must be one of {', '.join(TYPES)}.")
-        description = _one_line(description)
-        if not description:
-            raise MemoryRefused("bad_description", "A memory needs a one-line description.")
-        if len(description) > MAX_DESCRIPTION_CHARS:
-            raise MemoryRefused(
-                "bad_description",
-                f"The description must be at most {MAX_DESCRIPTION_CHARS} characters.",
-            )
-        body = body.replace("\r\n", "\n").strip()
-        if not body:
-            body = description
-        if len(body) > MAX_BODY_CHARS:
-            raise MemoryRefused(
-                "too_long", f"The body must be at most {MAX_BODY_CHARS} characters: shorten it."
-            )
-        expires = (expires or "").strip() or None
-        if expires is not None:
-            try:
-                expires = date.fromisoformat(expires).isoformat()
-            except ValueError:
-                raise MemoryRefused("bad_expires", "expires must be a date, YYYY-MM-DD.") from None
-        if type == "ongoing" and expires is None:
-            raise MemoryRefused(
-                "bad_expires", "An ongoing memory needs an expires date (YYYY-MM-DD)."
-            )
-        refused = scan.refusal(description, body)
-        if refused is not None:
-            kind = refused.split(":", 1)[0]
-            raise MemoryRefused(
-                kind,
-                "A memory must never hold a password, a key, a token, a code or a card number."
-                if kind == "secret"
-                else "A memory must be a plain fact about the user, not instructions or links.",
-            )
-        return description, body, expires
-
-    def write(
-        self,
-        name: str,
-        *,
-        type: str,
-        description: str,
-        body: str,
-        expires: str | None = None,
-        origin: str = "said",
-        turns: Sequence[int] = (),
-        leaving: Iterable[str] = (),
-        member: int | None = None,
-    ) -> Memory:
-        """Create the memory `name`, or replace it. Its `created` stays what it was, `updated` is
-        now, and the turns it came from are added to the ones it had; `member`, when given, is the
-        assistant it was told to now, else it keeps the one it had. MemoryRefused when it breaks
-        a limit or holds something it may not. `leaving` are memories about to be deleted (the
-        ones a merge folds into this one): the index is checked without them."""
-        description, body, expires = self.check(
-            name=name, type=type, description=description, body=body, expires=expires
-        )
-        existing = {m.name: m for m in self.all()}
-        old = existing.get(name)
-        if self.homes is None and old is None and len(existing) >= MAX_MEMORIES:
-            raise MemoryRefused(
-                "full",
-                f"The memory is full ({MAX_MEMORIES} memories): update or delete one first.",
-            )
-        now = _iso(self._now())
-        kept_turns = list(old.turns) if old is not None else []
-        for turn in turns:
-            if _is_turn_id(turn) and turn not in kept_turns:
-                kept_turns.append(turn)
-        memory = Memory(
-            name=name,
-            description=description,
-            type=type,
-            body=body,
-            created=old.created if old is not None and old.created else now,
-            updated=now,
-            origin=origin if origin in ORIGINS else "said",
-            expires=expires,
-            turns=tuple(kept_turns[-MAX_TURNS:]),
-            member=member if member is not None else (old.member if old is not None else None),
-        )
-        existing[name] = memory
-        gone = set(leaving) - {name}
-        kept = [m for m in existing.values() if m.name not in gone]
-        if self.homes is None and not _fits(index_of(kept, self.today())):
-            raise MemoryRefused(
-                "full",
-                "The index of memories is full: merge or delete memories, or shorten descriptions.",
-            )
-        self._write_file(self.root / f"{name}.md", render(memory))
-        self._count_change(name)
-        self._after_change()
-        return memory
-
-    def add_turn(self, name: str, turn_id: int) -> None:
-        """Add `turn_id` to the turns the memory `name` came from, leaving the rest of it (its
-        `updated` too, so that its line in the index stays the same)."""
-        memory = self.get(name)
-        if memory is None or turn_id in memory.turns or not _is_turn_id(turn_id):
-            return
-        turns = (*memory.turns, turn_id)[-MAX_TURNS:]
-        self._write_file(self.root / f"{name}.md", render(replace(memory, turns=turns)))
-        self._cache_key = None
-        if self._on_change is not None:
+    def apply(self, operations: Sequence[dict], *, mark: str = "", told: str = "", unattended: bool = False) -> dict:
+        """Apply `operations` ({action: add|replace|remove, content?, old_text?}) to the live file, all
+        or none, against the limit on their final result. `mark` is the mark of a turn that read
+        outside content, `told` the stamp of a shared entry, and `unattended` a pass nobody watches,
+        which may not empty the file or take most of it. The result is what the model is told."""
+        ops = [dict(op) if isinstance(op, dict) else {} for op in operations]
+        if not ops:
+            return {"success": False, "kind": "bad_arguments", "error": "operations is empty."}
+        for number, op in enumerate(ops, 1):
+            if op.get("action") == "add" and (refused := _refusal(str(op.get("content") or ""))):
+                return {"success": False, "kind": refused[0], "error": f"Operation {number}: {refused[1]}"}
+        try:
+            with self.homes.locked(self.member_id):
+                try:
+                    before = parse_entries(self._raw())
+                except (OSError, ValueError):
+                    return {"success": False, "kind": "read_failed", "error": (
+                        f"{self.name} exists but could not be read right now. Writing from an empty view "
+                        "would wipe it, so nothing was changed. Try again later.")}
+                try:
+                    working = self._walk(before, ops, mark=mark, told=told)
+                except Refused as refused:
+                    if refused.kind in ("secret", "injection"):
+                        return {"success": False, "kind": refused.kind, "error": str(refused)}
+                    return self._failed(refused.kind, str(refused))
+                problem = self._final_check(before, working, ops, unattended)
+                if problem is not None:
+                    return self._failed(*problem)
+                changed = working != before
+                if changed:
+                    self._persist(working)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not write a memory file: %s", type(exc).__name__)
+            return {"success": False, "kind": "io", "error": f"{self.name} could not be written. Nothing was changed."}
+        self._failures = 0
+        if changed and self._on_change is not None:
             self._on_change()
+        return {"success": True, "done": True, "target": self.target,
+                "changed": changed, "usage": self._usage(len(ENTRY_DELIMITER.join(working))), "entry_count": len(working),
+                "message": f"Applied {len(ops)} operation(s)." if changed else "Entry already exists (no duplicate added).",
+                "note": "Write saved. This update is complete: do not repeat it."}
 
-    def delete(self, name: str) -> bool:
-        """Delete the memory `name`; whether there was one."""
-        if not valid_name(name):
-            return False
-        try:
-            self._delete_file(self.root / f"{name}.md")
-        except FileNotFoundError:
-            return False
-        self._count_change(name)
-        self._after_change()
-        return True
-
-    def clear(self) -> int:
-        """Delete every memory; how many went."""
-        self._count_change(None)
-        deleted = 0
-        for path in self._files():
-            try:
-                self._delete_file(path)
-                deleted += 1
-            except OSError as exc:
-                logger.warning("Could not delete a memory: %s", type(exc).__name__)
-        self._after_change()
-        return deleted
-
-    def drop_expired(self) -> list[str]:
-        """Delete the memories whose date has passed; their names."""
-        today = self.today()
-        gone = [m.name for m in self.all() if m.expired(today)]
-        for name in gone:
-            self.delete(name)
-        return gone
-
-    def _write_file(self, path: Path, text: str) -> None:
-        if self.homes is not None:
-            relative = "MEMORY.md" if path.name == INDEX_FILE else "memory/" + path.name
-            self.homes.keep(self.member_id, relative, text)
-            return
-        self.root.mkdir(parents=True, exist_ok=True)
-        part = path.with_name(path.name + ".part")
-        part.write_text(text, encoding="utf-8", newline="\n")
-        os.replace(part, path)
-
-    def _delete_file(self, path: Path) -> None:
-        if self.homes is None:
-            path.unlink()
-        else:
-            from ..bots.homes import digest
-            self.homes.delete(self.member_id, "memory/" + path.name, expected_hash=digest(path.read_bytes()))
-
-    def _after_change(self) -> None:
-        """Write the index to `MEMORY.md`, for whoever opens the folder. The prompt reads `index`."""
-        self._cache_key = None
-        if not self.root.exists():
-            return
-        try:
-            if self.homes is not None:
-                from .growth import archive_document, prompt_document
-                document = prompt_document(self)
-                archive = archive_document(self)
-                # Overflow topics remain intact; the archive is a derived searchable view.
-                self._write_file(self.root / "archive.md", archive)
-                self._write_file(self.root / INDEX_FILE, document)
+    def _walk(self, entries: Sequence[str], ops: Sequence[dict], *, mark: str, told: str) -> list[str]:
+        working = list(entries)
+        for number, op in enumerate(ops, 1):
+            action = op.get("action")
+            content = str(op.get("content") or op.get("new_text") or "")
+            old_text = str(op.get("old_text") or "")
+            where = f"Operation {number} ({action or 'unknown'})"
+            if action == "add":
+                self._add(working, clean_entry(content), where, mark=mark, told=told, alone=len(ops) == 1)
+            elif action in ("replace", "remove"):
+                self._edit(working, action, old_text, content, where, mark=mark, told=told, alone=len(ops) == 1)
             else:
-                index = self.index()
-                header = "# Raphael's memory (made from the files; edits here are not kept)\n\n"
-                self._write_file(self.root / INDEX_FILE, header + (index + "\n" if index else ""))
-        except OSError as exc:
-            logger.warning("Could not write the index of the memory: %s", type(exc).__name__)
-        if self._on_change is not None:
+                raise Refused("bad_arguments", f"{where}: unknown action. Use add, replace or remove.")
+        return working
+
+    def _add(self, working: list[str], content: str, where: str, *, mark: str, told: str, alone: bool) -> None:
+        if not without_mark(content).strip():
+            raise Refused("bad_arguments", f"{where}: content is required.")
+        fresh = mark + _TOLD.sub("", without_mark(content)) + told
+        for index, entry in enumerate(working):
+            found = relation(content, entry)
+            if found == "same":
+                if is_unconfirmed(entry) and not mark:  # the owner said it: it needs no mark any more
+                    working[index] = fresh
+                return
+            if found == "inside":
+                return
+            if found == "wider" and (not mark or is_unconfirmed(entry)):
+                working[index] = fresh
+                return
+            if found == "near":
+                raise Refused("similar", (
+                    f"{where}: an entry already says nearly this, and one fact keeps one line. If the new text "
+                    "changes or adds to it, retry with 'replace', old_text set to that entry; if it says the "
+                    f"same, there is nothing to do.\nThe entry: {entry}"))
+        working.append(fresh)
+
+    def _edit(self, working: list[str], action: str, old_text: str, content: str, where: str, *, mark: str, told: str, alone: bool) -> None:
+        if not old_text.strip():
+            raise Refused("missing_old_text", (
+                f"{where}: old_text is required: a short unique part of the entry. Retry with old_text set "
+                "to part of one of the entries below." + _listed("current_entries", working)))
+        index, ambiguous = _find_unique_match(working, old_text if action == "replace" else old_text.strip())
+        if ambiguous:
+            raise Refused("ambiguous", f"{where}: '{old_text}' matched several entries. Include more of the one you mean.")
+        if index is None:
+            near = working if alone else _closest(working, old_text)
+            raise Refused("no_match", (
+                f"{where}: no entry matched '{old_text}'. Retry with old_text copied verbatim from the entry "
+                "you mean; old_text comes from ONE entry." + _listed("current_entries" if alone else "closest_entries", near)))
+        entry = working[index]
+        if mark and not is_unconfirmed(entry):
+            raise Refused("unconfirmed_only", (
+                f"{where}: this turn read outside content, so it may add entries and edit the ones marked as "
+                "unconfirmed, and never changes what the owner has confirmed. Nothing was changed; add it as a "
+                "new entry if it is worth keeping, and the owner can confirm it."))
+        if action == "remove":
+            del working[index]
+            return
+        if not content.strip():
+            raise Refused("bad_arguments", (
+                f"{where}: content is required: the text that takes the place of old_text. To drop part of an "
+                "entry, replace a longer span that holds it; 'remove' deletes the whole entry."))
+        count = _span_occurrences(entry, old_text)
+        if count > 1:
+            raise Refused("ambiguous", f"{where}: '{old_text}' occurs {count} times in the entry, and replace edits one span. Include more of the text around it.")
+        if count == 0:
+            raise Refused("no_match", f"{where}: old_text is not an exact part of the entry. Retry with it copied verbatim.\nThe entry: {entry}")
+        patched = clean_entry(entry.replace(old_text, content, 1))
+        if patched == entry:
+            raise Refused("no_change", f"{where}: this leaves the entry as it is.")
+        if refused := _refusal(patched):
+            raise Refused(refused[0], f"{where}: {refused[1]}")
+        if mark and not is_unconfirmed(patched):
+            patched = mark + patched
+        if told:
+            patched = _TOLD.sub("", patched) + told
+        others = working[:index] + working[index + 1:]
+        if any(_fold(other) == _fold(patched) for other in others):  # one fact keeps one line
+            del working[index]
+            return
+        working[index] = patched
+
+    def _final_check(self, before: Sequence[str], after: Sequence[str], ops: Sequence[dict], unattended: bool) -> tuple[str, str] | None:
+        old_total = len(ENTRY_DELIMITER.join(before))
+        new_total = len(ENTRY_DELIMITER.join(after))
+        alone_removed = len(ops) == 1 and ops[0].get("action") == "remove"
+        if before and not after and (unattended or not alone_removed):
+            return "would_empty", (
+                f"This would remove every entry of {self.name}. Merge entries into a shorter one instead of "
+                "removing the last one. Nothing was changed.")
+        if unattended and new_total < old_total * _UNATTENDED_KEEPS:
+            return "too_much_removed", (
+                f"This would take away more than half of {self.name}. Merge entries and keep their facts. "
+                "Nothing was changed.")
+        if new_total > self.limit and new_total > old_total:
+            over = new_total - self.limit
+            return "full", (
+                f"{self.name} at {old_total:,}/{self.limit:,} chars; this would exceed the limit by {over:,} chars. "
+                f"Retry as ONE 'operations' batch that removes or shortens (replace) stale entries from "
+                f"current_entries below to free at least {over:,} chars AND makes this change: the limit is "
+                "checked only on the batch's result. Merge what overlaps; drop what no longer matters."
+                + _listed("current_entries", before))
+        return None
+
+    def _persist(self, entries: Sequence[str]) -> None:
+        text = render_entries(entries)
+        if self.member_id is None:
+            self.homes.shared_keep(self.name, text)
+        else:
+            self.homes.keep(self.member_id, self.name, text)
+
+    def edit_document(self, text: str, revision: str | None) -> dict:
+        """The owner's edit of the whole document, from the copy with `revision`. It refuses an edit
+        from an old copy, since a member may have written meanwhile, and scans only what the edit adds:
+        a line that failed the scan once must not keep the owner from saving the rest of the file."""
+        try:
+            with self.homes.locked(self.member_id):
+                raw = self._raw()
+                if revision is not None and hashlib.sha256(raw.encode("utf-8")).hexdigest() != revision:
+                    return {"success": False, "kind": "changed", "error": "The memory changed while it was being edited."}
+                known = {_fold(entry) for entry in parse_entries(raw)}
+                entries = parse_entries(text)
+                for entry in entries:
+                    if _fold(entry) not in known and (refused := _refusal(entry)):
+                        return {"success": False, "kind": refused[0], "error": refused[1]}
+                changed = render_entries(entries) != raw
+                if changed:
+                    self._persist(entries)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not write a memory file: %s", type(exc).__name__)
+            return {"success": False, "kind": "io", "error": "The memory could not be written."}
+        if changed and self._on_change is not None:
+            self._on_change()
+        return {"success": True}
+
+    def drop_said(self, contents: Sequence[str]) -> None:
+        """Take away the entries that say what `contents` say: the other file holds them now."""
+        folded = {_fold(content) for content in contents}
+        changed = False
+        try:
+            with self.homes.locked(self.member_id):
+                before = parse_entries(self._raw())
+                after = [entry for entry in before if _fold(entry) not in folded]
+                changed = after != before
+                if changed:
+                    self._persist(after)
+        except (OSError, ValueError) as exc:  # the fact is kept in the other file all the same
+            logger.warning("Could not write a memory file: %s", type(exc).__name__)
+        if changed and self._on_change is not None:
             self._on_change()
 
-
-def move_note(name: str, source: MemoryStore, target: MemoryStore) -> bool:
-    """Move the memory `name` from `source` to `target` as its file is, byte for byte (an edit by
-    hand is kept); whether it moved. Not when `source` has no such memory or `target` already has
-    one of that name: nothing is ever overwritten. Both indexes are written again, and the move
-    counts as a change of the memory in both (`changed_since`), so a pass of the model that read
-    either before it applies nothing to it."""
-    if not valid_name(name) or source.get(name) is None or target.get(name) is not None:
-        return False
-    target.root.mkdir(parents=True, exist_ok=True)
-    source_path = source.root / f"{name}.md"
-    target._write_file(target.root / f"{name}.md", source_path.read_text(encoding="utf-8"))
-    source._delete_file(source_path)
-    for store in (source, target):
-        store._count_change(name)
-        store._after_change()
-    return True
-
-
-class SharedMemoryStore(MemoryStore):
-    """Preserve imported note files and publish the shared owner/team documents."""
-
-    def __init__(self, homes, **kwargs):
-        self.shared_homes = homes
-        super().__init__(homes.root / "shared/memory", **kwargs)
-
-    def _write_file(self, path: Path, text: str) -> None:
-        self.shared_homes.shared_keep("memory/" + path.name, text)
-
-    def _delete_file(self, path: Path) -> None:
-        if not path.exists():
-            raise FileNotFoundError(path)
-        self.shared_homes.shared_keep("memory/" + path.name, None)
-
-    def _after_change(self) -> None:
-        super()._after_change()
-        active = [m for m in self.all() if not m.expired(self.today())]
-        for filename, notes in (("USER.md", [m for m in active if m.type != "ongoing"]),
-                                ("team.md", [m for m in active if m.type == "ongoing"])):
-            text = "\n\n".join(f"## {m.name}\n{m.description}\n\n{m.body}" for m in notes)
-            self.shared_homes.shared_keep(filename, text + ("\n" if text else ""))
+    def clear(self) -> bool:
+        """Empty the file; whether it held anything. The journal keeps what it held."""
+        with self.homes.locked(self.member_id):
+            held = bool(self.entries())
+            if held:
+                self._persist([])
+            self.clears += 1
+        if held and self._on_change is not None:
+            self._on_change()
+        return held
 
 
 @dataclass(frozen=True)
-class MemoryIndex:
-    """What an assistant reads of the memory: the index of the shared memory, which every assistant
-    of the owner's reads and writes (who the owner is), and the index of its own (its own work).
-    The shared one comes first: it changes less often than an assistant's own work, which keeps
-    the start of the prompt the same for the provider's cache. `own` is None where no own note may
-    be read: a room's turn, or work one assistant handed another."""
+class MemorySnapshot:
+    """The memory as one turn reads it, made once at the turn's start and never changed by what the turn
+    writes: USER.md, which every member reads, then the member's own MEMORY.md, which changes more often
+    (the start of the prompt stays the same for the provider's cache). `own` is None where no own file
+    may be read: a room's turn, or work one member handed another."""
 
     shared: str = ""
     own: str | None = ""
-    topics: str = ""
+    shared_usage: str = ""
+    own_usage: str = ""
 
     def __bool__(self) -> bool:
         return bool(self.shared or self.own)
 
     def __str__(self) -> str:
-        """The indexes, each in its tags, for a prompt that shows them as data."""
-        shared = f"<shared_memory>\n{self.shared or '(no notes yet)'}\n</shared_memory>"
-        notes = shared if self.own is None else f"{shared}\n<own_memory>\n{self.own or '(no notes yet)'}\n</own_memory>"
-        return notes + (f"\n<topic_index>\n{self.topics}\n</topic_index>" if self.topics else "")
-
-
-def _is_turn_id(turn: object) -> bool:
-    """Whether `turn` is a turn id: a whole number above zero (not a bool)."""
-    return type(turn) is int and turn > 0
-
+        shared = f'<shared_memory file="USER.md" usage="{self.shared_usage}">\n{self.shared or "(empty)"}\n</shared_memory>'
+        if self.own is None:
+            return shared
+        return f'{shared}\n<own_memory file="MEMORY.md" usage="{self.own_usage}">\n{self.own or "(empty)"}\n</own_memory>'

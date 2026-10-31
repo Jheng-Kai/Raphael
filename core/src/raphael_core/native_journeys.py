@@ -200,11 +200,12 @@ for line in sys.stdin:
     if method == "initialize": send({"id":msg["id"], "result":{}})
     elif method == "model/list": send({"id":msg["id"], "result":{"data":[]}})
     elif method in ("thread/start", "thread/resume"):
-        prompt = msg["params"].get("developerInstructions", "")
-        assert "private-review" in prompt and "Review" in prompt
-        Path(sys.argv[1]).write_text(json.dumps({"member_home":True,"skills":True}), encoding="utf-8")
+        assert "Review" in msg["params"].get("developerInstructions", "")
         send({"id":msg["id"], "result":{"thread":{"id":"native-home"}}})
     elif method == "turn/start":
+        # The member's own file comes with every turn, so that a resumed thread reads it as it is now.
+        assert "private-review" in msg["params"]["input"][0]["text"]
+        Path(sys.argv[1]).write_text(json.dumps({"member_home":True,"skills":True}), encoding="utf-8")
         send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "id":"final", "phase":"final_answer", "text":"Native Codex home verified."}}})
         send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
         break
@@ -337,8 +338,8 @@ def native_memory(messages, offered, seen):
         if not seen:
             if "memory_update" not in offered:
                 raise ValueError("Native memory tool is absent")
-            return "memory_update", {"op": "add", "name": "reference-project-colour",
-                                     "body": "The project colour is heliotrope."}
+            return "memory_update", {"target": "memory", "operations": [
+                {"action": "add", "content": "The project colour is heliotrope."}]}
         return "reply", "The member saved the project colour."
     if "[native-memory:recall]" in question:
         recall = re.findall(r'<tool_result [^>]*tool="auto_recall"[^>]*>(.*?)</tool_result>', latest, re.S)

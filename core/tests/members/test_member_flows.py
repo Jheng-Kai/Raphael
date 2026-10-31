@@ -70,7 +70,7 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     history = AgentHistory(rig.conn)
     for person in (one, other):
         history.add(session_id=f"s{person.id}", question="Question", route="answer", prefix="", text="Answer", status="done", member_id=person.id)
-    team.memory.store_for(one.id).write("reference-topic", type="reference", description="Topic", body="Topic details")
+    team.memory.own(one.id).edit_document("Topic details\n", None)
     rig.service._cli_sessions.put(one.id, "claude", "old-session")
     rig.service._cli_sessions.put(other.id, "claude", "other-session")
     named = rig.service.conversations.create(one.id)
@@ -85,7 +85,7 @@ async def test_clear_member_history_preserves_other_threads_and_own_notes(setup)
     assert cleared["deleted"] == 1
     assert history.list(member_id=one.id) == []
     assert len(history.list(member_id=other.id)) == 1
-    assert team.memory.store_for(one.id).get("reference-topic") is not None
+    assert team.memory.own(one.id).read().strip() == "Topic details"
     assert rig.service._cli_sessions.get(one.id, "claude") is None
     assert rig.service._cli_sessions.get(other.id, "claude") == "other-session"
 

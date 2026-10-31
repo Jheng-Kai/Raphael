@@ -62,8 +62,8 @@ is open, save, open its conversation and reopen details. Assert identity/avatar 
 selection. Native proof must also relaunch the isolated dev instance and confirm
 persistence, then remove test data.
 
-Memory, routine, skill and command rows put edit/delete in their overflow menus
-(R-UI-11). A shared note's row names whom the owner told it to and when (`global-private-memory`). Routine switches remain on their rows. Existing edit, approval and undo
+Routine, skill and command rows put edit/delete in their overflow menus
+(R-UI-11). A memory is a document with one 編輯, and a shared entry ends with whom the owner told it to and when (`global-private-memory`). Routine switches remain on their rows. Existing edit, approval and undo
 behavior remains in the shared editors and controllers.
 
 ## Gotchas
@@ -202,7 +202,7 @@ npm run look -- context-menu-member context-menu-conversation context-menu-routi
 ## What destroys waits in the ⋯ (R-UI-56)
 
 Clear, clear all, delete and remove never stand open on a page (the owner, 2026-10-31, about the memory tab). They wait in the ⋯ of the row or section title they
-act on, and its right click: 全部清除 in the title of each memory section, 清除 in the conversation summary's row, the clears of Settings › 資料 in their rows (所有聽寫紀錄,
+act on, and its right click: 全部清除 in the title of each memory document, 清除 in the conversation summary's row, the clears of Settings › 資料 in their rows (所有聽寫紀錄,
 所有對話紀錄), 移除金鑰 in the key's row of Settings › 模型 › 用量, a person's removal in their Telegram row and a downloaded local model's deletion in its row of the chooser.
 `openConfirmMenu` (app/src/main/ui.ts) keeps the second press the buttons had: the first press asks in the item's place for five seconds, and closing the menu forgets
 it. A local model still asks in its row, and a clear of 資料 still gives its ten seconds of 復原.
@@ -254,21 +254,16 @@ Owner round 6: member-text and the shared details scenes cover conversation cons
 
 ## Bot homes, phase 1 (owner decision 2026-10-29)
 
-Every member, including Raphael, owns `bots/<id>/MEMORY.md`, `memory/` and
-`skills/<skill>/SKILL.md`. `bot-state/<id>/SOUL.md` is a derived persona mirror;
-the database remains authoritative. `skills.json` records enabled state, provenance
-and document revision. Atomic, bounded, allowlisted document writes redact secrets,
-check optimistic SHA-256 revisions and keep undo journals outside bot-writable homes.
-Core metadata undo restores the database before regenerating the mirror; no bot can
-write SOUL or role/enable metadata. Shared owner/team documents are `shared/USER.md`
-and `shared/team.md`; migrated shared notes remain under `shared/memory/`.
+Every member, including Raphael, owns `bots/<id>/SOUL.md`, `MEMORY.md`, `memory/log/`
+and `skills/<skill>/SKILL.md`. SOUL.md is written by the core from the member's details;
+the database remains authoritative and no bot can write it. `skills.json` records enabled
+state, provenance and document revision. Atomic, bounded, allowlisted document writes
+redact secrets, check optimistic SHA-256 revisions and keep undo journals outside
+bot-writable homes. The owner's profile is one file, `shared/USER.md`.
 
-Migration first verifies destinations and copies every source, then removes verified
-sources. It preserves legacy private/shared placement and bytes; conflicts abort
-without overwriting. Tests use a copied synthetic three-memory tree, never owner data.
-Private-chat writes and reflection stay in that member's home even when a model
-requests shared space. Only an explicit owner sharing request promotes a private
-request to shared memory. Search/read never cross another member's private memory
+The first move of the folders copies every source and then removes verified sources,
+keeping private/shared placement; conflicts abort without overwriting. Tests use a copied
+synthetic tree, never owner data. Search/read never cross another member's private memory
 or thread; `ask_member` returns the asked member's own answer.
 
 Member details uses the existing model picker once, with inherit-global plus API/CLI
@@ -291,60 +286,70 @@ no provider calls. Fixture/native/real-provider/judge evidence remain separate.
 Phase 2 adds automatic capture, recall/folding and owner pending review below. Learned skills remain phase 3.
 
 
-## Memory that grows, phase 2 (owner decision 2026-10-29)
+## Memory as living files (owner decision 2026-10-31, supersedes phase 2's notes)
 
-Every API/CLI brain receives the same `memory_update`, `memory_log`,
-`session_search` and `session_read` definitions through the production harness and
-RaphaelMcp. Tool writes are limited to 1000 characters. Useful private facts and
-work outcomes may be recorded without a remember phrase. After external ingestion
-(including external history retrieved later), writes stay outside the home under
-`bot-state/<id>/pending/` until the owner approves them. Pending entries appear in
-the existing member Memory pane; View shows a read-only proposal, operation,
-target and destination, Approve applies it, Delete rejects it. Approval rechecks
-the target revision; conflicting proposals remain pending. Pending data never
-enters prompts, recall or member-visible search.
+The owner, about rows of 待確認 notes that could repeat each other: memory is a file that keeps being edited,
+as in Hermes. Each member has `bots/<id>/MEMORY.md` (the pane's 「<name> 的記憶」), which no other member
+reads, and all read the one `shared/USER.md` (共同記憶). Limits are Hermes's: 2,200 and 1,375 characters.
 
-Private owner conversations, including owner facts and background capture, write
-only to that member's own home. Shared notes contain the shared owner profile,
-owner words in rooms/group chats and facts explicitly shared with everyone.
-Search/read/recall never inspect another member's private thread or home. Room
-turns cannot retrieve a member's private sources. `ask_member` lets the target
-member choose what to answer. All read paths, including cold index construction,
-recall and history reads, remain silent: they never emit change notifications.
+Every API/CLI brain edits them through one tool, `memory_update {target: memory|user, operations: [{action:
+add|replace|remove, content?, old_text?}]}` (and an API brain's reply field `memory`, the same edits). Useful
+facts and work outcomes are recorded without a remember phrase. The same fact keeps one line: the same words
+are not added again, more words take the place of fewer, another wording is refused with the entry to
+replace. A batch is atomic and its limit is checked on its result; a refusal says how much to free and shows the
+entries; past three failures in a turn the model is told to stop and answer. `old_text` is a short unique part of
+one entry; `replace` changes that span and keeps the rest. Two members writing at once lose nothing.
 
-The prompt includes the bounded main memory (200 lines / 24000 UTF-8 bytes), a
-topic index of at most 40 lines / 2000 characters, shared owner/team facts and the
-existing skills index. Overflow is archived; canonical topic files remain intact
-and searchable even when the archive must use references to stay within the home
-file limit. FTS5 is built in memory from permitted sources only, without disk or
-state writes. Automatic recall stays in the current thread; explicit session_search can find
-the member's other own threads and joined rooms. Auto-recall precedes the user question, never the system prompt,
-and is capped at 6000 characters with at most four memory and four conversation
-hits. Logs stay out of the system prompt.
+A model chooses the file; the host checks the choice for USER.md. From a private turn an entry goes there only
+when it is about who the owner is, not a conversation, a plan or a task, and the owner did not ask to keep it from
+the others; otherwise it goes to the member's own file and the model is told so. An explicit request to tell
+everyone, and a room's turn, write there whatever it is about. Every entry that reaches USER.md through a member
+ends with whom the owner told it to and when.
 
-After quiet time or six answered owner turns, a tool-less pass on the member's
-own selected brain (including CLI subscriptions) captures up to eight preferences,
-facts, decisions or outcomes with confidence >=0.6, deduplicating exact facts.
-Daily tidy removes expiry, merges duplicates/corrects contradictions and permits
-topic splitting while preserving sources after refused replacements. Capture
-skips exchange/routine turns; room capture is optional and remains disabled.
+There is no review queue. It protected against a web page planting a fact or an order through the model, and it
+held nearly every working turn's facts in rows the owner had to approve one by one. Now: instructions and secrets
+are refused at every write, and a line that reaches the file by hand is blocked from the prompt and stays for the
+owner to remove. What a turn writes after outside content (a web page, a file, a connected service, a colleague)
+goes in with 「（待確認）」 at its start, in the document the owner reads, stays in that member's own file, and may
+change only other marked entries; the model reads it as a claim. The owner saying the same thing, or editing the
+mark away, confirms it. The reflection pass reads only the owner's words of a turn that read outside content, so
+what it writes needs no mark.
+
+A turn reads both files once, at its start, in a form nothing it writes changes (`snapshot`), with how full each
+is; the tools see the live file. API brains read them in the system prompt. A resumed CLI session keeps the
+instructions it began with, so CLI brains read them in every turn's message. A room's turn and work a colleague
+handed over read USER.md alone. FTS5 search covers logs, turns and rooms from permitted sources only, without disk
+or state writes. Auto-recall precedes the user question, never the system prompt, capped at 6000 characters with
+at most four log and four conversation hits. All read paths remain silent.
+
+After quiet time or six answered owner turns, a tool-less pass on the member's own selected brain (including CLI
+subscriptions) reads both files whole and answers with edits at confidence >=0.6; a full file sends it back once
+with the refusal. Once a day a file past 80% of its limit is consolidated the same way. A pass nobody watches may
+not empty a file or take more than half of it, and the journal keeps what any edit replaced. Capture skips
+exchange/routine turns.
+
+At every start `memory/legacy.py` moves what the old store left (note files, the review queue, derived documents)
+into the files, merging exact and near duplicates, after copying everything to `bot-state/<id>/notes-backup/`. What
+waited in the queue enters marked; a note past its date keeps it in its words; a file over its limit stays whole.
+
+The pane (`memory-view.ts`) shows each file as paragraphs, one 編輯 opens all of it in one box that grows with its
+text, and 儲存 sends the copy's revision: an edit from an old copy is refused, what was typed stays, and the next
+儲存 is made knowing it. 全部清除 and the summary's 清除 wait in their ⋯ (R-UI-56).
 
 ```powershell
 npm run verify -- --core
-npm run look -- details-memory global-private-memory --theme both --width 1120,720,1920x1080
+npm run look -- details-memory memory-editing memory-saved global-private-memory member-edit-memory settings-memory --theme both --width 1120,720,1920x1080
 npm run native -- memory-growth
 ```
 
-`details-memory` opens the pending proposal; `pending-memory` checks read-only
-controls, the owner action, contextual external-content notice and zero writes
-on opening. `global-private-memory` checks shared provenance/private separation,
-then opens an ordinary editable note for same-component comparison. No new scene
-is added to the Guardian matrix. `core/tests/memory/test_growth.py` covers silent
-reads, own-home isolation, pending review/conflicts, bounded tools/recall, turn-one
-retrieval on turn 25, member-brain capture and tool-less CLI capture. The native
-fake-brain journey sends 25 real app turns and checks the member-written home and
-zero spend. It proves host plumbing, not real-provider inference or design-judge
-acceptance. Learned skills remain phase 3.
+`memory-document` checks paragraphs, no rows or type labels, the 待確認 tag, a real 編輯 and no scroll of its own.
+`memory-editor` checks the whole file in a focused box that does not scroll. `memory-saved` checks one write of this
+member's file with its revision. `global-private-memory` checks shared provenance and private separation.
+`member-edit-memory` and `settings-memory` cover the edit dialog's box and Raphael's tab of Settings.
+`core/tests/memory/test_files.py` covers every contract above, `test_reflection.py` the pass, `test_growth.py` silent
+reads and bounded recall, `members/test_cli_brains.py` a resumed session and MCP edits. The native fake-brain journey
+sends 25 real app turns and checks the member-written file and zero spend. It proves host plumbing, not real-provider
+inference or design-judge acceptance. Learned skills remain phase 3.
 
 
 ## Skills that grow, phase 3 (2026-10-29)
@@ -379,7 +384,7 @@ npm run native -- skill-growth
 ```
 
 The selected scenes cover learned provenance, silent reading, delete/undo, conversation
-notices and the ordinary memory/command editor comparisons. The native journey checks the real
+notices and the ordinary command editor comparison. The native journey checks the real
 heading, ten persisted tool calls, a background-generated home skill, and a successful
 skill_read on the next similar request, with zero fake-provider spend. This proves host
 plumbing, not real-provider inference. Core behavior tests are in

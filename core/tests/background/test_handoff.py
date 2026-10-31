@@ -289,8 +289,8 @@ def knowing(rig, tmp_path, target):
     """The asked member knows a code from its own conversation and a date from its own note; every
     member knows the brand colour."""
     memory = MemoryService(rig.conn, tmp_path/'memory', NoMemoryModel(), MemoryKeyStore())
-    memory.store_for(target.id).write('reference-launch', type='reference', description='上市日 PRIVATE-NOTE', body='上市日 PRIVATE-NOTE')
-    memory.shared.write('user-brand', type='user', description='品牌主色是金色', body='品牌主色是金色', member=0)
+    memory.own(target.id).edit_document('上市日 PRIVATE-NOTE\n', None)
+    memory.shared.edit_document('品牌主色是金色 — 拉斐爾 · 2026-10-27\n', None)
     rig.service.use_memory(memory)
     AgentHistory(rig.conn, rig.wall).add(session_id='private', question='只告訴你：新品代號 PRIVATE-CHAT', route='chat',
                                          prefix='', text='好，我記住了。', status='done', member_id=target.id)
@@ -333,7 +333,7 @@ async def test_a_consultation_answers_from_what_the_asked_member_knows_and_the_a
     assert rig.task(parent).state=='done', rig.task(parent)
     [child]=rig.service._store.handoffs(source.id)
     assert all(known in seen['asked'] for known in ('PRIVATE-CHAT','PRIVATE-NOTE','品牌主色是金色'))
-    assert {'memory_read','history_search'} <= set(seen['tools'])
+    assert 'history_search' in seen['tools'] and 'memory_read' not in seen['tools']
     # Only the answer reaches the asker: never the asked member's conversation or notes.
     assert 'PRIVATE-CHAT' in seen['asker'] and 'PRIVATE-NOTE' not in seen['asker'] and '好，我記住了' not in seen['asker']
     exchange=AgentHistory(rig.conn).get(child.turn_id)
@@ -404,7 +404,7 @@ async def test_assigned_work_reads_the_shared_notes_but_never_the_assignees_priv
     assert '品牌主色是金色' in shown
     assert 'PRIVATE-CHAT' not in shown and 'PRIVATE-NOTE' not in shown
     tools=[tool['function']['name'] for tool in assigned['tools']]
-    assert 'memory_read' in tools and 'history_search' not in tools
+    assert 'memory_read' not in tools and 'history_search' not in tools
 
 
 @pytest.mark.parametrize('room',[True,False])

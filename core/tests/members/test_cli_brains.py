@@ -434,17 +434,55 @@ def test_only_claude_code_is_offered_the_permission_prompt_tool(model, offered):
 
 
 @pytest.mark.parametrize("remember", [True, False])
-async def test_mcp_memory_write_is_autonomous_and_member_scoped(setup, tmp_path, remember):
+async def test_mcp_memory_update_is_autonomous_and_member_scoped(setup, tmp_path, remember):
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    args = {"name": "preference-examples", "type": "preference", "description": "Learning style", "body": "The owner prefers examples.", "space": "own"}
-    fake_mcp(rig, tmp_path, [("memory_write", args)])
+    args = {"target": "memory", "operations": [{"action": "add", "content": "The owner prefers examples."}]}
+    fake_mcp(rig, tmp_path, [("memory_update", args)])
     result = await typed(rig, "Remember that I prefer examples" if remember else "Give an example", teacher.id)
     assert result["text"] == "Finished."
-    assert team.memory.store_for(teacher.id).get("preference-examples") is not None
-    assert team.memory.store_for(0).get("preference-examples") is None
+    assert "The owner prefers examples." in team.memory.own(teacher.id).read()
+    assert team.memory.own(0).read() == ""
     turn = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"][0]
-    assert any(step["tool"] == "memory_write" for step in turn["steps"])
+    assert any(step["tool"] == "memory_update" for step in turn["steps"])
+    assert any(message["kind"] == "event" and message["text"] == "已記下。" for message in turn["messages"])
+
+
+async def test_a_resumed_cli_turn_carries_the_memory_as_it_is_now(setup, tmp_path, client):
+    # A resumed Codex thread keeps the instructions it began with: what the file says now must come with the
+    # turn, through the path every brain reads, and what it said before must not stand beside it unmarked.
+    rig, team = setup
+    teacher = member(team, model="cli:codex")
+    inputs = tmp_path / "inputs.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys
+def send(value): print(json.dumps(value), flush=True)
+for line in sys.stdin:
+    msg = json.loads(line)
+    if msg.get("method") == "initialize": send({"id":msg["id"], "result":{}})
+    elif msg.get("method") in ("thread/start", "thread/resume"):
+        with open(INPUTS, "a", encoding="utf-8") as out:
+            out.write(json.dumps({"method": msg["method"], "system": msg["params"].get("developerInstructions", "")}) + "\\n")
+        send({"id":msg["id"], "result":{"thread":{"id":"memory-session"}}})
+    elif msg.get("method") == "turn/start":
+        with open(INPUTS, "a", encoding="utf-8") as out:
+            out.write(json.dumps({"user": msg["params"]["input"][0]["text"]}) + "\\n")
+        send({"method":"item/completed", "params":{"item":{"type":"agentMessage", "id":"final", "phase":"final_answer", "text":"Noted."}}})
+        send({"method":"turn/completed", "params":{"turn":{"status":"completed"}}})
+        break
+'''.replace("INPUTS", repr(str(inputs))), name="codex")
+    write = lambda content: team.memory.update_memory(teacher.id, {"target": "memory", "operations": [{"action": "add", "content": content}]})
+    assert write("The owner studies Japanese.").ok
+    await typed(rig, "What do you know?", teacher.id, language="en")
+    assert team.memory.update_memory(teacher.id, {"target": "memory", "operations": [{"action": "replace", "old_text": "Japanese", "content": "Korean"}]}).ok
+    assert team.memory.update_memory(0, {"target": "user", "operations": [{"action": "add", "content": "The owner is called Jack"}]}).ok
+    await typed(rig, "And now?", teacher.id, language="en")
+    start, first, resume, second = [json.loads(line) for line in inputs.read_text(encoding="utf-8").splitlines()]
+    assert start["method"] == "thread/start" and resume["method"] == "thread/resume"
+    assert "Japanese" in first["user"] and "Korean" not in first["user"]
+    assert "Korean" in second["user"] and "The owner studies Japanese" not in second["user"] and "The owner is called Jack" in second["user"]
+    assert "/2,200 chars" in second["user"]
+    # The rules are the instructions'; the files themselves are never there, where a resumed thread would keep them.
+    assert "memory_update" in start["system"] and "The owner studies" not in start["system"]
 
 
 @pytest.mark.parametrize("stop", ["cancel", "expired", "deadline"])
@@ -493,20 +531,18 @@ async def test_spoken_cli_reply_retains_japanese_without_showing_json(setup, tmp
     assert reply.text == "明天練習。" and reply.say_ja == "明日練習します。"
 
 
-async def test_mcp_memory_write_safety_approval_is_audited_as_user(setup, tmp_path, monkeypatch):
-    from raphael_core.agent.safety import Screening
+async def test_mcp_memory_update_in_ask_first_is_audited_as_user(setup, tmp_path):
     rig, team = setup
     teacher = member(team, model="cli:claude")
-    args = {"name": "preference-examples", "type": "preference", "description": "Learning style", "body": "The owner prefers examples.", "space": "own"}
-    fake_mcp(rig, tmp_path, [("memory_write", args)])
-    async def screen(*args, **kwargs):
-        return Screening(verdict="ask", rule="Ask before memory changes")
-    monkeypatch.setattr(rig.service._gate, "screen", screen)
+    rig.settings.set("action_mode", "ask")
+    args = {"target": "memory", "operations": [{"action": "add", "content": "The owner prefers examples."}]}
+    fake_mcp(rig, tmp_path, [("memory_update", args)])
     pending = await typed(rig, "Remember that I prefer examples", teacher.id)
     assert pending["status"] == "confirm"
-    assert team.memory.store_for(teacher.id).get("preference-examples") is None
+    assert team.memory.own(teacher.id).read() == ""
     assert (await rig.confirm(pending["confirm"]["id"]))["text"] == "Finished."
-    [audit] = rig.conn.execute("SELECT approver FROM tool_audit WHERE tool='memory_write'").fetchall()
+    assert "The owner prefers examples." in team.memory.own(teacher.id).read()
+    [audit] = rig.conn.execute("SELECT approver FROM tool_audit WHERE tool='memory_update'").fetchall()
     assert audit[0] == "user"
 
 

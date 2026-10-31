@@ -492,7 +492,8 @@ test("member notifications refresh names, groups, unread dots and the open heade
 });
 
 test("memory notifications refresh the visible own and shared lists with correct scope", async () => {
-  api.core.mockImplementation(async (method: string) => method === "memory.list" ? { memories: [], summary: null } : { questions: [] });
+  const document = (text: string) => ({ text, revision: "r", chars: text.length, entries: text ? 1 : 0, limit: 2200, summary: null });
+  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("") : { questions: [] });
   mount();
   await flush();
   await pick(3);
@@ -503,15 +504,14 @@ test("memory notifications refresh the visible own and shared lists with correct
   send({ type: "MemoryChanged", member_id: 4, space: "own" });
   await flush();
   expect(api.core).not.toHaveBeenCalled();
-  const note = { name: "reference-live", description: "Fresh note", type: "reference", origin: "told", updated: "", expires: null };
-  api.core.mockImplementation(async (method: string) => method === "memory.list" ? { memories: [note], summary: null } : { questions: [] });
+  api.core.mockImplementation(async (method: string) => method === "memory.get" ? document("Fresh note") : { questions: [] });
   send({ type: "MemoryChanged", member_id: 3, space: "own" });
   await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.list", { member_id: 3, space: "own" });
+  expect(api.core).toHaveBeenLastCalledWith("memory.get", { member_id: 3, space: "own" });
   expect($('[data-mem-space="own"]').textContent).toContain("Fresh note");
   send({ type: "MemoryChanged", member_id: 0, space: "shared" });
   await flush();
-  expect(api.core).toHaveBeenLastCalledWith("memory.list", { space: "shared" });
+  expect(api.core).toHaveBeenLastCalledWith("memory.get", { space: "shared" });
   expect($('[data-mem-space="shared"]').textContent).toContain("Fresh note");
 });
 

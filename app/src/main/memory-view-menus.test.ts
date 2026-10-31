@@ -7,13 +7,10 @@ const api = vi.hoisted(() => ({ core: vi.fn() }));
 vi.mock("./api", () => api);
 
 import { installContextMenus, uncoveredOverflows } from "./context-menu";
-import { type MemoryList, createMemory, memoryHTML } from "./memory-view";
+import { type MemoryDocument, createMemory, memoryHTML } from "./memory-view";
 import { closeMenu } from "./ui";
 
-const LIST: MemoryList = {
-  memories: [{ name: "user-city", description: "主人住在台北", type: "user", origin: "said", updated: "2026-10-22T21:40:00+08:00", expires: null }],
-  summary: { text: "進行中：規劃週末", updated_at_ms: 1 },
-};
+const DOC: MemoryDocument = { text: "主人住在台北\n", revision: "r1", chars: 6, entries: 1, limit: 2200, summary: { text: "進行中：規劃週末", updated_at_ms: 1 } };
 
 const item = (): HTMLElement | null => document.querySelector<HTMLElement>("#app-popover [data-confirm-item]");
 const called = (method: string): boolean => api.core.mock.calls.some(([name]) => name === method);
@@ -22,8 +19,8 @@ let stop: () => void;
 let root: HTMLElement;
 
 /** One list drawn in the page the way the panel draws it, hearing the clicks of its section. */
-async function mount(space?: "shared" | "own"): Promise<void> {
-  const panel = createMemory({ visible: () => true, redraw: () => { root.innerHTML = memoryHTML(panel.view()); }, undo: { begin: vi.fn() }, expanded: true, space, memberId: () => 1, ownerName: () => "小晴" });
+async function mount(space: "shared" | "own" = "own"): Promise<void> {
+  const panel = createMemory({ visible: () => true, redraw: () => { root.innerHTML = memoryHTML(panel.view()); }, space, memberId: () => 1, ownerName: () => "小晴" });
   root.addEventListener("click", (event) => panel.click(event.target as Element));
   await panel.load();
 }
@@ -35,7 +32,7 @@ const rightClick = (target: Element): void => {
 
 beforeEach(() => {
   api.core.mockReset();
-  api.core.mockImplementation(async (method: string) => (method === "memory.list" ? structuredClone(LIST) : {}));
+  api.core.mockImplementation(async (method: string) => (method === "memory.get" ? structuredClone(DOC) : {}));
   document.body.innerHTML = '<div id="root"></div>';
   root = document.getElementById("root")!;
   stop = installContextMenus(document);
@@ -109,7 +106,7 @@ describe("the clears of a memory", () => {
     root.innerHTML = '<div id="shared"></div><div id="own"></div>';
     const shared = root.querySelector<HTMLElement>("#shared")!, own = root.querySelector<HTMLElement>("#own")!;
     for (const [space, slot] of [["shared", shared], ["own", own]] as const) {
-      const panel = createMemory({ visible: () => true, redraw: () => { slot.innerHTML = memoryHTML(panel.view()); }, undo: { begin: vi.fn() }, expanded: true, space, memberId: () => 1, ownerName: () => "小晴" });
+      const panel = createMemory({ visible: () => true, redraw: () => { slot.innerHTML = memoryHTML(panel.view()); }, space, memberId: () => 1, ownerName: () => "小晴" });
       root.addEventListener("click", (event) => panel.click(event.target as Element));
       await panel.load();
     }

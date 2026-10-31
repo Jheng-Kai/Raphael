@@ -25,7 +25,7 @@
 .mp-card.mp-fields > h3 { margin: 0; }
 .mp-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .mp-card .mp-card-head h3 { margin: 0; }
-.mp-card-add { border-top: 1px solid var(--line); padding-top: var(--sp-4); }
+#mp-memory { field-sizing: content; overflow: hidden; resize: none; }
 .mp-card h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: 600; }
 .mp-card p, .mp-empty { font-size: var(--fs-2xs); color: var(--text-2); line-height: 1.6; }
 .mp-empty { margin: var(--sp-3) 0; }

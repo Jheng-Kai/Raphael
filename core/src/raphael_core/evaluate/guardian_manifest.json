@@ -233,14 +233,6 @@
         "production_state"
       ]
     },
-    "raphael/core/memory_delete": {
-      "scenario_ids": [
-        "S21.memory.forget"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
-    },
     "raphael/core/memory_update": {
       "scenario_ids": ["S21.memory.update"],
       "expected_assertions": ["production_state"]
@@ -256,22 +248,6 @@
     "raphael/core/session_read": {
       "scenario_ids": ["S21.memory.session-read"],
       "expected_assertions": ["production_state"]
-    },
-    "raphael/core/memory_read": {
-      "scenario_ids": [
-        "S21.memory.show"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
-    },
-    "raphael/core/memory_write": {
-      "scenario_ids": [
-        "S21.memory.save-global"
-      ],
-      "expected_assertions": [
-        "production_state"
-      ]
     },
     "raphael/core/open": {
       "scenario_ids": [

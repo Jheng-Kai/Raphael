@@ -9,7 +9,7 @@ import { groupChoices, groupFromValue, groupValue, openAvatarPicker, openDialog,
 import { mountMemberResources, type ResourceEditor } from "./member-profile-resources";
 import { memberPreset, presetChoices, presetCommand, randomMemberName, type ProfilePreset } from "./member-profile-presets";
 import { INSTRUCTIONS_MAX, NAME_MAX, PERSONALITY_MAX, ROLE_MAX, cleanName, faceHTML, isMemberNameTaken, scheduleText } from "./members";
-import type { MemoryItem } from "./memory-view";
+import { MEMORY_MAX, memoryError, type MemoryDocument } from "./memory-view";
 import type { Member, MemberGroup, MemberPatch, Routine } from "./types";
 import { btn, esc, iconButton, openMenu, sel, tabs, tg, toaster } from "./ui";
 import { openRoutineDialog } from "./routine-dialog";
@@ -40,7 +40,8 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
   let ask = member.ask_before_members ?? false;
   let draftFirst = member.draft_first ?? true;
   let reply = member.reply_style ?? "full";
-  let memories: MemoryItem[] = [];
+  let memoryRevision = "";
+  let memoryText = "";
   let routines: Routine[] = [];
   let memoryLoaded = false;
   let routinesLoaded = false;
@@ -66,13 +67,6 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       else if (act === "reply") openMenu(target, [{ value: "full", label: t("members.profile.full") }, { value: "conversational", label: t("members.profile.conversational") }], reply, value => { reply = value as typeof reply; drawReply(); });
       else if (act === "ask") { ask = !ask; target.setAttribute("aria-checked", String(ask)); }
       else if (act === "draft") { draftFirst = !draftFirst; target.setAttribute("aria-checked", String(draftFirst)); }
-      else if (act === "memory-add") void addMemory();
-      else if (act === "memory-menu") openActions(target, [{ id: "delete", label: t("members.profile.delete"), icon: "trash" }], () => void resourceAction(async () => {
-        const index = Number(target.dataset.index);
-        await api.core("memory.delete", { member_id: member.id, space: "own", name: memories[index]!.name });
-        toaster.info(t("common.deleted"));
-        await loadMemory();
-      }));
       else if (act === "routine-add") routineForm();
       else if (act === "routine-menu") {
         const routine = routines.find(r => r.id === Number(target.dataset.id));
@@ -90,10 +84,9 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
         await api.routinesUpdate(routine.id, { enabled: !routine.enabled });
         await loadRoutines();
       });
-      else if (act === "memory-retry") void loadMemory();
       else if (act === "routine-retry") void loadRoutines();
     },
-    onEnter() { if (tab === "identity") void save(); else if (tab === "memory") void addMemory(); },
+    onEnter() { if (tab === "identity") void save(); },
     onClose() { alive = false; resources?.destroy(); voiceEditor?.destroy(); },
   });
   const nameInput = dialog.el.querySelector<HTMLInputElement>("#mb-new-name")!;
@@ -111,7 +104,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
       area("mb-new-instr", t("members.instructions"), member.instructions ?? "", INSTRUCTIONS_MAX, 8) + `<div class="mp-counter" aria-live="polite"></div></section>` +
       `<section class="mp-card"><h3>${esc(t("members.profile.replyStyle"))}</h3><div class="mp-reply"></div><p class="mp-reply-hint"></p></section>`;
     if (key === "skills") return `<div class="mp-resources"></div>`;
-    if (key === "memory") return `<section class="mp-card"><h3>${esc(t("members.profile.memory"))}</h3><div class="mp-memory-list"></div><div class="mp-add mp-card-add">${field("mp-memory", t("members.profile.remember"), "", 1200)}${btn(esc(t("members.profile.add")), "sm", ' data-dlg="memory-add"')}</div></section>`;
+    if (key === "memory") return `<section class="mp-card"><h3>${esc(t("members.profile.memory"))}</h3><textarea id="mp-memory" class="mb-fin mb-ta" maxlength="${MEMORY_MAX}" rows="8" spellcheck="false" aria-label="${esc(t("members.profile.remember"))}"></textarea></section>`;
     if (key === "routines") return `<section class="mp-card"><div class="mp-card-head"><h3>${esc(t("members.profile.routines"))}</h3>${btn(esc(t("members.routineAdd")), "sm", ' data-dlg="routine-add"')}</div><div class="mp-routine-list"></div></section>`;
     if (key === "permissions") return `<section class="mp-card"><h3>${esc(t("members.profile.permissions"))}</h3><div class="mp-resource"><div><b>${esc(t("members.profile.ask"))}</b><p>${esc(t("members.profile.askHint"))}</p></div>${tg(ask, t("members.profile.ask"), ' data-dlg="ask"')}</div>` +
       `<div class="mp-resource"><div><b>${esc(t("members.profile.draft"))}</b><p>${esc(t("members.profile.draftHint"))}</p></div>${tg(draftFirst, t("members.profile.draft"), ' data-dlg="draft"')}</div></section>`;
@@ -179,21 +172,32 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
     });
   }
   async function loadMemory(): Promise<void> {
-    const list = dialog.el.querySelector<HTMLElement>(".mp-memory-list")!;
     try {
-      memories = (await api.core<{ memories: MemoryItem[] }>("memory.list", { member_id: member.id, space: "own" })).memories;
+      const document = await api.core<MemoryDocument>("memory.get", { member_id: member.id, space: "own" });
       if (!alive) return;
       memoryLoaded = true;
-      list.innerHTML = memories.length ? memories.map((m, index) => `<div class="mp-resource"><span>${esc(m.description)}</span>${iconButton("more", t("members.more", { p0: m.description }), ` data-dlg="memory-menu" data-index="${index}" aria-haspopup="menu" aria-expanded="false"`)}</div>`).join("") : `<p class="mp-empty">${esc(t("members.profile.noMemory"))}</p>`;
-    } catch (error) { if (alive) { list.innerHTML = btn(esc(t("members.profile.retry")), "sm", ' data-dlg="memory-retry"'); toaster.info(describeError(error)); } }
+      memoryRevision = document.revision;
+      memoryText = document.text.trimEnd();
+      set("mp-memory", memoryText);
+    } catch (error) { if (alive) toaster.info(describeError(error)); }
   }
-  async function addMemory(): Promise<void> {
-    const body = value("mp-memory").trim();
-    if (!body || busy) return;
-    await resourceAction(async () => {
-      await api.core("memory.create", { member_id: member.id, space: "own", body, description: body.slice(0, 80) });
-      set("mp-memory", ""); await loadMemory();
-    });
+  /** The document, when it was opened and changed; whether the dialog may go on saving. */
+  async function saveMemory(): Promise<boolean> {
+    if (!memoryLoaded || value("mp-memory").trimEnd() === memoryText) return true;
+    const own = { member_id: member.id, space: "own" };
+    try {
+      const document = await api.core<MemoryDocument>("memory.update", { ...own, text: value("mp-memory"), revision: memoryRevision });
+      memoryRevision = document.revision;
+      memoryText = document.text.trimEnd();
+      return true;
+    } catch (error) {
+      const said = memoryError(error);
+      // A member wrote meanwhile. What was typed stays; the next 儲存 is made knowing that.
+      if (said === t("mem.changed")) memoryRevision = (await api.core<MemoryDocument>("memory.get", own)).revision;
+      selectTab("memory");
+      toaster.info(said);
+      return false;
+    }
   }
   async function loadRoutines(): Promise<void> {
     const list = dialog.el.querySelector<HTMLElement>(".mp-routine-list")!;
@@ -219,6 +223,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
     const fields: MemberPatch = { name, role: cleanName(value("mb-new-role")), blurb: cleanName(value("mp-blurb")), personality: value("mb-new-personality").trim(), instructions: value("mb-new-instr").trim(), group_id: groupId, reply_style: reply, ask_before_members: ask, draft_first: draftFirst, ...voice, ...(avatar ? { avatar } : {}) };
     busy = true; setBusy();
     try {
+      if (!await saveMemory()) return;
       const okay = host.update ? await host.update(member.id, fields) : !!(await api.membersUpdate(member.id, fields));
       if (!okay) return;
       host.saved?.({ ...member, ...fields }); dialog.close();

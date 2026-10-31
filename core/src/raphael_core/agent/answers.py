@@ -9,16 +9,12 @@ in tags. Its reply is made safe before it is used: the prefix is one of the lang
 line of about the length Raphael speaks (what had to be left out is kept in the detail), and
 Chinese in Traditional characters.
 
-With a memory (`raphael_core.memory`), the system prompt also carries the memory's index and its
-rules (`persona.memory_rules`), and the reply has two more fields: `memory`, what the owner asked
-to be remembered or forgotten in this turn (the tools `memory_write` and `memory_delete`, which the
-service checks and applies), and `need`, a lookup to make before answering (`memory_read` of a few
-notes, `history_search` of the past turns), after which the model is asked once more with what was
-found. The system prompt comes first and changes only when a memory does; what changes every turn
-(the time, the question) comes last, so the provider's prompt cache keeps the start.
-
-A note names its space (`space`): the shared memory every assistant of the owner's reads (macro
-knowledge about the owner), or the assistant's own; one with none is the own's.
+With a memory (`raphael_core.memory`), the system prompt also carries the memory files and their
+rules (`persona.memory_rules`), and the reply has two more fields: `memory`, edits of those files, which
+the service checks and applies (`Edit`, the same as the tool `memory_update`), and `need`, a search of the
+past turns (`history_search`) to make before answering, after which the model is asked once more with
+what was found. The system prompt comes first and changes only when a file does; what changes every
+turn (the time, the question) comes last, so the provider's prompt cache keeps the start.
 
 A member of the owner's team (`speaker.Speaker`) is worded the same way, with a system prompt of its
 own (`persona.member_system_prompt`): its persona, plain sentences, no prefix in the schema or in the
@@ -40,9 +36,10 @@ from typing import Any
 from ..brain.openrouter import OpenRouterError
 from ..brain.providers.base import ModelProvider
 from ..brain.textnorm import convert_leftover_simplified
-from ..memory.reflection import SPACES as MEMORY_SPACES
-from ..memory.reflection import Action as MemoryAction
-from ..memory.store import TYPES as MEMORY_TYPES
+from ..memory.reflection import ACTIONS as MEMORY_ACTIONS
+from ..memory.reflection import TARGETS as MEMORY_TARGETS
+from ..memory.reflection import Edit as MemoryEdit
+from ..memory.store import MemorySnapshot
 from .failure import AgentFailure, failure_kind
 from .history import Turn
 from .ledger import Ledger
@@ -69,9 +66,8 @@ ANSWER_TIMEOUT_S = 10.0
 REPLY_MAX_TOKENS = 1200
 
 
-# The most notes one reply may write or delete, and read.
-MAX_MEMORY_ITEMS = 3
-MAX_READS = 3
+# The most edits of the memory one reply may make.
+MAX_MEMORY_ITEMS = 8
 _SEARCH_CHARS = 100
 
 
@@ -80,10 +76,9 @@ class Reply:
     prefix: str
     text: str  # one line, at most about 80 characters or 40 words; empty only beside a memory
     detail: str | None  # the longer text for the history, if there is one
-    # What the owner asked to be remembered or forgotten (op "ADD" for a write, "DELETE").
-    memory: list[MemoryAction] = field(default_factory=list)
-    # The lookups the model asked for before it answers: notes to read, words to search for.
-    read: list[str] = field(default_factory=list)
+    # The edits of the memory files the reply asks for.
+    memory: list[MemoryEdit] = field(default_factory=list)
+    # The lookup the model asked for before it answers: words to search for.
     search: str = ""
     messages: list[str] = field(default_factory=list)
     # The line in Japanese, for the voice, when it was asked for (`reply_schema`'s `say_ja`): one
@@ -93,27 +88,24 @@ class Reply:
 
     @property
     def wants_lookup(self) -> bool:
-        return bool(self.read or self.search)
+        return bool(self.search)
 
 
 MEMORY_ITEM = {
     "type": "object",
     "properties": {
-        "op": {"type": "string", "enum": ["write", "delete"]},
-        "name": {"type": "string"},
-        "type": {"type": "string", "enum": list(MEMORY_TYPES)},
-        "description": {"type": "string"},
-        "body": {"type": "string"},
-        "expires": {"type": "string"},
-        "space": {"type": "string", "enum": list(MEMORY_SPACES)},
+        "target": {"type": "string", "enum": list(MEMORY_TARGETS)},
+        "action": {"type": "string", "enum": list(MEMORY_ACTIONS)},
+        "content": {"type": "string"},
+        "old_text": {"type": "string"},
     },
-    "required": ["op", "name", "type", "description", "body", "expires", "space"],
+    "required": ["target", "action", "content", "old_text"],
     "additionalProperties": False,
 }
 _NEED = {
     "type": "object",
-    "properties": {"read": {"type": "array", "items": {"type": "string"}}, "search": {"type": "string"}},
-    "required": ["read", "search"],
+    "properties": {"search": {"type": "string"}},
+    "required": ["search"],
     "additionalProperties": False,
 }
 
@@ -231,48 +223,30 @@ def _one_line_text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _memory_items(value: Any) -> list[MemoryAction]:
-    """The notes the reply writes or deletes, as actions for `memory.reflection.apply_actions`;
-    an item that is not well formed is left out. At most MAX_MEMORY_ITEMS."""
+def _memory_items(value: Any) -> list[MemoryEdit]:
+    """The edits the reply asks for; an item that is not well formed is left out. At most
+    MAX_MEMORY_ITEMS."""
     if not isinstance(value, list):
         return []
-    items: list[MemoryAction] = []
+    items: list[MemoryEdit] = []
     for item in value:
         if not isinstance(item, Mapping):
             continue
-        op = {"write": "ADD", "delete": "DELETE"}.get(_one_line_text(item.get("op")).strip())
-        name = _one_line_text(item.get("name")).strip().lower()
-        if op is None or (op == "DELETE" and not name):
+        action = _one_line_text(item.get("action")).strip()
+        target = _one_line_text(item.get("target")).strip()
+        if action not in MEMORY_ACTIONS:
             continue
-        kind = _one_line_text(item.get("type")).strip()
-        space = _one_line_text(item.get("space")).strip()
-        items.append(
-            MemoryAction(
-                op=op,
-                name=name,
-                type=kind if kind in MEMORY_TYPES else "",
-                description=_one_line_text(item.get("description")).strip(),
-                body=_one_line_text(item.get("body")).strip(),
-                expires=_one_line_text(item.get("expires")).strip() or None,
-                origin="said",
-                # A note's space as the model chose it; the own memory when it chose none.
-                space=space if space in MEMORY_SPACES else "own",
-            )
-        )
+        items.append(MemoryEdit(target if target in MEMORY_TARGETS else "memory", action,
+                                _one_line_text(item.get("content")).strip(), _one_line_text(item.get("old_text"))))
         if len(items) >= MAX_MEMORY_ITEMS:
             break
     return items
 
 
-def _need(value: Any) -> tuple[list[str], str]:
+def _need(value: Any) -> str:
     if not isinstance(value, Mapping):
-        return [], ""
-    read = value.get("read")
-    names = [
-        name.strip().lower() for name in read if isinstance(name, str) and name.strip()
-    ] if isinstance(read, list) else []
-    search = " ".join(_one_line_text(value.get("search")).split())[:_SEARCH_CHARS]
-    return list(dict.fromkeys(names))[:MAX_READS], search
+        return ""
+    return " ".join(_one_line_text(value.get("search")).split())[:_SEARCH_CHARS]
 
 
 def _plain_text(value: Any) -> str:
@@ -394,7 +368,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
     if not isinstance(data, Mapping):
         raise AgentFailure("error")
     memory = _memory_items(data.get("memory"))
-    read, search = _need(data.get("need"))
+    search = _need(data.get("need"))
     items = data.get("messages")
     messages = (
         [text for item in items[:4] if (text := _plain_text(_reply_words(item)))]
@@ -419,7 +393,7 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
             full = match[2].strip()
     if messages:
         full = messages[-1]
-    if not full and not (memory or read or search):
+    if not full and not (memory or search):
         logger.warning("The model's reply said nothing")
         raise AgentFailure("error")
     if plain:
@@ -433,7 +407,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
             text=full,
             detail=detail if detail and detail != full else None,
             memory=memory,
-            read=read,
             search=search,
             messages=messages,
         )
@@ -450,7 +423,6 @@ def parse_reply(data: Any, language: str, *, plain: bool = False, long: bool = F
         text=line,
         detail=detail if detail and detail != line else None,
         memory=memory,
-        read=read,
         search=search,
         say_ja=japanese_line(data.get("say_ja")),
         messages=messages,
@@ -492,7 +464,7 @@ class Voice:
         ledger: Ledger,
         background: str = "",
         summary: str = "",
-        memory_index: str | None = None,
+        memory_snapshot: "str | MemorySnapshot | None" = None,
         looked_up: bool = False,
         speaker: Speaker = RAPHAEL,
         say_ja: bool = False,
@@ -502,7 +474,7 @@ class Voice:
     ) -> Reply:
         """What Raphael says to `question` on `route` ("answer", "discuss" or "chat"), in
         `language`. `summary` is the summary of the earlier conversation and `context` its latest
-        turns; `memory_index` is the memory's index, or None when there is no memory (then the
+        turns; `memory_snapshot` is the memory files, or None when there is no memory (then the
         reply has no `memory` and no `need`). With a `speaker` who is a member of the team, the
         member says it instead, in its persona and in plain sentences (`parse_reply`'s `plain`).
         With `say_ja`, the reply also holds the line in Japanese for the voice (`Reply.say_ja`),
@@ -523,10 +495,10 @@ class Voice:
                 role=speaker.role,
                 instructions=speaker.instructions,
                 personality=speaker.personality,
-                memory_index=memory_index,
+                memory_snapshot=memory_snapshot,
             )
         else:
-            system = system_prompt(language, route, memory_index, say_ja=say_ja)
+            system = system_prompt(language, route, memory_snapshot, say_ja=say_ja)
         system += roster
         began = time.perf_counter()
         try:
@@ -539,7 +511,7 @@ class Voice:
                     system=system,
                     user=user,
                     schema=reply_schema(
-                        language, memory=memory_index is not None, plain=plain, say_ja=say_ja
+                        language, memory=memory_snapshot is not None, plain=plain, say_ja=say_ja
                     ),
                     schema_name="raphael_reply",
                     timeout_s=self._timeout_s,
