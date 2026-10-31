@@ -926,6 +926,9 @@ class App(Router):
         )
         self.members.use_event_tools(self.gate)
         self.members.register(self)
+        from .computer.teaching import Teaching
+        self.desktop_viewer.teaching = Teaching(self.desktop_viewer, self.members, self.memory)
+        self.desktop_viewer.teaching.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
                                   notify=self.notify, transcribe=self._transcribe_from_messaging,
                                   attachment_store=self.attachment_store, decision=DecisionRouter(self.client))

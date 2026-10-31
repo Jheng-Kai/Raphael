@@ -6,6 +6,36 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("teaching scenes wait for visible results and check owner publication explicitly", () => {
+    const teaching = scenes.filter(scene => scene.name.startsWith('desktop-teach-'));
+    expect(teaching).toHaveLength(6);
+    for (const scene of teaching) {
+      expect(scene.steps.some(step => step.action === 'check' && step.name.startsWith('teach-'))).toBe(true);
+      for (const step of scene.steps.filter(step => step.action === 'wait')) {
+        expect(step.selector.replaceAll(':not([hidden])','')).not.toContain('[hidden]');
+      }
+    }
+  });
+  it("checks a teaching trial against its member conversation after an earlier viewer opened", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<section class="desktop-panel"></section>';
+    browser.document.querySelector('.desktop-panel').getBoundingClientRect = () => ({width:300,height:300});
+    browser.__look = {calls:[
+      {method:'computer.viewer_open',params:{member_id:0,conversation_id:1}},
+      {method:'computer.viewer_open',params:{member_id:1,conversation_id:11}},
+      {method:'computer.teach',params:{action:'start',session:'member-viewer'}},
+      {method:'computer.teach',params:{action:'stop',session:'member-viewer'}},
+      {method:'computer.teach',params:{action:'save',member_id:1,text:'## Procedure'}},
+      {command:'agent_ask_text',memberId:1,conversationId:11,text:'checked-report 第二季報告'},
+    ]};
+    const previous = {document:globalThis.document,window:globalThis.window};
+    globalThis.document = browser.document; globalThis.window = browser;
+    try {
+      expect(checkRendered('teach-try').actions).toEqual(['start','stop','save']);
+      browser.__look.calls.at(-1).conversationId = 12;
+      expect(() => checkRendered('teach-try')).toThrow('the trial stays in the demonstrated member conversation');
+    } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
+  });
   it("keeps the WAV format name while still rejecting an English interface word", () => {
     const window = new Window();
     window.document.body.innerHTML = '<p>WAV</p><button>Save</button>';
@@ -197,6 +227,12 @@ describe("rendered look checks", () => {
     for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
     return { window, audit: () => auditDocument(window.document, { width: 1120, height: 900 }, []) };
   };
+  it("checks repair text over the desktop placeholder without auditing streamed pixels (R-UI-52)", () => {
+    const { window, audit } = productAudit('<div class="desktop-screen"><div class="missing-note"><button class="btn" style="border:1px solid gray;color:rgb(238,238,238);background-color:rgb(255,255,255)">Repair</button></div></div>');
+    expect(audit().productRules).toContainEqual(expect.objectContaining({rule:'R-UI-52'}));
+    window.document.querySelector('button').style.backgroundColor = 'rgb(21,21,21)';
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
   it("rejects text that vanishes at rest or under the pointer (R-UI-52)", () => {
     const { window, audit } = productAudit('<div style="background-color:rgb(30,30,30)"><button class="vanish" style="color:rgb(245,245,245)">Show all</button><p class="dim" style="color:rgb(10,10,10)">Link</p></div><style>.vanish:hover{background-color:rgb(245,245,245)}</style>');
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52').map(item => item.class)).toEqual(['dim', 'vanish']);

@@ -5,6 +5,7 @@ import { onLocaleChange, t } from "./i18n";
 import { esc, iconButton, btn } from "./ui";
 import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
+import { mountMemberResources } from "./member-profile-resources";
 
 export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
@@ -16,6 +17,8 @@ export interface DesktopState {
   preview_allowed?: boolean;
   /** Whether the owner has allowed this member its computer. */
   granted?: boolean;
+  teaching?: api.TeachingDraft;
+  teach_available?: boolean;
 }
 export interface DesktopSession { session: string; url: string }
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
@@ -33,14 +36,14 @@ export function preparationHTML(state: DesktopState): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean; available?(on: boolean): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; view(next: "computer" | "details"): void; viewing(): "computer" | "details" } {
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean; available?(on: boolean): void; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; view(next: "computer" | "details"): void; viewing(): "computer" | "details" } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.hidden = true;
   panel.innerHTML = `<p class="desktop-request" role="status" hidden></p><div class="desktop-shell"><div class="desktop-heading"><h2></h2><div>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}${iconButton("down", t("desktop.collapse"), ' data-desktop="collapse"')}</div></div>` +
     `<div class="desktop-screen"><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
     `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div></div>` +
-    `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
+    `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
   frame.remove();
   (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
@@ -50,6 +53,14 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const retry = panel.querySelector<HTMLButtonElement>('[data-desktop="retry"]')!;
   const revoke = panel.querySelector<HTMLButtonElement>('[data-desktop="revoke"]')!;
   const error = panel.querySelector<HTMLElement>('.desktop-error')!;
+  const teach = panel.querySelector<HTMLButtonElement>('[data-desktop="teach"]')!;
+  const discardTeach = panel.querySelector<HTMLButtonElement>('[data-desktop="discard-teach"]')!;
+  const review = panel.querySelector<HTMLElement>('.desktop-review')!;
+  const tryHost = panel.querySelector<HTMLElement>('.desktop-try')!;
+  const tryInput = tryHost.querySelector<HTMLInputElement>('[data-teach-input]')!;
+  let demonstration: api.TeachingDraft | undefined, skillName = "";
+  let skillEditor: ReturnType<typeof mountMemberResources> | undefined;
+  let teachingBusy = false, drafting = false;
   const timeline = mountDesktopTimeline(options.timeline, options.name);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
   let state: DesktopState | undefined, session: DesktopSession | undefined;
@@ -79,18 +90,31 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     request.hidden = !pending(); request.textContent = pending() ? desktopWorkText(pending()!) : "";
     panel.toggleAttribute("data-request", !!pending());
     const running = state?.state === "running", owner = state?.control === "owner";
+    const recording = demonstration && ["recording", "full"].includes(demonstration.state);
+    teach.textContent = t(drafting ? "teach.drafting" : recording ? "teach.stop" : demonstration ? "teach.review" : "teach.start");
+    teach.disabled = teachingBusy || changing || !demonstration && (!running || !connected || !!pending() || state?.teach_available === false);
+    teach.hidden = !!skillEditor;
+    const missing = panel.querySelector<HTMLElement>('.desktop-teach-missing')!;
+    missing.hidden = state?.teach_available !== false;
+    missing.innerHTML = state?.teach_available === false ? noticeHTML('member_computer', 'computer', 'computer') : '';
+    discardTeach.textContent = t("teach.discard"); discardTeach.hidden = !demonstration || !!skillEditor; discardTeach.disabled = teachingBusy && !drafting;
+    const warning = panel.querySelector<HTMLElement>('.desktop-recording')!;
+    warning.hidden = !recording && !drafting; warning.textContent = t(drafting ? "teach.drafting" : demonstration?.state === "full" ? "teach.full" : "teach.warning");
+    const tryButton = tryHost.querySelector<HTMLButtonElement>('button')!;
+    tryButton.textContent = t("teach.try"); tryInput.placeholder = t("teach.input"); tryInput.setAttribute('aria-label', t("teach.input"));
+    tryHost.hidden = !skillName;
     const preparing = state && ["starting", "building", "preparing"].includes(state.state);
     const label = preparing ? state!.state as "starting" | "building" | "preparing" : !running ? state?.state === "stopped" || state?.state === "missing" ? "stopped" : "unavailable" : !connected ? "connecting" : owner ? "owner" : "member";
     panel.dataset.desktopState = label;
     panel.dataset.interactive = String(interactive);
     // Watching must never take the computer from the member: only the named button does.
     hit.hidden = !running || !connected || owner || panel.hasAttribute('data-expanded');
-    take.textContent = t("desktop.take"); take.hidden = !running || !connected || owner; take.disabled = changing;
+    take.textContent = t("desktop.take"); take.hidden = !running || !connected || owner || !!demonstration; take.disabled = changing;
     frame.hidden = !running || !connected;
     frame.style.pointerEvents = interactive ? "auto" : "none";
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
     status.textContent = t("desktop.operating"); status.hidden = !owner || !connected;
-    action.textContent = t(pending() ? "desktop.done" : "desktop.release"); action.hidden = !owner; action.disabled = changing;
+    action.textContent = t(pending() ? "desktop.done" : "desktop.release"); action.hidden = !owner || !!recording; action.disabled = changing;
     const asleep = state?.state === "stopped" || state?.state === "missing";
     retry.textContent = t(asleep ? "desktop.start" : "desktop.retry"); retry.hidden = !!running || !!preparing || state?.state === "absent"; retry.disabled = opening;
     revoke.textContent = t("desktop.revoke"); revoke.hidden = !state?.granted || owner || !!preparing;
@@ -154,6 +178,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function update(next: DesktopState): void {
     state = next; timeline.update(next);
+    if (next.teaching && !teachingBusy) demonstration = next.teaching;
     for (const work of next.works ?? []) {
       const key = `${work.id}:${work.request_id ?? ''}:${work.state === 'waiting_control' ? 'help' : 'work'}`;
       if (visible && ["running", "waiting_control"].includes(work.state) && !revealed.has(key)) { revealed.add(key); setView("computer"); options.openPanel(); }
@@ -194,6 +219,63 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     document.documentElement.toggleAttribute('data-desktop-expanded', on);
     draw();
   };
+  function clearReview(): void { skillEditor?.destroy(); skillEditor = undefined; review.replaceChildren(); review.hidden = true; }
+  async function discardRecording(id = member(), recording = demonstration): Promise<void> {
+    if (!recording) return;
+    const current = ++generation;
+    await api.desktopTeach({action:'discard', member_id:id, id:recording.id});
+    if (current !== generation || member() !== id) return;
+    demonstration = undefined; clearReview(); if (state) state = {...state,control:'member'}; send(false); interactive = false; draw();
+  }
+  function editDraft(draft: api.TeachingDraft): void {
+    clearReview(); expand(false); demonstration = draft; review.hidden = false;
+    const id = member(), conversation = options.conversation();
+    skillEditor = mountMemberResources(review, {memberId:id,tab:'skills',standalone:true,draft:{text:draft.text,
+      async save(text) {
+        ++generation;
+        const result = await api.desktopTeach({action:'save',member_id:id,id:draft.id,text});
+        if (member() !== id || options.conversation() !== conversation) return;
+        demonstration = undefined; skillName = result.skill?.name ?? ''; clearReview(); draw(); tryInput.focus();
+      },
+      discard: () => discardRecording(id,draft),
+    }});
+    draw(); review.querySelector('textarea')?.focus();
+  }
+  teach.addEventListener('click', () => {
+    if (teachingBusy || teach.disabled) return;
+    const opened = session, id = member(), conversation = options.conversation();
+    const action = demonstration ? ['recording','full'].includes(demonstration.state) ? 'stop' : demonstration.state === 'draft' ? 'read' : 'draft' : 'start';
+    if (action === 'start' && !opened) return;
+    const current = ++generation;
+    teachingBusy = true; drafting = action === 'stop' || action === 'draft'; error.hidden = true;
+    if (action === 'stop' && demonstration) { demonstration = {...demonstration,state:'stopped'}; interactive = false; send(false); if (state) state = {...state,control:'member'}; expand(false); }
+    draw();
+    void (async () => {
+      try {
+        const result = await api.desktopTeach(action === 'start' || action === 'stop' ? {action,session:opened!.session} : {action,member_id:id,id:demonstration!.id});
+        if (current !== generation || member() !== id || options.conversation() !== conversation || session !== opened) return;
+        demonstration = result;
+        if (action === 'start') { skillName = ''; state = {...state!,control:'owner'}; expand(true); send(true); }
+        else { state = {...state!,control:'member'}; interactive = false; send(false); editDraft(result); }
+      } catch {
+        if (current !== generation) return;
+        if (action === 'stop' && demonstration) { demonstration = {...demonstration,state:'stopped'}; interactive = false; send(false); if (state) state = {...state,control:'member'}; expand(false); }
+        error.textContent = t('teach.failed'); error.hidden = false;
+      }
+      finally { if (current === generation) { teachingBusy = drafting = false; draw(); } }
+    })();
+  });
+  discardTeach.addEventListener('click', () => {
+    if (teachingBusy && !drafting) return;
+    teachingBusy = true; drafting = false; draw();
+    void discardRecording().catch(() => { error.textContent = t('teach.failed'); error.hidden = false; }).finally(() => { teachingBusy = false; draw(); });
+  });
+  tryHost.querySelector('button')!.addEventListener('click', () => {
+    const value = tryInput.value.trim();
+    if (!value || !skillName) { tryInput.focus(); return; }
+    options.trySkill?.(t('teach.tryPrompt',{name:skillName,input:value}));
+    skillName = ''; tryInput.value = ''; draw();
+  });
   hit.addEventListener('click', () => expand(true));
   // A small picture is no place to work: the same stream fills the window, under the owner's hands.
   take.addEventListener('click', () => { expand(true); void control(true); });
@@ -219,7 +301,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.
       if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); state = undefined; revealed.clear(); timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+      closeStream(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = false; state = undefined; revealed.clear(); timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     view: setView,

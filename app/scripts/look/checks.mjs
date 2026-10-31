@@ -2,6 +2,42 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('teach-')) {
+    const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
+    const actions = calls.map(c => c.params.action);
+    const panel = document.querySelector('.desktop-panel');
+    require(visible(panel), 'the demonstration belongs to the member computer panel');
+    if (name === 'teach-shared') {
+      require(visible(panel.querySelector('.desktop-teach-missing .missing-note')), 'the separate computer requirement is visible');
+      require(panel.querySelector('[data-desktop="teach"]').disabled && visible(panel.querySelector('[data-missing-repair="computer"]')), 'repair uses the existing computer settings entry');
+      require(!actions.length, 'a shared computer never starts recording');
+      return {check:name};
+    }
+    require(actions[0] === 'start', 'only the owner button starts the recording');
+    if (name === 'teach-recording') {
+      require(visible(panel.querySelector('.desktop-recording')) && visible(panel.querySelector('[data-desktop="discard-teach"]')), 'privacy words and one-press discard stay visible');
+      require(panel.querySelector('[data-desktop="teach"]').textContent === '停止錄製', 'the same button stops recording');
+      require(!actions.includes('save'), 'recording does not publish a skill');
+    } else if (name === 'teach-draft') {
+      const editor = panel.querySelector('#mp-skill-text');
+      require(visible(editor) && editor.value.includes('## Inputs') && editor.value.includes('## Verification'), 'the existing editor holds an editable skill with inputs and final checks');
+      require(actions.includes('stop') && !actions.includes('save'), 'the draft is not saved automatically');
+    } else if (name === 'teach-discard') {
+      require(actions.includes('discard') && !actions.includes('save') && panel.querySelector('.desktop-recording').hidden, 'discard clears the recording without publication');
+    } else {
+      require(actions.includes('save') && calls.find(c=>c.params.action==='save').params.text.includes('## Procedure'), 'the owner explicitly saved the document');
+      if (name === 'teach-saved') require(visible(panel.querySelector('[data-teach-input]')), 'the owner can enter a fresh input');
+      if (name === 'teach-try') {
+        const call = window.__look.calls.find(c=>c.command==='agent_ask_text');
+        require(call && JSON.stringify(call).includes('checked-report') && JSON.stringify(call).includes('第二季報告'), 'the existing conversation receives the saved skill and new input');
+        const saved = calls.find(c=>c.params.action==='save');
+        const opened = window.__look.calls.findLast(c=>c.method==='computer.viewer_open' && c.params.member_id === saved.params.member_id);
+        require(opened && call.memberId === opened.params.member_id && call.conversationId === opened.params.conversation_id, 'the trial stays in the demonstrated member conversation');
+        return {check:name,actions,member:call.memberId,conversation:call.conversationId};
+      }
+    }
+    return {check:name,actions};
+  }
   if (name.startsWith("routine-event-")) {
     if (name === "routine-event-profile") {
       const list = document.querySelector('.mp-routine-list');

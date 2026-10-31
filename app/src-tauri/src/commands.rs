@@ -396,6 +396,7 @@ const ALLOWED_PREFIXES: [&str; 8] = [
 // A slice, not a fixed-length array: branches that each add a method merge without a count to fix.
 const ALLOWED_METHODS: &[&str] = &[
     "computer.viewer_status",
+    "computer.teach",
     "computer.viewer_open",
     "computer.viewer_renew",
     "computer.viewer_control",
@@ -2253,6 +2254,8 @@ mod tests {
 
     #[test]
     fn desktop_viewer_exposes_only_named_main_window_operations() {
+        assert!(is_allowed_method("computer.teach"));
+        assert!(!is_allowed_method("computer.teach_input"));
         for method in ["computer.viewer_status", "computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close", "computer.revoke"] {
             assert!(is_allowed_method(method));
         }

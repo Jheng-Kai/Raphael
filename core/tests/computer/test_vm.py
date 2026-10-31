@@ -717,6 +717,24 @@ async def test_bridge_answers_ping_and_refuses_tools_while_held(desktop):
     assert (await bridge.request("tools/call", {"name": "click"}))["isError"]
 
 
+async def test_owner_observation_allows_only_exact_read_calls_during_takeover(desktop):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    vm, target, runtime = desktop
+    bridge = CuaBridge(vm, target)
+    vm.hold(target, True)
+    bridge._write = AsyncMock()
+    bridge.process = SimpleNamespace(stdout=SimpleNamespace(readline=AsyncMock(side_effect=[
+        json.dumps({"id":i,"result":{"content":[{"type":"text","text":"Report editor"}]}}).encode() + b"\n" for i in (1,2)])))
+    assert (await bridge.request("tools/call", {"name":"click","arguments":{}}, owner_observation=True))["isError"]
+    assert (await bridge.request("tools/call", {"name":"get_desktop_state","arguments":{}}))["isError"]
+    assert (await bridge.request("tools/call", {"name":"get_desktop_state","arguments":{"other":True}}, owner_observation=True))["isError"]
+    bridge._write.assert_not_called()
+    for name in ("get_accessibility_tree","get_desktop_state"):
+        assert not (await bridge.request("tools/call", {"name":name,"arguments":{}}, owner_observation=True)).get("isError")
+    assert bridge._write.await_count == 2
+
+
 def test_schema_normalization_preserves_constraints():
     raw = {"$schema": "x", "properties": {"x": {"type": "array", "items": {"type": "integer", "minimum": 1}}}, "required": ["x", "missing"]}
     normalized = normalize_schema(raw)

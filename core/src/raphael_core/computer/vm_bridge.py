@@ -74,11 +74,13 @@ class CuaBridge:
         self.process.stdin.write(json.dumps(packet).encode() + b"\n")
         await self.process.stdin.drain()
 
-    async def request(self, method, params=None):
+    async def request(self, method, params=None, *, owner_observation=False):
         if method == "ping":
             return {}
         async with self.lock:
-            if method == "tools/call" and self.target.key in self.vm.held:
+            observing = owner_observation and method == "tools/call" and params in (
+                {"name": "get_desktop_state", "arguments": {}}, {"name": "get_accessibility_tree", "arguments": {}})
+            if method == "tools/call" and self.target.key in self.vm.held and not observing:
                 return {"content": [{"type": "text", "text": "owner_holds_control"}], "isError": True}
             self.sequence += 1
             identifier = self.sequence

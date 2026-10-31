@@ -1,5 +1,26 @@
 # Raphael architecture and checked boundaries
 
+## Owner demonstration boundary (2026-11-01)
+
+`computer/teaching.py` binds an owner recording to DesktopViewer's captured target,
+member, conversation and lease. RfbInputGate exposes accepted protocol messages in
+order; the viewer observes each input before forwarding that message and checks
+the lease again afterwards. No owner-PC bridge or screen capture API is used.
+The pinned CuaBridge permits only the two exact, argument-free screen/accessibility
+reads during this owner observation; normal model calls still refuse a held screen.
+The accessibility observation fails closed for private or unavailable content.
+The existing viewer monitor samples changed screens and enforces the duration limit.
+
+Bounded JSON recordings live under `bots/<member>/demonstrations/` in the member's
+host-owned workspace. Safe path checks and atomic replacement protect this data.
+Restart restores a draft or interrupted data, never input ownership. Drafts run on
+MemoryBrain (API or CLI, without tools), through its normal spend ledger, and stay
+outside the skill registry until owner publication through MemberCapabilities.
+The shared resource editor supplies Save/Cancel; new-input trial uses the existing
+conversation send path. Ordinary skills and routines retain their existing gates.
+The single main-window RPC `computer.teach` has a named Rust allowlist entry and
+test; it exposes no raw action-upload or arbitrary capture endpoint (A-03/06/10/11).
+
 ## Connected-app event routines (2026-11-01)
 
 Migration 49 extends routines with a mutually exclusive when specification and

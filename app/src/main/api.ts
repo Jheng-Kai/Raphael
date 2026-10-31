@@ -85,6 +85,8 @@ export const desktopRenew = (session: string): Promise<DesktopState> => core("co
 export const desktopControl = (session: string, held: boolean, takeover?: string): Promise<DesktopState> => core("computer.viewer_control", { session, held, takeover });
 export const desktopClose = (session: string): Promise<unknown> => core("computer.viewer_close", { session });
 export const desktopRevoke = (member_id: number): Promise<{ granted: boolean }> => core("computer.revoke", { member_id });
+export interface TeachingDraft { id: string; state: string; text: string; conversation_id?: number }
+export const desktopTeach = (params: { action: string; session?: string; member_id?: number; id?: string; text?: string }): Promise<TeachingDraft & { skill?: import("./types").MemberSkill }> => core("computer.teach", params);
 
 // ---------- usage and prices ----------
 

@@ -15,6 +15,7 @@ export function installMock(fixture, config = {}, target = window) {
   let codexArrived = false, codexTimer;
   const desktopSessions = new Map();
   let desktopSequence = 0;
+  let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
   if (variant.pluginsMany) {
     const base = [...data.pluginCatalog];
@@ -426,10 +427,32 @@ export function installMock(fixture, config = {}, target = window) {
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         const session = `look-desktop-${++desktopSequence}`;
-        desktopSessions.set(session, { preview: p.preview, held: false });
+        desktopSessions.set(session, { preview: p.preview, held: false, member:p.member_id, conversation:p.conversation_id });
         return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html` };
       }
-      case "computer.viewer_renew": return { ...data.desktop, control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
+      case "computer.viewer_renew": return { ...data.desktop, ...(teaching ? {teaching} : {}), control: desktopSessions.get(p.session)?.held ? "owner" : "member" };
+      case "computer.teach": {
+        const session = desktopSessions.get(p.session);
+        if (p.action === 'start') {
+          if (!session || session.preview || data.desktop?.teach_available === false) throw new Error('Member computer required');
+          teaching = {id:'owner-demonstration',state:'recording',text:'',conversation_id:session.conversation,member:session.member};
+          session.held = true;
+        } else if (p.action === 'stop' || p.action === 'draft') {
+          if (session) session.held = false;
+          teaching.state = 'draft';
+          teaching.text = '---\nname: checked-report\ndescription: Prepare a checked report\n---\n\n## When to use\nWhen the owner asks for a report.\n\n## Inputs\nreport_title: the new report title.\n\n## Procedure\n1. Open the report editor and locate its title field.\n2. Enter report_title and save the report.\n\n## Pitfalls\nAsk the owner to take over for sign-in.\n\n## Verification\nCheck the saved title and report contents.';
+        } else if (p.action === 'save') {
+          if (teaching?.state !== 'draft' || !p.text) throw new Error('Review the draft first');
+          const skill = {id:Math.max(0,...data.skills.map(s=>s.id))+1,member_id:p.member_id,name:frontmatter(p.text,'name'),description:frontmatter(p.text,'description'),text:p.text,enabled:true,source:'owner',provenance:'owner'};
+          data.skills.push(skill); teaching = undefined;
+          notify('members.skills.changed',{member_id:p.member_id});
+          return {skill:skillRow(skill)};
+        } else if (p.action === 'discard') {
+          for (const current of desktopSessions.values()) current.held = false;
+          teaching = undefined; return {};
+        } else if (p.action !== 'read') throw new Error('Unknown demonstration action');
+        return teaching;
+      }
       case "computer.viewer_control": {
         const session = desktopSessions.get(p.session);
         if (session.preview) throw new Error("Read-only preview");
