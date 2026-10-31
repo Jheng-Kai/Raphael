@@ -962,6 +962,10 @@ not be done), and the next step you suggest.
 otherwise an empty string."""
 
 
+PLAN_MODE = (
+    "\n<plan_mode>\nThe owner chose plan mode: change nothing yet. Look up what you need, then reply with a short numbered plan "
+    "of what you would do, and stop there. Carry it out only after the owner has said yes to it in this conversation.\n</plan_mode>"
+)
 NEW_MEMBER = (
     "\n<new_member>\nYou were made a moment ago and have no job yet; your greeting has already asked the owner what you are for. "
     "If their message says what your job is, or what they want you to do for them from now on, then before you reply call the "

@@ -31,13 +31,6 @@ async def test_it_speaks_first_in_the_window_language_without_a_model(setup, cli
     assert conversation["title"] == ""
 
 
-async def test_a_start_with_a_job_says_that_job_and_asks_where_to_begin(setup):
-    rig, team = setup
-    new = await made(rig, name="Mia", role="研究夥伴", ui_language="zh-TW")
-    [turn] = await rig.turns(member_id=new["id"])
-    assert "研究夥伴" in turn["text"] and "你想請我" not in turn["text"]
-
-
 async def test_a_member_the_chief_makes_says_nothing_of_itself(setup):
     rig, team = setup
     new = (await rig.call("members.create", {"name": "Mia"}))["member"]

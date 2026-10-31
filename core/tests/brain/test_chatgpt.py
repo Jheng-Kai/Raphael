@@ -36,9 +36,11 @@ class Rig:
         self.vault, self.requests, self.urls, self.callbacks = {}, [], [], []
         self.client_id, self.subject = "oaiapp_test", "synthetic-subject"
         self.scope, self.callback_changes, self.claim_changes = SCOPE, {}, {}
+        self.callback_host = None
         self.token_error, self.model_error = None, None
         self.responses, self.body_checks = [], []
         self.revocation_status = 200
+        self.refresh_identity, self.refresh_nonce_free, self.token_delay = False, False, 0
         self.http = httpx.AsyncClient(transport=httpx.MockTransport(self.handle))
         self.legacy = OpenRouterClient(lambda: None, http=self.http)
         self.registry = ProviderRegistry(conn, self.legacy, MemoryKeyStore(), credential=self.credential, http=self.http)
@@ -55,6 +57,7 @@ class Rig:
         now = int(time.time())
         claims = {"iss": ISSUER, "aud": self.client_id, "sub": self.subject, "email": "synthetic@example.test",
                   "exp": now + 3600, "iat": now, "nonce": self.query["nonce"][0], **self.claim_changes}
+        claims = {key: value for key, value in claims.items() if value is not None}
         return jwt.encode(claims, self.key, algorithm="RS256", headers={"kid": "test-key"})
 
     def browser(self, url):
@@ -67,7 +70,7 @@ class Rig:
             fields = {"state": self.query["state"][0], "code": "synthetic-code", "client_id": self.client_id,
                       "scope": SCOPE, **self.callback_changes}
             fields = {key: value for key, value in fields.items() if value is not None}
-            writer.write(("GET /auth/callback?" + urlencode(fields) + " HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").encode())
+            writer.write(("GET /auth/callback?" + urlencode(fields) + f" HTTP/1.1\r\nHost: {self.callback_host or f'127.0.0.1:{parsed.port}'}\r\nAccept-Language: zh-TW\r\n\r\n").encode())
             await writer.drain()
             result = await reader.read()
             writer.close()
@@ -77,7 +80,12 @@ class Rig:
         self.callbacks.append(asyncio.create_task(callback()))
         return True
 
-    def handle(self, request):
+    async def handle(self, request):
+        if self.token_delay and request.url.path.endswith("/oauth/token"):
+            await asyncio.sleep(self.token_delay)
+        return self.answer(request)
+
+    def answer(self, request):
         self.requests.append(request)
         assert request.url.host in ("auth.openai.com", "api.openai.com"), "Unexpected provider request"
         path = request.url.path
@@ -93,6 +101,9 @@ class Rig:
             if self.token_error:
                 return httpx.Response(400, json={"error": self.token_error, "error_description": "secret-provider-text"})
             refresh = form["grant_type"] == ["refresh_token"]
+            if refresh and self.refresh_identity:
+                return httpx.Response(200, json={"access_token": "rotated-access", "refresh_token": "rotated-refresh", "token_type": "Bearer",
+                    "expires_in": 3600, "scope": self.scope, "id_token": self.identity()})
             if not refresh:
                 assert form["client_id"] == [self.client_id]
                 assert form["redirect_uri"] == self.query["redirect_uri"]
@@ -190,6 +201,147 @@ async def test_identity_validation_rejects_invalid_claims(rig, claims):
     with pytest.raises(OpenRouterError, match="identity validation"):
         await rig.sign_in()
     assert not (await rig.auth.status({}))["signed_in"]
+
+
+@pytest.mark.parametrize("ahead", [3, 120])
+async def test_a_computer_clock_behind_the_identity_server_still_signs_in(rig, ahead):
+    """A token is issued on OpenAI's clock and read on the owner's: seen live, the owner's ran 3 s behind."""
+    rig.claim_changes = {"iat": int(time.time()) + ahead}
+    status = await rig.sign_in()
+    assert status["signed_in"] and status["plan_scope_granted"]
+
+
+async def test_a_renewal_on_a_clock_behind_keeps_the_account_signed_in(rig):
+    """Seen live: at the start of the app a renewal failed this check and the account was signed out."""
+    await rig.sign_in()
+    rig.expire()
+    rig.refresh_identity = True
+    rig.claim_changes = {"iat": int(time.time()) + 3}
+    assert await rig.auth.access_token() == "rotated-access"
+    assert (await rig.auth.status({}))["signed_in"]
+
+
+async def test_a_renewal_whose_identity_fails_a_check_uses_nothing_and_forgets_nothing(rig):
+    await rig.sign_in()
+    rig.expire()
+    rig.refresh_identity = True
+    rig.claim_changes = {"aud": "other-client"}
+    with pytest.raises(OpenRouterError, match="identity validation"):
+        await rig.auth.access_token()
+    assert (await rig.auth.status({}))["signed_in"]
+    rig.claim_changes = {}
+    rig.refresh_nonce_free = True
+    tokens = rig.auth._tokens(rig.auth._state()["active"])
+    tokens["id_token"] = rig.identity()
+    rig.auth._store(rig.auth._state()["active"], tokens)
+    assert await rig.auth.access_token() == "rotated-access"
+
+
+async def test_a_renewal_to_a_different_person_ends_the_session(rig):
+    await rig.sign_in()
+    rig.expire()
+    rig.refresh_identity = True
+    rig.subject = "different-subject"
+    with pytest.raises(OpenRouterError, match="identity changed"):
+        await rig.auth.access_token()
+    assert not (await rig.auth.status({}))["signed_in"]
+
+
+@pytest.mark.parametrize("error", ["invalid_client", "temporarily_unavailable"])
+async def test_a_refusal_that_is_not_about_the_token_keeps_it(rig, error):
+    await rig.sign_in()
+    rig.expire()
+    rig.token_error = error
+    with pytest.raises(OpenRouterError):
+        await rig.auth.access_token()
+    assert (await rig.auth.status({}))["signed_in"]
+
+
+async def test_a_caller_that_stops_waiting_does_not_lose_the_rotated_token(rig):
+    await rig.sign_in()
+    rig.expire()
+    rig.token_delay = 0.05
+    waiting = asyncio.create_task(rig.auth.access_token())
+    await asyncio.sleep(0.01)
+    waiting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+    assert rig.auth._tokens(rig.auth._state()["active"])["refresh_token"] == "rotated-refresh"
+
+
+async def test_the_page_says_what_became_of_the_sign_in_and_gives_nothing_away(rig):
+    await rig.sign_in(language="zh-TW")
+    reply = (await rig.callbacks[-1]).decode()
+    head, body = reply.split("\r\n\r\n", 1)
+    assert head.startswith("HTTP/1.1 200 OK") and "text/html" in head
+    for header in ("Content-Security-Policy: default-src 'none'", "frame-ancestors 'none'", "Cache-Control: no-store",
+                   "Referrer-Policy: no-referrer", "X-Content-Type-Options: nosniff", "X-Frame-Options: DENY"):
+        assert header in head
+    assert "已連上 ChatGPT" in body and "synthetic@example.test" in body and "https://chatgpt.com/settings/usage" in body
+    assert "history.replaceState" in body
+    for secret in ("synthetic-code", rig.query["state"][0], rig.query["nonce"][0]):
+        assert secret not in reply
+
+
+async def test_a_sign_in_that_fails_says_so_on_the_page_and_in_the_log(rig, caplog):
+    rig.claim_changes = {"aud": "other-client"}
+    with pytest.raises(OpenRouterError):
+        await rig.sign_in(language="en")
+    reply = (await rig.callbacks[-1]).decode()
+    assert "Not connected to ChatGPT" in reply and "synthetic@example.test" not in reply
+    assert "ChatGPT sign-in stopped at identity: auth_expired" in caplog.text
+
+
+async def test_a_sign_in_the_owner_declines_says_so_on_the_page(rig):
+    rig.callback_changes = {"error": "access_denied"}
+    with pytest.raises(OpenRouterError):
+        await rig.sign_in(language="en")
+    assert "You did not approve" in (await rig.callbacks[-1]).decode()
+    assert not rig.requests
+
+
+async def test_a_page_on_the_web_cannot_reach_the_listener_through_a_name_it_controls(rig):
+    rig.callback_host = "evil.example"
+    with pytest.raises(OpenRouterError) as error:
+        await rig.auth.sign_in({"timeout_s": 0.1})
+    assert error.value.kind == "timeout" and not rig.requests
+    assert "400 Bad Request" in (await rig.callbacks[-1]).decode()
+
+
+async def test_the_documented_port_being_taken_does_not_stop_a_first_sign_in(rig):
+    holder = await asyncio.start_server(lambda reader, writer: writer.close(), "127.0.0.1", 1455)
+    try:
+        status = await rig.sign_in()
+        assert status["signed_in"] and rig.query["redirect_uri"] != ["http://127.0.0.1:1455/auth/callback"]
+    finally:
+        holder.close()
+        await holder.wait_closed()
+
+
+async def test_only_an_account_that_did_not_allow_the_plan_is_asked_for_consent_again(rig):
+    first = await rig.sign_in(enable_plan=True)
+    assert first["first_sign_in"] and "prompt" not in rig.query
+    again = await rig.sign_in(enable_plan=True)
+    assert not again["first_sign_in"] and "prompt" not in rig.query
+    rig.scope = "openid profile email offline_access"
+    await rig.sign_in()
+    rig.scope = SCOPE
+    await rig.sign_in()
+    assert rig.query["prompt"] == ["consent"]
+
+
+async def test_credentials_that_cannot_be_read_do_not_stand_in_the_way_of_signing_in_again(rig, monkeypatch):
+    await rig.sign_in()
+    vault = rig.auth._vault(rig.auth._state()["active"])
+    real = vault.get
+    monkeypatch.setattr(vault, "get", lambda: (_ for _ in ()).throw(ValueError("Incomplete provider credential")))
+    rig.auth._browser = rig.browser
+    original = rig.browser
+    def browser(url):
+        monkeypatch.setattr(vault, "get", real)
+        return original(url)
+    rig.auth._browser = browser
+    assert (await rig.sign_in())["signed_in"]
 
 
 async def test_signature_is_validated(rig, monkeypatch):

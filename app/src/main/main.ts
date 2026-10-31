@@ -23,7 +23,7 @@ import { installNavInput } from "./nav-input";
 import { createSidebar } from "./sidebar";
 import { setOwnerProfile } from "./owner-avatar";
 import { loadAvatar } from "./avatar";
-import { installWindowHotkeys } from "./window-hotkeys";
+import { followDictation, installWindowHotkeys } from "./window-hotkeys";
 import { installFocusKeys } from "./focus-keys";
 import { installContextMenus } from "./context-menu";
 import { followTray } from "./tray-open";
@@ -319,6 +319,7 @@ async function start(): Promise<void> {
   ctx.onEvent((event) => followTray(event, { inGuide: () => !guide.hidden, go, addWord: () => dictionary.addWord() }));
 
   api.subscribeMainEvents((event) => {
+    if (event.type === "Dictation") followDictation(event.phase, event.agent);
     if (event.type === "DictationPasted" && document.activeElement instanceof HTMLTextAreaElement) {
       document.activeElement.dispatchEvent(new CustomEvent("dictation-pasted", { detail: event.text }));
     }

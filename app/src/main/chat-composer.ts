@@ -40,23 +40,30 @@ export function composerHTML(): string {
 }
 
 const MODE_CHANGED = "raphael:action-mode";
-/** The one global choice of what a member does before it acts, named where the owner writes. */
+type ActionMode = "direct" | "ask" | "plan";
+const MODES = {
+  direct: { name: "chat.modeDirect", hint: "chat.modeDirectHint" },
+  ask: { name: "chat.modeAsk", hint: "chat.modeAskHint" },
+  plan: { name: "chat.modePlan", hint: "chat.modePlanHint" },
+} as const;
+/** The one global choice of what a member may do without asking, named where the owner writes. */
 export function bindActionMode(button: HTMLElement): void {
-  let mode: "ask" | "direct" = "direct";
-  const name = (value: "ask" | "direct"): string => t(value === "ask" ? "chat.modeAsk" : "chat.modeDirect");
+  let mode: ActionMode = "direct";
+  const name = (value: ActionMode): string => t(MODES[value].name);
   const draw = (): void => {
     button.querySelector("span")!.textContent = name(mode);
     button.setAttribute("aria-label", `${t("chat.beforeAct")}: ${name(mode)}`);
   };
   const read = async (): Promise<void> => {
-    try { mode = (await api.core<{ settings: { action_mode?: "ask" | "direct" } }>("settings.get"))?.settings?.action_mode ?? "direct"; draw(); }
+    try { mode = (await api.core<{ settings: { action_mode?: ActionMode } }>("settings.get"))?.settings?.action_mode ?? "direct"; draw(); }
     catch { /* A reconnecting core keeps the last answer; saving still requires the core. */ }
   };
   button.addEventListener("click", () => {
-    openMenu(button, [{ value: "ask", label: name("ask") }, { value: "direct", label: name("direct") }], mode, value => {
-      mode = value as "ask" | "direct"; draw();
+    const modes = Object.keys(MODES) as ActionMode[];
+    openMenu(button, modes.map(value => ({ value, label: name(value), desc: t(MODES[value].hint) })), mode, value => {
+      mode = value as ActionMode; draw();
       void api.core("settings.set", { key: "action_mode", value }).then(() => window.dispatchEvent(new Event(MODE_CHANGED))).catch(error => toaster.info(describeError(error)));
-    }, t("chat.beforeAct"));
+    }, t("chat.beforeAct"), [], { placement: "above" });
   });
   window.addEventListener(MODE_CHANGED, () => void read());
   onLocaleChange(draw);

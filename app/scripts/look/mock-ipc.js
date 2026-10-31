@@ -529,7 +529,7 @@ export function installMock(fixture, config = {}, target = window) {
         }
         return { clis: data.clis };
       case "chatgpt.status": return data.chatgpt ?? (config.fixture?.chatgptSignedIn ? { signed_in: true, email: "owner@example.test", plan_scope_granted: true } : { signed_in: false });
-      case "chatgpt.sign_in": data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true }; return data.chatgpt;
+      case "chatgpt.sign_in": data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true }; notify("ProvidersChanged"); return data.chatgpt;
       case "chatgpt.models": return { models: [] };
       case "chatgpt.cancel": return { cancelled: true };
       case "chatgpt.sign_out": data.chatgpt = { signed_in: false }; return { signed_out: true };
@@ -548,7 +548,7 @@ export function installMock(fixture, config = {}, target = window) {
         notify("BrainsChanged", {});
         return { started: !cli.available, reconnected: cli.available };
       }
-      case "models.catalog": return data.catalog;
+      case "models.catalog": return data.chatgpt?.signed_in ? { ...data.catalog, llm: [...data.catalog.llm, { ...data.catalog.llm[0], id: "gpt-6-sol", provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI", name: "GPT-6-Sol", input_per_mtok: null, output_per_mtok: null, free: false, variable_price: false, per_minute: null }] } : data.catalog;
       case "models.status": return data.modelStatus;
       case "models.local": return { models: data.localModels };
       case "providers.list": return { providers: data.providers };
@@ -791,6 +791,7 @@ export function installMock(fixture, config = {}, target = window) {
         notify("AgentTurn",{member_id:args.memberId,turn_id:args.turnId??0});return;
       }
       if (command === "main_events") { state.channel = args.channel; return; }
+      if (command === "main_window_forward") return;
       if (command === "window_hotkey" && variant.ownerVoice && ["agent_down", "agent_up"].includes(args.kind)) {
         const member = args.memberId ?? 0;
         if (!data.conversations.some(c => c.id === args.conversationId && c.member_id === member)) throw new Error("Composer voice must name its own conversation");
@@ -802,7 +803,7 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       // Escape reaches the native worker even when no capture is active.
-      if (command === "window_hotkey" && args.kind === "cancel") {
+      if (command === "window_hotkey" && (args.kind === "cancel" || args.kind === "cancel_key")) {
         if (variant.stopVoice) notify("Dictation", { phase: "cancelled", agent: true, member_id: variant.stopVoiceMember ?? 0 });
         return;
       }

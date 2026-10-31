@@ -1622,6 +1622,44 @@ export function checkRendered(name, context = {}) {
     require(document.querySelectorAll(".cb-menu .cb-pane [data-model]").length >= 1 && !document.querySelector('.cb-menu .cb-pane [role="status"]'), "the models took the place of the message without reopening");
     return { check: name };
   }
+  if (name === "depth-fill-covers-thumb") {
+    const track = document.querySelector(".cb-now .mc-track"), range = track.querySelector(".mc-range");
+    const place = range.getBoundingClientRect(), at = Number(range.value) / Number(range.max);
+    const thumbRight = place.left + 2 + (place.width - 4 - 24) * at + 24;
+    const fillRight = track.getBoundingClientRect().left + parseFloat(getComputedStyle(track, "::before").width);
+    require(fillRight >= thumbRight && fillRight - thumbRight <= 3, `the fill ends just past the thumb: fill ${fillRight}, thumb ${thumbRight}`);
+    return { check: name };
+  }
+  if (name === "composer-favorites") {
+    const group = document.querySelector(".cb-menu .cb-group"), rows = [...group.querySelectorAll("[data-model]")].map(row => row.dataset.model);
+    require(group.querySelector("h4")?.textContent.trim() && rows.join() === "openai/gpt-6-luna,cli:codex:gpt-6.1", `the starred models first, in order: ${rows}`);
+    require(document.querySelectorAll(".cb-menu .cb-source").length >= 3, "and the sources under them");
+    return { check: name };
+  }
+  if (name === "permission-menu") {
+    const rows = [...document.querySelectorAll("#app-popover [data-value]")];
+    require(rows.map(row => row.dataset.value).join() === "direct,ask,plan", "three modes");
+    require(rows.every(row => row.querySelector(".mt")?.textContent.trim() && row.querySelector(".mdesc")?.textContent.trim()), "each says what it does");
+    require(document.querySelector("#app-popover").getBoundingClientRect().bottom <= document.querySelector(".cmp-mode").getBoundingClientRect().top + 1, "it opens above the button, inside the window");
+    return { check: name };
+  }
+  if (name === "chooser-chatgpt") {
+    const rail = [...document.querySelectorAll(".model-chooser [data-source]")], chatgpt = document.querySelector('.model-chooser [data-source="chatgpt"]');
+    require(rail[0] === chatgpt, "first in the rail");
+    require(chatgpt.closest("section") === document.querySelector('.model-chooser [data-source="cli:codex"]').closest("section"), "under the subscriptions, with the CLIs");
+    require(chatgpt.querySelector(".mono svg, .mono .logo, svg"), "with its mark");
+    const pane = document.querySelector(".mc-pane");
+    require(!/token/i.test(pane.textContent), "no per-token price");
+    require(visible(pane.querySelector('[data-dlg="chatgpt"]')), "a real button to sign in");
+    require(pane.querySelectorAll(".mc-signin p").length >= 2, "what signing in means, and what it does not");
+    return { check: name };
+  }
+  if (name === "chooser-chatgpt-models") {
+    require(!document.querySelector(".mc-signin"), "no sign-in left");
+    require(visible(document.querySelector('.model-chooser [data-model="@chatgpt:gpt-6-sol"]')), "the plan's model");
+    require(!/token/i.test(document.querySelector(".mc-pane-head").textContent), "no per-token price");
+    return { check: name };
+  }
   if (name === "composer-model-small" || name === "composer-model-sources" || name === "composer-model-turned") {
     const menu = document.querySelector(".cb-menu"), now = menu.querySelector(".cb-now"), list = menu.querySelector(".cb-body");
     require(visible(now) !== visible(list), "the card shows one view at a time");
@@ -1633,7 +1671,7 @@ export function checkRendered(name, context = {}) {
       require(visible(head.querySelector(".cb-back")), "a way back");
       const centre = (head.querySelector("h3").getBoundingClientRect().left + head.querySelector("h3").getBoundingClientRect().right) / 2;
       require(Math.abs(centre - (card.left + card.right) / 2) <= 2 && title.width > 0, "the title stands in the middle of the card");
-      if (name === "composer-model-sources") require(menu.querySelectorAll(".cb-source").length >= 3 && menu.querySelector(".cb-group h4") && !menu.querySelector("[data-model]"), "the sources under their kinds, and no models yet");
+      if (name === "composer-model-sources") require(menu.querySelectorAll(".cb-source").length >= 3 && menu.querySelector(".cb-group h4") && [...menu.querySelectorAll("[data-model]")].every(row => row.closest(".cb-group") === menu.querySelector(".cb-group")), "the sources under their kinds, and no models but the starred ones");
       else require(!menu.querySelector(".cb-source"), "one source's models");
     }
     require(menu.getBoundingClientRect().bottom <= document.querySelector(".composer .cmp-model .mp-trigger").getBoundingClientRect().top + 1, "the card opens above the button, wherever the composer stands");
@@ -1664,8 +1702,13 @@ export function checkRendered(name, context = {}) {
     require(face.width >= 100 && Math.abs(face.left + face.width / 2 - maker.left - maker.width / 2) <= 2, "the slime is large, in the middle");
     require(!dialog.querySelector('img, input[type="file"], [data-pick]'), "a member is a slime: no pictures to choose");
     require(dialog.querySelectorAll(".cr-colors [data-slime-color]").length >= 8 && dialog.querySelectorAll(".cr-characters [data-slime-character]").length >= 20, "every colour and character is on the page");
-    require(dialog.querySelectorAll(".cr-suggestion").length >= 3, "it offers members to start from");
     require(dialog.querySelectorAll("input, textarea").length === 1, "it asks only for a name");
+    const stands = dialog.querySelector(".cr-face svg.slime").parentElement;
+    for (let box = stands; box && box !== dialog; box = box.parentElement) {
+      const seen = getComputedStyle(box);
+      require(box.matches(".mb-dlg-body") || (seen.clipPath === "none" && seen.overflow === "visible"), `nothing cuts the slime's wings and horns (.${box.className})`);
+    }
+    require(getComputedStyle(dialog.querySelector(".cr-face svg.slime")).clipPath === "none", "nothing cuts the slime's wings and horns");
     const start = dialog.querySelector('[data-dlg="create"]');
     if (name === "member-maker") require(start.disabled && document.activeElement === dialog.querySelector("#mb-new-name"), "the name has the focus and there is nothing to press yet");
     else {

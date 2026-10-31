@@ -913,6 +913,7 @@
     "owner_photo": "",
     "skin": "default",
     "agent_model": "openai/gpt-6-sol",
+    "model_favorites": { "answer": ["openai/gpt-6-luna", "cli:codex:gpt-6.1"], "cleanup": [], "stt": [] },
     "quick_model": "openai/gpt-6-luna",
     "quick_effort": "low",
     "cleanup_model": "openai/gpt-6-luna",

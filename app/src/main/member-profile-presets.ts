@@ -12,12 +12,6 @@ const PRESET_KEYS = {
   community: { label: "members.profile.community", blurb: "members.profile.communityBlurb", personality: "members.profile.communityPersonality", instructions: "members.profile.communityInstructions" },
   operations: { label: "members.profile.operations", blurb: "members.profile.operationsBlurb", personality: "members.profile.operationsPersonality", instructions: "members.profile.operationsInstructions" },
 } as const;
-/** The slime each start comes with; it can still be changed. */
-const PRESET_SLIMES: Record<Exclude<ProfilePreset, "custom">, string> = {
-  assistant: "slime:color:sky", email: "slime:color:coral", research: "slime:color:teal", coding: "slime:color:ocean",
-  community: "slime:color:orchid", operations: "slime:color:tangerine",
-};
-export const presetSlime = (preset: ProfilePreset): string => (preset === "custom" ? "" : PRESET_SLIMES[preset]);
 export const presetChoices = () => PROFILE_PRESETS.map(value => ({ value, label: t(PRESET_KEYS[value].label) }));
 
 export function memberPreset(preset: ProfilePreset): Partial<NewMember> {

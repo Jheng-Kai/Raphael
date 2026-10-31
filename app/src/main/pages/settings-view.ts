@@ -416,6 +416,7 @@ export function modelPickerLook(v: SettingsView, role: ModelRole): ModelPickerLo
     catalog: catalogOf(v),
     providers: v.providers?.providers,
     clis: role === "answer" ? v.cliBrains?.clis : undefined,
+    ...(role === "answer" ? { chatgpt: v.cliBrains?.chatgpt ?? null, chatgptError: v.cliBrains?.chatgptError ?? "" } : {}),
     loading: v.catalog === "loading",
     favorites: v.brain?.model_favorites?.[role] ?? [],
     ...(role === "stt" ? { local: localView(v) } : {}),

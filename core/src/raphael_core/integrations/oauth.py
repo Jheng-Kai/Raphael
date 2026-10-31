@@ -24,7 +24,6 @@ token, a code, a state, an address or a client registration.
 import asyncio
 import contextlib
 import functools
-import html
 import json
 import logging
 import time
@@ -34,6 +33,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlsplit
 
+from ..sign_in_page import SignInPage, http_response, language_of, sign_in_page
 from .client import USER_AGENT, McpFailure
 from .config import checked_url
 from .vault import SecretVault, delete_long, load_long, secret_name, store_long
@@ -144,19 +144,10 @@ _PAGE_FAILED = {
 }
 
 
-def _page(accept_language: str, *, ok: bool) -> bytes:
-    lang = "zh" if accept_language.lower().startswith("zh") else "ja" if accept_language.lower().startswith("ja") else "en"
-    title, text = (_PAGE if ok else _PAGE_FAILED)[lang]
-    body = (
-        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
-        '<meta name="viewport" content="width=device-width,initial-scale=1"><style>'
-        "body{font:16px/1.6 system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0;"
-        "background:#f7f9fd;color:#1b2942}main{text-align:center;padding:24px}h1{font-size:20px;margin:0 0 8px}"
-        "p{margin:0;color:#465873}@media(prefers-color-scheme:dark){body{background:#182133;color:#edf3fd}"
-        "p{color:#c0cee3}}</style></head><body><main>"
-        f"<h1>{html.escape(title)}</h1><p>{html.escape(text)}</p></main></body></html>"
-    )
-    return body.encode("utf-8")
+def _page(accept_language: str, *, ok: bool) -> SignInPage:
+    language = language_of(accept_language)
+    title, text = (_PAGE if ok else _PAGE_FAILED)[language]
+    return sign_in_page(language, ok=ok, title=title, text=text)
 
 
 class CallbackListener:
@@ -214,12 +205,8 @@ class CallbackListener:
                 return
             if len(head) > _MAX_REQUEST_BYTES:
                 return
-            status, body = self._answer(head)
-            payload = (
-                f"HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\n"
-                f"Content-Length: {len(body)}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n"
-            ).encode() + body
-            writer.write(payload)
+            status, page = self._answer(head)
+            writer.write(http_response(status, page))
             with contextlib.suppress(ConnectionError):
                 await writer.drain()
         finally:
@@ -227,7 +214,7 @@ class CallbackListener:
                 writer.close()
                 await writer.wait_closed()
 
-    def _answer(self, head: bytes) -> tuple[str, bytes]:
+    def _answer(self, head: bytes) -> tuple[str, SignInPage | None]:
         lines = head.decode("latin-1").split("\r\n")
         parts = lines[0].split(" ")
         headers = {}
@@ -236,10 +223,10 @@ class CallbackListener:
             headers[name.strip().lower()] = value.strip()
         language = headers.get("accept-language", "")
         if len(parts) != 3 or parts[0] != "GET":
-            return "405 Method Not Allowed", b""
+            return "405 Method Not Allowed", None
         target = urlsplit(parts[1])
         if target.path != "/callback" or headers.get("host") != f"127.0.0.1:{self._port}":
-            return "404 Not Found", b""
+            return "404 Not Found", None
         query = {key: values[0] for key, values in parse_qs(target.query).items()}
         state = query.get("state")
         if self._state is None or state != self._state or self._done.done():

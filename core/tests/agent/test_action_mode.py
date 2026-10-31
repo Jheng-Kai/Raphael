@@ -48,6 +48,16 @@ async def test_voice_command_waits_then_runs_once(make_rig, client, actions):
     assert actions.calls == [("lock_screen",)]
 
 
+def test_plan_mode_keeps_the_door_of_manual_and_tells_the_model_to_plan(conn):
+    gate = ToolGate(conn=conn)
+    assert not gate.plan_first
+    SettingsStore(conn).set("action_mode", "plan")
+    assert gate.plan_first and gate.ask_first
+    assert gate.needs_confirmation("lock_screen") and not gate.needs_confirmation("local_time")
+    with pytest.raises(NotApproved):
+        gate.check(Action("lock_screen"), None)
+
+
 @pytest.mark.parametrize("mode", [True, "other", None])
 def test_invalid_modes_are_refused(conn, mode):
     with pytest.raises((TypeError, ValueError)):

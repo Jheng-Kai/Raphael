@@ -361,7 +361,8 @@
 
 /* under way: a turning ring, and light passing over what is being done */
 .spin { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: var(--r-pill); border: 2px solid var(--track); border-top-color: var(--accent-text); animation: ra-spin 0.8s linear infinite; }
-.shimmer { background: linear-gradient(90deg, currentColor 0%, currentColor 40%, var(--accent-text) 50%, currentColor 60%, currentColor 100%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: ra-shimmer 1.6s linear infinite; }
+/* The words dim and the light their full colour, so it shows whatever the theme's colours are. */
+.shimmer { --shimmer-dim: color-mix(in srgb, currentColor 45%, transparent); background: linear-gradient(90deg, var(--shimmer-dim) 0%, var(--shimmer-dim) 38%, currentColor 50%, var(--shimmer-dim) 62%, var(--shimmer-dim) 100%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: ra-shimmer 1.6s linear infinite; }
 .think { display: inline-flex; gap: calc(6px + 2 * var(--pa-u)); }
 .think i { display: block; width: calc(var(--pa-dot) - 1px); height: calc(var(--pa-dot) - 1px); border-radius: var(--r-pill); background: var(--text-3); animation: ra-dots 1.2s ease-in-out infinite; }
 .think i:nth-child(2) { animation-delay: 0.15s; }

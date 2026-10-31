@@ -58,6 +58,7 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
       delete env.RAPHAEL_TEST_NATIVE_HOME;
       if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
+      if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "gmail-connect") env.RAPHAEL_TEST_NATIVE_GMAIL = "1";
       if (journey.name === "bot-homes") env.RAPHAEL_TEST_NATIVE_HOMES = "1";
       delete env.RAPHAEL_TEST_NATIVE_CATALOG;
@@ -82,7 +83,7 @@ async function run(options) {
         await writeFile(join(data, "device.json"), JSON.stringify({ onboarded: true, ui_language: "zh-TW", appearance: "light", autostart: false }));
         let audioMs = 0;
         delete env.RAPHAEL_FAKE_AUDIO;
-        if (journey.name === "voice-conversation") {
+        if (journey.name === "voice-conversation" || journey.name === "voice-keys") {
           const sample = await prepareVoiceSample(journeyDir);
           env.RAPHAEL_FAKE_AUDIO = sample.file;
           env.RAPHAEL_MODELS_DIR = process.env.RAPHAEL_MODELS_DIR || join(process.env.APPDATA, "Raphael/models");
@@ -142,7 +143,7 @@ async function run(options) {
           report.captures.push({ scene: `${journey.name}/${label}`, theme: "native", ...viewport, image, failed: !!(result.runtimeErrors.length || result.failures.length) });
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
-        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+        await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {
@@ -178,7 +179,7 @@ async function run(options) {
         }
         await writeFile(join(journeyDir, "app.log"), log);
         result.cliDiagnosticLog = log.split(/\r?\n/).filter(line => line.includes("Native CLI diagnostic "));
-        const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name));
+        const costs = paidRequests(log, ["gmail-connect", "store-finder", "catalog-connect"].includes(journey.name), journey.name === "openrouter-turn" ? ["openrouter.ai"] : []);
         if (costs.length) result.failures.push(`Undeclared paid/Composio requests: ${JSON.stringify(costs)}`);
         if (journey.name === "gmail-connect") result.connectorLog = log.split(/\r?\n/).flatMap((line, index, lines) => /connect|composio|card/i.test(line) ? lines.slice(Math.max(0, index - 2), index + 3) : []);
         result.failed = !!(result.failures.length || result.runtimeErrors.length);

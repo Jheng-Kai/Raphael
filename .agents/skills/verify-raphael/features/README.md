@@ -424,6 +424,19 @@ Status reports signed_in, account_id, email, plan_scope_granted, models,
 signing_in and separate saved registrations. Models preserve server ordering and
 only visibility=list. Sign-out reports whether remote revocation was confirmed.
 
+The sign-in ends on a page of `core/src/raphael_core/sign_in_page.py` that says what really became of it,
+served by the one-shot listener with a strict CSP and no external load. The listener answers only its own
+`Host` and path, one state, once. The ID token allows five minutes of clock difference (the owner's PC ran
+3 s behind OpenAI, which failed every sign-in and signed the account out at the next renewal). Tokens are
+forgotten only for a refresh error OpenAI's docs call terminal. Failures log their step and kind, never a word
+the server or the owner sent. The chooser and Settings say `Continue with ChatGPT`, what it means, and why it
+stopped; the composer's card says `Using ChatGPT plan` with Manage usage (OpenAI's UI/UX requirements at
+developers.openai.com/siwc/ui-ux-guidelines).
+
+Every source is proven by a real turn: `npm run native -- every-source` (the CLIs, on their subscriptions),
+`npm run native -- openrouter-turn` (the owner's key, a free model, nothing else paid). ChatGPT needs the
+owner's own consent click once; a sign-in in the real app, then one tool round, is its proof.
+
 Offline evidence lives in `core/tests/brain/test_chatgpt.py`: loopback callback,
 JWT validation, account separation, rotation-before-use, Responses tool round trip
 through NarratedLoop/run_task, gate rejection, terminal stream errors, classified

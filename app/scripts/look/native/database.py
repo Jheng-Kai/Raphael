@@ -86,7 +86,7 @@ elif operation == "init":
     # then drive all new conversations, turns and deletions from the real UI.
     Conversations(connection).main()
     Conversations(connection).quick()
-    voice = len(sys.argv) > 3 and sys.argv[3] == "voice-conversation"
+    voice = len(sys.argv) > 3 and sys.argv[3] in ("voice-conversation", "voice-keys")
     settings = {"stt_engine": "local" if voice else "cloud", "stt_local_model": "qwen3-asr" if voice else None,
                 "tts_enabled": False, "first_bot_profile": {"name": "Raphael", "personality": "Calm", "instructions": "Help with the current request."}}
     if len(sys.argv) > 3 and sys.argv[3] == "gmail-connect":

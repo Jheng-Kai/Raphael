@@ -1,14 +1,11 @@
-// 新增成員 as a character maker: the slime large in the middle, a colour or a character under it, a name, and a few
-// members to start from. It stands where the conversation stands, with the sidebar beside it. The member then opens and
-// asks what it is for (the core's greeting), and the owner's answer becomes its job: nothing else is asked here.
+// 新增成員 as a character maker: the slime large in the middle, a colour or a character under it, and a name. It stands
+// where the conversation stands, with the sidebar beside it. The member then opens and asks what it is for (the core's
+// greeting), and the owner's answer becomes its job: nothing else is asked here.
 import "./member-creator.css";
-import * as api from "./api";
-import { describeError } from "./format";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
-import { memberPreset, presetChoices, presetCommand, presetSlime, type ProfilePreset } from "./member-profile-presets";
 import { NAME_MAX, cleanName, isMemberNameTaken } from "./members";
-import { bareSlimeHTML, defaultSlimeAvatar, pickSlime, slimeCharactersHTML, slimeColorsHTML, slimeFaceHTML } from "./slime";
+import { defaultSlimeAvatar, pickSlime, slimeCharactersHTML, slimeColorsHTML, slimeFaceHTML } from "./slime";
 import type { Member, NewMember } from "./types";
 import { btn, esc, toaster } from "./ui";
 
@@ -25,16 +22,8 @@ export interface MemberCreatorOptions {
 
 export function openMemberCreator(o: MemberCreatorOptions): Dialog {
   let avatar = defaultSlimeAvatar(o.taken.length);
-  let preset: ProfilePreset = "custom";
   let busy = false;
-  let filledIn = "";
   let hop: ReturnType<typeof setTimeout> | undefined;
-
-  const suggestions = presetChoices().filter(choice => choice.value !== "custom").map(choice => {
-    const fields = memberPreset(choice.value);
-    return btn(`<span class="cr-card-face">${bareSlimeHTML(presetSlime(choice.value))}</span><span class="cr-card-text"><b>${esc(choice.label)}</b><small>${esc(fields.blurb ?? "")}</small></span>`,
-      "cr-suggestion", ` data-dlg="preset" data-preset="${choice.value}" aria-pressed="false"`);
-  }).join("");
 
   const dialog = openDialog({
     title: t("members.newMember"),
@@ -43,14 +32,11 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
       `<div class="cr-colors" role="group" aria-label="${esc(t("members.creator.colors"))}">${slimeColorsHTML(avatar, esc)}</div>` +
       `<div class="cr-characters" role="group" aria-label="${esc(t("members.creator.characters"))}">${slimeCharactersHTML(avatar, esc)}</div>` +
       `<div class="cr-fields"><label class="mp-label" for="mb-new-name"><span>${esc(t("members.name"))}</span><input id="mb-new-name" class="mb-fin" maxlength="${NAME_MAX}" autocomplete="off"></label></div>` +
-      `<div class="cr-start">${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div>` +
-      `<section class="cr-suggestions"><h3>${esc(t("members.creator.suggestions"))}</h3><div class="cr-suggestion-list">${suggestions}</div></section>`,
+      `<div class="cr-start">${btn(esc(t("members.create")), "pri", ' data-dlg="create" disabled')}</div></div>`,
     actions: {},
     canClose: () => !busy,
-    onAct(act, target) {
-      if (busy) return;
-      if (act === "create") void create();
-      else if (act === "preset") choosePreset(target.dataset.preset as ProfilePreset);
+    onAct(act) {
+      if (!busy && act === "create") void create();
     },
     onEnter() { void create(); },
     onClose() { clearTimeout(hop); },
@@ -80,20 +66,6 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
     drawFace(true);
   }
 
-  /** A start names the member and looks the part, unless the owner has typed a name; pressing it again takes that back. */
-  function choosePreset(next: ProfilePreset): void {
-    const leaving = preset === next;
-    preset = leaving ? "custom" : next;
-    for (const card of dialog.el.querySelectorAll<HTMLElement>(".cr-suggestion")) card.setAttribute("aria-pressed", String(card.dataset.preset === preset));
-    if (!cleanName(name.value) || name.value === filledIn) {
-      filledIn = leaving ? "" : memberPreset(preset).role ?? "";
-      name.value = filledIn;
-    }
-    if (!leaving) setAvatar(presetSlime(preset));
-    nameChanged();
-    name.focus();
-  }
-
   async function create(): Promise<void> {
     if (busy) return;
     const wanted = cleanName(name.value);
@@ -105,11 +77,8 @@ export function openMemberCreator(o: MemberCreatorOptions): Dialog {
     busy = true;
     start.disabled = true;
     try {
-      const made = await o.create({ ...memberPreset(preset), name: wanted, group_id: o.groupId, avatar, greet: true });
+      const made = await o.create({ name: wanted, group_id: o.groupId, avatar, greet: true });
       if (!made) return;
-      const command = presetCommand(preset);
-      // The member exists by now: a starter command that fails is said, and does not hold the maker open.
-      if (command) await api.membersCommandsSave(made.id, command).catch(error => toaster.info(describeError(error)));
       busy = false;
       dialog.close();
     } finally {

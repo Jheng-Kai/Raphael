@@ -157,6 +157,18 @@ describe("rendered look checks", () => {
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
   });
+  it("rejects a light in the colour of the words it passes over (R-UI-55)", () => {
+    const { window, audit } = productAudit('<span class="shimmer" style="background-image:linear-gradient(90deg,rgb(9,9,9),rgb(9,9,9))">x</span>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-55')).toHaveLength(1);
+    window.document.querySelector('.shimmer').style.backgroundImage = 'linear-gradient(90deg,rgba(9,9,9,0.4),rgb(9,9,9))';
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-55')).toEqual([]);
+  });
+  it("rejects a crop on a slime (R-UI-54)", () => {
+    const { window, audit } = productAudit('<span class="mb-av-slime" style="overflow:hidden"><svg></svg></span>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toHaveLength(1);
+    window.document.querySelector('.mb-av-slime').style.overflow = 'visible';
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-54')).toEqual([]);
+  });
   it("rejects words that hug the edge of a hover fill (R-UI-53)", () => {
     const { window, audit } = productAudit('<div class="row" style="color:rgb(10,10,10);background-color:rgb(255,255,255)">Quick questions</div><style>.row:hover{background-color:rgb(230,230,230)}</style>');
     const row = window.document.querySelector('.row');

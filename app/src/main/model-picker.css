@@ -31,6 +31,11 @@
 .mc-rail > .btn.ghost { flex: none; min-height: 40px; padding: 0 var(--sp-3); width: 100%; justify-content: flex-start; margin-top: var(--sp-4); background: var(--btn); border-color: var(--btn-edge); font-size: var(--fs-xs); }
 .mc-rail > .btn.ghost:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
 .mc-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); }
+.mc-signin { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-2); max-width: 340px; }
+.mc-signin p { margin: 0; }
+.mc-signin p[role="alert"] { color: var(--text); }
+.mc-signin .btn { gap: var(--sp-2); margin-top: var(--sp-2); }
+.mc-signin .btn .logo, .mc-signin .btn .mono svg { width: 16px; height: 16px; }
 .mc-pane-head { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5) var(--sp-3); flex: none; }
 .mc-pane-head h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-md); font-weight: 600; }
 .mc-pane-head p { margin: 0; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; }

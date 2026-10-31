@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { mountModelPicker, modelPickerHTML, type ModelPicker, type PickerRole } from "./model-picker";
 import type { CatalogModel, CliBrain } from "./types";
 import { t } from "./i18n";
@@ -54,6 +54,59 @@ test("logout removes rows and disables confirmation without saving", () => {
   expect(picker.button.textContent).toContain("Claude Sonnet 5.5");
   expect(document.querySelector(".mc-row")).toBeNull(); expect(document.querySelector<HTMLButtonElement>('[data-dlg="use"]')!.disabled).toBe(true);
   expect(choose).not.toHaveBeenCalled();
+});
+
+describe("ChatGPT in the chooser", () => {
+  const signedOut = { signed_in: false };
+  const open = (chatgpt: object | null, extra: object = {}) => {
+    const slot = document.createElement("div"); document.body.append(slot);
+    const action = vi.fn();
+    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", chatgpt: chatgpt as never, onChoose: vi.fn(), onChatgpt: action, ...extra });
+    picker.open(); click('[data-source="chatgpt"]');
+    return action;
+  };
+  test("is a subscription, first, and says what it costs nobody; signing in is right there and is a real action", () => {
+    const action = open(signedOut);
+    const rail = [...document.querySelectorAll<HTMLElement>("[data-source]")].map((row) => row.dataset.source);
+    expect(rail[0]).toBe("chatgpt");
+    const row = document.querySelector('[data-source="chatgpt"]')!;
+    expect(row.closest("section")!.querySelector("h3")!.textContent).toBe(t("chooser.subscriptions"));
+    expect(row.textContent).toContain(t("brains.signedOut"));
+    const pane = document.querySelector(".mc-pane")!.textContent!;
+    expect(pane).not.toContain(t("chooser.apiNote"));
+    expect(pane).toContain(t("brains.chatgptPrivate"));
+    expect(document.querySelector(".mc-row")).toBeNull();
+    click('[data-dlg="chatgpt"]');
+    expect(action).toHaveBeenCalledExactlyOnceWith("sign-in");
+  });
+  test("while the browser is signing in it says so, and can be cancelled", () => {
+    const action = open({ signed_in: false, signing_in: true });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("brains.chatgptSigning"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).toBeNull();
+    click('[data-dlg="chatgpt-cancel"]');
+    expect(action).toHaveBeenCalledExactlyOnceWith("cancel");
+  });
+  test("a sign-in that stopped says why, with the way to try again", () => {
+    open(signedOut, { chatgptError: "OpenAI could not be reached." });
+    expect(document.querySelector('.mc-pane [role="alert"]')!.textContent).toBe("OpenAI could not be reached.");
+    expect(document.querySelector('[data-dlg="chatgpt"]')).not.toBeNull();
+  });
+  test("an account that did not allow the plan is asked again", () => {
+    open({ signed_in: true, plan_scope_granted: false });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("brains.chatgptNoPlan"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).not.toBeNull();
+  });
+  test("signed in, its models are read, then listed", () => {
+    open({ signed_in: true, plan_scope_granted: true });
+    expect(document.querySelector(".mc-pane")!.textContent).toContain(t("chooser.readingModels"));
+    expect(document.querySelector('[data-dlg="chatgpt"]')).toBeNull();
+  });
+  test("a page that cannot sign in shows no ChatGPT when there are no models", () => {
+    const slot = document.createElement("div"); document.body.append(slot);
+    picker = mountModelPicker(slot, { role: "answer", catalog: null, clis, current: "cli:claude", label: "Answer", onChoose: vi.fn() });
+    picker.open();
+    expect(document.querySelector('[data-source="chatgpt"]')).toBeNull();
+  });
 });
 
 test("Antigravity shows mixed makers and saves the full effort-suffixed model ref", () => {

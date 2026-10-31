@@ -73,6 +73,8 @@ export interface ChatGptStatus {
   email?: string | null;
   plan_scope_granted?: boolean;
   signing_in?: boolean;
+  /** This sign-in made the account's registration: nobody has told them what it means yet. */
+  first_sign_in?: boolean;
 }
 
 export interface ModelProvider {

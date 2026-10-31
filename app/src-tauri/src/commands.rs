@@ -1680,6 +1680,14 @@ pub async fn open_attachment(app: AppHandle, webview: Webview, id: String) -> Re
 }
 
 /// Chat links may open only a web address, and only at the main window's request.
+/// A sign-in in the browser has finished: the owner's way back is this window coming to the front.
+#[tauri::command]
+pub fn main_window_forward(webview: Webview) -> Result<(), String> {
+    require_main(&webview)?;
+    crate::show_main_window(webview.app_handle());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_external_url(webview: Webview, url: String) -> Result<(), String> {
     require_main(&webview)?;
@@ -1988,6 +1996,7 @@ mod tests {
                 "hotkeys_practice",
                 "keyboard_has_altgr",
                 "main_events",
+                "main_window_forward",
                 "mic_access",
                 "open_attachment",
                 "open_external_url",

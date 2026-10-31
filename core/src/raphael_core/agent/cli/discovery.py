@@ -8,12 +8,14 @@ import subprocess
 from pathlib import Path
 
 from .process import Child, subscription_env
-from .models import claude_models, codex_models, antigravity_models
+from .models import claude_cli_models, claude_models, codex_models, antigravity_models
 
 # "gemini" is Google's Antigravity CLI (`agy`), which replaced Gemini CLI.
 NAMES = {"claude": "Claude Code", "codex": "Codex CLI", "gemini": "Antigravity"}
 LOGIN = {"claude": "claude auth login", "codex": "codex login", "gemini": "agy"}
 EXECUTABLE = {"claude": "claude", "codex": "codex", "gemini": "agy"}
+# The CLIs asked for their models in the background.
+MODEL_LISTS = ("claude", "codex", "gemini")
 
 
 def brain_ref(value):
@@ -132,12 +134,26 @@ class CliBrains:
             logged_in = self.logged_in(name) if command else False
         return cli_available(command, logged_in, self.disconnected(name))
 
+    def _claude_folder(self):
+        return Path(self.environ.get("CLAUDE_CONFIG_DIR", self.home / ".claude"))
+
+    def _known_models(self, name):
+        """The list the CLI gave; Claude's has a known first answer, so its menu is never empty."""
+        return self._models.get(name) or (claude_models(self._claude_folder()) if name == "claude" else [])
+
+    def model_name(self, reference):
+        """What the owner calls a brain's model, with no depth and no id: the CLI's own name for it, else the CLI's."""
+        found = brain_ref(reference)
+        if not found:
+            return None
+        base = reference.partition("?effort=")[0]
+        return next((row["name"] for row in self._known_models(found[0]) if row["id"] == base and row.get("name")), NAMES[found[0]])
+
     def with_effort(self, model, effort):
         """Resolve quick effort from discovered choices without spawning a discovery process."""
         name, _ = brain_ref(model)
         base = model.partition("?effort=")[0]
-        models = (claude_models(Path(self.environ.get("CLAUDE_CONFIG_DIR", self.home / ".claude")))
-                  if name == "claude" else self._models.get(name, []))
+        models = self._known_models(name)
         entry = next((m for m in models if m["id"] == base or base in m.get("effort_models", {}).values()), None)
         if entry is None and base == f"cli:{name}":
             entry = next((m for m in models if m.get("is_default")), None)
@@ -156,11 +172,7 @@ class CliBrains:
         logged_in = self.logged_in(name) if command else False
         disconnected = self.disconnected(name)
         available = self.available(name, command=command, logged_in=logged_in)
-        models = (
-            claude_models(Path(self.environ.get("CLAUDE_CONFIG_DIR", self.home / ".claude")))
-            if name == "claude"
-            else self._models.get(name, [])
-        ) if available else []
+        models = self._known_models(name) if available else []
         item = {"id": name, "name": NAMES[name], "installed": bool(command),
                 "logged_in": logged_in, "disconnected": disconnected, "available": available,
                 "login_command": LOGIN[name], "models": models}
@@ -188,7 +200,7 @@ class CliBrains:
             self._previous = value
         if self._watcher is None:
             self._watcher = asyncio.create_task(self._watch())
-        if self._model_refresh is None and any(self._needs_models(name) for name in ("codex", "gemini")):
+        if self._model_refresh is None and any(self._needs_models(name) for name in MODEL_LISTS):
             self._model_refresh = asyncio.create_task(self._refresh_models())
         return value
 
@@ -201,7 +213,9 @@ class CliBrains:
         if not self._needs_models(name) or not self.available(name, command=command):
             return
         try:
-            if name == "codex":
+            if name == "claude":
+                models = await claude_cli_models(command, self.environ, self._claude_folder())
+            elif name == "codex":
                 models = await codex_models(command, self.environ,
                     Path(self.environ.get("CODEX_HOME", self.home / ".codex")) / "config.toml")
             else:
@@ -219,7 +233,7 @@ class CliBrains:
 
     async def _refresh_models(self):
         try:
-            await asyncio.gather(*(self._refresh_one(name) for name in ("codex", "gemini")))
+            await asyncio.gather(*(self._refresh_one(name) for name in MODEL_LISTS))
         finally:
             self._model_refresh = None
 

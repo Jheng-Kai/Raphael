@@ -10,7 +10,7 @@ import {
 import { formatPerMinute, formatPerMtok } from "./pricing";
 import { modelMark, providerMark } from "./provider-marks";
 import { CLIS, cliModels } from "./cli-brains";
-import type { CatalogModel, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
+import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, ModelCatalog, ModelRole, ModelProvider } from "./types";
 import { CHECK, btn, esc, ico, openMenu, sel } from "./ui";
 import { openDialog, type Dialog } from "./member-dialogs";
 
@@ -394,6 +394,10 @@ export interface ModelPickerOptions {
   /** Public connection metadata includes enabled connections with no models for this role. */
   providers?: readonly ModelProvider[];
   clis?: readonly CliBrain[];
+  /** The ChatGPT account, for a picker where the plan can be signed in to; undefined where it cannot. */
+  chatgpt?: ChatGptStatus | null;
+  /** What stopped its last sign-in. */
+  chatgptError?: string;
   loading?: boolean;
   /** What the control is called: the title of its row. It names the button and the list for a screen reader. */
   label: string;
@@ -409,6 +413,7 @@ export interface ModelPickerOptions {
   onChoose: (id: string) => void;
   onSources?: () => void;
   onCliAction?: (id: CliBrainId) => void;
+  onChatgpt?: (action: "sign-in" | "cancel") => void;
   /** The speech models of this computer (a second tab) and what is under way: only the speech-to-text picker has it. */
   local?: LocalView;
   /** The user chose the local model `name`, or pressed 下載 on it. The page downloads it if it is not on disk, saves it and hands the progress back with `update`. */
@@ -448,6 +453,8 @@ export interface ChooserSource {
   group: "subscriptions" | "api" | "local";
   models: CatalogModel[];
   cli?: CliBrain;
+  /** ChatGPT's account: it is a subscription like a CLI's, signed in here rather than in a terminal. */
+  account?: ChatGptStatus | null;
 }
 
 const baseRef = (ref: string): string => ref.split("?effort=")[0];
@@ -480,8 +487,10 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
     id: `cli:${known.id}`, name: known.name, kind: known.mark, group: "subscriptions" as const,
     cli: o.clis?.find((c) => c.id === known.id), models: models.filter((m) => connectionId(m) === `cli:${known.id}`),
   })) : [];
+  const planModels = models.filter((m) => connectionId(m) === "chatgpt");
+  if (o.chatgpt !== undefined || planModels.length) sources.unshift({ id: "chatgpt", name: "ChatGPT", kind: "openai", group: "subscriptions", account: o.chatgpt, models: planModels });
   for (const provider of o.providers ?? []) {
-    if (provider.enabled) sources.push({ id: provider.id, name: provider.name, kind: provider.kind,
+    if (provider.enabled && provider.id !== "chatgpt") sources.push({ id: provider.id, name: provider.name, kind: provider.kind,
       group: isLocal(provider.kind) ? "local" : "api", models: models.filter((m) => connectionId(m) === provider.id) });
   }
   for (const model of models) {
@@ -579,7 +588,7 @@ const stopPercent = (at: number, count: number): number => (count > 1 ? (at / (c
 export function effortSliderHTML(levels: readonly string[], value: string): string {
   const at = Math.max(0, levels.indexOf(value));
   return `<div class="mc-depth"><span class="mc-depth-title">${esc(t("chooser.effort"))}</span>` +
-    (levels.length > 1 ? `<div class="mc-track"><input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` +
+    (levels.length > 1 ? `<div class="mc-track" style="--p:${stopPercent(at, levels.length) / 100}"><input type="range" class="mc-range" min="0" max="${levels.length - 1}" step="1" value="${at}" aria-label="${esc(t("chooser.effort"))}" aria-valuetext="${esc(effortText(levels[at] ?? ""))}" data-levels="${esc(levels.join(","))}" style="--at:${stopPercent(at, levels.length)}%">` +
       `<span class="mc-dots" aria-hidden="true">${levels.map((level, index) => `<i class="mc-dot" data-dot="${esc(level)}" data-on="${index === at}"></i>`).join("")}</span></div>` : "") +
     `<div class="mc-stops" aria-hidden="true">${levels.map((level, index) => `<span class="mc-stop" data-effort="${esc(level)}" data-on="${index === at}">${esc(effortText(level))}</span>`).join("")}</div></div>`;
 }
@@ -588,6 +597,7 @@ export function effortSliderHTML(levels: readonly string[], value: string): stri
 export function moveEffortSlider(range: HTMLInputElement): string {
   const levels = (range.dataset.levels ?? "").split(","), at = Number(range.value), level = levels[at] ?? "";
   range.style.setProperty("--at", `${stopPercent(at, levels.length)}%`);
+  range.parentElement?.style.setProperty("--p", String(stopPercent(at, levels.length) / 100));
   range.setAttribute("aria-valuetext", effortText(level));
   for (const stop of range.closest(".mc-depth")?.querySelectorAll<HTMLElement>("[data-effort], [data-dot]") ?? []) stop.dataset.on = String((stop.dataset.effort ?? stop.dataset.dot) === level);
   return level;
@@ -602,6 +612,12 @@ const sourceMark = (source: ChooserSource): string =>
 
 /** What a source's row says under its name: whether it is ready, or how many models it has. */
 export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string {
+  if (source.id === "chatgpt" && source.account !== undefined) {
+    if (source.account?.signing_in) return t("brains.chatgptWaiting");
+    if (!source.account?.signed_in) return t("brains.signedOut");
+    if (source.account.plan_scope_granted === false) return t("brains.chatgptNoPlanShort");
+    return t("brains.ready");
+  }
   return source.id.startsWith("cli:") ? !o.clis ? t("common.loading") : t(source.cli?.disconnected ? "brains.disconnected" : !source.cli?.installed ? "brains.missing" : source.cli.available ? "brains.ready" : "brains.signedOut") :
     t(source.group === "local" ? "chooser.localCount" : "chooser.modelCount", { n: source.id === "local-speech" && Array.isArray(o.local?.models) ? o.local.models.length : source.models.length });
 }
@@ -609,7 +625,7 @@ export function sourceStatus(source: ChooserSource, o: ModelPickerLook): string 
 export function listHTML(list: PickerList, selected = list.current, models: readonly CatalogModel[] = [], stars = false): string {
   return list.rows.map(({ model, usable, lead }) => {
     const chosen = model.id === selected;
-    const descriptions = { "cli:claude:sonnet": "chooser.sonnet", "cli:claude:opus": "chooser.opus", "cli:claude:haiku": "chooser.haiku" } as const;
+    const descriptions = { "cli:claude:sonnet": "chooser.sonnet", "cli:claude:opus": "chooser.opus", "cli:claude:fable": "chooser.fable", "cli:claude:haiku": "chooser.haiku" } as const;
     const key = descriptions[model.id as keyof typeof descriptions];
     const description = key ? t(key) : getLocale() === "en" ? model.description : "";
     const sub = [description || [model.provider, model.context_length ? formatContext(model.context_length) : ""].filter(Boolean).join(" · "),
@@ -684,6 +700,8 @@ class MountedPicker implements ModelPicker {
       onAct: (act) => {
         if (act === "use") this.use();
         if (act === "sources") { this.close(); this.o.onSources?.(); }
+        if (act === "chatgpt") this.o.onChatgpt?.("sign-in");
+        if (act === "chatgpt-cancel") this.o.onChatgpt?.("cancel");
         if (act === "login") {
           const id = this.source.slice(4) as CliBrainId;
           if (this.o.onCliAction) this.o.onCliAction(id);
@@ -744,7 +762,15 @@ class MountedPicker implements ModelPicker {
     if (!source) { pane.innerHTML = `<p class="mc-empty">${esc(t("chooser.empty"))}</p>`; this.paintFooter(); return; }
     const note = source.group === "subscriptions" ? "chooser.subscriptionNote" : source.group === "local" ? "chooser.localNote" : "chooser.apiNote";
     pane.innerHTML = `<header class="mc-pane-head">${sourceMark(source)}<span><h3>${esc(source.name)}</h3><p>${esc(t(note))}</p></span></header>`;
-    if (source.group === "subscriptions" && !source.cli?.available) {
+    if (source.id === "chatgpt" && source.account !== undefined && (!source.account?.signed_in || source.account.plan_scope_granted === false || source.account.signing_in)) {
+      const account = source.account;
+      pane.innerHTML += account?.signing_in
+        ? `<div class="mc-empty" role="status"><p>${esc(t("brains.chatgptSigning"))}</p>${btn(esc(t("common.cancel")), "", ' data-dlg="chatgpt-cancel"')}</div>`
+        : `<div class="mc-empty mc-signin"><p>${esc(t(account?.signed_in ? "brains.chatgptNoPlan" : "brains.chatgptNote"))}</p><p>${esc(t("brains.chatgptPrivate"))}</p>` +
+          `${this.o.chatgptError ? `<p role="alert">${esc(this.o.chatgptError)}</p>` : ""}${btn(`${providerMark("openai")}${esc(t("brains.chatgptSignIn"))}`, "", ' data-dlg="chatgpt"')}</div>`;
+      this.paintFooter(); return;
+    }
+    if (source.group === "subscriptions" && !source.cli?.available && source.id !== "chatgpt") {
       pane.innerHTML += `<div class="mc-empty"><p>${esc(t(source.cli?.disconnected ? "brains.disconnected" : source.cli?.installed ? "chooser.loginNote" : "chooser.installNote"))}</p>${this.o.clis ? btn(esc(t(source.cli?.installed ? "brains.connect" : "brains.install")), "", ' data-dlg="login"') : esc(t("common.loading"))}</div>`;
       this.paintFooter(); return;
     }
@@ -777,7 +803,7 @@ class MountedPicker implements ModelPicker {
         list.rows = all.filter((row) => !favorites.includes(row));
         listEl.innerHTML = `<h4>${esc(t("chooser.favorites"))}</h4>${first}<h4>${esc(t("chooser.all"))}</h4>${listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite)}`;
       } else listEl.innerHTML = listHTML(list, this.draft, pickerModels(this.o), !!this.o.onFavorite);
-      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t(source.cli?.available && !source.models.length ? "chooser.readingModels" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
+      if (!list.rows.length) listEl.innerHTML = `<p class="mc-empty">${esc(t((source.cli?.available || source.account?.signed_in) && !source.models.length ? "chooser.readingModels" : this.o.loading ? "common.loading" : "chooser.empty"))}</p>`;
     }
     const model = this.effortModel();
     const supported = model?.reasoning_efforts ?? [];

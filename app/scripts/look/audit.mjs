@@ -63,6 +63,8 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('.page-agent .ans.thinking')) violation('R-UI-38', 'Conversation waiting must use the shared work line');
+    if (element.matches('.mb-av-slime') && style.overflow !== 'visible') violation('R-UI-54', 'A crop cuts the horns and wings of a slime');
+    if (element.matches('.shimmer') && new Set(style.backgroundImage.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     if (element.matches('button.btn.icon')) {
       if (!floatingLatest && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');

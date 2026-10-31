@@ -211,9 +211,6 @@ const OFF_SEASON = new Date(2000, 5, 1);
 export const SLIME_CHARACTER_COUNT = CHARACTER_IDS.length;
 export const SLIME_COLOR_COUNT = COLOR_IDS.length;
 
-/** A slime on a card, standing still and bareheaded, whatever the season. */
-export const bareSlimeHTML = (avatar: string): string => slimeSVG(parseSlime(avatar) ?? { color: "sky" }, { now: OFF_SEASON });
-
 const IN_MENU = ' role="menuitem" tabindex="-1"';
 
 /** Every character, each as a button; `item` makes them a menu's items. */

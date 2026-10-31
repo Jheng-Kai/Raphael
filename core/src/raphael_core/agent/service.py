@@ -168,7 +168,7 @@ from ..members.activity import Activity, member_turn, step as activity_step, too
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import MEMORY_TOOLS, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
-from .persona import NEW_MEMBER
+from .persona import NEW_MEMBER, PLAN_MODE
 from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
@@ -286,8 +286,9 @@ RESUMED = "connector"
 # The sources of the requests made at this computer: a new one replaces every question that waits.
 _QUICK_SOURCES = (VOICE, "overlay")
 _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
-# Routing and answering share this deadline while the voice overlay waits.
-VOICE_TURN_TIMEOUT_S = 45.0
+# Routing and answering share this deadline while the voice overlay waits. A turn said into a conversation is not
+# waited on there, and has the time a typed one has: a brain thinking hard takes minutes, and the composer can stop it.
+VOICE_TURN_TIMEOUT_S = 180.0
 # The statuses of a turn that ended with a denial or a question that ran out: Raphael does not say
 # these aloud, as the owner knows (a "no", an Esc) or was not there.
 _UNSPOKEN = ("denied", "expired")
@@ -1089,7 +1090,7 @@ class AgentService:
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
         from ..computer.vm_tools import vm_scope
         with vm_scope(("turn", ask.speaker.id, ask.conversation_id)):
-            task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES else self._answer(ask))
+            task = asyncio.ensure_future(self._voice_answer(ask) if ask.source in _QUICK_SOURCES and ask.quick else self._answer(ask))
         self._inflight[ask.session_id] = task
         self._inflight_members[ask.session_id] = ask.speaker.id
         self._inflight_scopes[ask.session_id] = (ask.speaker.id, ask.conversation_id)
@@ -1767,6 +1768,8 @@ class AgentService:
             system += roster_prompt(self._team, ask.speaker, ask.language) + owner_context(self._settings)
             if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
                 system += NEW_MEMBER
+            if self._gate.plan_first:
+                system += PLAN_MODE
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             if ask.speaker.is_raphael:
@@ -4358,6 +4361,10 @@ class AgentService:
             return "no_key"
         return None
 
+    def _model_name(self, reference: str) -> str:
+        """A model as the owner knows it: never a reference with its source and depth in it."""
+        return self._cli_brains.model_name(reference) or re.sub(r"^@[^:]+:", "", reference.partition("?effort=")[0])
+
     def _failed(self, ask: _Ask, route: str, kind: str, ledger: Ledger) -> dict:
         """The 否 reply for a request that could not be answered, with the reason."""
         model = kind.model if isinstance(kind, AgentFailure) else None
@@ -4365,7 +4372,7 @@ class AgentService:
         kind = kind.kind if isinstance(kind, AgentFailure) else kind
         if model:
             diagnostic = diagnostic or classify(kind, record=False)
-            return self._finish(ask, route, "negative", diagnostic.sentence(model, ask.language), ledger, status="error")
+            return self._finish(ask, route, "negative", diagnostic.sentence(self._model_name(model), ask.language), ledger, status="error")
         if diagnostic is not None:
             name = RAPHAEL_NAMES[ask.language] if ask.speaker.is_raphael else ask.speaker.name
             return self._finish(ask, route, "negative", diagnostic.sentence(name, ask.language), ledger, status="error")

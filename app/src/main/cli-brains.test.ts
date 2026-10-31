@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
-  chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })) }));
+  chatgptStatus: vi.fn(async () => ({ signed_in: false })), chatgptSignIn: vi.fn(), chatgptCancel: vi.fn(), chatgptSignOut: vi.fn(), chatgptModels: vi.fn(async () => ({ models: [] })), mainWindowForward: vi.fn(async () => undefined) }));
 vi.mock("./api", () => api);
-import { createCliBrains, cliBrainsHTML, cliModels } from "./cli-brains";
+import { createCliBrains, cliBrainsHTML, cliModels, signInFailure } from "./cli-brains";
 import { closeMenu } from "./ui";
 
 const CLIS = [
@@ -59,6 +59,46 @@ test("the shared row menu disconnects once without confirmation and reconnects f
   expect(connect.textContent).toBe("連線");
   await controller.click(connect);
   expect(api.brainsCliLogin).toHaveBeenCalledExactlyOnceWith("claude");
+});
+
+test.each([
+  ["[-32603] ChatGPT sign-in was declined", "你沒有同意"],
+  ["[-32603] ChatGPT sign-in timed out; try signing in again", "等太久了"],
+  ["[-32603] ChatGPT could not connect", "連不上 OpenAI"],
+  ["[-32603] ChatGPT credentials could not be saved", "Windows 認證管理員"],
+  ["[-32603] ChatGPT sign-in browser could not open", "打不開瀏覽器"],
+  ["[-32603] ChatGPT identity validation failed", "沒有通過驗證"],
+  ["[-32603] ChatGPT operation failed", "沒有完成"],
+])("a sign-in that stopped says what to do about it: %s", (reason, words) => {
+  expect(signInFailure(reason)).toContain(words);
+});
+
+test("cancelling a sign-in is no failure, whatever shape the rejection takes", () => {
+  expect(signInFailure("[-32603] ChatGPT sign-in cancelled")).toBe("");
+  expect(signInFailure(new Error("ChatGPT sign-in cancelled"))).toBe("");
+});
+
+test("a sign-in brings the window forward, tells the owner once what it means, and a failed one says why on the card", async () => {
+  api.brainsCli.mockResolvedValue({ clis: CLIS });
+  const root = document.createElement("div"); document.body.append(root);
+  const controller = createCliBrains({ visible: () => true, redraw: () => { root.innerHTML = cliBrainsHTML(controller.view()); } });
+  await controller.load();
+  api.chatgptSignIn.mockRejectedValueOnce("[-32603] ChatGPT could not connect");
+  await controller.click(root.querySelector('[data-chatgpt="sign-in"]')!);
+  expect(root.querySelector('[role="alert"]')!.textContent).toContain("連不上 OpenAI");
+  api.chatgptSignIn.mockResolvedValueOnce({ signed_in: true, plan_scope_granted: true, first_sign_in: true });
+  api.chatgptStatus.mockResolvedValue({ signed_in: true, email: "owner@example.test", plan_scope_granted: true } as never);
+  await controller.click(root.querySelector('[data-chatgpt="sign-in"]')!);
+  expect(api.mainWindowForward).toHaveBeenCalledTimes(2);
+  expect(api.chatgptModels).toHaveBeenCalledOnce();
+  expect(root.querySelector('[role="alert"]')).toBeNull();
+  expect(root.textContent).toContain("owner@example.test");
+  expect(document.querySelector(".mb-confirm")!.textContent).toContain("你正在使用 ChatGPT 方案");
+  api.openExternalUrl.mockResolvedValueOnce(undefined);
+  document.querySelector<HTMLButtonElement>('.mb-confirm [data-dlg="usage"]')!.click();
+  expect(api.openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
+  expect(document.querySelector(".mb-confirm")).toBeNull();
+  api.chatgptStatus.mockResolvedValue({ signed_in: false });
 });
 
 test("model rows obey the core availability even when stale models and login remain", () => {

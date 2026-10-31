@@ -177,6 +177,7 @@ pub fn run() {
             commands::open_attachment,
             commands::hotkeys_pause,
             commands::window_hotkey,
+            commands::main_window_forward,
             commands::hotkeys_practice,
             commands::mic_access,
             commands::main_events,

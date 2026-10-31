@@ -114,11 +114,6 @@ GREETINGS = {
     "en": "Hi, I'm {name}. What would you like me to do for you?",
     "ja": "はじめまして、{name}です。どんなことをお手伝いしましょうか？",
 }
-GREETINGS_WITH_A_JOB = {
-    "zh-TW": "你好，我是{name}，你的{role}。想先從哪件事開始？",
-    "en": "Hi, I'm {name}, your {role}. Where shall we start?",
-    "ja": "はじめまして、{name}です。{role}として動きます。何から始めましょうか？",
-}
 AVATARS_DIR = "avatars"
 SLIME = "slime:"
 MEMBERS_DIR = "members"
@@ -823,9 +818,8 @@ class MembersService:
         language = self._ui_language(params)
         offer = routine_template(group.sources if group else (), language)
         if params.get("greet") is True:
-            words = GREETINGS_WITH_A_JOB[language] if member.role else GREETINGS[language]
             self._history.add(session_id=f"greeting-{member.id}", question="", route="greeting", prefix="",
-                              text=words.format(name=member.name, role=member.role), status="done", source="greeting",
+                              text=GREETINGS[language].format(name=member.name), status="done", source="greeting",
                               member_id=member.id)
         self._changed()
         return {"member": self.view_of(member), "routine_offer": offer}

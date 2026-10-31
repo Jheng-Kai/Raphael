@@ -20,6 +20,9 @@ export const journeys = [
   { name: "readable-layout", description: "Inspect the shared sidebar, aligned details and compact drawer in the real WebView" },
   { name: "locale-sweep", description: "Switch every locale and visit main pages and settings" },
   { name: "voice-conversation", description: "Speak into a newly created conversation and inspect persistence" },
+  { name: "voice-keys", description: "The real worker: after the composer's microphone the dictation key works during the answer, one Esc ends it, the recognising light shows, and a slow brain at high depth finishes" },
+  { name: "every-source", description: "One real turn on every signed-in CLI: Claude Code, Codex, Antigravity, with Claude's models as the CLI lists them" },
+  { name: "openrouter-turn", description: "One real turn through the owner's OpenRouter key on a free model: no other paid request" },
   { name: "delete-conversation", description: "Delete conversations/member after real exchanges and room reports; detect stale timeline rows" },
   { name: "gmail-connect", description: "Owner-only Composio card sign-in; stop before approving Google consent" },
   { name: "self-diagnosis", description: "Force an offline connection card failure; the same member checks and explains the real reason" },
@@ -185,6 +188,121 @@ export async function drive(name, context) {
     await capture("live-allowance");
     if (result.homeTiming.firstPaintMs >= 1500) throw new Error(`Home waited for CLI allowances: ${result.homeTiming.firstPaintMs.toFixed(1)} ms`);
     if (!result.homeTiming.firstAllowance?.includes('25%')) throw new Error("Home did not first paint the stored allowance before the live 40% window");
+    return;
+  }
+  if (name === "voice-keys") {
+    await keepFocus(page);
+    const heard = async (words, from, what) => {
+      for (let i = 0; i < 100; i++) { if ((await context.nativeLog()).slice(from).includes(words)) return; await pause(100); }
+      await capture("voice-keys-stuck");
+      throw new Error(what);
+    };
+    let sol;
+    for (let i = 0; i < 300 && !sol; i++) {
+      sol = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models.find(model => /gpt-6\.1-sol$/.test(model.id));
+      if (!sol) await pause(200);
+    }
+    if (!sol) throw new Error("The real Codex does not list GPT-6.1-Sol");
+    const ref = `${sol.id}?effort=high`;
+    await context.rpc("settings.set", { key: "agent_model", value: ref });
+    const conversation = await newConversation(context);
+    const before = new Set((await snapshot()).agent_turns.map(row => row.id));
+    await click(page, ".composer .cmp-voice");
+    await page.waitForSelector(".is-voice", { timeout: 15000 });
+    await pause(context.audioMs + 700);
+    await click(page, ".composer .cmp-voice");
+    await page.waitForSelector('[data-key="hearing"] .shimmer', { timeout: 15000 });
+    const light = await page.$eval('[data-key="hearing"] .shimmer', el => { const style = getComputedStyle(el); return { image: style.backgroundImage, name: style.animationName }; });
+    result.light = light;
+    await capture("recognising");
+    if (new Set(light.image.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2 || light.name === "none") throw new Error(`The recognising light shows nothing: ${JSON.stringify(light)}`);
+    let turn;
+    for (let i = 0; i < 600 && !turn; i++) {
+      turn = (await snapshot()).agent_turns.find(row => !before.has(row.id) && row.conversation_id === conversation);
+      if (!turn) await pause(100);
+    }
+    if (!turn) throw new Error("The spoken turn never began");
+    let mark = (await context.nativeLog()).length;
+    const running = (await snapshot()).agent_turns.find(row => row.id === turn.id);
+    if (running.status !== "running") throw new Error(`The answer ended before the keys could be tried: ${running.status}`);
+    await page.keyboard.press("AltRight");
+    await heard("dictation: recording", mark, "After the composer's microphone the dictation key did nothing during the answer");
+    await capture("dictating-during-answer");
+    mark = (await context.nativeLog()).length;
+    await pause(400);
+    await page.keyboard.press("Escape");
+    await heard("dictation: cancelled", mark, "One Esc with the app in front did not end the dictation");
+    if ((await snapshot()).agent_turns.find(row => row.id === turn.id).status !== "running") throw new Error("Esc on the dictation stopped the answer as well");
+    let final;
+    for (let i = 0; i < 2400 && !final; i++) {
+      final = (await snapshot()).agent_turns.find(row => row.id === turn.id && row.status !== "running");
+      if (!final) await pause(250);
+    }
+    result.turn = final && { model: final.model, status: final.status, seconds: Math.round((Date.now() - turn.created_at_ms) / 1000), text: final.text.slice(0, 80) };
+    await capture("answered-on-sol");
+    if (!final || final.status !== "done" || !final.text.trim()) throw new Error(`The spoken turn on ${ref} did not answer: ${JSON.stringify(result.turn)}`);
+    mark = (await context.nativeLog()).length;
+    await page.keyboard.press("AltRight");
+    await heard("dictation: recording", mark, "The dictation key did nothing with the app in front");
+    mark = (await context.nativeLog()).length;
+    await pause(400);
+    await page.keyboard.press("Escape");
+    await heard("dictation: cancelled", mark, "One Esc did not end a dictation started with the app in front");
+    return;
+  }
+  if (name === "every-source" || name === "openrouter-turn") {
+    await keepFocus(page);
+    const outcomes = result.sources = [];
+    const askOn = async (source, ref) => {
+      await context.rpc("settings.set", { key: "agent_model", value: ref });
+      const conversation = await newConversation(context);
+      const text = `Reply with the single word ready. (${source})`, began = Date.now();
+      await type(page, ".composer .cmp-input", text);
+      await click(page, ".cmp-send");
+      let turn;
+      for (let i = 0; i < 1200 && !turn; i++) {
+        turn = (await snapshot()).agent_turns.find(row => row.conversation_id === conversation && row.question === text && ["done", "error"].includes(row.status));
+        if (!turn) await pause(250);
+      }
+      const outcome = { source, model: ref, status: turn?.status ?? "no answer", answeredBy: turn?.model, seconds: Math.round((Date.now() - began) / 1000), text: turn?.text.slice(0, 120) };
+      outcomes.push(outcome);
+      await capture(`source-${source}`);
+      if (turn) await page.waitForFunction(id => document.querySelector(`.tn[data-id="${id}"]`), { timeout: 10000 }, turn.id);
+      return outcome;
+    };
+    if (name === "openrouter-turn") {
+      const { llm } = await context.rpc("models.catalog", {});
+      const free = llm.filter(model => model.free && model.roles?.answer?.usable && !model.id.startsWith("@") && !model.id.startsWith("cli:"));
+      if (!free.length) throw new Error("OpenRouter lists no free model that can answer");
+      await context.rpc("settings.set", { key: "cleanup_model", value: free[0].id }).catch(() => undefined);
+      // A free model is often rate limited by whoever hosts it: that says nothing of the route through the key.
+      for (const model of free.slice(0, 6)) {
+        const outcome = await askOn("openrouter", model.id);
+        if (outcome.status === "done" && outcome.text?.trim()) return;
+      }
+      throw new Error(`No free model on OpenRouter answered: ${JSON.stringify(outcomes)}`);
+    }
+    const prefer = { claude: /haiku$/, codex: /luna$/, gemini: /flash/ };
+    for (const id of ["claude", "codex", "gemini"]) {
+      let cli;
+      for (let i = 0; i < 300; i++) {
+        cli = (await context.rpc("brains.cli", {})).clis.find(row => row.id === id);
+        if (!cli?.available || (cli.models.length && (id !== "claude" || cli.models.length !== 4))) break;
+        await pause(200);
+      }
+      if (!cli?.available) { outcomes.push({ source: id, status: "not available", installed: cli?.installed, logged_in: cli?.logged_in, disconnected: cli?.disconnected }); continue; }
+      if (id === "claude") {
+        result.claudeModels = cli.models.map(model => `${model.id} [${model.reasoning_efforts?.join(",")}]`);
+        const fable = cli.models.find(model => model.id === "cli:claude:fable");
+        if (!fable || !fable.reasoning_efforts?.includes("xhigh") || !fable.reasoning_efforts?.includes("max")) throw new Error(`Claude's list is not the CLI's: ${result.claudeModels}`);
+      }
+      const model = cli.models.find(row => prefer[id].test(row.id)) ?? cli.models.at(-1);
+      const effort = model.reasoning_efforts?.includes("low") ? "low" : "";
+      await askOn(id, model.effort_models?.[effort] ?? (effort ? `${model.id}?effort=${effort}` : model.id));
+    }
+    const broken = outcomes.filter(outcome => outcome.status !== "done" && outcome.status !== "not available");
+    if (broken.length) throw new Error(`Sources that did not answer: ${JSON.stringify(broken)}`);
+    if (!outcomes.some(outcome => outcome.status === "done")) throw new Error("No source was available");
     return;
   }
   if (name === "model-sync") {

@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { canonicalKey } from "./keys";
 
-export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "cancel" | "agent_down" | "agent_up";
+export type WindowHotkey = "dictation_down" | "dictation_up" | "paste_last" | "cancel" | "cancel_key" | "agent_down" | "agent_up";
 /** `agent_keys` is missing from the settings of an app that does not know Raphael's question key yet. */
 interface Bindings { dictation_keys: string[]; paste_last_keys: string[]; agent_keys?: string[] }
 export interface KeyInput {
@@ -107,6 +107,15 @@ export function reduceHotkey(previous: HotkeyState, event: KeyInput, bindings: B
 
 let recorderPaused = false;
 let pauseGeneration = 0;
+let voiceCapture = false;
+
+/**
+ * Where the voice is, as the app tells the window. While a recording or a dictation's transcription is under way, one Esc
+ * ends it. A question being answered keeps the two presses of the shared gesture.
+ */
+export function followDictation(phase: string, agent: boolean): void {
+  voiceCapture = phase === "listening" || (phase === "processing" && !agent);
+}
 
 /** Called before recorder IPC so capture listeners never steal the key being recorded. */
 export function setWindowHotkeysPaused(paused: boolean): boolean {
@@ -141,6 +150,15 @@ export function installWindowHotkeys(
   };
   const handle = (raw: Event): void => {
     const event = raw as KeyboardEvent;
+    // With this window in front the global hook may not hear the keyboard (seen live), and then only this page hears
+    // Esc. The press is spent here: should the session's end ever go unreported, the next Esc is the page's again.
+    if (event.code === "Escape" && event.type === "keydown" && !event.repeat && voiceCapture && !recorderPaused) {
+      voiceCapture = false;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      forward("cancel_key");
+      return;
+    }
     if (generation !== pauseGeneration) {
       state = emptyHotkeyState();
       generation = pauseGeneration;

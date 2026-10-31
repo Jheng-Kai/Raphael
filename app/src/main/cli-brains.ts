@@ -1,9 +1,10 @@
 // Subscription metadata only; authentication is handled by each CLI's own terminal.
 import { knownClis, rememberClis } from "./brain-lists";
 import * as api from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { providerMark } from "./provider-marks";
 import { openActions } from "./member-column";
+import { openDialog } from "./member-dialogs";
 import type { CatalogModel, ChatGptStatus, CliBrain, CliBrainId, MainEvent } from "./types";
 import { btn, esc, iconButton } from "./ui";
 
@@ -18,9 +19,26 @@ export interface CliBrainsView {
   busy: CliBrainId | null;
   error: boolean;
   chatgpt: ChatGptStatus | null;
-  chatgptError: boolean;
+  /** What stopped the last sign-in, in the owner's words: empty when nothing did. */
+  chatgptError: string;
 }
-export const emptyCliBrainsView = (): CliBrainsView => ({ clis: [], state: "loading", busy: null, error: false, chatgpt: null, chatgptError: false });
+export const emptyCliBrainsView = (): CliBrainsView => ({ clis: [], state: "loading", busy: null, error: false, chatgpt: null, chatgptError: "" });
+export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+
+/** The core's reason for a sign-in that stopped, as something to do about it. Its messages are its own and carry no one's words. */
+const SIGN_IN_FAILURES = [
+  [/declined/i, "brains.failDeclined"],
+  [/timed out/i, "brains.failTimeout"],
+  [/could not connect/i, "brains.failNetwork"],
+  [/saved/i, "brains.failVault"],
+  [/browser/i, "brains.failBrowser"],
+  [/identity|registration|token response/i, "brains.failCheck"],
+] as const;
+export function signInFailure(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  if (/cancel/i.test(text)) return "";
+  return t(SIGN_IN_FAILURES.find(([words]) => words.test(text))?.[1] ?? "brains.chatgptFailed");
+}
 export function cliBrainLine(ref: string): string {
   const cli = CLIS.find((c) => ref === `cli:${c.id}` || ref.startsWith(`cli:${c.id}:`));
   return cli ? `<span class="mb-brain">${providerMark(cli.mark)}<span>${esc(cli.name)} · ${esc(t("brains.subscription"))}</span></span>` : "";
@@ -60,7 +78,7 @@ export function cliBrainsHTML(v: CliBrainsView): string {
       iconButton("more", t("members.more", { p0: known.name }), ` data-cli-menu="${known.id}" data-k="cli-menu:${known.id}" aria-haspopup="menu" aria-expanded="false"${v.busy ? " disabled" : ""}`) :
       btn(esc(label), "", ` data-cli="${known.id}" data-k="cli:${known.id}" aria-label="${esc(label + " " + known.name)}"${v.busy ? " disabled" : ""}`);
     return `<div class="pv-card cli-card"><span class="ic">${providerMark(known.mark)}</span><span class="tx"><span class="nm">${esc(known.name)}</span><span class="ds">${esc(status)}${version ? ` · v${esc(version)}` : ""}</span></span>${action}</div>`;
-  }).join("") + `</div>${v.error ? `<p class="note" role="alert">${esc(t("providers.error"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(t("brains.chatgptFailed"))}</p>` : ""}</section>`;
+  }).join("") + `</div>${v.error ? `<p class="note" role="alert">${esc(t("providers.error"))}</p>` : ""}${v.chatgptError ? `<p class="note" role="alert">${esc(v.chatgptError)}</p>` : ""}</section>`;
 }
 
 export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
@@ -88,25 +106,41 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     finally { value = { ...value, busy: null }; if (host.visible()) host.redraw(); }
   }
   async function signIn(): Promise<void> {
-    value = { ...value, chatgpt: { signed_in: false, ...value.chatgpt, signing_in: true }, chatgptError: false }; host.redraw();
+    value = { ...value, chatgpt: { signed_in: false, ...value.chatgpt, signing_in: true }, chatgptError: "" }; host.redraw();
     try {
-      await api.chatgptSignIn();
+      const status = await api.chatgptSignIn(getLocale());
       // The plan's models join the picker as soon as the owner is signed in.
       await api.chatgptModels().catch(() => undefined);
+      void api.mainWindowForward().catch(() => undefined);
+      if (status?.first_sign_in) welcome();
     } catch (error) {
-      // Cancelling is not a failure.
-      if (value.chatgpt?.signing_in) value = { ...value, chatgptError: !(error instanceof Error && /cancel/i.test(error.message)) };
+      void api.mainWindowForward().catch(() => undefined);
+      if (value.chatgpt?.signing_in) value = { ...value, chatgptError: signInFailure(error) };
     }
     await load();
   }
+  /** OpenAI's own requirement: said once, the first time. */
+  function welcome(): void {
+    const dialog = openDialog({
+      title: t("brains.welcomeTitle"), cls: "mb-confirm",
+      body: `<p>${esc(t("brains.welcomeBody"))}</p>`,
+      actions: { secondary: btn(esc(t("brains.manageUsage")), "", ' data-dlg="usage"'), primary: { label: esc(t("brains.welcomeDone")), attrs: ' data-dlg="close"' } },
+      onAct: (act) => {
+        if (act !== "usage") return;
+        void api.openExternalUrl(CHATGPT_USAGE_URL).catch(() => undefined);
+        dialog.close();
+      },
+    });
+  }
   async function chatgptClick(button: HTMLButtonElement): Promise<void> {
     if (button.dataset.chatgptMenu !== undefined) {
-      openActions(button, [{ id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], () => {
+      openActions(button, [{ id: "usage", label: t("brains.manageUsage") }, { id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], (id) => {
+        if (id === "usage") { void api.openExternalUrl(CHATGPT_USAGE_URL).catch(() => undefined); return; }
         void api.chatgptSignOut().catch(() => undefined).then(load);
       });
     } else if (button.dataset.chatgpt === "cancel") {
       await api.chatgptCancel().catch(() => undefined);
-      value = { ...value, chatgpt: value.chatgpt && { ...value.chatgpt, signing_in: false }, chatgptError: false };
+      value = { ...value, chatgpt: value.chatgpt && { ...value.chatgpt, signing_in: false }, chatgptError: "" };
       host.redraw();
     } else if (button.dataset.chatgpt === "sign-in") {
       await signIn();

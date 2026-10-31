@@ -1,14 +1,14 @@
 /* The composer's model menu: one card standing on the composer, showing one view at a time. */
 .menu.cb-menu { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(320px, calc(100vw - 16px)); max-width: min(320px, calc(100vw - 16px)); padding: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .cb-card { min-width: 0; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--menu); box-shadow: var(--pop); }
-.cb-body { display: flex; flex-direction: column; max-height: min(420px, 60vh); overflow: hidden; }
+.cb-body { display: flex; flex-direction: column; max-height: min(520px, 70vh); overflow: hidden; }
 .cb-body[hidden], .cb-now[hidden] { display: none; }
 .cb-pane { display: grid; flex: 0 1 auto; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-height: 0; min-width: 0; }
 .cb-pane:not(:has(.cb-search)) { grid-template-rows: minmax(0, 1fr); }
 .cb-list { display: grid; flex: 0 1 auto; row-gap: 2px; grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: none; }
 .cb-group { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
 .cb-group + .cb-group { margin-top: var(--sp-3); }
-.cb-group h4 { margin: 0; padding: var(--sp-1) var(--sp-3) var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
+.cb-group h4, .cb-heading { margin: 0; padding: var(--sp-1) var(--sp-3) var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
 .menu .cb-source, .menu .cb-row { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 44px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: left; }
 .cb-source .mono { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; }
 .cb-source .mono .logo, .cb-source .mono svg { width: 20px; height: 20px; }
@@ -39,14 +39,19 @@
 .cb-pick-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .cb-pick-name .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
 .cb-depth-slot[hidden] { display: none; }
+/* Whose quota this runs on, with the way to see it. */
+.cb-plan { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--sp-1) var(--sp-2); color: var(--text-3); font-size: var(--fs-xs); }
+.cb-plan .btn.sm { min-height: 24px; padding-inline: var(--sp-2); font-size: var(--fs-xs); }
 /* The depth as a thick track with a dot at each stop and a round thumb; only the stop it is on is named. */
 .cb-now .mc-depth { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-2); }
 .cb-now .mc-depth-title { display: none; }
-.cb-now .mc-track { position: relative; display: block; }
-.cb-now .mc-range { display: block; height: 28px; }
-.cb-now .mc-range::-webkit-slider-runnable-track { height: 28px; border-radius: var(--r-pill); background: linear-gradient(to right, color-mix(in srgb, var(--text) 42%, transparent) var(--at), var(--hover) var(--at)); }
+/* The fill is a pill of its own that ends just past the thumb, whatever the stop: 28px is the thumb with its margin on both sides. */
+.cb-now .mc-track { --thumb-room: 28px; position: relative; display: block; border-radius: var(--r-pill); background: var(--hover); }
+.cb-now .mc-track::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: calc((100% - var(--thumb-room)) * var(--p, 0) + var(--thumb-room)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--text) 42%, transparent); pointer-events: none; }
+.cb-now .mc-range { position: relative; display: block; height: 28px; padding-inline: 2px; }
+.cb-now .mc-range::-webkit-slider-runnable-track { height: 28px; border-radius: var(--r-pill); background: transparent; }
 .cb-now .mc-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: 2px; background: var(--text); box-shadow: var(--pop); }
-.cb-now .mc-dots { position: absolute; inset: 0 10px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.cb-now .mc-dots { position: absolute; inset: 0 12px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
 .cb-now .mc-dot { display: block; width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--text-3); }
 .cb-now .mc-dot[data-on="true"] { visibility: hidden; }
 .cb-now .mc-stops { grid-column: 1; justify-content: center; }

@@ -120,7 +120,12 @@ class ToolGate:
 
     @property
     def ask_first(self) -> bool:
-        return self._settings is not None and self._settings.get("action_mode") == "ask"
+        return self._settings is not None and self._settings.get("action_mode") in ("ask", "plan")
+
+    @property
+    def plan_first(self) -> bool:
+        """The owner reads a plan before anything is done. Whatever a model makes of that, the door still asks (`ask_first`)."""
+        return self._settings is not None and self._settings.get("action_mode") == "plan"
 
     # --- the registry ---------------------------------------------------------------------------
 

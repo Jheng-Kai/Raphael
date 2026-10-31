@@ -43,15 +43,19 @@ test("attachment-only delivery uses the shared composer and keeps the file on fa
  view.el.requestSubmit();await flush();expect(send).toHaveBeenLastCalledWith("",[{name:"notes.txt",mime:"text/plain",data:btoa("notes")}]);expect(view.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(true);
 });
 
-test("plus only attaches, and the action mode is its own named control", async () => {
+test("plus only attaches, and the permission mode is its own named control with what each mode does", async () => {
  const {view}=mount();
  const picker=view.el.querySelector<HTMLInputElement>(".cmp-picker")!,pick=vi.spyOn(picker,"click");
  view.el.querySelector<HTMLButtonElement>(".cmp-attach")!.click();
  expect(pick).toHaveBeenCalledTimes(1);expect(document.querySelector("#app-popover")).toBeNull();
  view.el.querySelector<HTMLButtonElement>(".cmp-mode")!.click();await flush();
- document.querySelector<HTMLButtonElement>('#app-popover [data-value="ask"]')!.click();await flush();
- expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"ask"});
- expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Ask before acting");
+ const rows=[...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")];
+ expect(rows.map(row=>row.dataset.value)).toEqual(["direct","ask","plan"]);
+ expect(rows.every(row=>row.querySelector(".mdesc")?.textContent)).toBe(true);
+ api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "plan" } } : {});
+ document.querySelector<HTMLButtonElement>('#app-popover [data-value="plan"]')!.click();await flush();
+ expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"plan"});
+ expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Plan");
 });
 test("voice records until manual Stop and learns an edited transcript only on send",async()=>{
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});

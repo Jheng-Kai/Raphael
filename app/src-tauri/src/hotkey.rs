@@ -78,6 +78,8 @@ pub enum WindowHotkey {
     AgentUp,
     PasteLast,
     Cancel,
+    /// Esc pressed in the window: the same request as the hook's physical Esc.
+    CancelKey,
 }
 
 impl From<WindowHotkey> for HotkeyEvent {
@@ -89,6 +91,7 @@ impl From<WindowHotkey> for HotkeyEvent {
             WindowHotkey::AgentUp => Self::AgentUp,
             WindowHotkey::PasteLast => Self::PasteLast,
             WindowHotkey::Cancel => Self::Cancel,
+            WindowHotkey::CancelKey => Self::CancelKey,
         }
     }
 }
@@ -1172,6 +1175,7 @@ mod tests {
             ("agent_up", HotkeyEvent::AgentUp),
             ("paste_last", HotkeyEvent::PasteLast),
             ("cancel", HotkeyEvent::Cancel),
+            ("cancel_key", HotkeyEvent::CancelKey),
         ] {
             let kind = serde_json::from_value::<WindowHotkey>(serde_json::json!(name)).unwrap();
             w.handle(Command::WindowHotkey(kind));

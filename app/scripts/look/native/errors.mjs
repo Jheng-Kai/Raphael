@@ -3,13 +3,14 @@ export function toastError(text) {
   return !/^(Deleted |已刪除|削除しました|Created |已建立「|「[^\r\n]+」を作成しました$|Cleared the history of “[^\r\n]+”$|已清除「[^\r\n]+」的紀錄$|「[^\r\n]+」の履歴を消去しました$)/u.test(text.trim());
 }
 
-export function paidRequests(log, gmail = false) {
+export function paidRequests(log, gmail = false, declared = []) {
   return log.split(/\r?\n/).filter(line => {
     const urls = line.match(/https?:\/\/[^\s"<>]+/gi) || [];
     return urls.some(value => {
       const host = new URL(value).hostname;
       if (["127.0.0.1", "localhost", "tauri.localhost"].includes(host)) return false;
       if (gmail && /(^|\.)composio\.(dev|ai)$/.test(host)) return false;
+      if (declared.includes(host)) return false;
       // Fail closed for unknown providers too, including custom paid API base URLs.
       return true;
     });

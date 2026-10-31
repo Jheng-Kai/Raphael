@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { emptyHotkeyState, reduceHotkey, installWindowHotkeys, setWindowHotkeysPaused, type KeyInput } from "./window-hotkeys";
+import { emptyHotkeyState, followDictation, reduceHotkey, installWindowHotkeys, setWindowHotkeysPaused, type KeyInput } from "./window-hotkeys";
 import { hotkeysPause } from "./api";
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -17,6 +17,63 @@ test("Escape reaches the shared UI gesture without forwarding a native cancel", 
   Object.assign(event,{code:"Escape",repeat:false,getModifierState:()=>false});
   target.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);expect(send).not.toHaveBeenCalled();remove();
+});
+
+describe("Esc in the window while the voice is working", () => {
+  const press = (target: EventTarget): Event => {
+    const event = new Event("keydown", { cancelable: true });
+    Object.assign(event, { code: "Escape", repeat: false, getModifierState: () => false });
+    target.dispatchEvent(event);
+    return event;
+  };
+  const setup = () => {
+    setWindowHotkeysPaused(false);
+    const target = new EventTarget(), send = vi.fn().mockResolvedValue(undefined);
+    return { target, send, remove: installWindowHotkeys(() => defaults, target, send) };
+  };
+
+  test.each([["listening", false], ["listening", true], ["processing", false]] as const)("%s (question: %s): one press ends it and goes no further", (phase, agent) => {
+    const { target, send, remove } = setup();
+    const later = vi.fn();
+    target.addEventListener("keydown", later);
+    followDictation(phase, agent);
+    const event = press(target);
+    expect(send).toHaveBeenCalledExactlyOnceWith("cancel_key");
+    expect(event.defaultPrevented).toBe(true);
+    expect(later).not.toHaveBeenCalled();
+    followDictation("cancelled", agent);
+    remove();
+  });
+
+  test("a question being answered and an idle window keep the page's own Esc", () => {
+    const { target, send, remove } = setup();
+    followDictation("processing", true);
+    expect(press(target).defaultPrevented).toBe(false);
+    followDictation("pasted", false);
+    expect(press(target).defaultPrevented).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    remove();
+  });
+
+  test("an end that was never reported holds Esc for one press only", () => {
+    const { target, send, remove } = setup();
+    followDictation("listening", false);
+    press(target);
+    expect(press(target).defaultPrevented).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
+    remove();
+  });
+
+  test("recording a shortcut receives Esc", () => {
+    const { target, send, remove } = setup();
+    followDictation("listening", false);
+    setWindowHotkeysPaused(true);
+    expect(press(target).defaultPrevented).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+    setWindowHotkeysPaused(false);
+    followDictation("cancelled", false);
+    remove();
+  });
 });
 
 describe("focused-window hotkeys", () => {

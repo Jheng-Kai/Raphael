@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -18,6 +19,7 @@ import httpx
 import jwt
 
 from ...protocol import INTERNAL_ERROR, INVALID_PARAMS, RpcError
+from ...sign_in_page import chatgpt_page, http_response, language_of
 from ..openrouter import OpenRouterError
 from ..settings import SettingsStore
 
@@ -30,6 +32,12 @@ SCOPE = "openid profile email offline_access resource.invoke " + PLAN_SCOPE
 SETTINGS_KEY = "chatgpt.registrations.v1"
 TERMINAL_REFRESH = frozenset(("invalid_grant", "invalid_refresh_token", "token_expired",
     "refresh_token_expired", "refresh_token_invalidated", "refresh_token_reused"))
+# The identity server's clock and this computer's differ (3 s on the owner's PC, seen live), so a token
+# can look issued in the future. The signature, the audience and the nonce prove it; its times need only be sane.
+CLOCK_LEEWAY_S = 300
+# How long the browser's page waits for the outcome of the exchange it started.
+OUTCOME_WAIT_S = 30
+logger = logging.getLogger(__name__)
 
 
 def failure(status, body, request_id=None):
@@ -191,7 +199,7 @@ class ChatGPTAuth:
                 raise ValueError
             key = jwt.PyJWK.from_dict(keys[0], algorithm="RS256").key
             claims = jwt.decode(token, key, algorithms=["RS256"], issuer=ISSUER, audience=client_id,
-                options={"require": ["iss", "aud", "exp", "sub", "iat"]})
+                leeway=CLOCK_LEEWAY_S, options={"require": ["iss", "aud", "exp", "sub", "iat"]})
             if not isinstance(claims["sub"], str) or not claims["sub"]:
                 raise ValueError
             if nonce is not None and not secrets.compare_digest(str(claims.get("nonce", "")), nonce):
@@ -268,28 +276,40 @@ class ChatGPTAuth:
             self._save(state)
         nonce, expected_state, verifier = (secrets.token_urlsafe(48) for _ in range(3))
         future = asyncio.get_running_loop().create_future()
+        outcome = asyncio.get_running_loop().create_future()
         self._pending = future
         server = None
         handlers = set()
+        port = 0
+        step = "listener"
 
         async def callback(reader, writer):
             task = asyncio.current_task()
             handlers.add(task)
-            status = 400
             try:
                 request = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 5)
-                method, target, _ = request.split(b"\r\n", 1)[0].decode("ascii").split(" ")
+                lines = request.decode("latin-1").split("\r\n")
+                method, target, _ = lines[0].split(" ")
+                headers = {name.strip().lower(): value.strip() for name, _, value in (line.partition(":") for line in lines[1:])}
+                language = language_of(params.get("language") or headers.get("accept-language", ""))
                 url = urlsplit(target)
                 pairs = parse_qs(url.query, keep_blank_values=True)
-                valid = (method == "GET" and url.path == "/auth/callback" and
+                # A page on the web cannot reach this listener through a name it controls, nor guess the state.
+                valid = (method == "GET" and url.path == "/auth/callback" and headers.get("host") == f"127.0.0.1:{port}" and
                     all(len(values) == 1 for values in pairs.values()) and
-                    secrets.compare_digest(pairs.get("state", [""])[0], expected_state))
+                    secrets.compare_digest(pairs.get("state", [""])[0].encode(), expected_state.encode()))
                 if valid and not future.done():
                     future.set_result({key: values[0] for key, values in pairs.items()})
-                    status = 200
-                writer.write((f"HTTP/1.1 {status} Result\r\nConnection: close\r\n"
-                    "Content-Type: text/plain\r\nCache-Control: no-store\r\n\r\n"
-                    "Raphael: return to the app to check sign-in.").encode())
+                    # The page says what really became of the sign-in, so it waits for the exchange.
+                    try:
+                        kind, who = await asyncio.wait_for(asyncio.shield(outcome), OUTCOME_WAIT_S)
+                    except TimeoutError:
+                        kind, who = "finishing", ""
+                    writer.write(http_response("200 OK", chatgpt_page(language, kind, who)))
+                elif url.path == "/auth/callback":
+                    writer.write(http_response("400 Bad Request", chatgpt_page(language, "expired")))
+                else:
+                    writer.write(http_response("404 Not Found", None))
                 await writer.drain()
             except (ValueError, OSError, TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
                 pass
@@ -298,8 +318,14 @@ class ChatGPTAuth:
                 handlers.discard(task)
 
         try:
-            # The first registration always uses the documented port. Reauthorization may vary it.
-            server = await asyncio.start_server(callback, "127.0.0.1", 0 if account else 1455, limit=16384)
+            # The first registration uses the documented port, unless something on this computer holds it
+            # (another app signing in). Only the port may differ, and reauthorization varies it anyway.
+            try:
+                server = await asyncio.start_server(callback, "127.0.0.1", 0 if account else 1455, limit=16384)
+            except OSError:
+                if account:
+                    raise
+                server = await asyncio.start_server(callback, "127.0.0.1", 0, limit=16384)
             port = server.sockets[0].getsockname()[1]
             redirect = f"http://127.0.0.1:{port}/auth/callback"
             query = {"client_id": account.get("client_id", "dynamic_agent_client"), "response_type": "code",
@@ -309,15 +335,22 @@ class ChatGPTAuth:
             if not account:
                 query["agent_name_hint"] = "Raphael"
             else:
-                tokens = self._tokens(selected)
+                # Unreadable credentials are what signing in again is for: they never stand in its way.
+                try:
+                    tokens = self._tokens(selected)
+                except OpenRouterError:
+                    tokens = {}
                 if tokens.get("id_token"):
                     query["id_token_hint"] = tokens["id_token"]
                 if account.get("email"):
                     query["login_hint"] = account["email"]
-            if params.get("enable_plan") is True:
-                query["prompt"] = "consent"
+                # Only an account that did not allow the plan is asked again; a first registration always sees OpenAI's page.
+                if tokens.get("refresh_token") and PLAN_SCOPE not in tokens.get("scope", "").split():
+                    query["prompt"] = "consent"
+            step = "browser"
             if not self._browser(AUTHORIZE + "?" + urlencode(query)):
                 raise OpenRouterError(0, "tool_broken", "ChatGPT sign-in browser could not open")
+            step = "callback"
             result = await asyncio.wait_for(asyncio.shield(future), timeout)
             if result.get("error"):
                 raise OpenRouterError(0, "permission_denied", "ChatGPT sign-in was declined")
@@ -326,14 +359,17 @@ class ChatGPTAuth:
                     account and client_id != account["client_id"]) or not result.get("code"):
                 raise OpenRouterError(0, "auth_expired", "Invalid ChatGPT registration callback")
             async with self.session_lock():
+                step = "token"
                 body = await self.request("POST", TOKEN, data={"grant_type": "authorization_code",
                     "client_id": client_id, "code": result["code"], "code_verifier": verifier,
                     "redirect_uri": redirect, "resource": RESOURCE})
+                step = "identity"
                 identity = await self._identity(body.get("id_token"), client_id, nonce)
                 if account and (identity["subject"], identity["issuer"]) != (account["subject"], account["issuer"]):
                     raise OpenRouterError(0, "auth_expired", "ChatGPT account identity changed")
                 tokens = self._token_set(body)
                 account_id = selected or uuid.uuid4().hex
+                step = "vault"
                 self._store(account_id, tokens)
                 state = self._state()
                 state.setdefault("accounts", {})[account_id] = {**identity, "client_id": client_id}
@@ -342,19 +378,37 @@ class ChatGPTAuth:
                 self.model_rows = []
                 self.revision += 1
             self._notify("providers.changed", {})
-            return await self.status({})
+            status = await self.status({})
+            outcome.set_result(("ok" if status["plan_scope_granted"] else "no_plan", status["email"]))
+            return {**status, "first_sign_in": not account}
         except TimeoutError:
+            logger.warning("ChatGPT sign-in stopped at %s: timeout", step)
+            outcome.set_result(("timeout", ""))
             raise OpenRouterError(0, "timeout", "ChatGPT sign-in timed out; try signing in again") from None
+        except OpenRouterError as error:
+            # The step and the kind, which is all anyone needs to find it: nothing the server or the owner sent.
+            logger.warning("ChatGPT sign-in stopped at %s: %s", step, error.kind)
+            outcome.set_result((error.kind, ""))
+            raise
+        except asyncio.CancelledError:
+            outcome.set_result(("cancelled", ""))
+            raise
         finally:
             self._pending = None
             if not future.done():
                 future.cancel()
+            if not outcome.done():
+                outcome.set_result(("failed", ""))
             if server is not None:
                 server.close()
-                await server.wait_closed()
+            # A page that waits for the outcome gets it; a socket the browser only opened in advance does not hold anything up.
+            if handlers:
+                await asyncio.wait(handlers, timeout=2)
             for task in list(handlers):
                 task.cancel()
             await asyncio.gather(*handlers, return_exceptions=True)
+            if server is not None:
+                await server.wait_closed()
 
     async def cancel(self, params):
         if self._sign_in_task is not None and self._sign_in_task is not asyncio.current_task():
@@ -374,27 +428,17 @@ class ChatGPTAuth:
             if PLAN_SCOPE not in tokens.get("scope", "").split():
                 raise OpenRouterError(0, "chatgpt_scope", "Enable ChatGPT plan usage by signing in again")
             if tokens.get("expires_at", 0) <= time.time() + 60:
+                # A refresh token is spent the moment OpenAI answers: its successor is saved even when
+                # whoever asked has stopped waiting, or the next request finds the account signed out.
+                renewal = asyncio.ensure_future(self._renew(account_id, account, tokens))
                 try:
-                    body = await self.request("POST", TOKEN, data={"grant_type": "refresh_token",
-                        "client_id": account["client_id"], "refresh_token": tokens["refresh_token"], "resource": RESOURCE})
-                except OpenRouterError as error:
-                    if error.kind == "auth_expired":
-                        self._vault(account_id).clear()
-                        self.model_rows = []
+                    tokens = await asyncio.shield(renewal)
+                except asyncio.CancelledError:
+                    await asyncio.wait({renewal}, timeout=25)
                     raise
-                renewed = self._token_set(body, tokens)
-                if body.get("id_token"):
-                    renewed["identity_pending"] = True
-                # Save the rotated token before validating optional identity or using new access.
-                self._store(account_id, renewed)
-                tokens = renewed
             if tokens.get("identity_pending"):
-                try:
-                    identity = await self._identity(tokens["id_token"], account["client_id"])
-                except OpenRouterError as error:
-                    if error.kind == "auth_expired":
-                        self._vault(account_id).clear()
-                    raise
+                # A check that fails is not a revocation: the tokens stay, unused, and the next request checks again.
+                identity = await self._identity(tokens["id_token"], account["client_id"])
                 if (identity["subject"], identity["issuer"]) != (account["subject"], account["issuer"]):
                     self._vault(account_id).clear()
                     raise OpenRouterError(0, "auth_expired", "ChatGPT account identity changed")
@@ -403,6 +447,23 @@ class ChatGPTAuth:
             if PLAN_SCOPE not in tokens.get("scope", "").split():
                 raise OpenRouterError(0, "chatgpt_scope", "Enable ChatGPT plan usage by signing in again")
             return tokens["access_token"]
+
+    async def _renew(self, account_id, account, tokens):
+        try:
+            body = await self.request("POST", TOKEN, data={"grant_type": "refresh_token",
+                "client_id": account["client_id"], "refresh_token": tokens["refresh_token"], "resource": RESOURCE})
+        except OpenRouterError as error:
+            # Only a token OpenAI says is spent is forgotten; a bad moment leaves the account signed in.
+            if getattr(error, "details", {}).get("code") in TERMINAL_REFRESH:
+                self._vault(account_id).clear()
+                self.model_rows = []
+            raise
+        renewed = self._token_set(body, tokens)
+        if body.get("id_token"):
+            renewed["identity_pending"] = True
+        # Save the rotated token before validating optional identity or using new access.
+        self._store(account_id, renewed)
+        return renewed
 
     async def sign_out(self, params):
         await self.cancel({})

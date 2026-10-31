@@ -100,7 +100,7 @@ export async function usageAnalytics(params: UsageRequest): Promise<UsageAnalyti
 export const modelsCatalog = (): Promise<ModelCatalog> => core("models.catalog");
 export const brainsCli = (): Promise<{ clis: CliBrain[] }> => core("brains.cli");
 export const chatgptStatus = (): Promise<ChatGptStatus> => core("chatgpt.status");
-export const chatgptSignIn = (): Promise<ChatGptStatus> => core("chatgpt.sign_in", { enable_plan: true });
+export const chatgptSignIn = (language: string): Promise<ChatGptStatus> => core("chatgpt.sign_in", { enable_plan: true, language });
 export const chatgptCancel = (): Promise<{ cancelled: boolean }> => core("chatgpt.cancel");
 export const chatgptSignOut = (): Promise<{ signed_out: boolean }> => core("chatgpt.sign_out");
 export const chatgptModels = (): Promise<{ models: unknown[] }> => core("chatgpt.models");
@@ -423,6 +423,8 @@ export const modelsEnsure = (names: string[]): Promise<{ ok: boolean }> => core(
 export const openLink = (url: string): Promise<void> => invoke("open_link", { url });
 /** Opens a chat http(s) address through the shell's scheme and credential checks. */
 export const openExternalUrl = (url: string): Promise<void> => invoke("open_external_url", { url });
+/** A sign-in in the browser has finished: the owner's way back is this window coming to the front. */
+export const mainWindowForward = (): Promise<void> => invoke("main_window_forward");
 export const pagesOpen = (id: string, theme: "dark" | "light"): Promise<PageOpened> => core("pages.open", { id, theme });
 export const pagesToolCall = (id: string, tool: string, args: object): Promise<{ status: string; ok?: boolean; tool_result?: object | null; error?: string | null }> => core("pages.tool_call", { id, tool, arguments: args });
 

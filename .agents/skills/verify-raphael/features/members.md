@@ -47,7 +47,8 @@ while that conversation is unwritten (owner, 10/31: a new conversation is made o
 a member's details, never the sidebar's ＋, and never beside one still empty);
 `member-maker*` is 新增成員 as a character maker where the conversation stands, slimes
 only (owner, 10/31: no pictures, for copyright; Grok Bot's create page is the reference
-at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg). It asks only for a name; the
+at bots/research/grokbot/12-flaviocopes-create-first-bot.jpg, without its suggestions: other
+people's bots will come from a library later). It asks only for a name; the
 member opens and speaks first (the core's greeting, no model), and the owner's answer
 becomes its job through `set_my_job`, offered only while it has none;
 `conversation-delete-main` deletes Raphael's main conversation, and the

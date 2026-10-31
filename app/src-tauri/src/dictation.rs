@@ -1012,6 +1012,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         };
         if was != Phase::Idle {
             log::warn!("the core restarted during a session; it is lost");
+            self.tell(DictationPhase::Failed, stage.is_some());
             if held || stage != Some(AgentStage::Speaking) {
                 self.overlay.hide();
             }
@@ -1746,7 +1747,14 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             return;
         }
         let transcript_ms = released.elapsed().as_secs_f64() * 1000.0;
-        self.converse(
+        // Said into a conversation, the words are in and the answer belongs there, as a typed one's
+        // does: the microphone and the dictation key are free again while it is worked on.
+        let turn = if session.conversation_id.is_some() {
+            self.hand_over(&id)
+        } else {
+            None
+        };
+        turn.as_ref().unwrap_or(self).converse(
             &id,
             AgentQuestion {
                 text: question,
@@ -1835,38 +1843,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
         if lock(&self.typed).contains_key(&id) {
             return Err(Busy);
         }
-        // Reuse the same reply/confirmation machinery with an independent turn state.
-        let mut turn = Self::new(
-            self.core.clone(),
-            self.overlay.clone(),
-            self.paster.clone(),
-            self.cancel.clone(),
-            self.mode.clone(),
-        );
-        turn.transitions = self.transitions.clone();
-        turn.typed = self.typed.clone();
-        turn.voice = Some(self.state.clone());
-        turn.cancel_owners = self.cancel_owners.clone();
-        turn.cancel_owner = id.clone();
-        turn.language = self.language.clone();
-        turn.front = self.front.clone();
-        turn.phase_report = self.phase_report.clone();
-        {
-            let mut state = lock(&turn.state);
-            let (_, started) = watch::channel(Started::Yes);
-            state.phase = Phase::Processing;
-            state.session = Some(Session {
-                id: id.clone(),
-                kind: Kind::Agent,
-                member,
-                conversation_id,
-                quick,
-                started,
-            });
-            state.agent = Some(AgentStage::Thinking);
-            state.questions = lock(&self.state).questions.clone();
-        }
-        lock(&self.typed).insert(id.clone(), turn.state.clone());
+        let turn = self.own_turn(&id, member, conversation_id, quick);
         log::info!("agent: a typed question");
         let (this, text) = (turn, text.to_owned());
         Ok(tokio::spawn(async move {
@@ -1887,6 +1864,63 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             )
             .await;
         }))
+    }
+
+    /// Moves the current session out of the voice slot to a turn of its own, which goes on from
+    /// where it is. `None` if the session is no longer the current one.
+    fn hand_over(&self, id: &str) -> Option<Self> {
+        let _transition = lock(&self.transitions);
+        let (session, shown) = {
+            let mut state = lock(&self.state);
+            if !state.session.as_ref().is_some_and(|session| session.id == id) {
+                return None;
+            }
+            let shown = state.on_overlay;
+            let session = state.go_idle()?;
+            self.set_cancel(false);
+            (session, shown)
+        };
+        if shown {
+            self.overlay.hide();
+        }
+        Some(self.own_turn(id, session.member, session.conversation_id, session.quick))
+    }
+
+    /// A turn with a state of its own, thinking: it reuses the reply and confirmation machinery
+    /// without occupying the voice slot.
+    fn own_turn(&self, id: &str, member: u64, conversation_id: Option<u64>, quick: bool) -> Self {
+        let mut turn = Self::new(
+            self.core.clone(),
+            self.overlay.clone(),
+            self.paster.clone(),
+            self.cancel.clone(),
+            self.mode.clone(),
+        );
+        turn.transitions = self.transitions.clone();
+        turn.typed = self.typed.clone();
+        turn.voice = Some(self.state.clone());
+        turn.cancel_owners = self.cancel_owners.clone();
+        turn.cancel_owner = id.to_owned();
+        turn.language = self.language.clone();
+        turn.front = self.front.clone();
+        turn.phase_report = self.phase_report.clone();
+        {
+            let mut state = lock(&turn.state);
+            let (_, started) = watch::channel(Started::Yes);
+            state.phase = Phase::Processing;
+            state.session = Some(Session {
+                id: id.to_owned(),
+                kind: Kind::Agent,
+                member,
+                conversation_id,
+                quick,
+                started,
+            });
+            state.agent = Some(AgentStage::Thinking);
+            state.questions = lock(&self.state).questions.clone();
+        }
+        lock(&self.typed).insert(id.to_owned(), turn.state.clone());
+        turn
     }
 
     /// The `question` of the session `id` with the agent: `agent.ask` (with `source`
@@ -4616,14 +4650,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_plain_timeout_gets_no_notice() {
+    async fn a_cleanup_that_timed_out_says_the_text_went_in_as_said() {
         let c = controller(
             FakeCore::with("dictation.stop", stop_result("原文", Some("timeout"))),
             FakePaster::pasting("notepad.exe"),
         );
         run(&c, HotkeyEvent::DictationDown, 0).await;
         run(&c, HotkeyEvent::DictationUp, 900).await;
-        assert_eq!(c.overlay().events().last().unwrap(), "hide");
+        assert_eq!(c.overlay().events().last().unwrap(), &notice(notices::NOT_CLEANED.zh));
+        assert_eq!(c.paster().delivered(), ["原文"]);
     }
 
     #[tokio::test]
@@ -6518,6 +6553,74 @@ mod tests {
             c.core().call_params("agent.ask")["destination"],
             QUICK_DESTINATION
         );
+    }
+
+    /// The owner's report, twice: after the composer's microphone, the dictation key did nothing until the answer came.
+    #[tokio::test]
+    async fn dictation_works_while_a_question_said_in_a_conversation_is_answered() {
+        for member in [0, 3] {
+            for mode in BOTH_MODES {
+                let (core, gate) = agent_core(answer("Answer", "Done")).gated("agent.ask");
+                core.script("dictation.stop", Ok(stop_result("Dictated text", None)));
+                let c = controller_in(mode, core, FakePaster::pasting("notepad.exe"));
+                run(&c, HotkeyEvent::ConversationDown { member, conversation: 42, quick: false }, 0).await;
+                assert_eq!(c.phase(), Phase::Recording);
+                let turn = c.on_hotkey(AgentUp, 900).or_else(|| c.on_hotkey(HotkeyEvent::ConversationDown { member, conversation: 42, quick: false }, 950));
+                let turn = turn.expect("the question ends");
+                for _ in 0..200 {
+                    if lock(&c.typed).len() == 1 { break; }
+                    tokio::task::yield_now().await;
+                }
+                assert_eq!(c.phase(), Phase::Idle, "the voice slot is free while the answer is worked on");
+                assert_eq!(c.cancel().last(), Some(false), "Esc belongs to the app in front again");
+                run(&c, DictationDown, 2000).await;
+                assert_eq!(c.phase(), Phase::Recording);
+                if let Some(stop) = end_dictation(&c, mode, 3200) {
+                    stop.await.unwrap();
+                }
+                assert_eq!(c.paster().delivered(), ["Dictated text"]);
+                assert_eq!(lock(&c.typed).len(), 1, "the question goes on");
+                gate.notify_one();
+                turn.await.unwrap();
+                for _ in 0..200 {
+                    if lock(&c.typed).is_empty() { break; }
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn a_question_said_to_the_overlay_keeps_the_voice_slot_while_it_is_answered() {
+        let (core, gate) = agent_core(answer("Answer", "Done")).gated("agent.ask");
+        let c = controller_in(DictationMode::Hold, core, FakePaster::pasting("notepad.exe"));
+        run(&c, AgentDown, 0).await;
+        let turn = c.on_hotkey(AgentUp, 900).unwrap();
+        until_stage(&c, AgentStage::Thinking).await;
+        assert_eq!(c.phase(), Phase::Processing);
+        gate.notify_one();
+        turn.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn esc_stops_a_question_said_in_a_conversation_while_its_answer_is_worked_on() {
+        let (core, gate) = agent_core(answer("Answer", "Done")).gated("agent.ask");
+        let c = controller_in(DictationMode::Hold, core, FakePaster::pasting("notepad.exe"));
+        run(&c, HotkeyEvent::ConversationDown { member: 3, conversation: 42, quick: false }, 0).await;
+        let turn = c.on_hotkey(AgentUp, 900).unwrap();
+        for _ in 0..200 {
+            if lock(&c.typed).len() == 1 { break; }
+            tokio::task::yield_now().await;
+        }
+        for _ in 0..200 {
+            tokio::task::yield_now().await;
+        }
+        if let Some(cancel) = c.on_hotkey(Cancel, 1000) {
+            cancel.await.unwrap();
+        }
+        assert!(c.core().calls.lock().unwrap().iter().any(|(method, _)| method == "agent.cancel"));
+        gate.notify_one();
+        turn.await.unwrap();
     }
 
     #[tokio::test]

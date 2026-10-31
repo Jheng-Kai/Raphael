@@ -4,7 +4,7 @@
 .cr-dialog .mb-dlg-head { padding: 0 var(--sp-4) var(--sp-1); }
 .cr-dialog .mb-dlg-head h2 { font-size: var(--fs-sm); font-weight: 600; }
 .cr-dialog .mb-dlg-act { display: none; }
-.cr-dialog .mb-dlg-body { flex: 1; align-content: start; justify-items: center; gap: var(--sp-5); padding: 0 var(--sp-4) var(--sp-5); }
+.cr-dialog .mb-dlg-body { flex: 1; align-content: start; justify-items: center; padding: var(--sp-5) var(--sp-4); }
 
 .cr-maker { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-3); width: min(460px, 100%); }
 .cr-face { display: flex; align-items: center; justify-content: center; height: 124px; }
@@ -21,14 +21,3 @@
 .cr-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: 100%; margin-top: var(--sp-2); }
 .cr-start { display: flex; justify-content: center; margin-top: var(--sp-1); }
 .cr-start .btn { min-width: 120px; }
-
-.cr-suggestions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); width: min(760px, 100%); }
-.cr-suggestions h3 { margin: 0; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
-.cr-suggestion-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-2); }
-.btn.cr-suggestion { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: auto; min-height: 72px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); text-align: left; white-space: normal; }
-.btn.cr-suggestion[aria-pressed="true"] { border-color: var(--text); background: var(--hover); }
-.cr-card-face { flex: none; width: 44px; height: 44px; }
-.cr-card-face .slime { display: block; width: 100%; height: 100%; }
-.cr-card-text { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
-.cr-card-text b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.cr-card-text small { display: -webkit-box; overflow: hidden; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

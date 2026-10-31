@@ -21,6 +21,7 @@ import { closeMenu, esc, ico, iconButton, openPopover, placeMenu, toaster } from
 import { describeError } from "./format";
 
 const SEARCH_FROM = 12;
+const USAGE_URL = "https://chatgpt.com/settings/usage";
 /** How long a signed-in CLI may be silent about its models while the menu is open before this says so. */
 const MODEL_WAIT_TRIES = 20, MODEL_WAIT_MS = 2000;
 const CHANGES: readonly MainEvent["type"][] = ["SettingsChanged", "BrainsChanged", "ProvidersChanged"];
@@ -34,6 +35,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   let menu: HTMLElement | null = null, source = "", query = "", view: "now" | "sources" | "models" = "now";
   let modelTries = 0, modelTimer: ReturnType<typeof setTimeout> | undefined;
   let paintedWho: string | null = null, paintedDepth: string | null = null;
+  let favorites: readonly string[] = [];
 
   const look = (): ModelPickerLook => {
     const who = member();
@@ -66,12 +68,27 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     void saved.then(() => { then?.(); paintButton(); paintMenu(); }).catch(error => { toaster.info(describeError(error)); void reload(); });
   }
 
+  /** What the owner starred in Settings, in the order they did, of what can answer now. */
+  function starred(): CatalogModel[] {
+    const all = pickerModelsFor(look());
+    return favorites.flatMap(id => all.filter(row => row.id === id && usableFor(row, "answer")));
+  }
+
+  function rowHTML(row: CatalogModel, note = ""): string {
+    const usable = usableFor(row, "answer"), checked = row.id === chosen().model?.id, words = note || chooserPrice(row, pickerModelsFor(look()), "answer");
+    return `<button type="button" role="radio" class="cb-row" data-model="${esc(row.id)}" aria-checked="${checked}"${usable ? "" : ` disabled title="${esc(reasonText(fitFor(row, "answer").reason))}"`}>` +
+      `<span class="cb-check" aria-hidden="true">${checked ? ico("check") : ""}</span><span class="cb-name"><b>${esc(row.name)}</b></span>${words ? `<small>${esc(words)}</small>` : ""}</button>`;
+  }
+
   function sourcesHTML(sources: ChooserSource[]): string {
     const { model } = chosen();
+    const liked = starred();
+    const sourceName = (row: CatalogModel): string => sources.find(item => item.models.some(other => other.id === row.id))?.name ?? "";
+    const top = liked.length ? `<div class="cb-group" role="radiogroup" aria-label="${esc(t("chooser.favorites"))}"><h4>${esc(t("chooser.favorites"))}</h4>${liked.map(row => rowHTML(row, sourceName(row))).join("")}</div>` : "";
     const groups = [["subscriptions", "chooser.subscriptions"], ["api", "chooser.api"], ["local", "chooser.local"]] as const;
-    const rows = groups.map(([group, title]) => {
+    const rows = top + groups.map(([group, title]) => {
       // Only what can answer now: signing in and adding a source belong to Settings.
-      const items = sources.filter(item => item.group === group && (group !== "subscriptions" || item.cli?.available));
+      const items = sources.filter(item => item.group === group && (group !== "subscriptions" || item.cli?.available || item.models.length));
       return !items.length ? "" : `<div class="cb-group"><h4>${esc(t(title))}</h4>${items.map(item => {
         const holds = !!model && item.models.some(row => row.id === model.id);
         return `<button type="button" role="menuitem" class="cb-source" data-cb-source="${esc(item.id)}" aria-haspopup="true">${sourceMarkHTML(item)}<span class="cb-name"><b>${esc(item.name)}</b></span>${holds ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}${ico("right")}</button>`;
@@ -94,7 +111,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   }
 
   function rowsHTML(sources: ChooserSource[]): string {
-    const item = sources.find(row => row.id === source), o = look();
+    const item = sources.find(row => row.id === source);
     if (!item) return `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
     if (item.group === "subscriptions" && !item.models.length) {
       return modelTries < MODEL_WAIT_TRIES ? `<p class="cb-empty" role="status">${esc(t("chooser.readingModels"))}</p>`
@@ -102,14 +119,13 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const models = item.models.filter(row => words.every(word => `${row.name} ${row.provider} ${row.id}`.toLowerCase().includes(word)));
-    const { model: current } = chosen();
-    const all = pickerModelsFor(o);
-    const rows = models.map(row => {
-      const usable = usableFor(row, "answer"), checked = row.id === current?.id, price = chooserPrice(row, all, "answer");
-      return `<button type="button" role="radio" class="cb-row" data-model="${esc(row.id)}" aria-checked="${checked}"${usable ? "" : ` disabled title="${esc(reasonText(fitFor(row, "answer").reason))}"`}>` +
-        `<span class="cb-check" aria-hidden="true">${checked ? ico("check") : ""}</span><span class="cb-name"><b>${esc(row.name)}</b></span>${price ? `<small>${esc(price)}</small>` : ""}</button>`;
-    }).join("");
-    return rows || `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
+    // What the owner starred comes first, under its own heading, as in Settings; a search looks through everything.
+    const liked = words.length ? [] : starred().filter(row => models.includes(row) || models.some(other => other.id === row.id));
+    if (liked.length && liked.length < models.length) {
+      const rest = models.filter(row => !liked.some(other => other.id === row.id));
+      return `<h4 class="cb-heading">${esc(t("chooser.favorites"))}</h4>${liked.map(row => rowHTML(row)).join("")}<h4 class="cb-heading">${esc(t("chooser.all"))}</h4>${rest.map(row => rowHTML(row)).join("")}`;
+    }
+    return models.map(row => rowHTML(row)).join("") || `<p class="cb-empty">${esc(t("chooser.empty"))}</p>`;
   }
 
   function depthHTML(): string {
@@ -121,7 +137,9 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
   /** What is chosen now, which is also the way to choose another. */
   function nowHTML(): string {
     const { name, source: from } = modelPickerSelection(look());
-    return `<button type="button" class="menu-action cb-pick" data-cb-act="browse"><small>${esc(from)}</small><span class="cb-pick-name"><b>${esc(name)}</b>${ico("right")}</span></button>`;
+    const onPlan = chosen().model?.id.startsWith("@chatgpt:");
+    return `<button type="button" class="menu-action cb-pick" data-cb-act="browse"><small>${esc(from)}</small><span class="cb-pick-name"><b>${esc(name)}</b>${ico("right")}</span></button>` +
+      (onPlan ? `<div class="cb-plan"><span>${esc(t("brains.usingPlan"))}</span><button type="button" class="btn sm" data-cb-act="usage">${esc(t("brains.manageUsage"))}</button></div>` : "");
   }
 
   /** While the source shown is a signed-in CLI whose models have not come, keep asking, and stop to say so. */
@@ -199,6 +217,7 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
       return;
     }
     if (target.dataset.cbAct === "retry") { modelTries = 0; paintMenu(); void reload(); return; }
+    if (target.dataset.cbAct === "usage") { void api.openExternalUrl(USAGE_URL).catch(error => toaster.info(describeError(error))); return; }
     if (target.dataset.cbAct === "back") {
       turnTo(view === "models" ? "sources" : "now");
       return;
@@ -257,7 +276,10 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
     if (mine !== generation) return;
     if (catalogResult.status === "fulfilled" && Array.isArray(catalogResult.value?.llm)) { catalog = catalogResult.value; rememberCatalog(catalog); }
     if (cliResult.status === "fulfilled") { clis = cliResult.value?.clis ?? []; rememberClis(clis); }
-    if (settingsResult.status === "fulfilled") answerModel = settingsResult.value?.settings?.agent_model ?? "";
+    if (settingsResult.status === "fulfilled") {
+      answerModel = settingsResult.value?.settings?.agent_model ?? "";
+      favorites = settingsResult.value?.settings?.model_favorites?.answer ?? [];
+    }
     draw();
   }
   host.onEvent?.(event => { if (CHANGES.includes(event.type)) void reload(); });

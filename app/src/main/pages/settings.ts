@@ -897,6 +897,10 @@ export function createSettings(app: AppContext): SettingsPage {
               const button = document.createElement("button"); button.dataset.cli = id;
               void cliBrains.click(button);
             },
+            onChatgpt: (action) => {
+              const button = document.createElement("button"); button.dataset.chatgpt = action;
+              void cliBrains.click(button);
+            },
             onChoose: (id) => void chooseModel(role, id),
             onFavorite: (id, on) => void changeFavorite(role, id, on),
             onUseLocal: (name) => void useLocal(name),

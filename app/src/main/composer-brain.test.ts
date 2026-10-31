@@ -3,9 +3,10 @@ import { beforeEach, expect, test, vi } from "vitest";
 const state = vi.hoisted(() => ({
   agent_model: "@p:global",
   clis: [] as object[],
+  favorites: [] as string[],
 }));
 const api = vi.hoisted(() => ({
-  core: vi.fn(async (method: string) => method === "settings.get" ? { settings: { agent_model: state.agent_model } } : method === "brains.cli" ? { clis: state.clis } : {
+  core: vi.fn(async (method: string) => method === "settings.get" ? { settings: { agent_model: state.agent_model, model_favorites: { answer: state.favorites } } } : method === "brains.cli" ? { clis: state.clis } : {
     llm: [
       { input_per_mtok: null, output_per_mtok: null, per_minute: null, free: false, variable_price: false, context_length: null, created_at_ms: null, id: "global", provider_id: "p", provider_name: "P", provider: "P", name: "Global", roles: { answer: { usable: true, reason: null } }, reasoning_efforts: ["low", "high"], default_effort: "low", capabilities: {} },
       { input_per_mtok: null, output_per_mtok: null, per_minute: null, free: false, variable_price: false, context_length: null, created_at_ms: null, id: "mine", provider_id: "p", provider_name: "P", provider: "P", name: "Mine", roles: { answer: { usable: true, reason: null } }, capabilities: {} },
@@ -13,6 +14,7 @@ const api = vi.hoisted(() => ({
   }),
   settingsSet: vi.fn(async (_key: string, value: string) => { state.agent_model = value; return { settings: { agent_model: value } }; }),
   membersUpdate: vi.fn(async () => ({})),
+  openExternalUrl: vi.fn(async () => undefined),
 }));
 vi.mock("./api", () => api);
 import { createCliBrains } from "./cli-brains";
@@ -37,7 +39,69 @@ function mount(member: Member = { id: 0, name: "Raphael", model: "" } as Member)
 const browse = (): void => { q(".cb-pick")!.click(); };
 const toModels = (source = "p"): void => { browse(); q(`[data-cb-source="${source}"]`)!.click(); };
 
-beforeEach(() => { closeMenu(); document.body.innerHTML = ""; vi.clearAllMocks(); state.agent_model = "@p:global"; state.clis = []; });
+beforeEach(() => { closeMenu(); document.body.innerHTML = ""; vi.clearAllMocks(); state.agent_model = "@p:global"; state.clis = []; state.favorites = []; });
+
+test("what the owner starred in Settings is right there when choosing, across sources, and choosing it works", async () => {
+  state.favorites = ["@p:mine", "@gone:model", "cli:codex:gpt-6.1"];
+  state.clis = [CODEX([RUNNABLE])];
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  browse();
+  const group = q(".cb-group")!;
+  expect(group.querySelector("h4")!.textContent).toBe("我的最愛");
+  expect([...group.querySelectorAll<HTMLElement>("[data-model]")].map(row => row.dataset.model)).toEqual(["@p:mine", "cli:codex:gpt-6.1"]);
+  expect(group.textContent).toContain("Codex");
+  group.querySelector<HTMLElement>('[data-model="@p:mine"]')!.click();
+  await flush();
+  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
+  expect(q<HTMLElement>(".cb-now")!.hidden).toBe(false);
+});
+
+test("in a source's list its starred models come first, and a search looks through all of them", async () => {
+  state.favorites = ["@p:mine"];
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  toModels();
+  const names = (): string[] => [...document.querySelectorAll<HTMLElement>(".cb-list .cb-heading, .cb-list [data-model]")].map(row => row.dataset.model ?? row.textContent ?? "");
+  expect(names()).toEqual(["我的最愛", "@p:mine", "所有模型", "@p:global"]);
+});
+
+test("nothing starred, no heading", async () => {
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  browse();
+  expect(q(".cb-menu")!.textContent).not.toContain("我的最愛");
+});
+
+test("a model on the ChatGPT plan says so, with the way to see the usage", async () => {
+  api.core.mockImplementationOnce(async () => ({ llm: [{ input_per_mtok: null, output_per_mtok: null, per_minute: null, free: false, variable_price: false, context_length: null, created_at_ms: null, id: "gpt", provider_id: "chatgpt", provider_name: "ChatGPT", provider: "OpenAI", name: "GPT", roles: { answer: { usable: true, reason: null } }, capabilities: {} }], stt: [], replaced: [] }));
+  state.agent_model = "@chatgpt:gpt";
+  const { open } = mount();
+  await flush();
+  open();
+  expect(q(".cb-plan")!.textContent).toContain("使用 ChatGPT 方案");
+  q('[data-cb-act="usage"]')!.click();
+  expect(api.openExternalUrl).toHaveBeenCalledExactlyOnceWith("https://chatgpt.com/settings/usage");
+});
+
+test("the fill reaches over the whole thumb at every stop, and follows a drag", async () => {
+  const { open } = mount();
+  await flush();
+  open();
+  await flush();
+  const track = q(".cb-now .mc-track")!;
+  expect(track.getAttribute("style")).toContain("--p:0");
+  const range = q<HTMLInputElement>(".mc-range")!;
+  range.value = "1";
+  range.dispatchEvent(new Event("input", { bubbles: true }));
+  expect((track as HTMLElement).style.getPropertyValue("--p")).toBe("1");
+});
 
 test("the picker sits in its slot and follows the open conversation's member", async () => {
   const slot = document.createElement("span"); document.body.append(slot);
