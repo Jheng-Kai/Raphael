@@ -331,7 +331,8 @@ class CliLoop:
         if not self.brains.available(name, command=command):
             self._failure("login", NAMES[name])
             return
-        lock = self.sessions.locks.setdefault((self.member_id, self.conversation_id), asyncio.Lock())
+        # A colleague's question resumes no native session of this conversation: a member at work on something answers it too.
+        lock = self.sessions.locks.setdefault((self.member_id, self.conversation_id), asyncio.Lock()) if self.resume_session else asyncio.Lock()
         if lock.locked():
             self._failure("busy", NAMES[name])
             return

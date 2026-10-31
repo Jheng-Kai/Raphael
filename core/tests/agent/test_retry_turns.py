@@ -153,6 +153,19 @@ async def test_a_cli_turn_waits_as_long_as_the_provider_said_and_says_so_once(mo
     assert lines == ["Codex CLI is rate-limited; retrying in 45 s."]
 
 
+async def test_a_colleagues_question_is_answered_while_the_member_is_at_work(monkeypatch, tmp_path, sleeps):
+    # Live: a member asked Raphael where a file was, while Raphael worked, and the owner's chat said a turn was under way.
+    answered = [Event("final", "It is in the team folder.")]
+    loop, _ = cli_loop(monkeypatch, tmp_path, [answered, answered], resume_session=False)
+    async with loop.sessions.locks.setdefault((5, 7), asyncio.Lock()):
+        await loop._work()
+        assert loop.failure is None and loop._queue.get_nowait().final == "It is in the team folder."
+        own, _ = cli_loop(monkeypatch, tmp_path, [answered])
+        own.sessions = loop.sessions
+        await own._work()
+        assert own.failure == "busy"
+
+
 async def test_a_cli_usage_limit_is_not_run_again_and_says_when_it_resets(monkeypatch, tmp_path, sleeps):
     reset = time.time() + 2 * 3600
     exhausted = [Event("error", "usage_limit", {"kind": "usage_limit", "reason": "Usage limit reached", "resets_at": reset})]

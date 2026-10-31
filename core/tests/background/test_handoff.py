@@ -576,6 +576,21 @@ async def test_a_written_deliverable_is_work_done_and_says_why_when_it_is_not(ma
     assert '只有回覆' in task.report_text and task.report_detail=='明早我會完成。'
 
 
+async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave(make_rig,tmp_path):
+    rig=make_rig()
+    target,source=setup(rig)
+    own,team=tmp_path/'own',tmp_path/'team'
+    own.mkdir(); team.mkdir()
+    rig.service.use_workspaces(lambda member:[own,team])
+    (team/'office.html').write_text('<html></html>',encoding='utf-8')
+    rig.client.replies.append(report('The page is in the team folder.'))
+    result=rig.service.handoff(RAPHAEL,args(target,done_when='office.html exists'),source_turn_id=source.id,language='en')
+    await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
+    task=rig.task(result.data['task_id'])
+    assert (task.state,task.reason)==('done',None)
+    assert [item['uri'] for item in rig.service._store.evidence(task.id)]==['office.html']
+
+
 async def test_required_artifact_and_modified_artifact_cannot_complete(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig)

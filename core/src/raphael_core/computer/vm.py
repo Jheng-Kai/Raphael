@@ -580,7 +580,8 @@ class LocalVm:
 
     async def read_file(self, target, guest_path, *, limit):
         path = PurePosixPath(guest_path) if isinstance(guest_path, str) else PurePosixPath("/")
-        if not path.is_absolute() or ".." in path.parts or not path.is_relative_to(GUEST):
+        root = GUEST if path.is_relative_to(GUEST) else SHARED if target.shared and path.is_relative_to(SHARED) else None
+        if not path.is_absolute() or ".." in path.parts or root is None:
             raise VmError("outside_workspace")
         # Resolve in the guest as well: Linux symlinks on a Windows bind mount are
         # not reliably visible to host pathlib. Open/copy bytes in one guest process.
@@ -599,7 +600,7 @@ with os.fdopen(file_fd, 'rb') as stream:
 assert len(data) <= int(sys.argv[3])
 print(base64.b64encode(data).decode())
 """
-        result = await self.run_for(target, exec_args(target, ["/opt/venv/bin/python", "-c", script, GUEST, str(path.relative_to(GUEST)), str(limit)]), timeout=30, limit=limit * 2)
+        result = await self.run_for(target, exec_args(target, ["/opt/venv/bin/python", "-c", script, root, str(path.relative_to(root)), str(limit)]), timeout=30, limit=limit * 2)
         if result.code or result.truncated:
             raise VmError("file_unavailable")
         import base64
