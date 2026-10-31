@@ -160,6 +160,11 @@ pub enum DictationPhase {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 pub enum MainEvent {
+    /// Ephemeral member activity, independent of the conversation currently open.
+    MemberActivity {
+        member_id: u64,
+        state: String,
+    },
     /// A successful dictation delivered to our own process, for in-memory composer learning.
     /// Never logged or replayed to a later subscriber.
     DictationPasted {
@@ -1057,6 +1062,19 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             done: whole(params.get("done")?)?,
             total: whole(params.get("total")?)?,
         }),
+        "member.activity" => {
+            let state = params.get("state")?.as_str()?;
+            if !matches!(
+                state,
+                "thinking" | "working" | "searching" | "computer" | "done" | "error" | "idle"
+            ) {
+                return None;
+            }
+            Some(MainEvent::MemberActivity {
+                member_id: params.get("member_id")?.as_u64()?,
+                state: state.to_owned(),
+            })
+        }
         "agent.turn" => Some(MainEvent::AgentTurn {
             turn_id: params.get("turn_id")?.as_u64()?,
             member_id: params.get("member_id").and_then(Value::as_u64).unwrap_or(0),
@@ -2967,6 +2985,45 @@ mod tests {
         assert_eq!(main_event_from(&progress, true), expected);
         let broken = notification("models.progress", json!({"name": "qwen3-asr"}));
         assert_eq!(main_event_from(&broken, true), None);
+    }
+
+    #[test]
+    fn member_activity_forwards_only_valid_states_and_member_ids() {
+        for state in [
+            "thinking", "working", "searching", "computer", "done", "error", "idle",
+        ] {
+            for member_id in [0, 7] {
+                let event = main_event_from(
+                    &notification("member.activity", json!({"member_id": member_id, "state": state})),
+                    false,
+                );
+                assert_eq!(
+                    event,
+                    Some(MainEvent::MemberActivity {
+                        member_id,
+                        state: state.to_owned()
+                    })
+                );
+                assert_eq!(
+                    serde_json::to_value(event.unwrap()).unwrap(),
+                    json!({"type": "MemberActivity", "member_id": member_id, "state": state})
+                );
+            }
+        }
+        for payload in [
+            json!({}),
+            json!({"member_id": 1}),
+            json!({"state": "idle"}),
+            json!({"member_id": -1, "state": "idle"}),
+            json!({"member_id": "1", "state": "idle"}),
+            json!({"member_id": true, "state": "idle"}),
+            json!({"member_id": 1.5, "state": "idle"}),
+            json!({"member_id": 1, "state": "waiting"}),
+            json!({"member_id": 1, "state": null}),
+            json!({"member_id": 1, "state": "unknown"}),
+        ] {
+            assert_eq!(main_event_from(&notification("member.activity", payload), true), None);
+        }
     }
 
     #[test]

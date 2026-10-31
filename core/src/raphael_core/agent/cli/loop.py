@@ -9,6 +9,7 @@ import time
 from contextlib import aclosing
 
 from ...worker.loop import Call, Outcome, Stop, ToolOutcome, WAITING
+from ...members.activity import StreamSteps, current, tool_step
 from ...worker.guards import RepeatGuard, wrap_untrusted
 from ..answers import MEMORY_ITEM, MESSAGE_BREAK, parse_reply
 from ..conversations import Conversations
@@ -137,6 +138,7 @@ class CliLoop:
         self.failure_reason = None
         self.catalog_changed = False
         self.on_done = None
+        self.activity_turn = None
         self.expire = expire
         self.wait_timeout_s = CONFIRM_TIMEOUT_S if wait_timeout_s is None else wait_timeout_s
 
@@ -154,6 +156,8 @@ class CliLoop:
             self.progress(line[:400])
         self._buffer = ""
 
+    @tool_step(lambda self, identifier, name, args: name,
+               scope=lambda self, *args: self.activity_turn)
     async def _tool(self, identifier, name, args):
         async with self._serial:
             # Every hand-off of a turn starts now; anything else waits for the delegated work.
@@ -219,6 +223,7 @@ class CliLoop:
             self._resume.set_result(outcome)
 
     async def run(self):
+        self.activity_turn = current()
         if self.task is None:
             self.task = asyncio.create_task(self._work())
             if self.on_done:
@@ -375,6 +380,10 @@ class CliLoop:
                     completion_tokens=tokens("output_tokens", "outputTokens", "candidatesTokenCount"))
 
     async def _attempt(self, name, command, model, server, session, workspace):
+        with StreamSteps(lambda: self.activity_turn) as steps:
+            return await self._stream_attempt(name, command, model, server, session, workspace, steps)
+
+    async def _stream_attempt(self, name, command, model, server, session, workspace, steps):
         """Run the CLI once for this turn: None once its answer is queued, else why it failed."""
         self._buffer = self._thought = ""
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
@@ -395,6 +404,8 @@ class CliLoop:
                 elif event.kind == "thinking":
                     self._thought = (self._thought + event.text)[-240:]
                 elif event.kind in ("tool_start", "permission"):
+                    if event.kind == "tool_start":
+                        steps.start(event.data)
                     self._acted = True
                     self._progress()
                     if line := public_line(self._thought, self.language):
@@ -402,8 +413,10 @@ class CliLoop:
                     self._thought = ""
                 elif event.kind == "usage":
                     self._usage = event.data
-                elif event.kind == "tool_end" and event.data.get("effect") and event.data.get("ok"):
-                    self.event("CLI 回報檔案已變更" if self.language == "zh-TW" else "CLI reported a file change")
+                elif event.kind == "tool_end":
+                    steps.end(event.data)
+                    if event.data.get("effect") and event.data.get("ok"):
+                        self.event("CLI 回報檔案已變更" if self.language == "zh-TW" else "CLI reported a file change")
                 elif event.kind == "error":
                     native_capture("normalized-error", event.text)
                     if self._handed_off():

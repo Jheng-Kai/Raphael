@@ -52,6 +52,11 @@ async def test_api_room_team_hands_off_and_wraps_up_through_shared_worker(make_r
             "### Conclusion", "Test first.", "### Owner decision", "The release date.", "### Next steps",
             "Alice owns testing; Bob owns rollout."]
         assert len(rig.client.chat_calls) == 5 and not rig.client.replies and rig.reports() == []
+        await until(lambda: not rig.service.activity.running)
+        for identifier in (0, alice.id, bob.id):
+            activity = [data['state'] for method, data in rig.notifications
+                        if method == 'member.activity' and data['member_id'] == identifier]
+            assert activity[0] == 'thinking' and activity[-2:] == ['done', 'idle']
         # Live, wrap-ups re-read the mail and even handed work off again: a conclusion only sums up.
         assert rig.client.chat_calls[4]["tools"] == [] and rig.client.chat_calls[3]["tools"]
         assert "PRECISE-PLANNER" in rig.client.chat_calls[1]["messages"][0]["content"]

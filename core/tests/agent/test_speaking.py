@@ -441,7 +441,7 @@ def announced():
 
 @pytest.fixture
 def timed_rig(make_rig, speaker, announced):
-    return make_rig(speaker=speaker, notify=lambda method, params: announced.append((method, params)))
+    return make_rig(speaker=speaker, notify=lambda method, params: announced.append((method, params)) if method == "agent.turn" else None)
 
 
 async def test_the_reply_waits_for_the_voice_and_comes_when_it_is_ready(timed_rig, client, speaker):
@@ -491,7 +491,7 @@ async def test_with_no_voice_the_reply_and_its_announcement_do_not_wait(
 ):
     speaker.can = False
     speaker.gate = asyncio.Event()  # would hold a reply for ever if it were waited for
-    rig = make_rig(speaker=speaker, notify=lambda m, p: announced.append((m, p)))
+    rig = make_rig(speaker=speaker, notify=lambda m, p: announced.append((m, p)) if m == "agent.turn" else None)
     client.decisions.append(decision("chat"))
     client.replies.append(spoken("答", "好。"))
     result = await asyncio.wait_for(rig.ask("你好"), 2)

@@ -74,6 +74,7 @@ from ..protocol import WORKER_STOPPED, RpcError, invalid_params
 from ..services.attachments import Attachment
 from ..services.urls import SeenUrls
 from ..worker.loop import WAITING, ToolOutcome, result_text
+from ..members.activity import current, tool_step
 from .snapshot import BUILTIN, FIND, MCP, Snapshot, ToolRef
 from .tasks import TaskStore
 
@@ -221,6 +222,7 @@ class TaskRun:
         ask_before_members: bool = False,
         diagnostics: Callable[[], dict] | None = None,
     ) -> None:
+        self.activity = current()
         self._memory = memory
         self._memory_untrusted = bool(attachments) or any(
             step.tool in ("web_search", "web_read", "read_attachment", "ask_member", "computer")
@@ -498,6 +500,7 @@ class TaskRun:
 
     # --- host.tool ------------------------------------------------------------------------------
 
+    @tool_step(lambda self, params: params.get("name", ""), scope=lambda self, params: self.activity)
     async def tool(self, params: dict) -> dict:
         """The result of a call of a tool of the snapshot."""
         name, arguments = params.get("name"), params.get("arguments")
@@ -662,6 +665,8 @@ class TaskRun:
         }
         return reply, _outcome_of(result), None if now is None else now.name, sent
 
+    @tool_step(lambda self, waiting, approval, action: waiting.alias,
+               scope=lambda self, *args, **kwargs: self.activity)
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
         for `action`, the very action the question was asked about), or not made after a no

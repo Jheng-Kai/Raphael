@@ -163,6 +163,7 @@ from ..worker.guards import MAX_ARGUMENT_CHARS, canonical
 from .answers import Reply, Voice, build_user_message
 from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
+from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import MEMORY_TOOLS, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
@@ -728,6 +729,8 @@ class AgentService:
             else Conversation(conn, client, now_ms=now_ms, clock=clock)
         )
         self._notify = notify
+        self.activity = (getattr(team, "activity", None)
+                         or getattr(background, "activity", None) or Activity(notify))
         self._settings = SettingsStore(conn)
         self._cli_brains = cli_brains or CliBrains(notify=notify, settings=self._settings)
         if self._cli_brains.settings is None:
@@ -1117,6 +1120,8 @@ class AgentService:
             if resumption is not None:
                 resumption.made.extend(ask.made)
 
+    @member_turn(lambda self, ask: ask.speaker.id,
+                 waiting=lambda self, ask: ask.waiting_apps or ask.waiting_secrets or ask.waiting_computer)
     async def _voice_answer(self, ask: _Ask) -> dict:
         """Bound the whole voice turn, including routing and any harness tool rounds."""
         try:
@@ -1125,6 +1130,8 @@ class AgentService:
             model = self._read_settings(ask.speaker, ask.conversation_id).model
             return self._failed(ask, "answer", AgentFailure("timeout", model=model), ask.ledger or Ledger(self._spend))
 
+    @member_turn(lambda self, ask: ask.speaker.id,
+                 waiting=lambda self, ask: ask.waiting_apps or ask.waiting_secrets or ask.waiting_computer)
     async def _answer(self, ask: _Ask) -> dict:
         """One request, from the router to the reply. Never raises for a failure of the world."""
         began = time.perf_counter()
@@ -1417,6 +1424,7 @@ class AgentService:
 
     # --- the owner's desktop ----------------------------------------------------------------------
 
+    @tool_step(lambda self, *args, **kwargs: "computer")
     async def _operate(self, ask: _Ask, settings: _Settings, ledger: Ledger, *,
                        narration: NarratedLoop | None = None, request: str | None = None) -> dict:
         """A run on the owner's desktop (`raphael_core.computer.run`). Only for a request made at
@@ -1478,6 +1486,8 @@ class AgentService:
         )
         return persona + owner_context(self._settings) + conversation_block(context.summary, context.turns, index)
 
+    @member_turn(lambda self, run: run.context.speaker.id)
+    @tool_step(lambda self, run: "computer")
     async def _next_from_run(self, run: ComputerRun) -> dict:
         """What the run says next, as the reply of `agent.ask` or `agent.confirm`: its question
         (the turn waits for a yes), or how it ended (the turn is complete). The turn is written
@@ -1942,6 +1952,7 @@ class AgentService:
                     self._message(ask, "event", phrase(ask.language, "member_created", member=str((result.data or {}).get("created", ""))))
                 return self._loop_result(result)
 
+            @tool_step(lambda call_id, name, args: name)
             async def observed_execute(call_id: str, name: str, args: dict) -> ToolOutcome:
                 waiting = "apps" if ask.waiting_apps else "secrets" if ask.waiting_secrets else "computer" if ask.waiting_computer else None
                 if waiting is not None and {CONNECT_APP: "apps", REQUEST_SECRET: "secrets"}.get(name) != waiting:
@@ -2101,6 +2112,7 @@ class AgentService:
         )
         return self._finish_reply(ask, "answer", reply, seen, ledger)
 
+    @tool_step(lambda self, ask, job, name: name)
     async def _tool(self, ask: _Ask, job: Any, name: str) -> ToolResult:
         """A tool's result, whatever happens: one that breaks is a tool that failed. It is a step
         of the request."""
@@ -2379,6 +2391,7 @@ class AgentService:
             proposed = Proposed(f"{tool.server} / {tool.name}", tool.description, summarize(call.arguments), narrow_scope(tool.key))
         return await self._gate.screen(proposed, language=ask.language, ledger=ledger)
 
+    @tool_step(lambda self, ask, call, *args, **kwargs: call.tool.key)
     async def _make_call(
         self,
         ask: _Ask,
@@ -3019,6 +3032,8 @@ class AgentService:
         data = {"member": member, "answer": said[:ANSWER_MAX_CHARS]}
         return ToolResult(name, ok, data, None if ok else "error", untrusted=True)
 
+    @member_turn(lambda self, target, *args, **kwargs: target.id,
+                 status=lambda self, result, *args, **kwargs: "done" if result[0] else "error")
     async def answer_for(
         self,
         target: Speaker,
@@ -3093,6 +3108,9 @@ class AgentService:
             if isinstance(followup.loop, CliLoop):
                 followup.loop.cancel()
 
+    @member_turn(lambda self, pending, approval, followup, **kwargs: followup.ask.speaker.id,
+                 waiting=lambda self, pending, approval, followup, **kwargs: (
+                     followup.ask.waiting_apps or followup.ask.waiting_secrets or followup.ask.waiting_computer))
     async def _confirm_plugin(
         self,
         pending: Pending,
@@ -3118,9 +3136,10 @@ class AgentService:
                         raise NotApproved(operation["name"])
                 self._gate.check_admin_batch(pending.action, approval)
                 chief_before = self._team.speaker(0).name
-                results = await self._team.admin_batch(
-                    followup.ask.speaker.id, operations, drafts=drafts, groups=groups
-                )
+                with activity_step("team_admin_batch"):
+                    results = await self._team.admin_batch(
+                        followup.ask.speaker.id, operations, drafts=drafts, groups=groups
+                    )
             except (RpcError, ValueError, NotApproved, UnknownTool):
                 self._gate.record_unrun("team_admin_batch", outcome="error")
                 step = self._step("tool", "team_admin_batch", BUILTIN_SERVER, "error", began, "bad_arguments")
@@ -3304,7 +3323,8 @@ class AgentService:
         began = time.perf_counter()
         try:
             self._gate.check(action, None)
-            await run_command(command, args, self._actions)
+            with activity_step(command.name):
+                await run_command(command, args, self._actions)
         except Exception as exc:
             logger.warning("The command %s failed: %s", command.name, type(exc).__name__)
             ask.steps.append(self._step("command", command.name, None, "error", began, None))
@@ -3558,12 +3578,18 @@ class AgentService:
                 return await self._resume_narrated(pending, resolution.approval, followup)
             return await self._confirm_plugin(pending, resolution.approval, followup, drafts=drafts, groups=groups)
         self._card_state(pending.id, "allowed")
+        return await self._confirmed_command(pending, resolution.approval)
+
+    @member_turn(lambda self, pending, approval: self._member_of_turn(pending.turn_id) or 0)
+    @tool_step(lambda self, pending, approval: pending.action.tool)
+    async def _confirmed_command(self, pending: Pending, approval: Approval | None) -> dict:
+        language = pending.language
         command = COMMANDS.get(pending.action.tool)
         if command is None:
             return self._outcome(pending, "negative", phrase(language, "failed"), "error")
         began = time.perf_counter()
         try:
-            self._gate.check(pending.action, resolution.approval)
+            self._gate.check(pending.action, approval)
             await run_command(command, pending.action.args, self._actions)
         except Exception as exc:  # NotApproved among them: it is a failure all the same
             logger.warning("The confirmed command %s failed: %s", command.name, type(exc).__name__)
@@ -3575,6 +3601,7 @@ class AgentService:
         done = _DONE_PHRASE.get(command.name)
         return self._outcome(pending, "understood", phrase(language, done) if done else "", "done")
 
+    @member_turn(lambda self, run: run.context.speaker.id)
     async def _resume_computer(self, run: ComputerRun) -> dict:
         """Keep desktop confirmation and the enclosing harness in one cancellable turn."""
         ask: _Ask = run.context

@@ -103,6 +103,7 @@ from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore, api_model
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
+from ..members.activity import Activity, current, member_turn
 from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import MemoryIndex
 from ..messaging.words import compose
@@ -360,6 +361,7 @@ class BackgroundService:
         self._gate = gate
         self._tools = tools
         self._notify = notify
+        self.activity = Activity(notify)
         self._host = host if host is not None else WorkerHost()
         self._limits = limits
         self._clock = clock
@@ -931,6 +933,8 @@ class BackgroundService:
             finally:
                 self._executing = False
 
+    @member_turn(lambda self, task, files=(): task.member_id,
+                 status=lambda self, result, task, files=(): getattr(self._store.get(task.id), "state", "cancelled"))
     async def _execute(self, task: Task, files: Sequence[Attachment] = ()) -> None:
         from ..computer.vm_tools import vm_scope
         with vm_scope(("task", task.id)):
@@ -1127,6 +1131,7 @@ class BackgroundService:
         after a no), and the worker takes the task up again from the conversation it gave back,
         with what is left of the task's limits."""
         run = paused.run
+        run.activity = current()
         approved, approval = paused.answer or (False, None)
         if self._host.disabled:
             self._conclude(
@@ -1167,6 +1172,7 @@ class BackgroundService:
 
     async def _carry_cli(self, task, run, spec=None):
         """Keep the shared CLI loop alive across the worker's existing approval cards."""
+        run.activity = current()
         loop = self._cli_loops[task.id]
         self._run = run
         self._changed(task.id, RUNNING)
@@ -1210,6 +1216,7 @@ class BackgroundService:
         call a paused task waited on and gives the conversation to go on with), and turn how it
         ended into the task's end, or its pause."""
         language = task.language
+        run.activity = current()
         self._run = run
         self._changed(task.id, RUNNING)
         try:
