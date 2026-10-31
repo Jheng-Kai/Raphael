@@ -214,6 +214,7 @@ export function createSettings(app: AppContext): SettingsPage {
   let altgr = false;
   let version = "";
   let desktopRequired = false;
+  let computerRemote: boolean | undefined, computerAliasDraft: string | undefined, computerHostError = false;
   /** The key field is shown although there is a key (「變更」). */
   let replacingKey = false;
   let keyBusy = false;
@@ -280,7 +281,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired,
+    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -307,6 +308,16 @@ export function createSettings(app: AppContext): SettingsPage {
           choices: LOCAL_COMMAND_MODES,
           current: brain?.local_commands_mode ?? "ask",
           pick: (value) => { if (LOCAL_COMMAND_MODES.some(c => c.value === value)) void changeBrain("local_commands_mode", value); },
+        };
+      case "computer-host":
+        return {
+          choices: [{ value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") }],
+          current: (computerRemote ?? !!brain?.computer_ssh_alias) ? "remote" : "local",
+          pick: (value) => {
+            computerRemote = value === "remote"; computerHostError = false;
+            if (!computerRemote) { computerAliasDraft = undefined; void changeBrain("computer_ssh_alias", ""); }
+            else { render(); el.querySelector<HTMLInputElement>('#computer-ssh-alias')?.focus(); }
+          },
         };
       case "mic": {
         const anchor = el.querySelector<HTMLElement>('.sel[data-k="mic"]');
@@ -1280,6 +1291,12 @@ export function createSettings(app: AppContext): SettingsPage {
     const input = e.target as HTMLInputElement;
     if (input.id === "limit-input") commitLimit(input);
     else if (input.id === "agent-city") commitCity(input);
+    else if (input.id === "computer-ssh-alias") {
+      computerAliasDraft = input.value;
+      computerHostError = !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(input.value);
+      if (computerHostError) render();
+      else void changeBrain("computer_ssh_alias", input.value);
+    }
   });
   el.addEventListener("input", (e) => {
     const input = e.target as HTMLInputElement;
@@ -1287,6 +1304,7 @@ export function createSettings(app: AppContext): SettingsPage {
     if (connections.input(input) || messaging.input(input) || memories.some((list) => list.input(input)) || rules.input(input)) return;
     if (input.id === "limit-input") limitDraft = input.value;
     else if (input.id === "agent-city") cityDraft = input.value;
+    else if (input.id === "computer-ssh-alias") computerAliasDraft = input.value;
   });
   el.addEventListener("keydown", (e) => {
     const tab = (e.target as Element).closest<HTMLElement>("[data-models-tab]");
@@ -1396,6 +1414,8 @@ export function createSettings(app: AppContext): SettingsPage {
       limitError = null;
       cityDraft = null;
       cityError = null;
+      computerRemote = computerAliasDraft = undefined;
+      computerHostError = false;
       // the first tab, unless the way in knows better (the report that says there is no key goes to the key)
       pane = open && PANES.some((p) => p.id === canonicalPane(open)) ? canonicalPane(open) : "general";
       if (open === "usage" || open === "models") modelsTab = open;

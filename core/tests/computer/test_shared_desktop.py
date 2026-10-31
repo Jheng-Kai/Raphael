@@ -17,6 +17,7 @@ async def shared(desktop, tmp_path, *, wait=0.3):
     hub.busy_wait_s, hub.busy_poll_s = wait, 0.01
     hub.names = {0: "Raphael", 2: "Alice"}.get
     await hub.prepare()
+    await hub._discover(target)
     vm.grants.set(2, True)
     return vm, target, runtime, hub
 

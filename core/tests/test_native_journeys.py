@@ -10,6 +10,44 @@ from raphael_core.native_journeys import home_timing_brain
 import json
 
 
+def test_computer_signin_fixture_is_private_to_each_journey_member(tmp_path, monkeypatch):
+    from raphael_core.native_journeys import vm_signin_fixture
+    from raphael_core.computer.vm import LocalVm
+    monkeypatch.delenv("RAPHAEL_TEST_NATIVE", raising=False)
+    with pytest.raises(RuntimeError):
+        vm_signin_fixture(tmp_path, 1)
+    assert not (tmp_path / "vm-homes").exists()
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    vm_signin_fixture(tmp_path, 0)
+    vm_signin_fixture(tmp_path, 1)
+    vm = LocalVm(tmp_path)
+    one, two = vm.target(0).workspace, vm.target(1).workspace
+    assert one != two
+    assert (one / "native-signin.py").read_bytes() == (two / "native-signin.py").read_bytes()
+    assert not (vm.target(2).workspace / "native-signin.py").exists()
+
+
+@pytest.mark.asyncio
+async def test_computer_cleanup_removes_every_recovered_journey_container(tmp_path, monkeypatch):
+    from raphael_core.native_journeys import vm_cleanup
+    from raphael_core.computer import vm as vm_module
+    calls = []
+    class FakeVm:
+        def __init__(self, directory):
+            assert directory == tmp_path
+            self.targets = {}
+        async def recover(self):
+            self.targets = {"one": "journey-one", "two": "journey-two"}
+        async def stop(self, target, *, remove):
+            calls.append((target, remove))
+        async def aclose(self):
+            calls.append("closed")
+    monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
+    monkeypatch.setattr(vm_module, "LocalVm", FakeVm)
+    await vm_cleanup(tmp_path)
+    assert calls == [("journey-one", True), ("journey-two", True), "closed"]
+
+
 @pytest.mark.parametrize(("fake", "native", "timing"), [(False, "1", "1"), (True, "", "1"), (True, "1", "")])
 def test_slow_home_cli_cannot_be_enabled_outside_its_isolated_native_journey(tmp_path, monkeypatch, fake, native, timing):
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", native)

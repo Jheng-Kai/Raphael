@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Browser
+Exec=raphael-browser %U
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;

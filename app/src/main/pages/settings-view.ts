@@ -262,6 +262,9 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 export interface SettingsView {
   /** An absent runtime is shown once in the existing computer settings area. */
   desktopRequired?: boolean;
+  computerRemote?: boolean;
+  computerAliasDraft?: string;
+  computerHostError?: boolean;
   modelsTab?: ModelsTab;
   pane: SettingsPane;
   device: DeviceSettings;
@@ -637,8 +640,17 @@ export const computerApps = (device: DeviceSettings): readonly { exe: string; na
  */
 function computerRows(v: SettingsView): string[] {
   const apps = computerApps(v.device);
-  const desktop = [row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
-    ...(v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : [])];
+  const remote = v.computerRemote ?? !!v.brain?.computer_ssh_alias;
+  const desktop = [
+    row(t("desktop.host"), t("desktop.memberLogins"), sel([
+      { value: "local", label: t("desktop.local") }, { value: "remote", label: t("desktop.remote") },
+    ], remote ? "remote" : "local", t("desktop.host"), ` data-k="computer-host"${v.brain ? "" : " disabled"}`)),
+    ...(remote ? [row(t("desktop.sshAlias"), "", fieldHTML("", v.computerAliasDraft ?? v.brain?.computer_ssh_alias ?? "", {
+      id: "computer-ssh-alias", label: t("desktop.sshAlias"), w: 200, disabled: !v.brain, invalid: v.computerHostError,
+    })), ...(v.computerHostError ? [note(st("err", t("desktop.invalidAlias")), ' role="alert" data-computer-host-error')] : [])] : []),
+    ...(!remote && v.desktopRequired ? [row(esc(t("desktop.required")), "", btn(t("desktop.download"), "sm", ' data-act="docker-download"'))] : []),
+    row(t("local.title"), "", sel(LOCAL_COMMAND_MODES, v.brain?.local_commands_mode ?? "ask", t("local.title"), ` data-k="local-commands"${v.brain === null ? " disabled" : ""}`)),
+  ];
   if (apps.length === 0) return [...desktop, row(`<span class="val">${esc(t("settings.computerNone"))}</span>`)];
   return [...desktop, ...apps.map((app) =>
     row(esc(app.name), "", iconBtn("more", t("members.more", { p0: app.name }), ` data-act="computer-menu" data-exe="${esc(app.exe)}" aria-haspopup="menu" aria-expanded="false"`)),

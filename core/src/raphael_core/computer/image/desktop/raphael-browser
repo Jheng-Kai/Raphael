@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+# No browser is started with the desktop. Keep profile storage in the member's volume.
+for browser in /usr/bin/google-chrome-stable /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+    if [ -x "$browser" ]; then
+        exec "$browser" --disable-background-networking --disable-background-mode \
+            --disable-extensions --disable-sync --no-first-run --no-default-browser-check \
+            --disable-features=MediaRouter --renderer-process-limit=4 "$@"
+    fi
+done
+exec firefox "$@"

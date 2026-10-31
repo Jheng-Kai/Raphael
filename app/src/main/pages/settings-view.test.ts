@@ -419,7 +419,7 @@ describe("拉斐爾", () => {
     setLocale("zh-TW");
     const html = tab("agent");
     expect(names(html).slice(0, 2)).toEqual(["問拉斐爾", "天氣的城市"]);
-    expect(described(html)).toEqual([]);
+    expect(described(html)).toEqual(["電腦位置"]);
     // Raphael's picture is changed in his details panel on the 拉斐爾 page, no longer here
     expect(names(html)).not.toContain("頭像");
     expect(html).not.toMatch(/avatar|app-emblem/);
@@ -760,7 +760,7 @@ describe("電腦操作", () => {
     expect(excel).toContain('aria-label="「Microsoft Excel」的選項"');
     // An overflow icon only: no word beside it, no helper text anywhere.
     expect(excel.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("Microsoft Excel");
-    expect(described(html)).toEqual([]);
+    expect(described(html)).toEqual(["電腦位置"]);
     expect(buttons(html).filter((b) => b.includes("computer-menu"))).toHaveLength(2);
   });
 
@@ -802,6 +802,16 @@ describe("電腦操作", () => {
     expect(html.match(/data-act="docker-download"/g)).toHaveLength(1);
     expect(html).toContain("成員電腦需要 Docker Desktop。");
     expect(tab("agent", { desktopRequired: false })).not.toContain("docker-download");
+  });
+
+  test("computer location uses the shared dropdown and shows an SSH alias only for another host", () => {
+    const local = tab("agent", { desktopRequired: true });
+    expect(local).toContain('data-k="computer-host"');
+    expect(local).toContain("這台電腦");expect(local).not.toContain('id="computer-ssh-alias"');
+    const remote = tab("agent", { desktopRequired: true, brain: { ...brain, computer_ssh_alias: "studio-mini" } });
+    expect(remote).toContain("另一台電腦");expect(remote).toContain('id="computer-ssh-alias"');
+    expect(remote).toContain('value="studio-mini"');expect(remote).not.toContain('data-act="docker-download"');
+    expect(remote).toContain("帳號需各自登入");expect(remote).toContain("團隊資料夾");
   });
 
   test("the search finds the section by its name in any language", () => {

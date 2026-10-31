@@ -17,8 +17,11 @@ from .test_vm import Runtime, container, Bridge, EmptyHub
 
 @pytest.fixture
 async def rig(tmp_path, conn):
+    from raphael_core.brain.settings import SettingsStore
+    settings = SettingsStore(conn)
+    settings.set("computer_vm_mode", "shared")
     runtime = Runtime()
-    vm = LocalVm(tmp_path, runner=runtime)
+    vm = LocalVm(tmp_path, settings=settings, runner=runtime)
     runtime.raw = container(vm, vm.target(), runtime)
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge, conn=conn)
     vm.grants.set(0, True)

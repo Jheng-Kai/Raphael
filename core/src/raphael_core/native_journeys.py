@@ -63,7 +63,7 @@ async def vm_smoke(directory):
         await hub.prepare()
         assert not docker_commands, "Preparing a granted turn must not invoke Docker"
         snapshot = take_snapshot(hub)
-        assert vm.target(0) == vm.target(1), "Expected shared desktop"
+        # Default journeys use a separate computer per member.
         shot = next((name for name in snapshot.refs if name == "computer__get_desktop_state"), None)
         if not shot:
             raise VmError("Desktop tool discovery failed: " + str(hub.problem or "unavailable"))
@@ -108,9 +108,7 @@ async def vm_smoke(directory):
         await hub.prepare()
         assert len(docker_commands) == before, "The next turn must reuse the catalog without Docker"
         target = vm.target()
-        import shutil
-        target.workspace.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", target.workspace / "native-signin.py")
+        vm_signin_fixture(directory, 0)
         vm.hold(target, True)
         refused = []
         for name, arguments in calls:
@@ -128,6 +126,31 @@ async def vm_smoke(directory):
     finally:
         await vm.aclose()
         conn.close()
+
+
+def vm_signin_fixture(directory, member_id):
+    """Seed only the isolated journey member's own workspace, without starting Docker."""
+    import shutil
+    from .computer.vm import LocalVm
+    if not native_enabled(True):
+        raise RuntimeError("VM sign-in fixture requires the native runner")
+    workspace = LocalVm(directory).target(member_id).workspace
+    workspace.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(Path(__file__).parent / "evaluate/signin_fixture.py", workspace / "native-signin.py")
+
+
+async def vm_cleanup(directory):
+    """Remove all containers owned by this isolated journey data directory."""
+    from .computer.vm import LocalVm
+    if not native_enabled(True):
+        raise RuntimeError("VM cleanup requires the native runner")
+    vm = LocalVm(directory)
+    try:
+        await vm.recover()
+        for target in list(vm.targets.values()):
+            await vm.stop(target, remove=True)
+    finally:
+        await vm.aclose()
 
 
 def attachment_id(store):

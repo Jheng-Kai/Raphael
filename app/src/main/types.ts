@@ -557,6 +557,7 @@ export interface DictionaryEntry {
 
 /** `settings.get`: the settings of the brain. */
 export interface BrainSettings {
+  computer_ssh_alias?: string;
   chief_pinned?: boolean;
   owner_name?: string;
   owner_about?: string;

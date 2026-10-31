@@ -35,10 +35,10 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean; available?(on: boolean): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; view(next: "computer" | "details"): void; viewing(): "computer" | "details" } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.hidden = true;
-  panel.innerHTML = `<div class="desktop-heading"><h2></h2>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}</div>` +
-    `<p class="desktop-request" role="status" hidden></p><div class="desktop-screen"><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>` +
+  panel.innerHTML = `<p class="desktop-request" role="status" hidden></p><div class="desktop-shell"><div class="desktop-heading"><h2></h2><div>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}${iconButton("down", t("desktop.collapse"), ' data-desktop="collapse"')}</div></div>` +
+    `<div class="desktop-screen"><img class="desktop-last" alt="" hidden><div class="desktop-placeholder"></div>` +
     `<iframe referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin" hidden></iframe>` +
-    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div>` +
+    `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div></div>` +
     `<p class="desktop-error" role="alert" hidden></p><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
   frame.remove();
@@ -201,6 +201,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   revoke.addEventListener('click', () => {
     void api.desktopRevoke(member()).then(() => { if (state) state = { ...state, granted: false }; draw(); })
       .catch(() => { error.textContent = t('desktop.busy'); error.hidden = false; });
+  });
+  panel.querySelector('[data-desktop="collapse"]')!.addEventListener('click', () => {
+    if (panel.hasAttribute('data-expanded')) {
+      panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
+    }
+    setView("details");
   });
   panel.querySelector('[data-desktop="expand"]')!.addEventListener('click', () => {
     expand(!panel.hasAttribute('data-expanded')); draw();

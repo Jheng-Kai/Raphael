@@ -44,9 +44,9 @@ This brief prohibits Docker, cargo, native journeys, network, judge and real
 subscription commands. Offline fakes and rendered fixture success do not prove
 those boundaries. Rule IDs: R-PC-01/02/03 and R-AG-13.
 
-The optional Docker desktop is shared by default. `computer_vm_mode=per-bot`
-selects a durable workspace per member (and its own container, 4 GB and 2 CPUs each; members
-then no longer share files, which a team building one program needs). Host paths use pathlib and Docker CSV bind
+The optional Docker desktop defaults to `computer_vm_mode=per-bot`: a durable workspace,
+container and browser profile per member (2 GiB and two CPUs each), plus a shared team
+folder at `/home/cua/team`. Existing explicitly saved shared mode remains supported. Host paths use pathlib and Docker CSV bind
 mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
 computer operation. A granted turn's tool preparation never invokes Docker. When Docker is absent,
 no computer tools are offered; the existing Settings computer area has one requirement line and an official download button.
@@ -263,3 +263,44 @@ then request a screen operation: greetings must leave it stopped, the screen
 operation must complete without a Docker Desktop window appearing or taking focus,
 and a following greeting must not start anything. Inspect the report and captures;
 CLI fakes cannot establish real Windows window/focus behavior.
+
+## Per-member hosts (2026-11-01, supersedes earlier local/shared assumptions)
+
+The existing Settings > Raphael computer area uses the shared dropdown for This
+computer / Another computer and shows an SSH alias input for the latter. It explains
+separate sign-ins and the team folder. The remote choice never offers a local Docker
+requirement. Invalid aliases stay in the field with an inline error that wraps
+inside the settings column at narrow widths and never reaches storage. With local
+Docker absent, installation remains in that same area; all other capabilities work.
+Alias changes take effect for new targets without restarting the app; captured old
+targets retain their original engine. Nothing reads SSH keys or starts a remote host.
+Remote workspace/team volumes belong to that Docker engine; attachments use the
+guest reader. The viewer uses an ephemeral loopback SSH forward, no remote published
+port. Remote computers stay awake; local idle-stop and a two-computer capacity bound
+apply only locally. Busy/held machines cannot be evicted; old running owned
+containers count toward capacity but are never stopped automatically. Real Docker/SSH acceptance,
+image startup and resource measurements are pending the owner's build/setup.
+
+The frame adds the member's name and bare collapse action in a dark shell, in both
+themes. Collapse retains the stream and never completes a takeover request. Compare
+Settings dropdown/input with existing city and language fields, and frame controls
+with the member details header at the same width/theme. References were supplied
+outside git; trademarks and task teaching are excluded. The noVNC fixture proves
+only the frame and real app interaction, not pixels from the unbuilt desktop image.
+
+Selected scenes: desktop-host-remote, desktop-host-invalid, desktop-collapse,
+desktop-panel, desktop-viewer, desktop-owner, desktop-handback, desktop-takeover,
+desktop-takeover-owner, desktop-takeover-done, desktop-stopped, desktop-unavailable,
+desktop-starting, desktop-building, desktop-preparing, desktop-absent, desktop-install.
+Run both themes at 1120,720,1920x1080. Core: tests/computer/test_hosts.py plus
+computer, grant/choice, lazy background, settings, native cleanup and architecture
+consumers. Native cleanup recovers and removes every container owned by the isolated
+journey data directory, retaining its workspaces. Each test member gets its own
+sign-in fixture; native frame checks still run inside the cross-origin viewer.
+Cleanup never stops Docker Desktop or touches the owner's 15 old containers.
+Judge/native/live/image build are SKIP by the
+explicit unit brief, not acceptance. See CODEX_REPORT.md for exact results.
+
+```powershell
+npm run look -- desktop-host-remote desktop-host-invalid desktop-collapse desktop-panel desktop-viewer desktop-owner desktop-handback desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-stopped desktop-unavailable desktop-starting desktop-building desktop-preparing desktop-absent desktop-install --theme both --width 1120,720,1920x1080
+```

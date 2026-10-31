@@ -102,6 +102,16 @@ test('absent Docker has no computer section',async()=>{
   api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(true);expect(api.desktopOpen).not.toHaveBeenCalled();
 });
 
+test('the member frame collapses in place without completing a takeover or reconnecting',async()=>{
+  panelOpen=true;mounted.show();await flush();message('connected');const same=frame();
+  mounted.view('computer');peek().click();await flush();
+  host.querySelector<HTMLButtonElement>('[data-desktop="collapse"]')!.click();await flush();
+  expect(mounted.viewing()).toBe('details');expect(panel().hasAttribute('data-expanded')).toBe(false);
+  expect(document.documentElement.hasAttribute('data-desktop-expanded')).toBe(false);
+  expect(frame()).toBe(same);expect(api.desktopOpen).toHaveBeenCalledTimes(1);
+  expect(api.desktopControl).not.toHaveBeenCalled();
+});
+
 test('a press on the picture only enlarges it, and only the named button takes the computer',async()=>{
   panelOpen=true;mounted.show();await flush();message('connected');
   expect(peek().hidden).toBe(false);expect(take().hidden).toBe(false);
