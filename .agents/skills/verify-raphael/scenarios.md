@@ -54,10 +54,12 @@ read-back assertion. Discovery, denied calls, old schema/HEAD/run evidence and
 driver-initiated setup RPCs never count. Dynamic identities include provider,
 server ID and original operation, independently of display names and aliases.
 
-Current executable flows are S17's missing-auth/missing-permission cases and
-S21.routines create/list/edit/pause/resume/delete. Routine setup uses RPC; the model
-must select the mutation/read tool, and the driver reads the result back through
-RPC. All other complete owner contracts remain explicit failures with their
+Current executable flows are S17's missing-auth/missing-permission cases,
+S21.routines create/list/edit/pause/resume/delete and S21.calendar
+create/list/move/delete. Routine setup uses RPC; the model must select the
+mutation/read tool, and the driver reads the result back through RPC. The calendar
+cells ask in the owner's words (今天的行程) and fail when the turn reaches for another
+calendar through find_app or connect_app. All other complete owner contracts remain explicit failures with their
 responsible PRs in `guardian_scenarios.py`. The coverage guard itself is executable,
 but S22 correctly fails until the mapped calls pass on both brains and every
 API/MCP surface is present. There are known API/MCP gaps for CLI memory/approval

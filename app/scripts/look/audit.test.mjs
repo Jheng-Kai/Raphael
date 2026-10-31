@@ -6,6 +6,22 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("accepts read-only calendar details and rejects an unexpected edit action", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="au-pop-detail"><p class="au-pop-time">10:00</p><p class="au-pop-from">Google Calendar</p></div>';
+    const measure = () => {
+      for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 310, bottom: 210, width: 300, height: 200 });
+    };
+    measure();
+    vi.stubGlobal('document', window.document); vi.stubGlobal('innerWidth', 1120); vi.stubGlobal('innerHeight', 900);
+    try {
+      expect(() => checkRendered('calendar-detail-read')).not.toThrow();
+      window.document.querySelector('.au-pop-detail').insertAdjacentHTML('beforeend', '<button data-pop="edit">Edit</button>');
+      measure();
+      expect(() => checkRendered('calendar-detail-read')).toThrow('only an own event');
+      expect(() => checkRendered('calendar-detail-own')).toThrow('only an own event');
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
   it("does not mistake a fallback card's action glyph for a rendered Mermaid diagram", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="page-agent"><section class="rich-block message-diagram"><header><button><svg></svg></button></header><div class="diagram-view"></div><pre>unfinished</pre><p class="rich-note">Still writing</p></section></div>';

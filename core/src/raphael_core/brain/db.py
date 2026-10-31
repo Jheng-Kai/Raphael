@@ -1123,6 +1123,27 @@ UPDATE members SET model = '';
 PRAGMA user_version = 47;
 COMMIT;
 """
+# The app's own calendar (`own_calendar`): a timed event is two instants, an all-day one two local dates, the last included.
+_MIGRATIONS[48] = """
+BEGIN;
+CREATE TABLE calendar_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  all_day INTEGER NOT NULL DEFAULT 0,
+  start_ms INTEGER,
+  end_ms INTEGER,
+  start_date TEXT,
+  end_date TEXT,
+  notes TEXT NOT NULL DEFAULT '',
+  added_by INTEGER,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+CREATE INDEX calendar_events_timed ON calendar_events(start_ms);
+CREATE INDEX calendar_events_all_day ON calendar_events(start_date);
+PRAGMA user_version = 48;
+COMMIT;
+"""
 
 LATEST_VERSION = max(_MIGRATIONS)
 

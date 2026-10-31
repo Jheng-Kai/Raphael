@@ -253,6 +253,15 @@ export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => cor
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>
   core("routines.template", uiLanguage ? { member_id: memberId, ui_language: uiLanguage } : { member_id: memberId });
 
+// ---------- the app's own calendar ----------
+
+/** What the window sends: a time as an instant, or a date for all day. What is left out of a change stays. */
+export interface CalendarFields { title?: string; start?: string; end?: string; all_day?: boolean; notes?: string }
+export interface CalendarEventView { id: number; title: string; start: string; end: string; all_day: boolean; notes: string; added_by: number | null }
+export const calendarAdd = (fields: CalendarFields): Promise<{ event: CalendarEventView }> => core("calendar.add", fields);
+export const calendarUpdate = (id: number, fields: CalendarFields): Promise<{ event: CalendarEventView }> => core("calendar.update", { id, ...fields });
+export const calendarDelete = (id: number): Promise<{ deleted: boolean }> => core("calendar.delete", { id });
+
 // ---------- Raphael's picture ----------
 
 /** The person's picture for Raphael, as a data URL and its crop; null while he is his emblem. */

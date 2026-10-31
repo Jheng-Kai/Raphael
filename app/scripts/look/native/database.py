@@ -175,7 +175,7 @@ else:
         result = {}
         for table in tables:
             columns = {row[1] for row in connection.execute(f'PRAGMA table_info("{table}")')}
-            if table in {"conversations", "members", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit", "dictionary", "dictionary_evidence"} or "conversation_id" in columns:
+            if table in {"calendar_events", "conversations", "members", "rooms", "room_messages", "room_exchanges", "agent_steps", "tool_audit", "dictionary", "dictionary_evidence"} or "conversation_id" in columns:
                 result[table] = [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"')]
         print(json.dumps(result, ensure_ascii=False))
     elif operation == "thread":

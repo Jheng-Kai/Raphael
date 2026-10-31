@@ -741,6 +741,7 @@ export type MainEvent =
   | { type: "MemberActivity"; member_id: number; state: "idle" | "thinking" | "working" | "searching" | "computer" | "done" | "error" }
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
+  | { type: "CalendarChanged" }
   | { type: "MembersChanged" }
   | { type: "ProvidersChanged" }
   | { type: "SettingsChanged" }
@@ -1029,7 +1030,11 @@ export type SettingsPane = "general" | "appearance" | "dictation" | "agent" | "c
 export type AgentDraft = `draft:${string}`;
 export type CalendarDate = `${number}-${number}-${number}`;
 export type CalendarEventFocus = `calendar:${CalendarDate}:${string}`;
-export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus;
+/** Calendar on that day, with the form of a new event open. */
+export type CalendarCreate = `calendar-new:${CalendarDate}`;
+/** Calendar on the week of that day, its usual view. */
+export type CalendarWeek = `calendar-week:${CalendarDate}`;
+export type PageArgument = SettingsPane | AgentDraft | CalendarDate | CalendarEventFocus | CalendarCreate | CalendarWeek;
 
 /** One of the five pages of the main window. */
 export interface Page {

@@ -199,6 +199,12 @@ export async function perform(page, step) {
       if (await page.evaluate(() => document.querySelector('[data-au="tools"]').getBoundingClientRect().width > 0)) await click('[data-au="tools"]');
       break;
     }
+    case "calendar-date": {
+      // The rail's month where it stands; at a narrow width it is in the drawer, which a date closes again.
+      if (await page.evaluate(() => document.querySelector('[data-au="tools"]').getBoundingClientRect().width > 0)) await click('[data-au="tools"]');
+      await click(`[data-mini-date="${step.date}"]`);
+      break;
+    }
     case "member-column": {
       if (step.collapsed) throw new Error("Icon strips were removed; use sidebar drawer scenes");
       if (await page.evaluate(() => matchMedia("(max-width: 859px)").matches && !document.documentElement.hasAttribute("data-sidebar-open"))) await page.click('[data-sidebar="open"]');
@@ -386,15 +392,8 @@ export async function perform(page, step) {
       const expanded = await calendar.evaluate(node => getComputedStyle(node).getPropertyValue('--home-calendar-expanded').trim() === '1');
       await calendar.dispose();
       await click(`[data-home-select="${step.date}"]`);
-      if (!expanded) {
-        const selected = await visible(`.ho-agenda[data-selected-day="${step.date}"]`); await selected.dispose();
-        const block = await visible('.ho-calendar');
-        await block.scrollIntoView();
-        if (step.open) { const box = await block.boundingBox(); await page.mouse.click(box.x + 6, box.y + 6); }
-        await block.dispose();
-      }
-      if (expanded || step.open) { const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose(); }
-      return {check:'home-day-selection',expanded,date:step.date,opened:expanded || Boolean(step.open)};
+      const day = await visible(`.au-day-col[data-day="${step.date}"]`); await day.dispose();
+      return {check:'home-day-selection',expanded,date:step.date,opened:true};
     }
     case "touch-swipe": {
       const element = await visible(step.selector), client = await page.createCDPSession();

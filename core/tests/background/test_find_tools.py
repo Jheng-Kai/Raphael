@@ -108,8 +108,12 @@ def test_find_shows_the_tools_that_fit_the_query_and_not_the_ones_it_has():
     assert "notion-update-page" not in mcp_names(snapshot)
     added, lines = snapshot.find("update a page")
     assert [d["function"]["name"] for d in added] == ["Notion__notion-update-page"]
-    assert "notion-update-page" in mcp_names(snapshot) and lines[0].startswith("Notion__notion-update")
-    assert snapshot.find("update a page") == ([], [])  # nothing new the second time
+    assert "notion-update-page" in mcp_names(snapshot)
+    assert any(line.startswith("Notion__notion-update") for line in lines)
+    assert any(line.startswith("calendar_update (yours already)") for line in lines)
+    again, reminders = snapshot.find("update a page")
+    assert again == []  # No plugin is added twice; the internal calendar remains discoverable.
+    assert len(reminders) == 1 and reminders[0].startswith("calendar_update (yours already)")
 
 
 async def test_the_find_tools_call_makes_the_tool_callable_and_counts_as_a_tool_call(

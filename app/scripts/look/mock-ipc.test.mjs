@@ -5,6 +5,22 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("adds an own calendar event without replacing Google, then updates and deletes only that event", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });
+    const google = structuredClone((await call("home.overview")).calendar_events.filter(item => item.kind === "event"));
+    expect(google.length).toBeGreaterThan(0);
+    const { event } = await call("calendar.add", { title: "Visit", start: "2026-10-24T11:00:00+08:00", end: "2026-10-24T12:00:00+08:00" });
+    const events = async () => (await call("home.overview")).calendar_events;
+    expect((await events()).filter(item => item.kind === "event")).toEqual(google);
+    expect((await events()).find(item => item.event_id === event.id)).toMatchObject({ kind: "own", title: "Visit", added_by: null });
+    await call("calendar.update", { id: event.id, title: "Updated visit" });
+    expect((await events()).find(item => item.event_id === event.id).title).toBe("Updated visit");
+    await call("calendar.delete", { id: event.id });
+    expect((await events()).some(item => item.event_id === event.id)).toBe(false);
+    expect((await events()).filter(item => item.kind === "event")).toEqual(google);
+    expect(state.errors).toEqual([]);
+  });
   it("returns offline link metadata without fetching a table cell's URL or thumbnail", async () => {
     const target = {}, state = installMock(fixture, {}, target);
     const url = 'https://example.com/research';

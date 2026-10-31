@@ -15,11 +15,11 @@ export function monthDays(month: Date): Date[] {
 }
 
 export function monthGrid(month: Date, selected: string, attr: string): string {
-  const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" });
+  const weekday = new Intl.DateTimeFormat(getLocale(), { weekday: "narrow" }), today = dateKey(new Date());
   return `<div class="au-month-grid">${[1, 2, 3, 4, 5, 6, 0].map(n => `<span title="${esc(dayName(n))}">${esc(weekday.format(new Date(2024, 0, 7 + n)))}</span>`).join("")}` +
     monthDays(month).map(day => {
       const key = dateKey(day);
-      return btn(String(day.getDate()), `sm${day.getMonth() === month.getMonth() ? "" : " au-other-month"}`, ` ${attr}="${key}" aria-label="${key}" aria-pressed="${key === selected}"`);
+      return btn(String(day.getDate()), `sm${day.getMonth() === month.getMonth() ? "" : " au-other-month"}`, ` ${attr}="${key}" aria-label="${key}" aria-pressed="${key === selected}"${key === today ? ' aria-current="date"' : ""}`);
     }).join("") + `</div>`;
 }
 

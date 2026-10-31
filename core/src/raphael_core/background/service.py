@@ -106,6 +106,7 @@ from ..brain.settings import DEFAULTS, SettingsStore, api_model
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
 from ..members.activity import Activity, current, member_turn
+from ..own_calendar import OwnCalendar
 from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import MemoryIndex
 from ..messaging.words import compose
@@ -354,7 +355,9 @@ class BackgroundService:
         tz: tzinfo | None = None,
         clock: Callable[[], float] = time.monotonic,
         model_observer: Callable[..., None] | None = None,
+        calendar: OwnCalendar | None = None,
     ) -> None:
+        self._calendar = calendar if calendar is not None else OwnCalendar(conn, notify=notify, now_ms=now_ms, tz=tz)
         self._client = client
         self._model_observer = model_observer  # told each CLI turn's actual model (Guardian verifies it)
         self._picker = ToolPicker(client)
@@ -1060,6 +1063,7 @@ class BackgroundService:
             can_wait=True,
             ask_before_members=speaker.ask_before_members,
             diagnostics=(lambda: self.diagnostics(speaker, task.turn_id or task.source_turn_id)) if self.diagnostics else None,
+            calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
         )
         if recovered:
             run.model_calls,run.tool_calls = task.model_calls,task.tool_calls

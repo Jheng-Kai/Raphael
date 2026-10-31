@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
-const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineRuns:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
+const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineRuns:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
@@ -9,6 +9,9 @@ import { createAutomationsPage } from "./pages/automations";
 import { dateKey, localDay, monthGrid, shiftDay } from "./schedule-picker";
 import { setLocale } from "./i18n";
 import { closeMenu } from "./ui";
+import { allDayBars, dayLayout, entryOfItem, type CalendarEntry } from "./calendar-view";
+import { besidePlacement, closePanel } from "./calendar-popover";
+import type { HomeItem } from "./home-types";
 const person = (id:number,name:string):Member => ({id,name,role:"Research",instructions:"",avatar:"",group_id:id?1:null,model:"",tools:null,position:id,created:0,unread:false,waiting:false,preview:"",last_at:null});
 const members = [person(0,"Raphael"),person(1,"Alice"),person(2,"Bob")];
 const plan:Routine = {id:1,member_id:1,title:"Review",prompt:"Check progress",schedule:{kind:"daily",time:"09:00"},enabled:true,last_run:null,next_run:new Date("2026-10-24T09:00").getTime()};
@@ -18,7 +21,8 @@ const field=(selector:string,value:string):void=>{document.querySelector<HTMLInp
 let events: ((e:any)=>void)[];
 const app=():AppContext=>({onEvent:(fn:any)=>{events.push(fn);return ()=>{};},go:vi.fn()} as unknown as AppContext);
 beforeEach(()=>{
-  closeMenu(); document.body.innerHTML="";vi.clearAllMocks();setLocale("en");events=[];
+  closePanel(); closeMenu(); document.body.innerHTML="";vi.clearAllMocks();setLocale("en");events=[];localStorage.clear();
+  api.calendarAdd.mockResolvedValue({event:{id:9}});api.calendarUpdate.mockResolvedValue({event:{id:9}});api.calendarDelete.mockResolvedValue({deleted:true});
   api.homeOverview.mockResolvedValue({calendar:[]});api.modelsCatalog.mockResolvedValue(null);api.brainsCli.mockResolvedValue({clis:[]});
   api.membersList.mockResolvedValue({members,groups:[{id:1,name:"Work",position:0,sources:[]}]});
   api.routinesList.mockResolvedValue({routines:[plan]});api.routineRuns.mockResolvedValue({runs:[]});
@@ -59,7 +63,7 @@ test("the calendar opens directly, without a list, and the keep-awake switch per
   const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
   expect(page.el.querySelector('[data-view]')).toBeNull();
   expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);
-  expect(page.el.querySelector('.au-calendar > .au-calendar-scroll + .au-calendar-side')).not.toBeNull();
+  expect(page.el.querySelector('.au-calendar > .au-calendar-side + .au-calendar-main > .au-calendar-scroll')).not.toBeNull();
   click('[data-au="awake"]');await flush();expect(api.keepAwakeSet).toHaveBeenCalledWith(true);expect(page.el.querySelector('[data-au="awake"]')!.getAttribute("aria-checked")).toBe("true");
   page.hide();
 });
@@ -117,7 +121,7 @@ test("mini month uses single Chinese weekday characters and retains full weekday
 });
 
 test("calendar switches between day and week and mini dates navigate",async()=>{
-  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);click('[data-period="day"]');expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(1);click('[data-mini-date]');expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(1);page.hide();
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);click('[data-au="view"]');click('#app-popover [data-value="day"]');expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(1);click('[data-mini-date]');expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(1);page.hide();
 });
 
 test("calendar chips keep complete compact times and full task details when edited",async()=>{
@@ -126,7 +130,7 @@ test("calendar chips keep complete compact times and full task details when edit
   expect(chip.querySelector('time')?.textContent).toBe("09:00");
   expect(chip.title).toContain("Review");expect(chip.title).toContain("09:00");
   expect(chip.getAttribute("aria-label")).toContain("Alice");
-  chip.click();expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Review");
+  chip.click();click('[data-pop="open-routine"]');expect(document.querySelector<HTMLInputElement>("#au-title")!.value).toBe("Review");
   expect(document.querySelector<HTMLInputElement>("#au-time")!.value).toBe("09:00");page.hide();
 });
 
@@ -157,8 +161,234 @@ test("status summaries have one separator and history appears in past calendar d
  const at=new Date();at.setHours(9,0,0,0);at.setDate(at.getDate()-2);
  api.routineRuns.mockResolvedValue({runs:[{id:5,routine_id:1,scheduled:at.getTime(),started:at.getTime()+120000,finished:at.getTime()+180000,status:"done",summary:"Completed。．.",cost:0,turn_id:12}]});
  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
- click('[data-mini-date="'+dateKey(at)+'"]');click('[data-period="day"]');
+ click('[data-mini-date="'+dateKey(at)+'"]');click('[data-au="view"]');click('#app-popover [data-value="day"]');
  expect(page.el.querySelector('[data-run="5"]')).not.toBeNull();page.hide();
+});
+
+const at=(hour:number,minute=0,day=24):number=>new Date(2026,9,day,hour,minute).getTime();
+const entry=(id:string,start:number,end:number,more:Partial<CalendarEntry>={}):CalendarEntry=>({id,kind:"own",title:id,start,end,allDay:false,source:"own",...more});
+const own=(id:number,title:string,start:number,end:number,more:Partial<HomeItem>={}):HomeItem=>({id:`own:${id}`,kind:"own",event_id:id,title,summary:"",at_ms:start,end_ms:end,member_id:-1,name:"",avatar:"",turn_id:null,conversation_id:null,routine_id:null,all_day:false,notes:"",added_by:null,...more});
+const google=(id:string,title:string,start:number,end:number):HomeItem=>({...own(0,title,start,end),id:`event:${id}`,kind:"event",event_id:undefined,member_id:0,name:"Google Calendar",added_by:undefined});
+
+test("events that overlap stand side by side, and a group of overlaps shares its width",()=>{
+ const parts=dayLayout([entry("a",at(9),at(10,30)),entry("b",at(9,30),at(10)),entry("c",at(10),at(11)),entry("d",at(14),at(15))],localDay("2026-10-24"));
+ const of=(id:string)=>parts.find(part=>part.entry.id===id)!;
+ expect([of("a").lane,of("b").lane,of("c").lane]).toEqual([0,1,1]);
+ expect([of("a").lanes,of("b").lanes,of("c").lanes]).toEqual([2,2,2]);
+ expect(of("d")).toMatchObject({lane:0,lanes:1});
+});
+
+test("two short events that would touch on screen stand apart, and one past midnight is on both days",()=>{
+ const parts=dayLayout([entry("a",at(12),at(12,10)),entry("b",at(12,15),at(12,25))],localDay("2026-10-24"));
+ expect(parts.map(part=>part.lanes)).toEqual([2,2]);
+ const night=entry("n",at(22),at(2,0,25));
+ expect(dayLayout([night],localDay("2026-10-24"))[0]).toMatchObject({start:at(22),end:at(0,0,25)});
+ expect(dayLayout([night],localDay("2026-10-25"))[0]).toMatchObject({start:at(0,0,25),end:at(2,0,25)});
+ expect(dayLayout([entry("day",at(9),at(10,0,25))],localDay("2026-10-24"))).toEqual([]);
+});
+
+test("all-day events are bars across their days, in rows, and what does not fit is counted per day",()=>{
+ const days=Array.from({length:7},(_,n)=>shiftDay(localDay("2026-10-19"),n));
+ const allDay=(id:string,from:number,to:number)=>entry(id,at(0,0,from),at(0,0,to+1),{allDay:true});
+ const {bars,more,used}=allDayBars([allDay("trip",19,21),allDay("a",20,20),allDay("b",20,20),allDay("c",20,20),allDay("next",24,28)],days);
+ const of=(id:string)=>bars.find(bar=>bar.entry.id===id)!;
+ expect(of("trip")).toMatchObject({column:0,span:3,row:0,startsBefore:false,endsAfter:false});
+ expect(of("next")).toMatchObject({column:5,span:2,row:0,endsAfter:true});
+ expect(used).toBe(3);
+ expect(more).toEqual([0,1,0,0,0,0,0]);
+});
+
+test("a panel stands beside what it is about and inside the window",()=>{
+ const viewport={width:1120,height:800,top:32};
+ expect(besidePlacement({left:300,right:380,top:200},{width:344,height:300},viewport)).toEqual({left:388,top:200});
+ expect(besidePlacement({left:800,right:900,top:200},{width:344,height:300},viewport)).toEqual({left:448,top:200});
+ expect(besidePlacement({left:300,right:380,top:700},{width:344,height:300},viewport).top).toBe(492);
+ expect(besidePlacement({left:10,right:700,top:5},{width:344,height:300},{...viewport,width:720})).toEqual({left:368,top:40});
+});
+
+test("an own event keeps who added it and is one entry from its item",()=>{
+ const item=own(4,"Dentist",at(14),at(15),{added_by:2,name:"Bob",member_id:2,notes:"Bring card"});
+ expect(entryOfItem(item)).toMatchObject({id:"own:4",kind:"own",eventId:4,notes:"Bring card",member:{id:2,name:"Bob"},source:"own"});
+ expect(entryOfItem(own(5,"Mine",at(14),at(15))).member).toBeUndefined();
+ expect(entryOfItem(google("g","Out",at(9),at(10)))).toMatchObject({kind:"event",source:"google"});
+});
+
+test("a week leaves readable day widths beside the rail and returns to seven days with enough room",async()=>{
+ const page=createAutomationsPage(app());document.body.append(page.el);
+ let width=814;vi.spyOn(page.el,"clientWidth","get").mockImplementation(()=>width);
+ page.show("calendar-week:2026-10-24");await flush();
+ expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(3);
+ expect(page.el.querySelector('.au-day-col')?.getAttribute('data-day')).toBe("2026-10-24");
+ width=1200;page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(5);
+ width=1600;page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);
+ page.hide();
+});
+
+describe("the calendar's own events",()=>{
+ const open=async(items:HomeItem[],arg?:string,state="connected"):Promise<ReturnType<typeof createAutomationsPage>>=>{
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:items,calendar_google:state});
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show(arg as never);await flush();return page;
+ };
+ test("建立 opens the small form and saving sends what was typed, as an instant, and draws what the core then has",async()=>{
+  const page=await open([],"calendar-week:2026-10-24");
+  click('[data-au="new"]');
+  const panel=document.querySelector('.au-pop-editor');expect(panel).not.toBeNull();
+  expect(document.querySelector('.mb-scrim')).toBeNull();
+  expect(page.el.querySelector('.au-draft')).not.toBeNull();
+  const title=document.querySelector<HTMLInputElement>('#cal-title')!;title.value="Dentist";title.dispatchEvent(new Event("input",{bubbles:true}));
+  expect(page.el.querySelector('.au-draft b')!.textContent).toBe("Dentist");
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:[own(9,"Dentist",at(9),at(10))],calendar_google:"connected"});
+  click('.au-pop-editor [data-pop="save"]');await flush();
+  expect(api.calendarAdd).toHaveBeenCalledWith(expect.objectContaining({title:"Dentist",all_day:false,start:expect.stringMatching(/Z$/),end:expect.stringMatching(/Z$/)}));
+  expect(document.querySelector('.au-pop-editor')).toBeNull();
+  expect(page.el.querySelector('.au-draft')).toBeNull();
+  expect(page.el.querySelector('.cal-chip.is-own b')!.textContent).toBe("Dentist");
+  page.hide();
+ });
+ test("no title, no event; and an all-day event sends dates",async()=>{
+  const page=await open([],"calendar-week:2026-10-24");
+  click('[data-au="new"]');click('.au-pop-editor [data-pop="save"]');await flush();
+  expect(api.calendarAdd).not.toHaveBeenCalled();
+  field('#cal-title',"Holiday");document.querySelector('#cal-title')!.dispatchEvent(new Event("input",{bubbles:true}));click('[data-pop="all-day"]');
+  expect(document.querySelector('.au-pop-editor [data-pop="start-time"]')).toBeNull();
+  click('.au-pop-editor [data-pop="save"]');await flush();
+  expect(api.calendarAdd).toHaveBeenCalledWith(expect.objectContaining({title:"Holiday",all_day:true,start:"2026-10-24",end:"2026-10-24"}));
+  page.hide();
+ });
+ test("a press outside closes a form with nothing typed and leaves one that holds words",async()=>{
+  const page=await open([],"calendar-week:2026-10-24");
+  click('[data-au="new"]');field('#cal-title',"Half typed");document.querySelector('#cal-title')!.dispatchEvent(new Event("input",{bubbles:true}));
+  page.el.click();await flush();
+  expect(document.querySelector('.au-pop-editor')).not.toBeNull();
+  document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+  expect(document.querySelector('.au-pop-editor')).toBeNull();
+  page.hide();
+ });
+ test("an own event shows its time, notes and who added it, with edit, and delete only in its ⋯, asking once more",async()=>{
+  const page=await open([own(4,"Dentist",at(14),at(15),{notes:"Bring card",added_by:2,name:"Bob",member_id:2})],"calendar-week:2026-10-24");
+  click('[data-entry="own:4"][data-au="entry"]');
+  const panel=document.querySelector('.au-pop-detail')!;
+  expect(panel.textContent).toContain("14:00 – 15:00");expect(panel.textContent).toContain("Bring card");expect(panel.textContent).toContain("Added by Bob");
+  expect([...panel.querySelectorAll('button')].filter(button=>/delete/i.test(button.textContent??""))).toEqual([]);
+  click('.au-pop-detail [data-pop="more"]');
+  click('#app-popover [data-confirm-item]');expect(api.calendarDelete).not.toHaveBeenCalled();
+  click('#app-popover [data-confirm-item]');await flush();
+  expect(api.calendarDelete).toHaveBeenCalledWith(4);
+  expect(document.querySelector('.au-pop-detail')).toBeNull();
+  expect(page.el.querySelector('[data-entry="own:4"]')).toBeNull();
+  page.hide();
+ });
+ test("edit changes that event, keeping its id",async()=>{
+  const page=await open([own(4,"Dentist",at(14),at(15))],"calendar-week:2026-10-24");
+  click('[data-entry="own:4"][data-au="entry"]');click('[data-pop="edit"]');
+  expect(document.querySelector<HTMLInputElement>('#cal-title')!.value).toBe("Dentist");
+  field('#cal-title',"Orthodontist");click('.au-pop-editor [data-pop="save"]');await flush();
+  expect(api.calendarUpdate).toHaveBeenCalledWith(4,expect.objectContaining({title:"Orthodontist"}));
+  expect(api.calendarAdd).not.toHaveBeenCalled();
+  page.hide();
+ });
+ test("a right click reaches the same ⋯ through its row, and only an own event has one",async()=>{
+  const {overflowAt}=await import("./context-menu");
+  const page=await open([own(4,"Dentist",at(14),at(15)),google("g","Outside",at(16),at(17))],"calendar-week:2026-10-24");
+  expect(overflowAt(page.el.querySelector('[data-au="entry"][data-entry="own:4"]'))?.button.dataset.au).toBe("event-more");
+  expect(overflowAt(page.el.querySelector('[data-au="entry"][data-entry="event:g"]'))).toBeNull();
+  page.hide();
+ });
+ test("a Google event is read here and says where it comes from",async()=>{
+  const page=await open([google("g","Outside",at(16),at(17))],"calendar-week:2026-10-24");
+  click('[data-entry="event:g"][data-au="entry"]');
+  const panel=document.querySelector('.au-pop-detail')!;
+  expect(panel.textContent).toContain("From Google Calendar");
+  expect(panel.querySelector('[data-pop="edit"]')).toBeNull();expect(panel.querySelector('[data-pop="more"]')).toBeNull();
+  page.hide();
+ });
+ test("the month draws its days with chips and a click on an empty day makes an all-day event there",async()=>{
+  const page=await open([own(4,"Dentist",at(14),at(15))],"calendar-week:2026-10-24");
+  click('[data-au="view"]');click('#app-popover [data-value="month"]');
+  expect(page.el.querySelectorAll('.au-month-cell')).toHaveLength(42);
+  expect(page.el.querySelector('[data-month-day="2026-10-24"] .cal-chip.is-own b')!.textContent).toBe("Dentist");
+  click('[data-month-day="2026-10-27"]');
+  expect(document.querySelector('.au-pop-editor [data-pop="start-time"]')).toBeNull();
+  expect(page.el.querySelector('[data-month-day="2026-10-27"] .au-draft')).not.toBeNull();
+  page.hide();
+ });
+ test("a source's check hides it and remembers, and the month's arrows ask the core for that month",async()=>{
+  const page=await open([own(4,"Dentist",at(14),at(15))],"calendar-week:2026-10-24");
+  click('[data-source="own"]');
+  expect(page.el.querySelector('[data-entry="own:4"]')).toBeNull();
+  expect(page.el.querySelector('[data-source="own"]')!.getAttribute("aria-checked")).toBe("false");
+  page.hide();page.el.remove();
+  const again=await open([own(4,"Dentist",at(14),at(15))],"calendar-week:2026-10-24");
+  expect(again.el.querySelector('[data-entry="own:4"]')).toBeNull();
+  click('[data-source="own"]');expect(again.el.querySelector('[data-entry="own:4"]')).not.toBeNull();
+  click('[data-au="view"]');click('#app-popover [data-value="month"]');click('[data-au="next"]');await flush();
+  expect(api.homeOverview).toHaveBeenLastCalledWith(expect.anything(),"2026-11");
+  again.hide();
+ });
+ test("a change of the calendar elsewhere redraws it",async()=>{
+  const page=await open([],"calendar-week:2026-10-24");
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:[own(4,"Added by a member",at(14),at(15))],calendar_google:"connected"});
+  events.forEach(fn=>fn({type:"CalendarChanged"}));await flush();
+  expect(page.el.textContent).toContain("Added by a member");
+  page.hide();
+ });
+ test("the page opens with the form on the day Home asked for",async()=>{
+  const page=await open([],"calendar-new:2026-10-27");
+  expect(document.querySelector('.au-pop-editor')).not.toBeNull();
+  expect(page.el.querySelector('.au-day-col[data-day="2026-10-27"] .au-draft')).not.toBeNull();
+  page.hide();expect(document.querySelector('.au-pop-editor')).toBeNull();
+ });
+ test("an empty calendar is calm and offers to make something",async()=>{
+  api.routinesList.mockResolvedValue({routines:[]});
+  const page=await open([],"calendar-week:2026-10-24");
+  const hint=page.el.querySelector('.au-empty-hint')!;
+  expect(hint.querySelector('[data-au="new"]')).not.toBeNull();
+  expect(page.el.querySelector('.cal-notice')).toBeNull();
+  page.hide();
+ });
+});
+
+describe("what the calendar says of Google",()=>{
+ const open=async(state:string,items:HomeItem[]=[own(4,"Dentist",at(14),at(15))]):Promise<{page:ReturnType<typeof createAutomationsPage>;go:ReturnType<typeof vi.fn>}>=>{
+  api.homeOverview.mockResolvedValue({calendar:[],calendar_events:items,calendar_google:state});
+  const context=app();const page=createAutomationsPage(context);document.body.append(page.el);page.show("calendar-week:2026-10-24" as never);await flush();
+  return {page,go:context.go as ReturnType<typeof vi.fn>};
+ };
+ test("not connected is said once, with the place to connect it, and closed it stays closed",async()=>{
+  const {page,go}=await open("not_connected");
+  const notice=page.el.querySelector('.cal-notice')!;
+  expect(notice.textContent).toContain("isn't connected");
+  expect(page.el.querySelector('[data-entry="own:4"]')).not.toBeNull();
+  expect(page.el.querySelector('[data-source="google"]')).toBeNull();
+  click('[data-calendar-go]');expect(go).toHaveBeenCalledWith("settings","connections");
+  click('[data-calendar-dismiss]');
+  expect(page.el.querySelector('[data-calendar-go]')).toBeNull();expect(page.el.querySelector('.cal-notice.is-closed')!.textContent).toContain("isn't connected");
+  page.hide();page.el.remove();
+  const again=await open("not_connected");
+  expect(again.page.el.querySelector('[data-calendar-go]')).toBeNull();
+  again.page.hide();
+ });
+ test("a read that failed says so, names where to check, cannot be closed, and own events still show",async()=>{
+  const {page,go}=await open("unreadable");
+  expect(page.el.querySelector('.cal-notice')!.textContent).toContain("can't be read");
+  expect(page.el.querySelector('[data-calendar-dismiss]')).toBeNull();
+  expect(page.el.querySelector('[data-entry="own:4"]')).not.toBeNull();
+  expect(page.el.querySelector('[data-calendar-go]')!.textContent).toContain("Settings");
+  click('[data-calendar-go]');expect(go).toHaveBeenCalledWith("settings","connections");
+  page.hide();
+ });
+ test("connected, nothing is said and Google has a row of its own",async()=>{
+  const {page}=await open("connected");
+  expect(page.el.querySelector('.cal-notice')).toBeNull();
+  expect(page.el.querySelector('[data-source="google"]')).not.toBeNull();
+  page.hide();
+ });
+ test("connected through a service the calendar cannot read is not called disconnected",async()=>{
+  const {page}=await open("members_only");
+  const words=page.el.querySelector('.cal-notice')!.textContent!;
+  expect(words).toContain("Members can read");expect(words).not.toContain("isn't connected");
+  page.hide();
+ });
 });
 
 test("routine destination uses an app dropdown",()=>{

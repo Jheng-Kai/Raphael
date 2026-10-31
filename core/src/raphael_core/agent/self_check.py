@@ -16,6 +16,7 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 8. Safety: permissions and consent remain authoritative; never bypass a denial.
 9. Logs: raphael.log; self_check reads only recent redacted failure diagnostics.
 10. Diagnosis: inspect once, change approach once, then report the exact blocker.
+11. Calendar: the app's own, on Home; read and change it with the calendar_* tools.
 """
 
 DOCTRINE = """
@@ -53,6 +54,10 @@ about holds version information. Native logs are written to logs/raphael.log in 
 self_check reads existing state only: it does not sign in, refresh credentials, probe a provider,
 run a model, change settings, create a card or send a request over the network.
 Unknown/unreadable key presence or sign-in is unknown, not false. Report it honestly.
+The calendar on Home and the Calendar page (行事曆, 行程, 日曆) is the app's own. Every member reads it with
+calendar_list and adds, moves and removes one-time events with calendar_add, calendar_update and calendar_delete.
+It also shows routine occurrences and, when Google is connected, Google events; those are read here, and change
+in the routine's editor or in Google. For what repeats, use a routine.
 """
 
 # Executable reference links: tests reject renamed product entry points and panes.

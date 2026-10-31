@@ -1650,6 +1650,144 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call => call.method === "agent.history.list" && call.params.conversation_id === 11 && call.params.around_id === 2), "The reported conversation was loaded around its exact turn");
     return { check: name, turnId: 2, memberId: 1 };
   }
+  if (name === "calendar-now") {
+    const line = document.querySelector('.au-now'), scroll = document.querySelector('.au-calendar-scroll');
+    require(visible(line), "today has the current-time line");
+    const box = line.getBoundingClientRect(), port = scroll.getBoundingClientRect(), head = scroll.querySelector('.au-grid-head').getBoundingClientRect();
+    require(box.top >= head.bottom && box.bottom <= port.bottom, "it opens scrolled near now");
+    return { check: name, top: box.top - port.top };
+  }
+  if (name === "calendar-overlaps") {
+    const seen = [];
+    for (const column of document.querySelectorAll('.au-day-col')) {
+      const parts = [...column.querySelectorAll(':scope > .au-event')].map(part => part.getBoundingClientRect());
+      for (const [index, a] of parts.entries()) for (const b of parts.slice(index + 1)) {
+        const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top), overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        if (overlapY > 1) { seen.push(overlapX); require(overlapX <= 1, "events that overlap in time stand side by side"); }
+      }
+    }
+    require(seen.length > 0, "the scene has events that overlap");
+    return { check: name, overlaps: seen.length };
+  }
+  if (name === "calendar-month" || name === "calendar-month-more") {
+    const view = document.querySelector('.au-month-view');
+    require(visible(view) && view.querySelectorAll('.au-month-cell').length === 42 && view.querySelectorAll('.au-month-weekday').length === 7, "a month has six weeks under seven weekdays");
+    require(view.scrollHeight <= view.clientHeight + 1 && view.scrollWidth <= view.clientWidth + 1, "the month fits with no scrolling");
+    for (const cell of view.querySelectorAll('.au-month-cell')) {
+      const bottom = cell.getBoundingClientRect().bottom;
+      for (const chip of [...cell.querySelectorAll('.au-event, .cal-more')].filter(visible)) require(chip.getBoundingClientRect().bottom <= bottom + 1, "chips stay inside their day");
+    }
+    if (name === "calendar-month-more") require(/還有 \d+ 個/.test(view.querySelector('[data-month-day="2026-10-28"] .cal-more:not([hidden])')?.textContent ?? ""), "a day that does not fit counts the rest");
+    return { check: name };
+  }
+  if (name === "calendar-empty") {
+    const hint = document.querySelector('.au-empty-hint');
+    require(visible(hint) && visible(hint.querySelector('[data-au="new"]')), "an empty calendar offers 建立");
+    require(!document.querySelector('.cal-notice.is-unreadable'), "and stays calm");
+    const box = hint.getBoundingClientRect();
+    for (const day of document.querySelectorAll('.au-month-view .au-day-num')) {
+      const date = day.getBoundingClientRect();
+      require(date.bottom <= box.top || date.top >= box.bottom || date.right <= box.left || date.left >= box.right, "the empty hint leaves every month date clear");
+    }
+    return { check: name };
+  }
+  if (name === "calendar-editor") {
+    const panel = document.querySelector('.au-pop-editor');
+    require(visible(panel), "the small form is open");
+    const box = panel.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "the form fits the window");
+    require(box.width <= 345, "it is a small popover, not a dialog");
+    require(!document.querySelector('.mb-scrim'), "the calendar stays in view behind it");
+    require(panel.contains(document.activeElement), "the keyboard is in the form");
+    require(panel.querySelectorAll('input[type="time"], select').length === 0, "times are the shared dropdown");
+    const draft = document.querySelector('.au-draft');
+    if (draft && visible(draft) && innerWidth > 800) {
+      const near = draft.getBoundingClientRect();
+      require(box.left >= near.right - 1 || box.right <= near.left + 1, "it stands beside the slot, not over it");
+    }
+    return { check: name, width: box.width };
+  }
+  if (name === "calendar-drag-range") {
+    const [from, to] = [...document.querySelectorAll('.au-pop-editor .sel > span')].map(node => node.textContent);
+    const minutes = value => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+    require(from === "12:00", `the drag sets the start: ${from}`);
+    require(minutes(to) > minutes(from) && minutes(to) !== minutes(from) + 60, `and the end, by how far it went: ${to}`);
+    return { check: name, from, to };
+  }
+  if (name === "calendar-saved") {
+    const call = window.__look.calls.find(item => item.method === "calendar.add");
+    require(call?.params.title === "拜訪客戶", "the form's words reach the core");
+    require([...document.querySelectorAll('.cal-chip.is-own b')].some(node => node.textContent === "拜訪客戶"), "the event is drawn at once");
+    require(!document.querySelector('.au-pop-editor') && !document.querySelector('.au-draft'), "the form and its placeholder are gone");
+    return { check: name };
+  }
+  if (name === "calendar-detail-own" || name === "calendar-detail-read") {
+    const panel = document.querySelector('.au-pop-detail');
+    require(visible(panel), "the small detail is open");
+    const box = panel.getBoundingClientRect();
+    require(box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight, "it fits the window");
+    require(visible(panel.querySelector('.au-pop-time')) && visible(panel.querySelector('.au-pop-from')), "it says when and where it comes from");
+    const own = name === "calendar-detail-own";
+    require(Boolean(visible(panel.querySelector('[data-pop="edit"]'))) === own && Boolean(visible(panel.querySelector('[data-pop="more"]'))) === own, "only an own event can be changed here");
+    require(![...panel.querySelectorAll('button')].some(button => /刪除/.test(button.getAttribute('aria-label') ?? button.textContent)), "what destroys waits in the ⋯");
+    return { check: name };
+  }
+  if (name === "calendar-deleted") {
+    require(window.__look.calls.some(item => item.method === "calendar.delete" && item.params.id === 1), "the core is told");
+    require(!document.querySelector('[data-entry="own:1"]') && !document.querySelector('.au-pop-detail'), "the event and its detail are gone");
+    require(/牙醫回診/.test(document.querySelector('.toast')?.textContent ?? ""), "the shared notice names it");
+    return { check: name };
+  }
+  if (name === "calendar-moved" || name === "calendar-resized") {
+    const call = window.__look.calls.find(item => item.method === "calendar.update" && item.params.id === 1);
+    require(call, "the drag reaches the core");
+    const start = new Date(call.params.start).getTime(), end = new Date(call.params.end).getTime(), hour = 3600000;
+    if (name === "calendar-moved") require(end - start === hour && start !== new Date(2026, 9, 24, 14).getTime(), "moving keeps how long it lasts");
+    else {
+      require(start === new Date(2026, 9, 24, 14).getTime() && end > start + hour, "the edge changes when it ends, not when it starts");
+      const chip = document.querySelector('.cal-chip[data-entry="own:1"]');
+      require(chip.querySelector('time').getBoundingClientRect().top - chip.getBoundingClientRect().top <= 5, "a long event keeps its time at the start");
+    }
+    require(!document.querySelector('.au-pop-detail'), "a drag is not a click");
+    return { check: name, start, end };
+  }
+  if (name === "calendar-google-off" || name === "calendar-google-closed" || name === "calendar-google-failed" || name === "calendar-google-members") {
+    const rail = [...document.querySelectorAll('.au-calendar-side')].find(visible);
+    const notice = rail.querySelector('.cal-notice');
+    const words = notice?.textContent ?? "";
+    if (name === "calendar-google-off") require(/未連接/.test(words) && visible(notice.querySelector('[data-calendar-go]')) && visible(notice.querySelector('[data-calendar-dismiss]')), "not connected is said, with the place to connect it, and can be closed");
+    if (name === "calendar-google-closed") require(/未連接/.test(words) && !notice.querySelector('.btn'), "closed, only the words stay");
+    if (name === "calendar-google-failed") require(/讀不到/.test(words) && /設定/.test(notice.querySelector('[data-calendar-go]')?.textContent ?? "") && !notice.querySelector('[data-calendar-dismiss]'), "a failed read says so and names where to check");
+    if (name === "calendar-google-members") require(/成員/.test(words) && visible(notice.querySelector('[data-calendar-go]')), "connected elsewhere is said plainly");
+    require(!rail.querySelector('[data-source="google"]'), "no row for a calendar that is not read");
+    require(document.querySelector('.au-page .cal-chip.is-own'), "own events always show");
+    return { check: name };
+  }
+  if (name === "home-google-off" || name === "home-google-closed" || name === "home-google-failed") {
+    const notice = document.querySelector('.ho-calendar .cal-notice');
+    if (name === "home-google-closed") require(!notice, "closed, it stays closed");
+    else {
+      require(visible(notice), "Home says it too");
+      const go = notice.querySelector('[data-home-go="connections"]');
+      require(visible(go) && /設定/.test(go.textContent), "with the place to go");
+      const words = notice.querySelector('.cal-notice-words').textContent;
+      require(name === "home-google-off" ? /未連接/.test(words) : /讀不到/.test(words), `in plain words: ${words}`);
+      const header = document.querySelector('.ho-calendar > header').getBoundingClientRect(), box = notice.getBoundingClientRect();
+      require(box.top >= header.top - 1 && box.bottom <= header.bottom + 1, "in the block's header, moving nothing");
+    }
+    return { check: name };
+  }
+  if (name === "home-calendar-language") {
+    const calendar = document.querySelector('.ho-calendar'), today = calendar.querySelector('.ho-day[aria-current="date"] b');
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const probe = document.createElement('i'); probe.style.color = accent; document.body.append(probe); const expected = getComputedStyle(probe).color; probe.remove();
+    require(getComputedStyle(today).backgroundColor === expected, "today is the same filled circle");
+    const chips = [...calendar.querySelectorAll('.cal-chip')].filter(visible);
+    require(chips.length > 0, "the block draws the calendar's own chip");
+    require(chips.some(chip => chip.classList.contains('is-own')), "and the own events");
+    for (const chip of chips) { const time = chip.querySelector('time'); if (time && !chip.textContent.includes('全天')) require(/^\d{2}:\d{2}$/.test(time.textContent), `the same time format: ${time.textContent}`); }
+    return { check: name, chips: chips.length };
+  }
   if (name === "calendar-all-day") {
     require(visible(document.querySelector('.au-all-day-event')), "all-day events remain in the pinned header");
     return { check: name };
@@ -1673,8 +1811,11 @@ export function checkRendered(name, context = {}) {
     const compact = grid.closest('.au-page').clientWidth <= 760;
     require(visible(side) !== compact, "the month and members remain visible at 1120px; compact tools start below 760px content width");
     require(visible(document.querySelector('[data-au="tools"]')) === compact, "compact calendar tools have a toolbar icon");
+    const contentWidth = grid.closest('.au-page').clientWidth;
+    require(columns.length === 1 || columns.length === (contentWidth < 1100 ? 3 : contentWidth < 1500 ? 5 : 7), `a week keeps readable day widths: ${columns.length}`);
+    require(getComputedStyle(grid).scrollbarWidth === "none", "the grid scrolls with no visible bar");
     if (visible(side)) {
-      require(side.getBoundingClientRect().left >= grid.getBoundingClientRect().right - 1, "the month and members sit on the right");
+      require(side.getBoundingClientRect().right <= grid.getBoundingClientRect().left + 1, "the month and what it shows sit in a rail on the left");
       for (const day of side.querySelectorAll('.au-month-grid > span')) {
         require(getComputedStyle(day).whiteSpace === "nowrap" && day.scrollWidth <= day.clientWidth + 1, "month weekday labels fit on one line");
       }
@@ -1690,7 +1831,7 @@ export function checkRendered(name, context = {}) {
     const popover = document.querySelector('.au-calendar-tools');
     if (popover) {
       const box = popover.getBoundingClientRect();
-      require(box.left >= 8 && box.right <= innerWidth - 8 && box.bottom <= innerHeight - 8, "calendar tools fit inside the viewport");
+      require(box.left === 0 && box.top === 0 && Math.abs(box.height - innerHeight) <= 1 && box.right <= innerWidth - 8, "at a narrow width the rail is a drawer from the left");
     }
     if (name === "calendar-tools-awake") {
       require(panel.querySelector('[data-au="awake"]').getAttribute('aria-checked') === 'true', "keep-awake persists after redrawing the tools");
@@ -2535,6 +2676,8 @@ export function checkRendered(name, context = {}) {
     for (const chip of chips) {
       const time = chip.querySelector("time, small"), face = chip.querySelector(".av"), label = chip.querySelector("b");
       const bounds = chip.getBoundingClientRect();
+      // Side by side, a chip gives its face up to its words; the face is back in the day view and the popover.
+      if (chip.closest(".is-tight")) continue;
       require(visible(face), "member face is visible in every event chip");
       if (visible(face)) {
         const picture = face.getBoundingClientRect();

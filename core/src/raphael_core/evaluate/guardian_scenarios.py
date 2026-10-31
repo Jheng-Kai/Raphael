@@ -134,7 +134,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         "routines": ("create", "list", "edit", "pause", "resume", "run-now", "delete"),
         "skills": ("save-trigger", "edit", "run", "delete", "read", "list", "manage"),
         "memory": ("show", "save-global", "forget", "private-global", "history-search", "update", "log", "session-search", "session-read"),
-        "calendar": ("create", "move", "list"),
+        "calendar": ("create", "move", "list", "delete"),
         "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import", "set-my-job"),
         "meetings": ("create-reuse", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
         "web-open": ("search", "read", "show", "show-page", "update-page", "url", "app", "settings", "weather", "local-time"),
@@ -150,7 +150,8 @@ def cells(registry=(), catalog=(), *, servers=()):
             implemented = family == "routines" and operation != "run-now"
             result.append(ScenarioCell(f"S21.{family}.{operation}", f"{family}: {operation}", SCENARIOS[20].prompt,
                                       ("production_state",), "P21a" if family in ("routines", "skills", "memory") else "P21b-c",
-                                      "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics" else ""))
+                                      "routine-" + operation if implemented else "diagnostic-" + operation if family == "diagnostics"
+                                      else "calendar-" + operation if family == "calendar" else ""))
     # The current reader has extension sets and inline MIME/dispatch branches,
     # rather than a separate format registry. Inventory those production source
     # declarations; never maintain a second hand-copied list in the evaluator.

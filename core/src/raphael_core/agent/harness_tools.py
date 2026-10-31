@@ -30,6 +30,21 @@ def definition(description, properties=None, required=()):
     return {"description": description, "parameters": {"type": "object", "properties": properties or {}, "required": list(required)}}
 
 
+# The owner's words for it are in the first sentence: find_tools matches a request against them.
+CALENDAR_WORDS = "行事曆, 行程, 日曆, calendar, schedule, event, カレンダー, 予定, スケジュール"
+CALENDAR_LIST = "calendar_list"
+CALENDAR_ADD = "calendar_add"
+CALENDAR_UPDATE = "calendar_update"
+CALENDAR_DELETE = "calendar_delete"
+CALENDAR_WRITES = (CALENDAR_ADD, CALENDAR_UPDATE, CALENDAR_DELETE)
+CALENDAR_TOOLS = (CALENDAR_LIST, *CALENDAR_WRITES)
+CALENDAR_WHEN = "YYYY-MM-DDTHH:MM in the owner's local time, or YYYY-MM-DD for all day."
+CALENDAR_FIELDS = {
+    "start": {"type": "string", "description": CALENDAR_WHEN}, "end": {"type": "string", "description": CALENDAR_WHEN},
+    "all_day": {"type": "boolean"}, "notes": {"type": "string", "maxLength": 2000},
+}
+
+
 DEFINITIONS = {
     SHOW_PAGE: definition(
         "Show an operable page inside this conversation: a product page, form, interactive comparison or small tool. "
@@ -63,6 +78,21 @@ DEFINITIONS = {
     "routine_list": definition("List only the current speaker's routines."),
     "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),
+    CALENDAR_LIST: definition(
+        f"Read the owner's calendar in this app ({CALENDAR_WORDS}). It answers with everything the calendar shows, each entry marked with its "
+        "source: own events, routine occurrences and Google events when connected. Without start and end (dates): today and the next six days. "
+        "Only source own can be changed, by its id. The field google says whether Google could be read: not_connected or unreadable is not an empty calendar.",
+        {"start": {"type": "string", "description": "YYYY-MM-DD"}, "end": {"type": "string", "description": "YYYY-MM-DD, included."}}),
+    CALENDAR_ADD: definition(
+        f"Add a one-time event to the owner's calendar in this app ({CALENDAR_WORDS}). Those words mean this calendar unless the owner names Google: "
+        "never offer to connect Google Calendar for them. Without end a timed event lasts an hour. For what repeats, use a routine.",
+        {"title": {"type": "string", "maxLength": 120}, **CALENDAR_FIELDS}, ["title", "start"]),
+    CALENDAR_UPDATE: definition(
+        f"Change an event of the owner's calendar in this app ({CALENDAR_WORDS}), whoever added it, by the id calendar_list gives; give only changed fields. A new start keeps its length.",
+        {"id": {"type": "integer"}, "title": {"type": "string", "maxLength": 120}, **CALENDAR_FIELDS}, ["id"]),
+    CALENDAR_DELETE: definition(
+        f"Delete an event of the owner's calendar in this app ({CALENDAR_WORDS}), by the id calendar_list gives.",
+        {"id": {"type": "integer"}}, ["id"]),
     "computer": definition("Operate the computer for the owner at the keyboard, using the guarded desktop loop and its permission questions. For an explicitly requested desktop task only; prefer showing web content in this chat. When the task reaches a sign-in, a password or a payment it is the owner's to do: a card in this chat hands the computer over, this call returns at once saying it is paused, and the task carries on by itself, once, when the owner gives the computer back. Then end your turn with one short sentence, and never claim the task's result before it is done.", {"request": {"type": "string"}}, ["request"]),
     FIND_APP: definition("Search the public app catalog by name, slug, description or alias. Read-only: returns id, name, provider and connected state, never account data. Use its exact id with connect_app when the request needs an unconnected app.", {"query": {"type": "string", "maxLength": 200}}, ["query"]),
     CONNECT_APP: definition("Show the owner a card in this chat to connect an app this request needs that is not connected, or whose sign-in expired. Use an exact catalog id returned by find_app or listed in TeamContextSnapshot. The owner connects from the card; then this request resumes by itself, once, with the app's tools. After calling it, end your turn with one short sentence, and never claim the app's data before it is connected.", {"app": {"type": "string"}}, ["app"]),
@@ -93,7 +123,7 @@ for name, command in COMMANDS.items():
     DEFINITIONS[name] = definition(command.guidance + " Only for an owner at this computer. Open a browser only when explicitly asked to open it.", properties, required)
 
 DEFINITIONS.update(MEMORY_DEFINITIONS)
-TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
+TIERS = {name: Tier.T0 if name in ("self_check", "raphael_help", "show", "routine_list", CALENDAR_LIST, "computer", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SHOW_PAGE, UPDATE_PAGE, SET_MY_JOB) or name in MEMORY_DEFINITIONS and name not in GROWTH_WRITES else Tier.T1 for name in DEFINITIONS if name not in COMMANDS}
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
@@ -134,3 +164,13 @@ def routine_event(name: str, data: dict, language: str) -> str:
     else:
         timing = words[3] + " " + str(schedule.get("time", ""))
     return action if not routine else f"{action} · {timing.strip()} {routine.get('title', '')}"
+
+
+def calendar_event(name: str, data: dict, language: str) -> str:
+    """The line a calendar change leaves in the conversation, as a routine's does."""
+    event = data["event"]
+    words = {"zh-TW": ("已加入行程", "已更新行程", "已刪除行程", "全天"), "en": ("Added to the calendar", "Calendar updated", "Removed from the calendar", "All day"),
+             "ja": ("予定を追加しました", "予定を更新しました", "予定を削除しました", "終日")}[language]
+    action = words[CALENDAR_WRITES.index(name)]
+    day = event["start"][5:10].replace("-", "/")
+    return f"{action} · {day} {words[3] if event['all_day'] else event['start'][11:16]} {event['title']}"

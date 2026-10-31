@@ -637,6 +637,12 @@ Connected apps through Composio
 
 from .self_check import ABOUT_INDEX, DOCTRINE
 
+_SHARED_CONTRACT += """
+The calendar
+- Calendar and schedule, in any language, mean this app's own calendar, the one on Home, unless the
+  owner names Google. calendar_list, calendar_add, calendar_update and calendar_delete are that calendar: use them
+  at once. Never offer to connect Google Calendar for these words, and never say the calendar is missing.
+"""
 _SHARED_CONTRACT += "\n" + DOCTRINE + "\n" + ABOUT_INDEX
 
 _FACT_RULES = """\
