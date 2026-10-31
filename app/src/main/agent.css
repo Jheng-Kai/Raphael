@@ -270,7 +270,7 @@
 .permission-card .cc-ask > span:last-child { text-wrap: pretty; }
 .permission-card .cc-was > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .permission-card[data-kind^="local_"] .cc-name { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.local-command { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--pa-sys); color: var(--text); }
+.local-command { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
 
 /* An email card (mail-card.ts): who sends it and to whom, the subject and the body, with 捨棄 and 傳送. A draft that is over
    is a quiet line (a connector card); the choice card of a hand-over is a connector card with the colleague's face. */
