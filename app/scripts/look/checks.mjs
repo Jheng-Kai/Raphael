@@ -2364,6 +2364,18 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, chips: chips.length };
   }
+  if (name === "work-steps-own-words") {
+    // A member's own tools say what was done in a word and never whose; only a connected service names itself.
+    const body = document.querySelector('.page-agent:not([hidden]) .work-body');
+    const rows = [...body.querySelectorAll('.step-list .step')].filter(visible);
+    const words = rows.map(row => row.querySelector('.step-t').textContent);
+    require(visible(body) && words.join("|") === "讀取|Notion：讀取|修改|讀取|詢問同事|Notion：讀取", `each row says what was done: ${words.join("|")}`);
+    require(!rows.some(row => row.textContent.includes("拉斐爾") || row.querySelector('[title*="拉斐爾"], [aria-label*="拉斐爾"]')), "no row or picture names Raphael");
+    const named = rows.filter(row => row.querySelector('.step-ic[aria-label]'));
+    require(named.length === 2 && named.every(row => row.querySelector('.step-ic').getAttribute('aria-label') === "Notion"), "a connected service keeps its name on its picture");
+    require(rows.length - named.length === 4 && rows.filter(row => !named.includes(row)).every(row => row.querySelector('.step-ic').getAttribute('aria-hidden') === 'true'), "the app's own tools have a plain picture without a name");
+    return { check: name, words };
+  }
   if (name === "bot-ask-centred" || name === "bot-ask-expanded") {
     const event = document.querySelector('[data-handoff="x71"]');
     const [line] = eventLines(1);

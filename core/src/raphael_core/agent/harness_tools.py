@@ -100,15 +100,14 @@ TIERS.update(ADMIN_TIERS)
 
 
 def definitions_for(speaker):
-    """Administration and routine targeting belong to the chief capability."""
+    """What every speaker is offered: the same tools for Raphael and for each member. Changes to the team
+    are proposals the owner confirms, whoever makes them (`agent.service`)."""
     for name, item in DEFINITIONS.items():
-        if name in ADMIN_TOOLS and not speaker.is_chief:
-            continue
         if name == SET_MY_JOB and not speaker.has_no_job:
             continue
-        if name in ROUTINE_TOOLS and speaker.is_chief:
+        if name in ROUTINE_TOOLS:
             schema = item["parameters"]
-            item = {**item, "description": item["description"] + " The chief may supply member_id to manage any member's routines.",
+            item = {**item, "description": item["description"] + " Supply member_id to manage another member's routines.",
                     "parameters": {**schema, "properties": {**schema["properties"], "member_id": {"type": "integer", "minimum": 0}}}}
         yield name, item
 

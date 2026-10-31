@@ -49,7 +49,7 @@ async def test_cli_turn_applies_or_denies_the_whole_batch_through_http_mcp(setup
 
     async def run(driver, **kwargs):
         assert "COO, PM, RD" in kwargs["user"]
-        assert "You lead the owner's team" in kwargs["system"]
+        assert "You can change the owner's team yourself" in kwargs["system"]
         async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
             async def rpc(method, params):
                 response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": method, "method": method, "params": params})
@@ -134,24 +134,24 @@ async def test_member_deletion_always_asks_and_obeys_the_answer(setup, client, a
     assert (team.members.speaker(one.id) is None) == approved
 
 
-async def test_peer_cannot_discover_or_execute_admin_tools_or_select_peer_routines(setup, client):
-    from raphael_core.protocol import RpcError
+async def test_a_member_has_the_same_team_tools_as_raphael_and_the_owner_still_confirms(setup, client):
     from raphael_core.agent.team_admin import DEFINITIONS
 
     rig, team = setup
     one, other = member(team), member(team, name="Other")
-    client.chats = [chat("Trying an unauthorized change.", ("member_create", {"name": "Hidden", "role": "COO"}), ("create_member", {"name": "Legacy hidden", "role": "COO", "instructions": ""})), live_said("No change.")]
-    await typed(rig, "Create Hidden", one.id, language="en")
+    client.chats = [chat("Proposing a member.", ("member_create", {"name": "Added", "role": "COO"}), ("create_member", {"name": "Legacy added", "role": "COO", "instructions": ""})), live_said("Proposed.")]
+    asked = await typed(rig, "Create Added", one.id, language="en")
     offered = {item["function"]["name"]: item for item in client.chat_calls[0]["tools"]}
-    assert not set(DEFINITIONS) & set(offered)
-    assert "create_member" not in offered
-    assert "member_id" not in offered["routine_create"]["function"]["parameters"]["properties"]
+    assert set(DEFINITIONS) <= set(offered) and {"create_member", "room_meeting"} <= set(offered)
+    assert "member_id" in offered["routine_create"]["function"]["parameters"]["properties"]
+    # a change to the team is a proposal the owner confirms, whoever makes it
+    assert asked["status"] == "confirm"
     assert len((await rig.call("members.list", {}))["members"]) == 3
-    for name in DEFINITIONS:
-        with pytest.raises(RpcError):
-            await team.members.admin_tool(one.id, name, {})
-    with pytest.raises(RpcError):
-        await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Stolen", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
+    await rig.confirm(asked["confirm"]["id"])
+    assert [item["name"] for item in (await rig.call("members.list", {}))["members"][3:]] == ["Added", "Legacy added"]
+    # and any member's routines can be selected by any speaker
+    await team.members.routine_tool(one.id, "routine_create", {"member_id": other.id, "title": "Report", "prompt": "X", "schedule": {"kind": "daily", "time": "08:00"}})
+    assert [item["title"] for item in (await rig.call("routines.list", {"member_id": other.id}))["routines"]] == ["Report"]
 
 
 async def test_admin_turn_enforces_ten_creates_and_leaves_faces_to_the_app(setup, client):

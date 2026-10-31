@@ -93,10 +93,10 @@ conversation view. A request routed to `operate` or to a command makes nothing o
 The members of the owner's team (`raphael_core.members`) are a parameter of all this, not a path of
 their own (`speaker.Speaker`). `agent.ask` takes `member_id` (0, Raphael, by default): a message
 typed in the app or a chat connection is answered by the same narrated harness, gate and worker,
-as the chosen speaker: its persona, model, conversation and memory. Members share ordinary
-tools; team administration is Raphael-only. Desktop operations require the owner's local presence.
+as the chosen speaker: its persona, model, conversation and memory. Every speaker has the same
+tools, team administration included (the owner confirms its changes). Desktop operations require the owner's local presence.
 The voice alone may use the fast router, with recent conversation included. The team tools (`team`)
-let any assistant ask any other (`ask_member`), and let Raphael add a member at the owner's request
+let any assistant ask any other (`ask_member`), and add a member at the owner's request
 (`create_member`, 《了。已建立「…」。》). The one asked answers through `answer_for`, as itself and
 never on the desktop, within a chain at most two deep and with no cycle (`Speaker.can_ask`); the
 exchange is written in the two threads alone. Nobody waits at the overlay for such an answer, so
@@ -166,7 +166,7 @@ from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
 from .cli.discovery import CliBrains, brain_ref
-from .cli.loop import MEMORY_TOOLS, CliLoop, Sessions as CliSessions
+from .cli.loop import COMPUTER_GRANTED, MEMORY_TOOLS, TOOLS_FOUND, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
 from .persona import NEW_MEMBER, PLAN_MODE
 from ..brain.owner import owner_context
@@ -1773,13 +1773,12 @@ class AgentService:
                 system += PLAN_MODE
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
-            if ask.speaker.is_raphael:
-                system += LEADERSHIP
-                if ask.speaker.name:
-                    system += "\nOwner-confirmed first Bot profile (identity 0; administration remains chief-only):\n" + json.dumps({
-                        "name": ask.speaker.name, "role": ask.speaker.role,
-                        "personality": ask.speaker.personality, "instructions": ask.speaker.instructions,
-                    }, ensure_ascii=False)
+            system += LEADERSHIP
+            if ask.speaker.is_raphael and ask.speaker.name:
+                system += "\nOwner-confirmed first Bot profile (identity 0):\n" + json.dumps({
+                    "name": ask.speaker.name, "role": ask.speaker.role,
+                    "personality": ask.speaker.personality, "instructions": ask.speaker.instructions,
+                }, ensure_ascii=False)
             user = build_user_message(
                 labelled_lines(ask.exchange_speakers[0], ask.text) if ask.exchange_speakers else ask.text,
                 self._moment(), context.turns, [], ask.language,
@@ -1897,12 +1896,15 @@ class AgentService:
                 if ref is not None and ref.kind == FIND:
                     definitions, lines = snapshot.find(str(args.get("query", "")))
                     loop.tools.extend(definitions)
+                    if definitions and isinstance(loop, CliLoop) and loop.resume_session:
+                        # Only a turn that can start again in its own thread: a fresh start would not know what was done.
+                        loop.reload_note, loop.catalog_changed = TOOLS_FOUND, True
                     return ToolOutcome(True, content="\n".join(lines), tools=definitions)
                 planned = plan(name, args)
                 screened = [screenings[call_id]] if call_id in screenings else None
                 if name in BATCH_TOOLS and ask.nested:
                     return ToolOutcome(False, "owner_confirmation_required")
-                if planned is not None and name in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
+                if planned is not None and name in BATCH_TOOLS and not ask.nested:
                     screening = screened[0] if screened else await self._screen_call(ask, planned, ledger)
                     screened = [screening]
                     if screening.verdict == DENY:
@@ -2020,7 +2022,7 @@ class AgentService:
                 loop.tools[:] = [item for item in loop.tools if not item["function"]["name"].startswith("computer__")]
                 loop.tools.extend(item for item in snapshot.definitions if item["function"]["name"].startswith("computer__"))
                 if isinstance(loop, CliLoop):
-                    loop.catalog_changed = True
+                    loop.reload_note, loop.catalog_changed = COMPUTER_GRANTED, True
             loop.refresh_computer = refresh_computer
         try:
             outcome = await loop.run()
@@ -2341,7 +2343,7 @@ class AgentService:
         asking: list[tuple[PlannedCall, Screening]] = []
         for call, screening in zip(calls, screenings):
             tier = self._tier_now(call)
-            if call.tool.key in BATCH_TOOLS and ask.speaker.is_chief and not ask.nested:
+            if call.tool.key in BATCH_TOOLS and not ask.nested:
                 creates = sum(queued.tool.key in ("member_create", "create_member") for queued in ask.admin_pending)
                 if call.tool.key in ("member_create", "create_member") and ask.member_creates + creates >= 10:
                     results.append(ToolResult(call.tool.key, False, None, "member_create_limit"))
@@ -2541,7 +2543,7 @@ class AgentService:
         try:
             self._gate.check_for(action or Action(name, args), name, args, approval)
             if name in ADMIN_TOOLS:
-                if not ask.speaker.is_chief or self._team is None:
+                if self._team is None:
                     raise HarnessToolError("unavailable")
                 if name == "member_create" and ask.member_creates >= 10:
                     raise HarnessToolError("member_create_limit")
@@ -3066,7 +3068,7 @@ class AgentService:
         if team is None or name not in TEAM_TOOLS or (name not in (*SKILL_TOOLS, "handoff") and not speaker.may_ask):
             return ToolResult(name, False, None, "blocked")
         current = self._speaker(speaker.id)
-        if name in (CREATE_MEMBER, "room_meeting") and (current is None or not current.is_chief or speaker.depth):
+        if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
             return ToolResult(name, False, None, "blocked")
         try:
             self._gate.check_for(action or Action(name, dict(arguments)), name, arguments, approval)

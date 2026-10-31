@@ -25,14 +25,30 @@ def test_members_and_rooms_do_not_create_brain_loops():
                 assert getattr(node.func, "id", "") not in {"NarratedLoop", "CliLoop", "OpenRouterClient"}, path
 
 
-def test_administration_is_raphael_only():
+def test_every_speaker_is_offered_the_same_team_administration():
+    """Raphael is the default member, not a holder of tools the others lack: the chief role changes who the
+    owner brings work to and who concludes a room, never what a speaker may propose (the owner confirms)."""
     from raphael_core.agent.speaker import Speaker
+    from raphael_core.agent.team import team_tools_for
+
+    class Team:
+        def named_in(self, text):
+            return []
+
+        def has_members(self):
+            return True
+
+    offered = {}
     for identifier in (0, 1, 999):
-        chief = Speaker(id=identifier, capabilities=frozenset({"chief"}))
-        peer = Speaker(id=identifier)
-        assert set(ADMIN) <= dict(definitions_for(chief)).keys()
-        assert not set(ADMIN) & dict(definitions_for(peer)).keys()
-        assert "member_id" not in dict(definitions_for(peer))["routine_create"]["parameters"]["properties"]
+        for chief in (True, False):
+            speaker = Speaker(id=identifier, capabilities=frozenset({"chief"}) if chief else frozenset(), role="r")
+            tools = dict(definitions_for(speaker))
+            assert set(ADMIN) <= tools.keys()
+            assert "member_id" in tools["routine_create"]["parameters"]["properties"]
+            offered[(identifier, chief)] = ({name: item["parameters"] for name, item in tools.items()},
+                                            sorted(team_tools_for(Team(), speaker, always=True)))
+    assert len({repr(value) for value in offered.values()}) == 1
+    assert {"create_member", "room_meeting", "ask_member"} <= set(next(iter(offered.values()))[1])
 
 
 def test_shared_loop_and_definition_sources():

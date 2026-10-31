@@ -73,11 +73,13 @@ Skills/commands/voices have empty fixture collections. Seed resources before cla
 populated-resource flows. Native avatar picking/cropping, files, audio output and
 provider behavior need native evidence. A dialog screenshot does not prove saving.
 
-## Raphael sidebar administration
+## Sidebar administration
 
-The current chief can administer the sidebar from their conversation: overview, member creation
-and editing, groups, any member's routines, skill imports and command templates.
-Management tools, including the legacy create_member alias, are offered only to the current chief capability holder. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
+Raphael and every member can administer the sidebar from their own conversation: overview, member creation
+and editing, groups, any member's routines, skill imports and command templates (owner decision 2026-10-31:
+everyone's abilities are the same; Raphael is the default member and the chief role only decides who the owner brings work to
+and who concludes a room). The owner still confirms every change at the end of the turn.
+Management tools, including the legacy create_member alias, are offered to every speaker, never to one that another member asked. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
 presets, then the neutral silhouette, and the create dialog defaults.
 
 ```powershell

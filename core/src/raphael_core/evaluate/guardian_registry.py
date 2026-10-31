@@ -92,8 +92,6 @@ async def inventory(servers=()):
         for name, item in {**_DEFINITIONS, **dict(definitions_for(speaker))}.items():
             register(builtin(name), name, item["parameters"], role)
         for name in TEAM_TOOLS:
-            if name in ("create_member", "room_meeting") and member:
-                continue
             definition = worker_definition(name)["function"]
             register(builtin(name), name, definition["parameters"], role)
         for definition in MEMORY_TOOLS + [APPROVE]:
@@ -129,7 +127,7 @@ async def inventory(servers=()):
         snapshot = take_snapshot(AllRegistered(), memory=True, attachments=True,
                                  speaker=Speaker(id=member, name="Fixture", role="Assistant",
                                                  capabilities=frozenset({"chief"}) if role == "chief" else frozenset()),
-                                 team=TEAM_TOOLS if not member else ("ask_member",),
+                                 team=TEAM_TOOLS,
                                  interactive=True, max_tier=Tier.T3)
         if snapshot.pool:
             snapshot.show(snapshot.pool.by_alias)

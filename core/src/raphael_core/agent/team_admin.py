@@ -1,4 +1,4 @@
-"""The single registry of Raphael-only team administration tool contracts.
+"""The single registry of team administration tool contracts, offered to Raphael and to every member.
 
 Member data: name, role, blurb, personality, instructions, group name, avatar preset.
 Targets use member IDs; groups use IDs for rename and names for member placement.
@@ -81,8 +81,8 @@ BATCH_TOOLS = {"member_create", "create_member", "member_update", "group_create"
 CONFIRM_TOOLS = (set(DEFINITIONS) - {"team_overview"}) | {"create_member", "routine_create", "routine_update", "routine_delete"}
 
 LEADERSHIP = (
-    "\nYou lead the owner's team. Use team_overview and your team administration tools to create "
-    "and change members, groups, routines, skills and commands yourself. Use returned IDs. "
+    "\nYou can change the owner's team yourself, like every member. Use team_overview and your team administration tools to create "
+    "and change members, groups, routines, skills and commands. Use returned IDs. "
     "In every mode member creates, updates and groups are proposals staged until the turn ends. "
     "Collect every requested change before your final reply; pending_approval is not success and has no new ID. "
     "Follow the owner's approval setting; deleting a member always needs approval. "

@@ -19,10 +19,13 @@ tool an alias is stays here in the core. The snapshot holds:
   task may read a note or look up what was said before. It never writes one: a task reads what
   services return, and a memory is written only from the owner's own words.
 - the team tools (`agent.team`): `ask_member`, when there is someone to ask (for Raphael, a member;
-  for a member, Raphael), and for Raphael `create_member`.
+  for a member, Raphael), and `create_member`.
 
-A task of a member of the owner's team is offered only what the member was given (`Speaker.uses`,
-`Speaker.uses_plugin`): Raphael's own web tools on its list, and the connections on it.
+A task of a member of the owner's team is offered what Raphael's is (`Speaker.uses`,
+`Speaker.uses_plugin` say yes to everything): the same web tools and the same connections.
+
+The three tools of Composio's router are pinned (`PluginTool.pinned`): they are shown to every task
+whatever it says, since the one that executes shares no word with any request.
 
 Not the commands for this computer (open a site, the volume, lock the screen, copy): those stay with
 the fast tier, which the user speaks to; a task in the background must not open a page or lock the

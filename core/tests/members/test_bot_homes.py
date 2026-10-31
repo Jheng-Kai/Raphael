@@ -15,15 +15,16 @@ async def test_member_brain_is_used_instead_of_the_global_brain(rig):
     assert rig.service.speaker(member["id"]).model == "cli:codex"
 
 
-async def test_chief_role_moves_with_the_top_contact_and_revokes_raphael(rig):
+async def test_chief_role_moves_with_the_top_contact_and_no_tool_moves_with_it(rig):
     member = (await rig.call("members.create", {"name": "Alice"}))["member"]
     await rig.call("members.set_primary", {"id": member["id"]})
     assert rig.service.team_context(0, "en")["chief_id"] == member["id"]
-    assert "team_overview" in dict(definitions_for(rig.service.speaker(member["id"])))
-    assert "team_overview" not in dict(definitions_for(rig.service.speaker(0)))
-    assert (await rig.service.admin_tool(member["id"], "team_overview", {}))["members"]
+    # the role decides who the owner brings work to; every speaker keeps the same tools
+    for speaker in (member["id"], 0):
+        assert "team_overview" in dict(definitions_for(rig.service.speaker(speaker)))
+        assert (await rig.service.admin_tool(speaker, "team_overview", {}))["members"]
     with pytest.raises(Exception):
-        await rig.service.admin_tool(0, "team_overview", {})
+        await rig.service.admin_tool(999, "team_overview", {})
 
 
 async def test_private_memory_cannot_be_promoted_by_a_model_space_choice(rig):

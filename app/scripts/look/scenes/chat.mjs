@@ -23,6 +23,14 @@ const quickAnswer = { id: 91, session_id: "look-quick-umbrella", member_id: 0, c
   question: "明天早上要帶傘嗎？", route: "answer", source: "voice", prefix: "答", text: "明天早上降雨機率七成，出門記得帶傘。",
   detail: null, status: "done", cost_usd: 0.0008, model: "openai/gpt-6-luna", steps: [], attachments: [],
   messages: [{ seq: 1, kind: "progress", text: "《告。正在查看明天早上的天氣。》", at_ms: 1792807161000 }] };
+// A member's turn as the core keeps it: the member's own built-in tools (server "Raphael" for all of them), a connected
+// service and a step that is no step to the reader. Nothing in its steps may read as Raphael's doing.
+const memberWork = { id: 502, session_id: "look-member-work", member_id: 1, conversation_id: 11, created_at_ms: 1792807154000,
+  question: "把每週報告改到星期五，再看一下筆記。", route: "answer", source: "app", prefix: "", text: "已改到星期五早上九點。",
+  detail: null, status: "done", cost_usd: 0, model: "openai/gpt-6-luna", attachments: [],
+  messages: [{ seq: 1, kind: "reply", text: "已改到星期五早上九點。", at_ms: 1792807160000 }],
+  steps: [["session_search", "Raphael"], ["find_tools", "Raphael"], ["search", "Notion"], ["routine_update", "Raphael"], ["self_check", "Raphael"], ["ask_member", "Raphael"],
+    ["fetch", "Notion"]].map(([tool, server], index) => ({ kind: "tool", tool, server, outcome: "ok", at_ms: 1792807155000 + index * 800, ms: 300 + index * 120, reason: null })) };
 const rosterRefresh = { action: "main-event", event: { type: "MembersChanged" } };
 const stopSlot = [wait('.composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice svg'), check("composer-stop-slot")];
 const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), key("Enter"), rosterRefresh, ...stopSlot, check("pending-work")];
@@ -187,6 +195,8 @@ export default [
   scene("member-avatar", "Member avatar picker above details", [...details, click('[data-det="avatar"]'), wait("#app-popover")]),
   scene("member-edit", "Edit member dialog", [...details, click('[data-det="edit"]'), wait(".mb-dialog")]),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
+  scene("work-member-builtin", "A member's own tools in its work steps say what was done and never name Raphael; a connected service keeps its name",
+    [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait(".work-body:not([hidden]) .step-list .step"), check("work-steps-own-words")], { turns: [memberWork] }),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-value]"), check("permission-menu")]),
   scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),

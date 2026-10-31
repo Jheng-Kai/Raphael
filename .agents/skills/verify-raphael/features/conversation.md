@@ -13,6 +13,16 @@ contained slugs use the same read/write classifier as Connections: all enabled
 reads are T1 and run without a permission card; any write is T2 and requires one.
 Production agent/gate/MCP flow is exercised with a fake MCP and synthetic email.
 
+Owner report 2026-10-31 (a member could not read Gmail): the three Composio router tools are
+core-pinned, so a turn's narrowing by the words of the request (`take_snapshot`, more than 40
+plugin tools) never hides the executing tool; a CLI brain, which reads its tool list when it
+starts, starts again in the same native thread when `find_tools` shows it more tools
+(`CliLoop.catalog_changed`, also for a background task). Raphael and every member are offered
+the same tools on the API and the CLI path: core/tests/members/test_plugins_everywhere.py.
+A step of the app's own tools (server "Raphael") reads 「讀取」, 「修改」 or 「詢問同事」 and
+never names Raphael, on a member's turn or his; a connected service keeps its name
+(`work-member-builtin`).
+
 Conversation and routing fallback controls are absent from the UI. Only the chosen
 model is called; hidden legacy agent_fallbacks/router_fallbacks confer no consent.
 Implicit CLEANUP_FALLBACKS are removed from agent, tool-selection, computer and
@@ -128,7 +138,7 @@ the compact picker's search action, for messages.
 npm run look -- composer-task-stop chat running running-motion empty details raphael-details details-closed conversation-filter new-conversation row-menu rename delete --theme both --width 1120,720,1920x1080
 npm run look -- quick-conversation-list quick-conversation quick-question-result quick-formal-isolation quick-stop --theme both --width 1120,720,1920x1080
 npm run look -- live-scenario-owner-view --theme both --width 1120,720,1920x1080
-npm run look -- work composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
+npm run look -- work work-member-builtin composer mode actions reply search search-target tooltip slash-commands --theme both --width 1120,720,1920x1080
 npm run look -- member-composer-empty member-text member-composer-hover conversation-notice --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- plain-bot-chat centred-system-events --theme both --width 1120,720,1920x1080
@@ -232,7 +242,7 @@ private and room result destinations are also checked by offline core tests.
 Every private/API/CLI/member turn receives the current public TeamContextSnapshot with self,
 count, stable IDs, roles, primary/chief and secret-free app connection states. The primary is the owner's chosen primary contact (see [Members](members.md): Raphael
 until another is chosen), read from that snapshot fresh on every turn: the primary is told it hands work it is given to the colleague it belongs to with the one hand-off
-(S03.primary-dispatch), another member forwards work that is not its own to that colleague or, when it cannot tell whose it is, to the primary, and Raphael alone administers the team. Meeting requests
+(S03.primary-dispatch), another member forwards work that is not its own to that colleague or, when it cannot tell whose it is, to the primary, and every speaker can propose team changes that the owner confirms. Meeting requests
 use room_meeting; one centred grey line with the group icon, outside Raphael's message, opens the room, and quick ask_member answers are
 folded into the requesting assistant reply. Room history remains outside private turns.
 

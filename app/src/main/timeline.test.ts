@@ -171,12 +171,45 @@ describe("a step in words", () => {
     // a command or a lookup with no words of its own says so in the window's language, its name in the tooltip
     expect(stepTitle(step({ kind: "command", tool: "something_new", server: null }))).toBe("操作這台電腦");
     expect(stepToolTip(step({ kind: "command", tool: "something_new", server: null }))).toBe("something_new");
-    expect(stepTitle(step({ tool: "get_news" }))).toBe("拉斐爾：讀取");
+    expect(stepTitle(step({ tool: "get_news" }))).toBe("讀取");
     setLocale("en");
     expect(stepTitle(step({ tool: "list_issues", server: "GitHub" }))).toBe("GitHub: read");
     expect(stepTitle(step({ tool: "create_issue", server: "GitHub" }))).toBe("GitHub: change");
     setLocale("ja");
     expect(stepTitle(step({ tool: "list_issues", server: "GitHub" }))).toBe("GitHub：読み取り");
+  });
+
+  test("a tool of the app's own names nobody: every member has them as much as Raphael, so a row never says Raphael did it", () => {
+    const own: [string, string][] = [
+      ["routine_update", "修改"], ["routine_create", "修改"], ["set_my_job", "修改"], ["member_create", "修改"],
+      ["session_search", "讀取"], ["self_check", "讀取"], ["team_overview", "讀取"], ["raphael_help", "讀取"],
+      ["memory_read", "讀取"], ["routine_list", "讀取"], ["read_attachment", "讀取"], ["web_read", "讀取"],
+      ["ask_member", "詢問同事"],
+    ];
+    for (const [tool, title] of own) {
+      const row = step({ tool });
+      expect(stepTitle(row), tool).toBe(title);
+      expect(stepTitle(row), tool).not.toContain("拉斐爾");
+      // the picture has no name either: it would show Raphael on a member's turn
+      const html = stepHTML(row, false);
+      expect(html, tool).not.toContain("拉斐爾");
+      expect(html, tool).toContain('<span class="step-ic" aria-hidden="true">');
+    }
+    expect(stepPlace(step({ tool: "routine_update" }))).toBe("");
+    // and the picture says the same as the words: a change is a pencil, a question a bubble, a reading a lens
+    expect(stepHTML(step({ tool: "routine_update" }), false)).toContain(ico("pencil"));
+    expect(stepHTML(step({ tool: "ask_member" }), false)).toContain(ico("chat"));
+    expect(stepHTML(step({ tool: "session_search" }), false)).toContain(ico("search"));
+    // a connected service keeps its name, in the title and on its picture
+    expect(stepTitle(step({ tool: "search", server: "Notion" }))).toBe("Notion：讀取");
+    expect(stepHTML(step({ tool: "search", server: "Notion" }), false)).toContain('aria-label="Notion"');
+    setLocale("en");
+    expect(stepTitle(step({ tool: "routine_update" }))).toBe("Change");
+    expect(stepTitle(step({ tool: "session_search" }))).toBe("Read");
+    expect(stepTitle(step({ tool: "ask_member" }))).toBe("Ask a colleague");
+    setLocale("ja");
+    expect(stepTitle(step({ tool: "routine_update" }))).toBe("変更");
+    expect(stepTitle(step({ tool: "session_search" }))).toBe("読み取り");
   });
 
   test("a step's line shows the words and keeps the tool's own name only in its tooltip", () => {

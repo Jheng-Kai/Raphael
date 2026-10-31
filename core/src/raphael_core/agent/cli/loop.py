@@ -30,6 +30,10 @@ RATE_LIMIT_WAITS_S = RETRY_WAITS
 # A room or background turn has no one sitting on it: it rides out a throttle of minutes (live, 429s lasted several).
 ROOM_RATE_LIMIT_WAITS_S = (30.0, 60.0, 120.0, 240.0)
 
+COMPUTER_GRANTED = ("The owner granted computer access. Reload the computer MCP catalog and continue "
+                    "the original task. Do not repeat completed actions.")
+TOOLS_FOUND = ("The tools you asked find_tools for are in your tool list now. Continue the original task "
+               "with them. Do not repeat completed actions.")
 APPROVE = {"type": "function", "function": {"name": "approve", "description": "Ask the owner for permission. Never grants permission by itself.",
            "parameters": {"type": "object", "properties": {"tool_name": {"type": "string"}, "input": {"type": "object"}}, "additionalProperties": True}}}
 # The fields an API brain's notes have: live, a CLI brain offered free strings wrote type "fact", which no space takes.
@@ -136,7 +140,10 @@ class CliLoop:
         self._repeats = RepeatGuard()
         self._failures = RepeatFailures()
         self.failure_reason = None
+        # A CLI reads its tool list once, when it starts: after a change (`catalog_changed`) it starts again in the same
+        # thread, and is told why.
         self.catalog_changed = False
+        self.reload_note = COMPUTER_GRANTED
         self.on_done = None
         self.activity_turn = None
         self.expire = expire
@@ -346,8 +353,8 @@ class CliLoop:
                     while failure == "tools_changed":
                         self.catalog_changed = False
                         session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
-                        self.user = ("The owner granted computer access. Reload the computer MCP catalog and continue "
-                                     "the original task. Do not repeat completed actions.\n" + self.user)
+                        if not self.user.startswith(self.reload_note):
+                            self.user = self.reload_note + "\n" + self.user
                         failure = await self._attempt(name, command, model, server, session, workspace)
                     # Running the request again is safe only while nothing of it has happened yet.
                     while failure in TRANSIENT and waits and not (self._acted or self._calls):

@@ -1025,14 +1025,12 @@ class MembersService:
         return routine_id
 
     async def routine_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """The current chief can select any member; peers stay within their own routines."""
+        """Any speaker can select any member; the routine must belong to the one selected."""
         handlers = {"routine_list": self._routines_list, "routine_create": self._routine_create,
                     "routine_update": self._routine_update, "routine_delete": self._routine_delete}
         if name not in handlers:
             raise invalid_params("unknown routine tool")
         target = _whole(arguments, "member_id") if "member_id" in arguments else member_id
-        if not self.store.is_chief(member_id) and target != member_id:
-            raise invalid_params("routine belongs to another speaker")
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
@@ -1204,7 +1202,7 @@ class MembersService:
         """Apply the approved list atomically and publish only committed roster changes."""
         from ..agent.team_admin import BATCH_TOOLS
 
-        if not self.store.is_chief(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
+        if not self.store.exists(member_id) or not operations or any(op["name"] not in BATCH_TOOLS for op in operations):
             raise invalid_params("invalid team administration batch")
         planned = self.plan_admin_batch(operations, drafts=drafts, groups=groups)
         allowed_targets = {op["arguments"].get("id") for op in operations if op["name"] == "member_update"}
@@ -1234,11 +1232,11 @@ class MembersService:
         return results
 
     async def admin_tool(self, member_id: int, name: str, arguments: dict) -> dict:
-        """Adapt Raphael's registry to the same RPC handlers, defaults and notifications."""
+        """Adapt the registry of team administration tools to the same RPC handlers, defaults and notifications."""
         from ..agent.team_admin import DEFINITIONS
 
-        if not self.store.is_chief(member_id) or name not in DEFINITIONS:
-            raise invalid_params("team administration requires the chief capability")
+        if not self.store.exists(member_id) or name not in DEFINITIONS:
+            raise invalid_params("unknown team administration tool")
         schema = DEFINITIONS[name]["parameters"]
         if (set(arguments) - set(schema["properties"]) or
                 any(field not in arguments for field in schema["required"])):

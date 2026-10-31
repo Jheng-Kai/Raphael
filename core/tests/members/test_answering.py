@@ -410,7 +410,7 @@ async def test_a_member_asks_raphael_who_answers_as_himself(setup, client, conn)
     result = await typed(rig, "問拉斐爾主人住哪裡", one.id)
     assert result["text"] == "主人住在台北。"
     tools = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
-    assert "ask_member" in tools and "create_member" not in tools
+    assert {"ask_member", "create_member"} <= tools  # a member has the tools Raphael has
     assert client.plan_calls == []
     assert "You are Raphael" in client.chat_calls[1]["messages"][0]["content"]
     assert AgentHistory(conn).list(member_id=0) == []
@@ -495,12 +495,17 @@ async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
     assert await asks(b_asked, "小研究") == "blocked"  # nobody asks itself
     assert await asks(a, "小財務") == "blocked"
     assert await asks(a, "nobody") == "not_found"
+    refused = await rig.service.team_tool(
+        b_asked, "create_member", {"name": "x", "role": "", "instructions": ""},
+        language="zh-TW", ledger=None, session_id="s",
+    )  # fmt: skip
+    assert not refused.ok and refused.error == "blocked"  # what another member asked adds nobody
+    assert team.members.find("x") is None
     created = await rig.service.team_tool(
         a, "create_member", {"name": "x", "role": "", "instructions": ""},
         language="zh-TW", ledger=None, session_id="s",
     )  # fmt: skip
-    assert not created.ok and created.error == "blocked"
-    assert team.members.find("x") is None
+    assert created.ok and team.members.find("x") is not None  # what the owner asked a member may, as Raphael may
 
 
 async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultation(setup):
@@ -510,7 +515,8 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member", "create_member", "room_meeting"]
+    assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member"]
 
 
 @pytest.mark.parametrize("text", ["幫我找行銷跟 PM 開個會議", "大家一起商量上架的事", "schedule a meeting about launch"])
