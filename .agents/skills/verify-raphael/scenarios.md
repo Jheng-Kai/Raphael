@@ -83,7 +83,8 @@ That fixture is not live model, connector, native or design acceptance.
 
 ## S01 team setup acceptance (P05)
 
-S01 uses the production AgentService loops for both brains. It checks that a
+S01 uses the production AgentService loops for both brains, with the owner's setting
+on 先詢問 (in 自動 a team is made at once). It checks that a
 five-member team is proposed without roster mutation, cancels and replays the old
 confirmation, then requests the team again, edits the first prompt, applies once
 and reads back the saved prompt. Replaying approval must not change the roster.

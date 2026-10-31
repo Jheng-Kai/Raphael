@@ -8,6 +8,7 @@ import base64
 import json
 import mimetypes
 import re
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import PurePosixPath
@@ -20,22 +21,33 @@ from ..integrations.audit import AuditLog
 from ..services.attachments import Attachment, MAX_FILE_BYTES, sniff_ok
 from .vm import VmError
 from .vm_bridge import CuaBridge
-from .vm_catalog import DRIVER_TOOLS, READS
+from .vm_catalog import DRIVER_TOOLS, NOTICES, READS
 from .takeover import TAKEOVER
 
 _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
+# Where a call that has to wait for the desktop says so: the line for the owner, and the language of the work.
+_NOTE = ContextVar("computer_note", default=(None, "en"))
+
+# The line a member shows while another has the desktop (one line per wait, never one per poll).
+WAITING_FOR = {
+    "zh-TW": "正在等 {who} 用完電腦",
+    "ja": "{who} がコンピューターを使い終わるのを待っています",
+    "en": "Waiting for {who} to finish with the computer",
+}
 
 
 @contextmanager
-def vm_scope(owner, *, turn_id=0, private=False, task=None):
+def vm_scope(owner, *, turn_id=0, private=False, task=None, progress=None, language="en"):
     token = _SCOPE.set(owner)
     turn = _TURN.set((turn_id, private, task))
+    note = _NOTE.set((progress, language))
     try:
         yield
     finally:
         _SCOPE.reset(token)
         _TURN.reset(turn)
+        _NOTE.reset(note)
 
 
 VM_CONTRACT = (
@@ -45,9 +57,10 @@ VM_CONTRACT = (
     "or expired, stop. Sandbox success is not approval."
 )
 
-EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser.",
+EXEC = {"description": VM_CONTRACT + " Run a shell command inside the VM workspace, never on the host. Nothing it does shows on the screen the owner watches: use it for files and programs, never to fetch a page in place of opening it in the browser. It waits for the command for at most timeout_seconds (60 by default, 1800 at most) and ends it then. For a build or a server that takes longer, or to work on while it runs, set background: it returns at once with a job and the paths of its log and of its .exit file (the exit code, there once the job has ended); read them with another vm_exec. Other members' commands and the screen are not held up by it.",
         "parameters": {"type": "object", "properties": {"command": {"type": "string", "minLength": 1},
-        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 300}}, "required": ["command"], "additionalProperties": False}}
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 21600},
+        "background": {"type": "boolean"}}, "required": ["command"], "additionalProperties": False}}
 ATTACH = {"description": "Copy an existing file from /home/cua/workspace into Raphael's attachment store and return its attachment ID. Paths outside this workspace are refused.",
           "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}
 REQUEST = {"description": "Ask the owner to grant you persistent computer access. Use only when the owner asks for computer work or the task truly needs it. No computer starts before yes. On denial or expiry, say plainly that you cannot use the computer. Routines cannot grant access; ask the owner in a private chat first.",
@@ -57,8 +70,21 @@ SCREEN = {"description": VM_CONTRACT + " Inspect screen and discover control too
 
 
 class VmTools:
+    # How long a member waits for another to finish with the screen, and how often it looks: a bounded wait,
+    # then a result that says who holds it and for how long.
+    busy_wait_s = 60.0
+    busy_poll_s = 0.5
+    # A holder that has not touched the screen for this long (it is thinking, or busy with commands) has let go
+    # of it: another may take it, and the holder looks at it again when it comes back.
+    lease_idle_s = 60.0
+
     def __init__(self, delegate, vm, *, attachments, conn=None, bridge=CuaBridge):
         self.delegate, self.vm, self.attachments, self.bridge = delegate, vm, attachments, bridge
+        # What a member is called (told by the app), when each holder took the screen and last used it, and the
+        # (desktop, scope) pairs whose picture of the screen is out of date because another used it since.
+        self.names = lambda member_id: None
+        self.lease_since, self.lease_used, self.stale = {}, {}, set()
+        self.commands = {}  # the shell commands under way on each desktop: they are not input at the screen
         self.audit = AuditLog(conn) if conn is not None else None
         self.conn = conn
         if conn is not None:
@@ -246,11 +272,11 @@ class VmTools:
                 if origin:
                     owner = ("task", task_id, origin["member_id"], origin["conversation_id"])
                     turn = (origin["turn_id"], True, None)
-            previous = self.leases.get(target.key)
-            if previous is not None and previous != owner and self.scope_busy(previous):
-                result = PluginResult(False, "computer_busy")
+            # Only the screen is shared out: a command in the workspace takes nobody's turn, and no turn waits for one.
+            screen = tool.name not in ("vm_exec", "attach_file")
+            if screen and (busy := await self._take_screen(target, owner)) is not None:
+                result = busy
                 return result
-            self.leases[target.key] = owner
             work = self.vm.work.begin(target, owner, *turn)
             if work and owner[0] == "task":
                 work.alive = lambda: self.scope_busy(owner)
@@ -259,28 +285,50 @@ class VmTools:
             if work and work.check_required and tool.name != "get_desktop_state":
                 return PluginResult(False, "desktop_check_required")
             if tool.name == "request_takeover":
-                if self.vm.active.get(target.key) or self.actions.get(target.key) and self.actions[target.key].locked():
-                    return PluginResult(False, "computer_busy")
+                # Never over input that is already running at the screen (a long command in the workspace is none).
+                if self.vm.active.get(target.key, 0) > self.commands.get(target.key, 0) or (
+                        self.actions.get(target.key) and self.actions[target.key].locked()):
+                    return self._busy(target, None, 0.0)
                 data = await self.vm.work.request(work, arguments["reason"])
                 result = PluginResult(True, text=json.dumps(data))
                 return result
             if work:
                 work.tool = tool.name
-            lock = self.actions.setdefault(target.key, asyncio.Lock())
-            if lock.locked():
-                result = PluginResult(False, "computer_busy")
+            if screen and (target.key, owner) in self.stale and tool.name not in READS:
+                # Another used the screen since this one looked at it: look again before acting on it.
+                result = PluginResult(True, "screen_changed", json.dumps({
+                    "status": "screen_changed",
+                    "note": "Another member used the computer while you waited, so the screen is no longer what you last saw. "
+                            "Nothing was done. Call get_desktop_state, then do this again if it is still needed."}))
                 return result
-            await lock.acquire()
+            lock = self.actions.setdefault(target.key, asyncio.Lock()) if screen else None
+            if lock is not None:
+                # What is ahead is another member's single action: seconds, not a turn.
+                if lock.locked():
+                    try:
+                        await asyncio.wait_for(lock.acquire(), self.busy_wait_s)
+                    except TimeoutError:
+                        return self._busy(target, None, self.busy_wait_s)
+                else:
+                    await lock.acquire()
             self.vm.active[target.key] = self.vm.active.get(target.key, 0) + 1
+            command = tool.name == "vm_exec"
+            if command:
+                self.commands[target.key] = self.commands.get(target.key, 0) + 1
             try:
                 await self.vm.start(target)
                 # A hold may have arrived while the desktop was starting. Never queue actions.
                 if target.key in self.vm.held:
                     raise VmError("owner_holds_control")
                 if tool.name == "vm_exec":
-                    data = await self.vm.execute(target, arguments["command"], arguments.get("timeout_seconds", 60))
+                    background = arguments.get("background", False)
+                    wait = arguments.get("timeout_seconds", 3600 if background else 60)
+                    if background:
+                        data = await self.vm.execute(target, arguments["command"], wait, background=True)
+                    else:
+                        data = await self.vm.execute(target, arguments["command"], wait)
                     # A command that ran and exited non-zero (tests that fail) is what the model asked to find out, not a broken tool.
-                    result = PluginResult(True, None, json.dumps(data), data["truncated"])
+                    result = PluginResult(True, None, json.dumps(data), data.get("truncated", False))
                 elif tool.name == "attach_file":
                     data = await self.vm.read_file(target, arguments["path"], limit=MAX_FILE_BYTES)
                     name = PurePosixPath(arguments["path"]).name
@@ -319,10 +367,16 @@ class VmTools:
                         combined[:20_000], len(combined) > 20_000, blocks=blocks)
                 if work and result.ok and tool.name == "get_desktop_state":
                     work.check_required = False
+                if screen and result.ok and tool.name == "get_desktop_state":
+                    self.stale.discard((target.key, owner))
             finally:
                 self.vm.active[target.key] -= 1
+                if command:
+                    self.commands[target.key] -= 1
                 self.vm.last_activity[target.key] = self.vm.clock()
-                lock.release()
+                if lock is not None:
+                    self.lease_used[target.key] = self.vm.clock()
+                    lock.release()
             return result
         except asyncio.CancelledError:
             result = PluginResult(False, "cancelled")
@@ -337,4 +391,59 @@ class VmTools:
             result = PluginResult(False, "error")
             return result
         finally:
-            self._audit(key, "ok" if result.ok else result.kind or "error", approver, task_id)
+            self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
+
+    # --- sharing the screen ---------------------------------------------------------------------
+
+    def _holder(self, target, owner):
+        """The scope that has the screen, if it is another's, still at work, and has touched the screen lately."""
+        previous = self.leases.get(target.key)
+        if previous is None or previous == owner or not self.scope_busy(previous):
+            return None
+        return None if self.vm.clock() - self.lease_used.get(target.key, 0.0) >= self.lease_idle_s else previous
+
+    async def _take_screen(self, target, owner):
+        """Take the desktop's screen for `owner`: while another's turn at it goes on, wait a bounded time, with one
+        line saying so. None once it is `owner`'s; else the result to give in place of the action (`_busy`). A screen
+        that was another's since `owner` last looked at it is stale: `owner` must look again before it acts on it."""
+        began = time.monotonic()
+        said = False
+        while (held := self._holder(target, owner)) is not None:
+            waited = time.monotonic() - began
+            if waited >= self.busy_wait_s:
+                return self._busy(target, held, waited)
+            if not said:
+                said = True
+                progress, language = _NOTE.get()
+                if progress is not None:
+                    progress(WAITING_FOR.get(language, WAITING_FOR["en"]).format(who=self._name_of(held)))
+            await asyncio.sleep(min(self.busy_poll_s, self.busy_wait_s - waited))
+        previous = self.leases.get(target.key)
+        if previous != owner:
+            if previous is not None and owner[0] != "async":  # a call outside any turn or task has no picture to go stale
+                self.stale.add((target.key, owner))
+            self.lease_since[target.key] = self.vm.clock()
+        self.leases[target.key] = owner
+        self.lease_used[target.key] = self.vm.clock()
+        return None
+
+    def _busy(self, target, held, waited):
+        """Not a tool failing: how things stand, so that the model can do other work or ask again later."""
+        held = held or self.leases.get(target.key)
+        name = "someone" if held is None else self._name_of(held)
+        since = self.lease_since.get(target.key)
+        return PluginResult(True, "computer_busy", json.dumps({
+            "status": "computer_busy", "held_by": name,
+            "held_for_s": None if since is None else round(self.vm.clock() - since), "waited_s": round(waited),
+            "note": f"{name} is using the computer. Nothing was done. Do other work that does not need it, or call again "
+                    "later; this is not an error."}, ensure_ascii=False))
+
+    def _name_of(self, scope):
+        """What the member whose turn `scope` is is called."""
+        member = scope[1] if scope[0] == "turn" else scope[2] if scope[0] == "task" and len(scope) > 2 else None
+        if member is None and scope[0] == "task" and self.conn is not None:
+            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (scope[1],)).fetchone()
+            member = None if row is None else row[0]
+        if member is None:
+            return "someone"
+        return self.names(member) or ("Raphael" if member == 0 else f"#{member}")

@@ -104,8 +104,8 @@ async def test_one_undeliverable_result_leaves_the_others_and_is_delivered_once_
     second=rig.service.handoff(RAPHAEL,args(target,mode='consult',stage_id='two'),source_turn_id=source.id,language='en').data['task_id']
     rig.conn.execute(f"CREATE TRIGGER fail_delivery BEFORE INSERT ON room_messages WHEN NEW.request_id='handoff-{first}' "
                      "BEGIN SELECT RAISE(ABORT,'fixture delivery failure'); END")
-    later=rig.submit()
-    await until(lambda:rig.task(later).state=='done')
+    later=rig.submit()  # Raphael's own task runs beside the Writer's two, which follow one another
+    await until(lambda:all(rig.task(task).state=='done' for task in (first,second,later)))
     delivered=lambda task:rig.conn.execute('SELECT delivered_at_ms FROM task_outbox WHERE event_id=?',(f'{task}:result',)).fetchone()[0]
     assert rig.task(first).state==rig.task(second).state=='done'
     assert delivered(first) is None and delivered(second) is not None
@@ -237,9 +237,10 @@ async def test_parent_releases_slot_real_file_result_and_resume_once(make_rig,tm
     nonce='fixture-'+deadline
     receipt=[]
     async def file_tool(server,name,arguments,**kwargs):
-        assert rig.task(parent).state=='waiting'
+        # The child works beside its parent, which parks as soon as it has handed the work over.
+        await until(lambda:rig.task(parent).state=='waiting')
         output.write_text('<!doctype html><p>'+nonce+'</p>',encoding='utf8')
-        receipt.append(rig.service._store.verify_artifact(rig.service._run.task_id,'file',output,workspace=tmp_path,mime='text/html'))
+        receipt.append(rig.service._store.verify_artifact(next(iter(rig.service._runs)),'file',output,workspace=tmp_path,mime='text/html'))
         return CallOutcome(json.dumps({'file':output.name,'digest':receipt[-1],'nonce':nonce}),False)
     monkeypatch.setattr(rig.plugins.hub._connector,'call_tool',file_tool)
     parent=rig.service.submit(session_id='parent',text='Delegate a file with '+deadline,language='zh-TW',model=model)
@@ -460,6 +461,7 @@ async def test_restart_recovers_queued_child_and_waiting_parent_once(make_rig,mo
     parent=rig.submit(model=model,language='zh-TW')
     rig.service.attach_turn(parent,source.id)
     await asyncio.wait_for(queued.wait(),5)
+    await until(lambda:rig.task(parent).state=='waiting')
     [child]=rig.service._store.handoffs(source.id)
     assert rig.task(parent).state=='waiting' and child.state=='queued'
     await rig.service.aclose()
@@ -508,7 +510,7 @@ async def test_deleted_assignee_keeps_terminal_receipt_and_wakes_parent(make_rig
     child=accepted.data['task_id']
     rig.service._store.pause_for_children(parent,{'spec':{'task_id':parent,'system':'Report the failure.','user':'Work now.','tools':[],
                                                'limits':{'model_calls':5,'tool_calls':5,'seconds':30}},
-                                               'messages':[],'remaining_s':30})
+                                               'messages':[]})
     rig.service.forget_member(target.id)
     assert rig.task(child).state=='failed' and rig.task(child).reason=='member_unknown_or_removed'
     assert rig.task(parent).state=='queued'
@@ -578,6 +580,7 @@ async def test_stage_owner_cas_prevents_two_sources_claiming_one_stage(make_rig)
     rig=make_rig()
     target,source=setup(rig)
     store=rig.service._store
+    rig.service._closing=True  # nothing is started: the test plays the task's part itself
     parent=rig.submit()
     rig.service._queue.remove(parent)
     rig.service.attach_turn(parent,source.id)
@@ -620,7 +623,7 @@ async def test_stop_tree_preserves_receipts_and_rejects_late_terminal(make_rig,m
     [child]=rig.service._store.handoffs(source.id)
     evidence=rig.service._store.evidence(child.id)
     assert evidence
-    run=rig.service._run
+    run=rig.service._runs[child.id]
     assert (await rig.service._cancel({'task_id':parent}))['cancelled']
     await until(lambda:rig.task(child.id).state=='cancelled')
     assert rig.task(parent).state=='cancelled'
@@ -653,7 +656,7 @@ async def test_room_progress_is_status_only_and_a_dangling_address_is_never_publ
     rig=make_rig()
     target,source=setup(rig)
     async def response(**kwargs):
-        task=rig.service._store.get(rig.service._run.task_id)
+        task=rig.service._store.get(next(iter(rig.service._runs)))
         for index in range(3):
             rig.service._progress(task,f'Progress chunk {index}')
         return report('Delivered @')

@@ -207,23 +207,55 @@ async def test_a_task_that_is_not_well_formed_is_refused(core, bad):
     assert error.value.code == INVALID_PARAMS
 
 
-async def test_one_task_at_a_time(core):
-    started = asyncio.Event()
+async def test_tasks_run_side_by_side_and_a_task_runs_once(core):
+    started = []
     release = asyncio.Event()
 
     async def hold():
-        started.set()
+        started.append(1)
         await release.wait()
         return final()
 
-    core.chats = [hold]
-    running = asyncio.ensure_future(core.a.request("task.run", spec()))
-    await asyncio.wait_for(started.wait(), 2)
+    core.chats = [hold, hold]
+    one = asyncio.ensure_future(core.a.request("task.run", spec()))
+    two = asyncio.ensure_future(core.a.request("task.run", spec(task_id=8)))
+    await asyncio.wait_for(_both(started), 2)
     with pytest.raises(RpcError) as error:
         await core.a.request("task.run", spec(task_id=8))
     assert error.value.code == BUSY
     release.set()
-    assert (await running)["status"] == "done"
+    assert [(await one)["status"], (await two)["status"]] == ["done", "done"]
+
+
+async def _both(started):
+    while len(started) < 2:
+        await asyncio.sleep(0.01)
+
+
+async def test_cancelling_one_of_two_tasks_leaves_the_other_running(core):
+    started = []
+    release = asyncio.Event()
+
+    async def hold():
+        started.append(1)
+        await asyncio.sleep(30)
+
+    async def finish():
+        started.append(1)
+        await release.wait()
+        return final()
+
+    core.chats = [hold, finish]
+    one = asyncio.ensure_future(core.a.request("task.run", spec()))
+    while not started:
+        await asyncio.sleep(0.01)
+    two = asyncio.ensure_future(core.a.request("task.run", spec(task_id=8)))
+    await asyncio.wait_for(_both(started), 2)
+    core.a.notify("task.cancel", {"task_id": 7})
+    assert (await asyncio.wait_for(one, 2))["status"] == "cancelled"
+    assert not two.done()
+    release.set()
+    assert (await two)["status"] == "done"
 
 
 async def test_cancel_stops_the_task_that_runs_and_only_that_one(core):

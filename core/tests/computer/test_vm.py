@@ -380,7 +380,7 @@ async def test_exec_has_guest_timeout_and_combined_output_cap(desktop):
     assert "60" in args and kwargs["timeout"] == 65
 
 
-@pytest.mark.parametrize("timeout", [301, 0, -1, True, float("nan"), float("inf")])
+@pytest.mark.parametrize("timeout", [1801, 0, -1, True, float("nan"), float("inf")])
 async def test_exec_rejects_invalid_timeouts_before_docker(desktop, timeout):
     vm, target, runtime = desktop
     with pytest.raises(VmError, match="bad_arguments"):
@@ -723,6 +723,7 @@ async def test_shared_desktop_lease_refuses_another_active_turn(desktop, tmp_pat
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
     vm.grants.set(2, True)
+    hub.busy_wait_s = 0  # the wait is tested in test_shared_desktop
     hub.scope_busy = lambda owner: owner == ("turn", 0, 1)
     shot = next(tool for tool in hub.offered() if tool.name == "get_desktop_state")
     with vm_scope(("turn", 0, 1)):

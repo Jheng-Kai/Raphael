@@ -109,8 +109,10 @@ def finish(rig, task_id, state, reason=None):
 @pytest.mark.parametrize("state", ["interrupted", "cancelled", "limit", "failed"])
 async def test_a_task_that_did_not_finish_can_be_run_again(make_rig, conn, state):
     rig = make_rig()
+    rig.service._closing = True  # the first task is not started: it ends the way the test says
     old, old_turn, history = hand_over(rig, conn, source="telegram")
     rig.service._queue.clear()
+    rig.service._closing = False
     finish(rig, old, state, "x")
     rig.client.replies = [report("Second time.")]
     result = await rig.rpc.call("worker.rerun", {"task_id": old})
@@ -209,16 +211,16 @@ def test_the_cost_cap_is_one_of_four_amounts_and_twenty_cents_by_default(conn):
     assert settings.get("worker_cost_cap_usd") == 0.2
 
 
-async def test_legacy_cost_cap_settings_do_not_stop_tasks(make_rig, conn):
+async def test_the_cost_cap_setting_is_read_when_a_task_asks_for_the_model(make_rig, conn):
     rig = make_rig()
     SettingsStore(conn).set("worker_cost_cap_usd", 0.10)
     rig.client.replies = [
         turn("", [call("local_time", {}, "c1")], cost=0.11),
-        report("finished"),
+        turn("Done: one lookup. Not done: the rest. Next: go on."),
     ]
     rig.submit()
-    [done] = await rig.wait_for_reports()
-    assert done["state"] == "done" and done["text"] == "finished"
+    [stopped] = await rig.wait_for_reports()
+    assert stopped["state"] == "limit" and stopped["text"] == "Done: one lookup. Not done: the rest. Next: go on."
     assert len(rig.client.chat_calls) == 2
     SettingsStore(conn).set("worker_cost_cap_usd", 0.50)
     rig.client.replies = [turn("", [call("local_time", {}, "c2")], cost=0.11), report("fine")]

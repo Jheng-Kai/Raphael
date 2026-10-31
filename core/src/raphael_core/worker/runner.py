@@ -5,10 +5,10 @@ a core that is gone leaves it nothing to do. The core calls:
 
 - `worker.hello {}`: answered with the protocol version and the process id (the start-up handshake);
 - `task.run {task_id, system, user, tools, limits, context_window}`: carry the task out
-  (`loop.run_task`) and answer with how it ended. One task at a time. A task that goes on after the
-  owner answered its question is given `messages` (the whole conversation, as it was given back) in
-  place of `system` and `user`; a task that pauses for a question answers with the conversation as it
-  stands (`messages`) and the id of the call that waits (`waiting_call`);
+  (`loop.run_task`) and answer with how it ended. Tasks run side by side, one per id. A task that goes
+  on after the owner answered its question is given `messages` (the whole conversation, as it was given
+  back) in place of `system` and `user`; a task that pauses for a question answers with the conversation
+  as it stands (`messages`) and the id of the call that waits (`waiting_call`);
 - `task.cancel {task_id}` (a notification): stop the task at once.
 
 and, while a task runs, the worker calls the core's `host.chat {task_id, messages, tools}` for a
@@ -139,12 +139,12 @@ def _result(outcome: Outcome) -> dict:
 
 
 class Worker:
-    """What the process does with its peer: the methods the core calls."""
+    """What the process does with its peer: the methods the core calls. Tasks run side by side, each
+    on its own id; the core decides how many."""
 
     def __init__(self, peer: Peer) -> None:
         self._peer = peer
-        self._task_id: int | None = None
-        self._cancelled = asyncio.Event()
+        self._cancelled: dict[int, asyncio.Event] = {}
         peer.register("worker.hello", self._hello)
         peer.register("task.run", self._run)
         peer.register("task.cancel", self._cancel)
@@ -168,10 +168,9 @@ class Worker:
             raise invalid_params("system and user must be strings")
         if not isinstance(tools, list) or not all(_is_tool(tool) for tool in tools):
             raise invalid_params("tools must be a list of tools in the chat format")
-        if self._task_id is not None:
-            raise RpcError(BUSY, "A task is running")
-        self._task_id = task_id
-        self._cancelled = asyncio.Event()
+        if task_id in self._cancelled:
+            raise RpcError(BUSY, "That task is running")
+        cancelled = self._cancelled[task_id] = asyncio.Event()
         window = params.get("context_window")
         try:
             outcome = await run_task(
@@ -181,12 +180,12 @@ class Worker:
                 tools=tools,
                 messages=messages,
                 limits=_limits(params.get("limits")),
-                cancelled=self._cancelled,
+                cancelled=cancelled,
                 guardrails=ToolGuardrails(hard_stop=True),  # nobody is in a background task to read a note
                 context_window=window if type(window) is int else None,
             )
         finally:
-            self._task_id = None
+            del self._cancelled[task_id]
         logger.info(
             "Task ended: status=%s kind=%s model_calls=%d tool_calls=%d",
             outcome.status,
@@ -197,8 +196,10 @@ class Worker:
         return _result(outcome)
 
     async def _cancel(self, params: dict) -> dict:
-        if self._task_id is not None and params.get("task_id") in (None, self._task_id):
-            self._cancelled.set()
+        task_id = params.get("task_id")
+        for running, cancelled in self._cancelled.items():
+            if task_id in (None, running):
+                cancelled.set()
         return {}
 
 

@@ -8,10 +8,17 @@ from .test_answering import client, setup, typed, live_said, member  # noqa: F40
 from .test_admin import member_rpc  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def asks_first(setup):
+    """Proposals are what the mode that asks first makes; the automatic mode creates at once."""
+    rig, team = setup
+    rig.settings.set("action_mode", "ask")
+
+
 @pytest.fixture(params=["api", "cli"])
 def brain(request, setup, client, tmp_path, monkeypatch):
     rig, team = setup
-    operations = []
+    operations, runs = [], []
     if request.param == "cli":
         from raphael_core.agent.cli.discovery import CliBrains
         from raphael_core.agent.cli.drivers import Driver, Event
@@ -22,32 +29,90 @@ def brain(request, setup, client, tmp_path, monkeypatch):
         rig.settings.set("agent_model", "cli:codex:test")
 
         async def run(driver, **kwargs):
+            runs.append(kwargs["user"])
+            if "team_changes" in kwargs["user"]:  # the turn going on after the owner's yes
+                yield Event("session", "codex-thread-1")
+                yield Event("final", prepare.then)
+                return
             before = await rig.call("members.list", {})
+            proposing = rig.settings.get("action_mode") != "direct"
             async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
                 for index, (name, args) in enumerate(operations):
                     response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
                         "method": "tools/call", "params": {"name": name, "arguments": args}})
                     result = response.json()["result"]
                     assert not result["isError"]
-                    assert "pending_approval" in str(result)
-                    assert await rig.call("members.list", {}) == before
+                    assert ("pending_approval" in str(result)) == proposing
+                    assert (await rig.call("members.list", {}) == before) == proposing
             yield Event("session", "codex-thread-1")
-            yield Event("final", "草稿已準備好，等待確認。")
+            yield Event("final", "草稿已準備好，等待確認。" if proposing else prepare.then)
 
         monkeypatch.setattr(Driver, "run", run)
 
-    def prepare(*calls):
+    def prepare(*calls, then="工作已交辦。"):
         operations[:] = calls
+        prepare.then = then
         if request.param == "api":
-            client.chats = [chat("Preparing proposals.", *calls), live_said("草稿已準備好，等待確認。")]
+            client.chats = [chat("Preparing proposals.", *calls), live_said("草稿已準備好，等待確認。"), live_said(then)]
+            if rig.settings.get("action_mode") == "direct":
+                client.chats = [chat("Preparing proposals.", *calls), live_said(then)]
+
+    def continued():
+        """What the brain was shown when the turn went on."""
+        return runs[-1] if request.param == "cli" else str(client.chat_calls[-1]["messages"])
     prepare.cli = request.param == "cli"
+    prepare.continued = continued
     return prepare
 
 
-@pytest.mark.parametrize("mode", ["ask", "direct"])
-async def test_every_brain_collects_edits_and_applies_once(setup, brain, mode):
+async def test_after_the_owner_says_yes_the_turn_goes_on_with_the_real_ids(setup, brain):
     rig, team = setup
-    rig.settings.set("action_mode", mode)
+    rig.settings.set("action_mode", "ask")
+    brain(("member_create", {"name": "Research", "role": "Research"}), ("member_create", {"name": "Writer", "role": "Writer"}))
+    asked = await typed(rig, "Create a team and give them work", 0)
+    done = await rig.call("agent.confirm", {"id": asked["confirm"]["id"], "approved": True, "drafts": asked["confirm"]["drafts"]})
+    # The model's own words, not a fixed 「已建立」: the turn did not end at the yes.
+    assert done["text"] == "工作已交辦。" and done["turn_id"] == asked["turn_id"]
+    made = {m["name"]: m["id"] for m in (await rig.call("members.list", {}))["members"]}
+    shown = brain.continued()
+    assert f'"id": {made["Research"]}' in shown and f'"id": {made["Writer"]}' in shown
+
+
+async def test_in_automatic_mode_the_members_exist_at_once_and_the_model_sees_their_ids(setup, client, brain):
+    rig, team = setup
+    rig.settings.set("action_mode", "direct")
+    brain(("member_create", {"name": "Research", "role": "Research"}), ("member_create", {"name": "Writer", "role": "Writer"}))
+    done = await typed(rig, "Create a team and give them work", 0)
+    assert done["status"] == "done" and done["text"] == "工作已交辦。"
+    made = (await rig.call("members.list", {}))["members"][1:]
+    assert [m["name"] for m in made] == ["Research", "Writer"]
+    if not brain.cli:
+        results = " ".join(m["content"] for m in client.chat_calls[1]["messages"] if m.get("role") == "tool")
+        assert all(f'"id": {m["id"]}' in results for m in made)
+
+
+async def test_a_safety_rule_that_asks_still_gets_the_owners_yes_in_automatic_mode(setup, brain):
+    from types import SimpleNamespace
+
+    from raphael_core.agent.safety import ASK, Screening
+
+    if brain.cli:
+        pytest.skip("the api variant covers the rule")
+    rig, team = setup
+    rig.settings.set("action_mode", "direct")
+
+    async def asking(proposed, **kwargs):
+        return Screening(ASK)
+
+    rig.service._gate._safety = SimpleNamespace(screen=asking)
+    brain(("member_create", {"name": "Research", "role": "Research"}))
+    asked = await typed(rig, "Create Research", 0)
+    assert asked["status"] == "confirm" and len((await rig.call("members.list", {}))["members"]) == 1
+
+
+async def test_every_brain_collects_edits_and_applies_once(setup, brain):
+    rig, team = setup
+    rig.settings.set("action_mode", "ask")
     roles = ["COO", "PM", "RD", "QA", "Design", "Marketing", "Finance"]
     brain(("group_create", {"name": "Company"}), *[("member_create", {"name": role, "role": role,
         "personality": "Precise", "instructions": "Review evidence", "group": "Company"}) for role in roles])
@@ -95,7 +160,11 @@ async def test_once_the_owner_answers_a_proposal_a_cli_brain_starts_a_new_thread
     if brain.cli:
         assert rig.service._cli_sessions.get(0, "cli:codex:test", main) == "codex-thread-1"
     await rig.confirm(asked["confirm"]["id"], approved)
-    assert rig.service._cli_sessions.get(0, "cli:codex:test", main) is None
+    if approved and brain.cli:
+        # The turn went on in the same thread and ended with an answer: nothing is left half-said in it.
+        assert rig.service._cli_sessions.get(0, "cli:codex:test", main) == "codex-thread-1"
+    else:
+        assert rig.service._cli_sessions.get(0, "cli:codex:test", main) is None
 
 
 async def test_first_bot_profile_uses_the_same_draft_and_survives_service_restart(setup, brain, tmp_path):
@@ -115,7 +184,9 @@ async def test_first_bot_profile_uses_the_same_draft_and_survives_service_restar
     assert after["members"][0]["name"] == "晨星"
     assert after["members"][0]["profile_ready"] is True
     assert len(after["members"]) == 1
-    assert (await rig.turns())[0]["text"] == "已重新命名為 晨星"
+    turn = (await rig.turns())[0]
+    assert turn["text"] == "工作已交辦。"  # the turn went on after the yes and the model closed it
+    assert any(m["kind"] == "event" and m["text"] == "已重新命名為 晨星" for m in turn["messages"])
     restarted = MembersService(team.conn, tmp_path, background=team.background)
     assert restarted.speaker(0).personality == "Precise"
     assert restarted.speaker(0).instructions == "Research daily"

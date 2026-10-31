@@ -155,18 +155,20 @@ async def test_s01_edits_cancels_and_applies_once_on_both_production_brains(tmp_
     calls = [("group_create", {"name": "驗證團隊"}), *[("member_create", {
         "name": name, "role": name, "instructions": "Review evidence for " + name, "group": "驗證團隊"
     }) for name in ("行銷", "信件助理", "HiKari", "PM", "RD")]]
-    client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", [])])
+    # The last reply is the turn going on after the owner's yes to the second draft.
+    client = FakeClient([("", calls), ("等待確認。", []), ("", calls), ("等待確認。", []), ("團隊已建立。", [])])
     if brain == "C":
         from raphael_core.agent.cli.drivers import Driver
 
         async def run(driver, **kwargs):
-            async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
-                for index, (name, arguments) in enumerate(calls):
-                    response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
-                        "method": "tools/call", "params": {"name": name, "arguments": arguments}})
-                    assert not response.json()["result"]["isError"]
+            if "team_changes" not in kwargs["user"]:
+                async with httpx.AsyncClient(headers={"Authorization": "Bearer " + kwargs["token"]}, trust_env=False) as http:
+                    for index, (name, arguments) in enumerate(calls):
+                        response = await http.post(kwargs["endpoint"], json={"jsonrpc": "2.0", "id": index,
+                            "method": "tools/call", "params": {"name": name, "arguments": arguments}})
+                        assert not response.json()["result"]["isError"]
             yield Event("model", "test-model")
-            yield Event("final", "等待確認。")
+            yield Event("final", "團隊已建立。" if "team_changes" in kwargs["user"] else "等待確認。")
         monkeypatch.setattr(Driver, "run", run)
     registry = await inventory()
     result = await run_cell(selected("S01"), brain, "cli:codex:test-model" if brain == "C" else "fake/model", tmp_path,

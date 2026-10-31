@@ -1,11 +1,11 @@
 # Member computer (Phases A and B)
 
 The optional Docker desktop is shared by default. `computer_vm_mode=per-bot`
-selects a durable workspace per member. Host paths use pathlib and Docker CSV bind
+selects a durable workspace per member (and its own container, 4 GB and 2 CPUs each; members
+then no longer share files, which a team building one program needs). Host paths use pathlib and Docker CSV bind
 mounts; no host shell or alternate runtime is used. The core starts an installed Docker Desktop through the host adapter on the first actual
 computer operation. A granted turn's tool preparation never invokes Docker. When Docker is absent,
-the existing Settings computer area has one requirement line and an official download button;
-an offered operation reports the lifecycle's existing availability error on use.
+no computer tools are offered; the existing Settings computer area has one requirement line and an official download button.
 
 `computer/vm_catalog.py` curates 30 driver tools plus Raphael's `vm_exec` and
 `attach_file` (32 total). Each selection has a one-line reason. Screenshot/window
@@ -41,7 +41,13 @@ global Ask mode (`agent/gate.py`: the registry asks only above T0 in that mode).
 The foreground and background harness skip per-action safety classification for
 these sandbox tools. `attach_file` retains its existing T0/workspace contract.
 Owner control refuses every call immediately, including screenshots, clicks and
-exec. Busy desktops never queue another tool action.
+exec. Members share the one screen by turns: a member whose turn comes while another
+has the screen waits up to a minute with one progress line (「正在等 <成員> 用完電腦」),
+then gets a result, not a failure, that names who holds it and for how long
+(`computer_busy`, no evidence of work) so it can do other work or ask again. After
+waiting, or after another used the screen, its first action returns `screen_changed`
+until it has called `get_desktop_state` again. Commands (`vm_exec`, `attach_file`) never
+take or wait for anyone's turn at the screen.
 
 Before sending a message or email, publishing or posting, deleting anything outside
 the workspace, paying or buying, the member must first call `approve` on CLI brains
@@ -52,8 +58,10 @@ This contract is in every driver/exec tool description (within the shared offer'
 400-character cap) and the shared doctrine in `agent/persona.py`; no click classifier
 is used. Contract tests check the actual snapshot and every CLI/API/worker persona.
 
-`vm_exec` defaults to 60 seconds, caps at 300 seconds and 20,000 combined output
-characters, and times out in the guest as well as the host. `attach_file` only
+`vm_exec` defaults to 60 seconds, caps at 1800 seconds and 20,000 combined output
+characters, and times out in the guest as well as the host. With `background` it starts
+detached and returns a job, its log and its `.exit` file under `.raphael-jobs/` in the
+workspace (at most six hours); the member reads them with later commands. `attach_file` only
 copies regular files under `/home/cua/workspace` into the existing attachment
 store. Guest directory traversal and symlinks are refused with openat/no-follow.
 Screenshot blocks reach CLI and API brains, are treated as untrusted screen

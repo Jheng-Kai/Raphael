@@ -83,6 +83,7 @@ async def test_a_no_to_adding_a_member_adds_nobody(guarded, rules, client):
 
 async def test_an_allow_rule_still_requires_the_editable_team_proposal(guarded, rules, client):
     rig, team = guarded
+    rig.settings.set("action_mode", "ask")
     rules.create("新增成員", ALLOW)
     client.decisions += [decision("command"), judged(1)]
     client.plans.append(tool_plan(CREATE))

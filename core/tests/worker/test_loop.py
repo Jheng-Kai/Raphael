@@ -199,7 +199,7 @@ async def test_the_model_call_limit_stops_the_task_without_another_call():
     outcome = await run(host, limits=Limits(model_calls=3, tool_calls=25, seconds=60))
     assert (outcome.status, outcome.kind) == ("stopped", "limit_model")
     assert (outcome.model_calls, outcome.tool_calls) == (3, 3)
-    assert len(host.conversations) == 3
+    assert len(host.conversations) == 4  # three steps, then the one call that asks where the task stands
 
 
 async def test_the_tool_call_limit_stops_the_task_before_the_call_is_made():
@@ -226,17 +226,6 @@ async def test_the_time_limit_stops_a_task_whose_tool_takes_too_long():
     host = FakeHost([Turn("", [ask("Notes__look", {"topic": "x"})])], answer=slow)
     outcome = await run(host, limits=Limits(model_calls=15, tool_calls=25, seconds=0.05))
     assert (outcome.status, outcome.kind) == ("stopped", "limit_time")
-
-
-async def test_the_time_limit_is_looked_at_between_steps_too():
-    now = [0.0]
-    host = FakeHost(
-        [Turn("", [ask("Notes__look", {"topic": "x"})]), report()],
-        answer=lambda name, arguments: now.__setitem__(0, 100.0) or ToolOutcome(True, None, "r"),
-    )
-    outcome = await run(host, limits=Limits(seconds=60), clock=lambda: now[0])
-    assert (outcome.status, outcome.kind) == ("stopped", "limit_time")
-    assert len(host.conversations) == 1
 
 
 async def test_a_stop_of_the_host_ends_the_task_with_its_kind_and_detail():

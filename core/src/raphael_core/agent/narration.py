@@ -133,8 +133,17 @@ class NarratedLoop:
         self.guardrails = ToolGuardrails()
         self.last_failure = None
         self.acted = False
+        # The conversation as the model last saw it (the loop's own list, which it goes on adding to).
+        self.live: list[dict] = []
+
+    def go_on(self, note: str) -> None:
+        """Take the conversation up again after the turn was over, with one more message from the user:
+        a turn that stopped to ask the owner something and has their answer now."""
+        self.messages = [*self.live, {"role": "user", "content": note}]
+        self.response = None
 
     async def chat(self, messages: Sequence[dict], tools: Sequence[dict], room: int = 1) -> Turn:
+        self.live = messages  # type: ignore[assignment]
         began = time.perf_counter()
         try:
             # Once a turn has done something it rides out a failed call for as long as that lasts, until the owner stops
