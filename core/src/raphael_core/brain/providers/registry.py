@@ -497,10 +497,13 @@ class ProviderRouter:
             state = "missing"
         return Failure("auth_expired", "Selected provider unavailable", missing=Missing(pid, "provider", state, "models"))
 
+    def api_providers(self):
+        """The services a model reference may name for API work: all but those on this computer."""
+        return {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
+
     def cleanup_fallback(self, primary):
         """The mandatory cleanup retry follows the owner's provider preference order."""
-        api_providers = {pid for pid in self.registry.ids() if BY_KIND.get(self.registry.config(pid)["kind"], {}).get("group") != "local"}
-        candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=api_providers),
+        candidates = [DEFAULTS["cleanup_model"], api_model(self.registry.settings, self.registry.settings.get("agent_model"), api_providers=self.api_providers()),
                       *self.registry.settings.get("cleanup_fallbacks")]
         for pid in self.registry.ids():
             models = self.registry._successful_models.get(pid, [])

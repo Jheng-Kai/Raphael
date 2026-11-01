@@ -75,20 +75,6 @@ async def test_a_question_said_into_a_conversation_gets_the_card_a_typed_one_get
     assert host.execute.await_count == 1
 
 
-@pytest.mark.parametrize("source,quick,nested,scope,shown", [
-    ("app", False, False, "private", True),
-    ("connector", False, False, "private", True),
-    ("voice", False, False, "private", True),
-    ("voice", True, False, "private", False),
-    ("voice", False, True, "private", False),
-    ("voice", False, False, "room", False),
-    ("telegram", False, False, "private", False),
-])
-def test_a_card_goes_to_a_chat_the_owner_is_at(source, quick, nested, scope, shown):
-    from raphael_core.agent.permissions import qualifies
-    assert qualifies(source=source, quick=quick, nested=nested, scope=scope) is shown
-
-
 async def test_cli_mcp_calls_the_same_command_gate(make_rig, conn, tmp_path, monkeypatch):
     from members.test_cli_brains import fake_mcp
     hub, host = local_hub(conn)

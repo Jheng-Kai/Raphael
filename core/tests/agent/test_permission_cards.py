@@ -280,7 +280,8 @@ async def test_a_no_is_remembered_by_the_request_so_that_no_other_way_to_the_sam
     [
         ("app", False, False, "private", True),
         ("connector", False, False, "private", True),  # a task resumed in the same thread
-        ("voice", False, False, "private", False),  # a spoken request: the overlay asks
+        ("voice", False, False, "private", True),  # said into the chat the owner is at
+        ("voice", True, False, "private", False),  # a question spoken at the key: the overlay asks
         ("telegram", False, False, "private", False),  # a message from a phone
         ("app", True, False, "private", False),  # a quick question
         ("app", False, True, "private", False),  # a request one member handed another
@@ -288,7 +289,7 @@ async def test_a_no_is_remembered_by_the_request_so_that_no_other_way_to_the_sam
         ("member", False, False, "exchange", False),
     ],
 )
-def test_only_a_private_chat_typed_at_this_computer_is_shown_a_card(source, quick, nested, scope, shown):
+def test_only_a_private_chat_the_owner_is_at_is_shown_a_card(source, quick, nested, scope, shown):
     assert qualifies(source=source, quick=quick, nested=nested, scope=scope) is shown
 
 

@@ -448,6 +448,22 @@ async def test_a_task_hands_out_only_so_many_pieces(make_rig,monkeypatch):
     assert first.ok and not second.ok and second.error=='handoff_depth_limit'
 
 
+@pytest.mark.parametrize('chosen',['@chatgpt:gpt-6-luna?effort=high','@my-service:big-model'])
+async def test_work_goes_to_the_brain_the_owner_chose_and_not_to_the_auxiliary_model(make_rig,chosen):
+    # Live, work chosen for a ChatGPT sign-in was quietly sent to OpenRouter's auxiliary model and billed there.
+    rig=make_rig()
+    rig.client.api_providers=lambda:{'openrouter','my-service'}
+    settings=SettingsStore(rig.conn)
+    settings.set('agent_model',chosen)
+    settings.set('assistant_model','openai/gpt-6-luna')
+    target,source=setup(rig,model=chosen,room=False)
+    rig.client.replies.append(report('Done '+'with the report. '*20))
+    receipt=rig.service.handoff(RAPHAEL,args(target,stage_id='work',request='Write it',done_when='A written report.'),
+                                source_turn_id=source.id,language='en')
+    await until(lambda:rig.task(receipt.data['task_id']).state in ('done','failed'))
+    assert rig.client.chat_calls[0]['model']==chosen
+
+
 async def test_a_stopped_conversation_turn_stops_the_questions_it_sent(make_rig,tmp_path):
     rig=make_rig()
     target,source=setup(rig,room=False)

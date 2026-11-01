@@ -1220,7 +1220,10 @@ class BackgroundService:
         # its own brain; any other continuation goes on from the run that paused.
         answering = recovered is not None and 'spec' not in recovered
         room_cli = selected_model.startswith("cli:")
-        model = selected_model if room_cli else api_model(self._settings, selected_model)
+        # A hosted reference reaches its own service through the router, never quietly the auxiliary model on another bill.
+        # ChatGPT counts signed in or not: its own failure says to sign in again.
+        hosted = getattr(self._client, "api_providers", lambda: ())
+        model = selected_model if room_cli else api_model(self._settings, selected_model, api_providers={"chatgpt", *hosted()})
         context = self._context(task)
         # A consultation is answered from what the asked member knows: its notes and its own
         # conversation with the owner. Only the answer goes back. A room's turn or work a colleague
