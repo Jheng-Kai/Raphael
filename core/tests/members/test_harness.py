@@ -78,7 +78,8 @@ async def test_a_member_can_open_an_app_with_the_same_presence_guard(setup, clie
 def test_the_tool_offers_every_schedule_the_engine_runs():
     schedule = DEFINITIONS["routine_create"]["parameters"]["properties"]["schedule"]
     assert set(schedule["properties"]["kind"]["enum"]) == set(KINDS)
-    assert {field.name for field in fields(Schedule)} <= set(schedule["properties"])
+    public = {"from_time": "from", "to_time": "to"}
+    assert {public.get(field.name, field.name) for field in fields(Schedule)} <= set(schedule["properties"])
 
 
 @pytest.mark.parametrize("schedule", [

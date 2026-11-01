@@ -1,5 +1,23 @@
 # Raphael architecture and checked boundaries
 
+## Shared calendar reading and rhythm projection (2026-11-01)
+
+ConnectedCalendar owns the most recent 24 in-memory range readings and attempts, one-minute refresh admission and
+background provider tasks. calendar.changed invalidates Home and Calendar;
+calendar_list reuses a covering reading, even an empty one, or awaits its first range read under the shared 12-second provider timeout. Readable connections start connected; only a failed read makes them unreadable. App shutdown
+cancels refresh tasks before closing services or SQLite. call_calendar pins the
+sole read slug and validates ordinary Google list arguments. A task-local core
+context lets that one read through the existing managed gate before catalog load;
+it changes no grants or model-call classification. Real Composio text is decoded
+at data.results[0].response.data; every envelope failure is refused.
+
+Schedule owns local-day window math. Migration 54 retains the lowest id, all runs
+and unique receipts; duplicates retain their most advanced state. calendar-view
+owns quiet bars and status icons. Home's bounded projection emits one rhythm per
+local date. routines.runs and Home share the SQL projection of unfinished turn status and actual pending owner_questions/worker_questions in live background tasks. Owner questions are confirm; waiting for delegated children alone remains running. No new RPC, Rust allowlist entry, setting or brain
+loop is introduced.
+
+Calendar page instances retain their current date/view until the app closes. Home resumes that instance without a date argument; explicit date/event links keep their navigation semantics. Only view choice is persisted as raphael.calendar.view, guarded and validated with a week default. Grid width determines seven-day layout (fallback below 520px); all-day and timed grids share column templates. The Today navigation group has a scoped R-UI-18 audit exception, without changing other text actions.
 ## Member media and datasets (2026-11-01)
 
 GenerationTools wraps the existing hub for API, authenticated RaphaelMcp and background
@@ -289,7 +307,7 @@ own events to what it computes; `HomeOverview.between` serves a member's `calend
 from the same sources. Tools are offered on every path through `take_snapshot`; the API
 and CLI turns reach them through `_harness_call`, a background task through
 `TaskRun._lookup`, with the same screening at T1. `calendar_google` says what Google is
-(connected, not connected, unreadable, members only) so that none of them reads as an
+(connected, not connected, unreadable) so that none of them reads as an
 empty calendar. Everything else the app shows is computed and gets no tools.
 
 The final Home calendar uses a size container: 900px width plus 460px height selects

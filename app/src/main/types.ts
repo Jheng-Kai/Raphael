@@ -980,7 +980,7 @@ export type RoutineSchedule = (
   | { kind: "daily"; time: string }
   | { kind: "weekdays"; time: string }
   | { kind: "weekly"; days: number[]; time: string }
-  | { kind: "every"; hours: number; time?: string }
+  | { kind: "every"; hours: number; time?: string; from?: string; to?: string }
 ) & { start_date?: string; max_runs?: number; until?: string };
 
 export interface RoutineRun {

@@ -8,6 +8,7 @@ import { getLocale, t } from "./i18n";
 import { faceHTML, scheduleText } from "./members";
 import { ownerFaceHTML } from "./owner-avatar";
 import { dateKey, localDay, openDatePicker } from "./schedule-picker";
+import type { RoutineRun } from "./types";
 import { actionRow, btn, closeMenu, esc, ico, iconButton, openMenu, sel, tg, toaster, type Choice } from "./ui";
 
 /** An event as the editor holds it. No id: one that is being made. */
@@ -200,19 +201,29 @@ export interface DetailOptions {
   onOpenRoutine?(): void;
   onClose?(): void;
   runStatus?: string;
+  today?: Date;
+  onRun?(run: RoutineRun): void;
+  onOff?(): void;
 }
 
 /** What one entry is: its time, notes, who added it or where it comes from, and what can be done with it. */
 export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, entry: CalendarEntry, o: DetailOptions): Panel {
-  const when = entry.allDay && entry.end - entry.start > 86_400_000
+  const when = entry.rhythm ? entry.timing ?? "" : entry.allDay && entry.end - entry.start > 86_400_000
     ? `${whenDay(entry.start)} – ${whenDay(entry.end - 1)}`
     : `${whenDay(entry.start)} · ${clockRange(entry)}`;
   const from = entry.kind === "own"
     ? `${entry.member ? faceHTML(entry.member, 20) : ownerFaceHTML(20)}<span>${esc(entry.member ? t("cal.addedBy", { p0: entry.member.name }) : t("cal.addedByOwner"))}</span>`
     : entry.kind === "routine"
-      ? `${entry.member ? faceHTML(entry.member, 20) : ""}<span>${esc(t("cal.fromRoutine", { p0: entry.member?.name ?? "" }))}${entry.routine ? ` · ${esc(scheduleText(entry.routine.schedule))}` : ""}</span>`
+      ? `${entry.member ? faceHTML(entry.member, 20) : ""}<span>${esc(t("cal.fromRoutine", { p0: entry.member?.name ?? "" }))}${entry.routine && !entry.rhythm ? ` · ${esc(scheduleText(entry.routine.schedule))}` : ""}</span>`
       : `${googleMark()}<span>${esc(t("cal.fromGoogle"))}</span>`;
   const panel = openPanel(rect, "au-pop-detail", entry.title, { onClose: o.onClose });
+  const today = dateKey(o.today ?? new Date());
+  const todayRuns = (entry.runs ?? []).filter(r=>dateKey(new Date(r.at))===today);
+  const runsHTML = entry.rhythm ? `<div class="au-rhythm-runs" aria-label="${esc(t("auto.todayRuns"))}">${todayRuns.map(r=>{
+    const status=r.run?.status ?? "coming", label=t(status==="done" ? "auto.done" : status==="error" ? "auto.error" : status==="confirm" ? "auto.waiting" : status==="running" ? "auto.running" : status==="skipped" ? "auto.skipped" : "auto.coming");
+    const icon=status==="done" ? "check" : status==="error" ? "x" : status==="confirm" ? "info" : "clock";
+    return btn(ico(icon)+`<time>${esc(formatClock(r.at))}</time>`,"sm",` data-rhythm-time="${r.at}" data-status="${status}" aria-label="${esc(formatClock(r.at)+" · "+label)}"${r.run?.turn_id ? "" : " disabled"}`);
+  }).join("")}</div><p class="au-pop-time">${esc(t("auto.nextRun"))} · ${entry.routine?.next_run ? esc(whenDay(entry.routine.next_run)+" · "+formatClock(entry.routine.next_run)) : esc(t("auto.notYet"))}</p>` : "";
   panel.el.innerHTML =
     `<header class="au-pop-tools">` +
     (o.onEdit ? iconButton("pencil", t("cal.edit"), ' data-pop="edit"') : "") +
@@ -221,10 +232,13 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     `<h2>${esc(entry.title)}</h2><p class="au-pop-time">${esc(when)}</p>` +
     (entry.notes ? `<p class="au-pop-notes">${esc(entry.notes)}</p>` : "") +
     `<p class="au-pop-from">${from}</p>` +
+    runsHTML +
     (o.runStatus ? `<p class="au-pop-status">${esc(o.runStatus)}</p>` : "") +
-    (o.onOpenRoutine ? btn(esc(t("cal.openRoutine")), "au-pop-open", ' data-pop="open-routine"') : "");
+    (o.onOpenRoutine ? `<div class="au-pop-routine-actions">${btn(`<span>${esc(t("cal.openRoutine"))}</span>`, "au-pop-open", ' data-pop="open-routine"')}${o.onOff ? btn(ico("pause")+`<span>${esc(t("auto.turnOff"))}</span>`, "", ' data-pop="off"') : ""}</div>` : "");
   place(panel, rect);
   panel.el.addEventListener("click", e => {
+    const time=(e.target as Element).closest<HTMLElement>("[data-rhythm-time]");
+    if (time) { const run=todayRuns.find(r=>r.at===Number(time.dataset.rhythmTime))?.run; if (run) { panel.close(); o.onRun?.(run); } return; }
     const target = (e.target as Element).closest<HTMLElement>("[data-pop]");
     if (!target) return;
     const act = target.dataset.pop;
@@ -232,6 +246,7 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     else if (act === "edit") o.onEdit?.();
     else if (act === "more") o.onMore?.(target);
     else if (act === "open-routine") { panel.close(); o.onOpenRoutine?.(); }
+    else if (act === "off") { panel.close(); o.onOff?.(); }
   });
   panel.el.querySelector<HTMLElement>('[data-pop="close"]')?.focus({ preventScroll: true });
   return panel;

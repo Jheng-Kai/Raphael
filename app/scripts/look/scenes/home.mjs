@@ -2,6 +2,7 @@ import { scene, click, wait, check, scroll, page, key, hover } from "./steps.mjs
 
 const ready = [wait(".page-home:not([hidden]) .ho-hero"), check("home-hero"), check("home-overview"), check("home-redesign"), check("home-month")];
 export default [
+  scene("home-calendar-rhythm", "Home shares the quiet rhythm, member face and timing", [page("home"),scroll('.ho-calendar'),check("home-calendar-rhythm")], {calendarRhythm:true}),
   scene("home", "Home briefing with reports, pending items, calendar and usage", ready),
   scene("home-empty", "Home without pending work, reports, events or usage", ready, { homeEmpty: true }),
   scene("home-sparse", "Four stable summaries with no events/reports, some spend, one CLI with windows and one without", ready, { homeSparse: true }),

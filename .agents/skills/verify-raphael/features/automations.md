@@ -1,5 +1,45 @@
 # Calendar and automations
 
+## Calendar navigation review (2026-11-01)
+
+The general Home calendar entrance resumes its in-memory date and view. Explicit date/event links still jump. View choice persists in guarded browser storage across reload; the date starts on today in a fresh launch. Week uses all seven columns at content widths of at least 520px, otherwise a short range with an explicit date title. All-day and rhythm bars align with the hour columns. Previous/Today/next share a quiet borderless group; Today dims in its current range without moving.
+
+Selected scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls. Run both themes at 1120,900,720,1920x1080,480. Check return through Home and conversation, true page reload, seven columns at 1120/720, narrow fallback dates, bar edges, hover surface and stable button geometry. At 480, month overflow counts fit their buttons and the rhythm shows only face and title.
+
+```powershell
+npm run look -- calendar-remember calendar-view-reload calendar-week-fit calendar-today-controls --theme both --width 1120,720,1920x1080
+npm run look -- calendar-remember calendar-view-reload calendar-week-fit calendar-today-controls --theme both --width 900,480
+```
+
+## Calendar rhythms and Composio readings (2026-11-01)
+
+Google through Composio is drawn after its first successful background read.
+A readable connection starts connected. Pending/slow reads never hold the page up; failed reads keep old events and say
+unreadable. The rail shows Google when connected. Tests cover the observed provider
+envelope, every failure level and an empty catalog without changing model auto
+permissions. Member calendar_list waits for its first uncovered range, up to 12 seconds; covering empty readings return at once. Cache and attempt history retain the most recent 24 ranges. The owner performs real-account acceptance separately.
+
+An every routine may have from/to, for example every three hours from 08:00 to
+23:00. The shared editor uses real time menus in a reserved row, without native
+select/time input or new settings. Member rows say the interval and window.
+Migration 54 merges eligible historical daily rows.
+
+Several runs a day are one quiet all-day bar across active days, after real all-day
+events, with member face/colour, title and brief timing. Month and Home show at most
+one rhythm line per day with face and title only (no interval, window or clock). Day/week give the title its full available width, then show timing only when it fits whole; the popover retains full timing. Error/confirm runs retain unfaded timed chips and status icons. Pending ask_owner and background permission cards project to confirm from their real stores; waiting for children alone does not. Both question open/close notifications refresh the calendar. The existing popover shows today's times/states, next run, edit/off
+and report navigation. Edit/off share one row height and text baseline at every selected width/theme. The member source checkbox hides both bar and exceptions;
+both use existing overflow counts. Daily, weekly, once and every 24 hours stay timed.
+
+```powershell
+npm run look -- calendar-rhythm-week calendar-rhythm-day calendar-rhythm-month calendar-rhythm-popover calendar-rhythm-hidden home-calendar-rhythm automations-google-composio automation-window automation-window-menu automation-window-saved automations-calendar automations-all-day automation-edit details-routines home-own-events --theme both --width 1120,720,1920x1080
+```
+
+Inspect all contact sheets and full-size narrow/wide bars, month lines, exception
+chips, popovers and time menus. Compare editors with automation-edit, member rows
+with details-routines, and Home chips with home-own-events. Checks assert no ordinary
+rhythm chip in the hours, error/confirm exceptions, daily chips, one month line,
+status icons, shared controls and saved window values.
+
 ## Connected-app event routines (2026-11-01)
 
 A routine has exactly one of schedule or when. In conversation, the existing
@@ -61,18 +101,18 @@ From Home click the calendar block, a date or an event. Home remains highlighted
 - **Make:** click a slot for the small form beside it, drag over a range to set the time, or 建立 for the same form. It holds the title, start, end, all-day and notes, and 改成例行任務 for what repeats. Enter or 儲存 saves and draws it. A press outside closes a form with nothing typed; one that holds words stays until 取消 or Escape.
 - **Read and change:** click an event for its time, notes and who added it, the pencil and the ⋯ that holds delete, which asks once more. Right click reaches the same menu. Drag moves an own event, its bottom edge resizes it; an all-day bar moves by days and its right edge stretches it; in a month a chip moves to another day. Routine and Google entries are read and say where they come from; a routine opens its existing editor.
 - **Month:** six weeks of chips, 還有 N 個 for what does not fit, which opens that day. A click on an empty part of a day makes an all-day event there.
-- **Narrow windows:** at 760px of content width and below, a calendar icon in the toolbar opens the rail as a drawer from the left, + makes an event, and a week shows three days from the day in view. With the rail visible, it shows three days below 1100px content width, five below 1500px and seven above, so overlapping chips keep readable times. Picking a date or starting a member drag closes the drawer.
+- **Narrow windows:** at 760px of content width and below, a calendar icon in the toolbar opens the rail as a drawer from the left, + makes an event, and a week still shows all seven days whenever its actual calendar content is at least 520px. Below that it shows one to three days from the date in view and names those dates in the title. Tight chips retain readable times. Picking a date or starting a member drag closes the drawer.
 
 Mini month weekdays use narrow names (one Chinese character each); event titles truncate with full tooltips and times remain complete. Advanced routine fields are under More. Member details also exposes routines; aggregate usage and CSV are in Settings > Models > Usage.
 
-The rail and Home say what Google is, in one quiet line with the place to go (R-UI-66): not connected is offered until its × closes it for good, after which the rail keeps the bare words and Home nothing; could not be read names 設定 › 連接 until it reads again; connected through Composio says members can read it and it is not drawn here. An empty period stays calm with one line and 建立.
+The rail and Home say what Google is, in one quiet line with the place to go (R-UI-66): not connected is offered until its × closes it for good, after which the rail keeps the bare words and Home nothing; could not be read names 設定 › 連接 until it reads again; connected through Composio is drawn from the same cached reading as direct Google sign-in. An empty period stays calm with one line and 建立.
 
 ## Driving it with look
 
 ```powershell
 npm run look -- automations-calendar automations-day automations-month automations-view-menu automations-empty automations-day-empty automations-month-empty automations-busy automations-busy-day automations-month-busy --theme both --width 1120,720,1920x1080
 npm run look -- automations-create-slot automations-create-drag automations-create-button automations-create-time-menu automations-create-all-day automations-create-saved automations-detail-own automations-detail-member automations-detail-routine automations-detail-google automations-edit-own automations-delete-own automations-right-click automations-move automations-resize --theme both --width 1120,720,1920x1080
-npm run look -- automations-google-off automations-google-off-closed automations-google-failed automations-google-members-only automations-hover --theme both --width 1120,720,1920x1080
+npm run look -- automations-google-off automations-google-off-closed automations-google-failed automations-google-composio automations-hover --theme both --width 1120,720,1920x1080
 npm run look -- automations-tools automations-tools-month automations-tools-date automations-tools-awake --theme both --width 1120,720,1920x1080
 npm run look -- automation-once automation-daily automation-weekdays automation-weekly automation-every automation-hours-menu --theme both --width 1120,720,1920x1080
 npm run look -- automation-destination automation-end-menu automation-max-runs automation-until automation-edit automation-delete automation-drag-prefill automation-more-bottom --theme both --width 1120,720,1920x1080
@@ -125,7 +165,7 @@ npm run look -- automation-delete --theme both --width 1120,720,1920x1080
 
 ## Owner round 6 contracts
 
-Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller content areas use the drawer and fewer days. calendar-shell asserts both modes.
+Owner round 6: automations-calendar/automations-day/automations-tools/automations-tools-awake retain the month/member rail at a 1120px window by narrowing the week grid. The calendar-container breakpoint is 760px; smaller page content uses the drawer; only calendar content below 520px reduces the number of days. calendar-shell asserts both modes.
 
 ## Owner round 7 contracts
 
@@ -145,3 +185,5 @@ calendar-all-day checks its visible event. Cover empty/sparse/full day and week.
 ```powershell
 npm run look -- automations-day-empty automations-sparse automations-day-sparse automations-all-day --theme both --width 1120,720,1920x1080,1280x800
 ```
+
+Title priority review: calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month and home-calendar-rhythm use a long routine title. Check its visible width at 1120/720 and require timing to be whole or hidden, never truncated. Run the same four scenes in both themes at 1120,720,1920x1080.

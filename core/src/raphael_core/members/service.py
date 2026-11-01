@@ -88,6 +88,7 @@ from ..services.attachments import IMAGE_TYPES, MAX_IMAGE_BYTES, AttachmentError
 from .capabilities import MemberCapabilities, download_skills
 from .schedule import Schedule, next_run
 from .store import (
+    ROUTINE_RUN_STATUS_SQL,
     PROMPT_MAX,
     PROFILE_FIELDS,
     NAME_MAX,
@@ -1369,8 +1370,9 @@ class MembersService:
             if row[0] is not None:
                 self._finish_run(row[0])
         rows = self._conn.execute(
-            "SELECT id, routine_id, scheduled, started, finished, status, turn_id, summary, cost"
-            " FROM routine_runs WHERE routine_id = ? ORDER BY id DESC LIMIT 100", (routine_id,)
+            "SELECT r.id, r.routine_id, r.scheduled, r.started, r.finished,"
+            f" {ROUTINE_RUN_STATUS_SQL} AS status, r.turn_id, r.summary, r.cost"
+            " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id = ? ORDER BY r.id DESC LIMIT 100", (routine_id,)
         )
         runs = [dict(row) for row in rows]
         total = self._conn.execute("SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine_id,)).fetchone()[0]

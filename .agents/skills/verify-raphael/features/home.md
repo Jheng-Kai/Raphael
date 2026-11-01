@@ -1,5 +1,14 @@
 # Home overview
 
+## Calendar rhythm (2026-11-01)
+
+home-calendar-rhythm shares Calendar's calendar-view chip: member face/colour,
+title only, without timing or a clock. Its projection has one rhythm per local date
+plus timed failure/owner-question exceptions; overflow includes each bar. Compare
+with home-own-events and calendar-rhythm-day in both themes at
+1120,720,1920x1080. The background Google reading notifies Home through
+calendar.changed and never holds first paint.
+
 ## Sub-features
 
 ### Product contract (owner refinement, 2026-10-30)
@@ -42,15 +51,14 @@ Full, sparse and empty states retain identical tracks and dimensions.
 The block's header has one quiet line about Google between the title and the fixed
 controls, so that it is never taken for an empty calendar: not connected, with the place
 to connect it and a × that closes it for good (here and on the Calendar page); could not be
-read, with where to check, until it reads again; connected through a service the calendar
-does not read. Connected, it says nothing. Own events show whatever Google does.
+read, with where to check, until it reads again. Connected, it says nothing. Own events show whatever Google does.
 
 At container width >=900px and height >=460px (1920x1080), a full month fills the
 remaining Home area. Days show two chips, or three above 600px of calendar height,
 with time, title and a remaining count. Chips open their event on Calendar with the
 occurrence highlighted and its detail open; dates open that Calendar day. A month with
 nothing in it offers 建立 in the header. Compact agenda rows use the event action. Blank
-space opens the Calendar's week. Calendar remains reachable from Home rather than the
+space resumes the Calendar's last date and view (today with the stored view after a fresh launch). Calendar remains reachable from Home rather than the
 sidebar.
 
 ## How to get to it (user POV)
@@ -109,8 +117,8 @@ expands recurrences and orders by start time over the visible 42 days, capped at
 expired connections yield no connected events, and `calendar_google` says which it was;
 own events and local routines remain available. All-day dates use calendar time zone.
 Reports stay separate from the timeline. An own event or a Google one past midnight is
-counted and marked on each of its days. The `composio:googlecalendar` toolkit gives members
-tools but the calendar does not read it (`members_only`).
+counted and marked on each of its days. The `composio:googlecalendar` toolkit also supplies this reading through the fixed
+core read path; the direct Google sign-in wins when readable.
 
 Offline pytest covers projection and HTTP doubles. Browser fixtures prove UI;
 isolated fake-brain native journeys prove the desktop path. Neither proves live
@@ -118,3 +126,7 @@ calendar/OAuth/provider scheduling. Judge is excluded by this task's explicit br
 Follow the shared [content-width contract](README.md#content-width).
 
 Native `sidebar-home` checks the emblem/report/date and in-place sidebar search at 1120,720,1920x1080, using the real WebView and isolated data.
+
+Review fixes: Home rhythms show only face and title, without interval or time window. Failed/waiting chips never carry is-past. Pending background owner/permission cards use the shared real-store run-status projection. Readable Google connections start connected and background reads never hold Home up.
+
+The general calendar block resumes Calendar without a date argument. Explicit day, event and create links still navigate to their targets. calendar-remember checks both Home and conversation returns; calendar-view-reload checks a fresh launch.

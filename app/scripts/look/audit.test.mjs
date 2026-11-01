@@ -6,6 +6,21 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects month intervals clipped by their containing chip", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<section class="au-page"><h1>Month</h1><div class="au-month-view"><button class="cal-chip is-rhythm"><span class="cal-chip-copy"><small>Every 3 hours</small></span></button></div></section>';
+    for (const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left:0,top:0,right:60,bottom:20,width:60,height:20});
+    const copy=browser.document.querySelector('.cal-chip-copy'), interval=copy.querySelector('small');
+    copy.getBoundingClientRect=()=>({left:0,top:0,right:42,bottom:20,width:42,height:20});
+    interval.getBoundingClientRect=()=>({left:0,top:0,right:49,bottom:20,width:49,height:20});
+    Object.defineProperty(interval,'clientWidth',{value:49});Object.defineProperty(interval,'scrollWidth',{value:49});
+    vi.stubGlobal('document',browser.document);
+    try {
+      expect(()=>checkRendered('calendar-remember-copy')).toThrow('the whole month interval stays inside its chip');
+      copy.getBoundingClientRect=()=>({left:0,top:0,right:60,bottom:20,width:60,height:20});
+      expect(()=>checkRendered('calendar-remember-copy')).not.toThrow();
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("measures login field rows while allowing room for the password lock", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<section data-secret-card="card-login"><span class="field"><input data-login-user value="owner"></span><span class="field"><input data-secret-input type="password"></span><button data-act="card-save">Save</button></section>';
@@ -519,6 +534,10 @@ describe("rendered look checks", () => {
   it("checks text frames and bare icon borders", () => {
     const { audit } = productAudit('<button class="btn" style="border: none">Save</button><button class="btn icon" style="border: 1px solid red">X</button><button class="btn" style="border: 1px solid red">Cancel</button>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-18', 'R-UI-18']);
+  });
+  it("allows the owner's quiet Today navigation only inside its arrow group", () => {
+    const { audit } = productAudit('<div class="au-date-nav"><button class="btn au-today" style="border:0">Today</button></div><button class="btn au-today" style="border:0">Save</button>');
+    expect(audit().productRules.map(item=>item.rule)).toEqual(['R-UI-18']);
   });
   it("checks rendered primary and destructive action positions", () => {
     const { window, audit } = productAudit('<div class="mb-dialog"><div class="action-row"><button class="pri">Save</button><span class="action-destructive"><button>Delete</button></span></div></div>');

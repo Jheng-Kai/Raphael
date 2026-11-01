@@ -252,6 +252,9 @@ class Connected:
         assert method == "connectors.status" and params == {"refresh": False}
         return {"connectors": self.connectors}
 
+    async def call_calendar(self, args):
+        return await self.call_google("calendar_list_events", args)
+
     async def call_google(self, name, args):
         from raphael_core.connectors.http import ConnectorFailure
         if self.fails:
@@ -262,13 +265,40 @@ class Connected:
 READABLE = {"id": "google", "status": "ACTIVE", "enabled_tools": ["calendar_list_events"]}
 
 
+@pytest.mark.parametrize("fails", [False, True])
+async def test_a_model_calendar_list_waits_for_its_first_slow_read(setup, client, home, fails):
+    import asyncio
+    from raphael_core.home import ConnectedCalendar
+    rig, team = setup
+    release = asyncio.Event()
+    class Slow(Connected):
+        async def call_calendar(self, args):
+            await release.wait()
+            return await super().call_calendar(args)
+    link = Slow([{"id":"composio:googlecalendar","status":"ACTIVE","enabled_tools":["GOOGLECALENDAR_EVENTS_LIST"]}], fails)
+    home.calendar_events = ConnectedCalendar(link, link)
+    secretary = member(team)
+    client.chats = [chat("", ("calendar_list", {})), live_said("Sample calendar checked")]
+    reading = asyncio.create_task(typed(rig, "List my calendar", secretary.id))
+    await asyncio.sleep(.03)
+    assert not reading.done()
+    release.set()
+    await asyncio.wait_for(reading, 2)
+    seen = next(m for m in client.chat_calls[-1]["messages"] if m.get("role") == "tool")
+    assert f'"google": "{"unreadable" if fails else "connected"}"' in seen["content"]
+    if not fails:
+        assert '"source": "google"' in seen["content"]
+        assert f'"start": "{TODAY}T10:00+00:00"' in seen["content"]
+    await home.calendar_events.aclose()
+
+
 @pytest.mark.parametrize("connectors, fails, state, titles", [
     ([], False, "not_connected", ["牙醫"]),
     ([{**READABLE, "enabled_tools": []}], False, "not_connected", ["牙醫"]),
     ([READABLE], False, "connected", ["外部會議", "牙醫"]),
     ([READABLE], True, "unreadable", ["牙醫"]),
     ([{**READABLE, "status": "EXPIRED"}], False, "unreadable", ["牙醫"]),
-    ([{"id": "composio:googlecalendar", "status": "ACTIVE", "enabled_tools": ["X"]}], False, "members_only", ["牙醫"]),
+    ([{"id": "composio:googlecalendar", "status": "ACTIVE", "enabled_tools": ["GOOGLECALENDAR_EVENTS_LIST"]}], False, "connected", ["外部會議", "牙醫"]),
 ])
 async def test_the_calendar_tells_not_connected_and_unreadable_from_nothing_and_own_events_always_show(setup, client, home, connectors, fails, state, titles):
     from raphael_core.home import ConnectedCalendar
@@ -276,7 +306,10 @@ async def test_the_calendar_tells_not_connected_and_unreadable_from_nothing_and_
     link = Connected(connectors, fails)
     home.calendar_events = ConnectedCalendar(link, link)
     await rig.call("calendar.add", {"title": "牙醫", "start": f"{TODAY}T15:00"})
-    value = await rig.call("home.overview", {"refresh": True})
+    await rig.call("home.overview", {"refresh": True})
+    import asyncio
+    await asyncio.gather(*home.calendar_events._tasks.values())
+    value = await rig.call("home.overview")
     assert value["calendar_google"] == state
     assert [item["title"] for item in value["calendar_events"]] == titles or sorted(item["title"] for item in value["calendar_events"]) == sorted(titles)
     secretary = member(team)
@@ -284,17 +317,26 @@ async def test_the_calendar_tells_not_connected_and_unreadable_from_nothing_and_
     await typed(rig, "今天的行程", secretary.id)
     seen = next(m for m in client.chat_calls[-1]["messages"] if m.get("role") == "tool")
     assert f'"google": "{state}"' in seen["content"]
+    if state == "connected":
+        assert "外部會議" in seen["content"]
 
 
 async def test_a_google_event_has_its_length_and_a_read_that_works_again_clears_the_failure(setup, home):
     from raphael_core.home import ConnectedCalendar
     rig, team = setup
     link = Connected([READABLE], True)
-    home.calendar_events = ConnectedCalendar(link, link)
-    assert (await rig.call("home.overview", {"refresh": True}))["calendar_google"] == "unreadable"
+    clock = [0]
+    home.calendar_events = ConnectedCalendar(link, link, now_ms=lambda: clock[0])
+    await rig.call("home.overview", {"refresh": True})
+    import asyncio
+    await asyncio.gather(*home.calendar_events._tasks.values())
+    assert (await rig.call("home.overview"))["calendar_google"] == "unreadable"
     assert (await rig.call("home.overview"))["calendar_google"] == "unreadable", "the last read is what a local paint says"
     link.fails = False
-    value = await rig.call("home.overview", {"refresh": True})
+    clock[0] = 60_000
+    await rig.call("home.overview", {"refresh": True})
+    await asyncio.gather(*home.calendar_events._tasks.values())
+    value = await rig.call("home.overview")
     assert value["calendar_google"] == "connected"
     [event] = [item for item in value["calendar_events"] if item["kind"] == "event"]
     assert event["end_ms"] - event["at_ms"] == 90 * 60_000

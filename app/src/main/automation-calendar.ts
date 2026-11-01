@@ -15,6 +15,18 @@ export function occurrences(routine: Routine, from: Date, to: Date, remaining = 
   };
   if (s.kind === "once") { add(new Date(`${s.start_date}T${s.time}`).getTime()); return result; }
   if (s.kind === "every") {
+    if (s.from && s.to) {
+      const first = Number.isFinite(remaining) ? new Date(routine.next_run) : from;
+      const firstMinute = Number(s.from.slice(0, 2)) * 60 + Number(s.from.slice(3));
+      const lastMinute = Number(s.to.slice(0, 2)) * 60 + Number(s.to.slice(3));
+      for (let day = localDay(dateKey(first)); day < to && used < remaining; day = shiftDay(day, 1)) {
+        for (let minute = firstMinute; minute <= lastMinute && used < remaining; minute += s.hours * 60) {
+          const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minute).getTime();
+          if (at >= routine.next_run) add(at);
+        }
+      }
+      return result;
+    }
     const step = s.hours * 3600000, anchor = routine.next_run;
     const offset = Math.max(0, Math.ceil((from.getTime() - anchor) / step));
     used = offset;

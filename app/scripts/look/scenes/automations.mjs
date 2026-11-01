@@ -13,7 +13,22 @@ const eventRoutine = { id: 90, member_id: 1, title: "客戶來信草稿", prompt
   when: { app: "Gmail", event: { tool: "mcp:Gmail/messages", arguments: { limit: 50 }, items: "messages", id: "id" }, filter: { field: "sender", equals: "client@example.com" } } };
 const eventDetails = [member(1), { action: "open-details" }, click('[data-det="tab"][data-tab="routines"]'), wait('[data-routine="90"]')];
 const eventDialog = [...eventDetails, hover('[data-routine="90"]'), check("routine-event-menu"), click('[data-det="routine-menu"][data-id="90"]'), click('#app-popover [data-pick="edit"]'), wait('#au-filter')];
+const rhythm = {calendarRhythm:true};
+const rhythmDetail = [...auto, ...view("day"), wait('.au-all-day-row .is-rhythm'), click('.au-all-day-row .is-rhythm'), wait('.au-rhythm-runs')];
+const windowDialog = [...rhythmDetail, click('[data-pop="open-routine"]'), wait('[data-dlg="window-from"]')];
 export default [
+  scene("calendar-remember", "Home and conversation returns preserve the date and chosen view", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-remember-save"),...auto,check("calendar-remember-return"),member(1),...auto,check("calendar-remember-return")], rhythm),
+  scene("calendar-view-reload", "Reload keeps the view preference and starts on today", [...auto,...view("month"),click('[data-au="next"]'),check("calendar-view-stored"),{action:"reload"},...auto,check("calendar-view-reload")], rhythm),
+  scene("calendar-week-fit", "Seven week columns and aligned all-day bars fit the available width", [...auto,check("calendar-shell"),check("calendar-week-fit")], rhythm),
+  scene("calendar-today-controls", "Quiet previous, today and next controls stay aligned through hover and return", [...auto,click('[data-au="next"]'),check("calendar-nav-away"),hover('[data-au="today"]'),check("calendar-nav-hover"),click('[data-au="today"]'),check("calendar-nav-today")], rhythm),
+  scene("calendar-rhythm-week", "One quiet rhythm above the hours, daily work and exceptions keep their times", [...auto, check("calendar-rhythm-week")], rhythm),
+  scene("calendar-rhythm-day", "One daytime rhythm and the failed run in the day", [...auto,...view("day"),check("calendar-rhythm-day")], rhythm),
+  scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month")], rhythm),
+  scene("calendar-rhythm-popover", "Today's runs, icon statuses, next run, edit and off", [...rhythmDetail,check("calendar-rhythm-popover")], rhythm),
+  scene("calendar-rhythm-hidden", "The member checkbox hides rhythm and exceptions together", [...auto,{action:"calendar-tools"},click('[data-source="member:1"]'),check("calendar-rhythm-hidden")], rhythm),
+  scene("automation-window", "One every routine keeps its daytime window", [...windowDialog,check("routine-window")], rhythm),
+  scene("automation-window-menu", "The daytime window uses the shared time menu", [...windowDialog,click('[data-dlg="window-from"]'),wait('#app-popover')], rhythm),
+  scene("automation-window-saved", "One save preserves the full daytime rhythm", [...windowDialog,click('[data-dlg="window-from"]'),click('#app-popover [data-value="07:00"]'),click('[data-dlg="save"]'),waitGone('.au-routine-dialog'),...rhythmDetail.slice(auto.length),click('[data-pop="open-routine"]'),wait('[data-dlg="window-from"]'),check("routine-window-saved")], rhythm),
   scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),
   scene("routine-event-edit", "A readable event filter in the shared routine editor", [...eventDialog, check("routine-event-edit")], { routines: [eventRoutine] }),
   scene("routine-event-saved", "A changed event filter is saved and shown in the same list", [...eventDialog, type("#au-filter", "owner@example.com"), click('[data-dlg="save"]'), waitGone('.au-routine-dialog'), check("routine-event-saved")], { routines: [eventRoutine] }),
@@ -76,7 +91,7 @@ export default [
   scene("automations-google-off", "Google not connected: said once, with the place to connect it", [...auto, ...view("week"), { action: "calendar-tools" }, check("calendar-google-off")], { calendarGoogle: "not_connected" }),
   scene("automations-google-off-closed", "Closed, the offer is not made again and its words stay in the rail", [...auto, { action: "calendar-tools" }, wait("[data-calendar-dismiss]"), click("[data-calendar-dismiss]"), check("calendar-google-closed")], { calendarGoogle: "not_connected" }),
   scene("automations-google-failed", "Google could not be read: said, with where to check, and own events still show", [...auto, { action: "calendar-tools" }, check("calendar-google-failed")], { calendarGoogle: "unreadable" }),
-  scene("automations-google-members-only", "Connected through a service the calendar cannot read: said plainly", [...auto, { action: "calendar-tools" }, check("calendar-google-members")], { calendarGoogle: "members_only" }),
+  scene("automations-google-composio", "Google Calendar through Composio is drawn after a successful read", [...auto, check("calendar-google-composio")], {calendarComposio:true}),
   scene("automations-tools", "Responsive calendar month, members and keep-awake", tools),
   scene("automations-tools-month", "Calendar tools navigate mini months", [...tools, click('[data-au="month-next"]'), check("calendar-tools")]),
   scene("automations-tools-date", "Calendar tools select a date and return to the grid", [...tools, click('[data-mini-date="2026-10-28"]'), wait('.au-day-col[data-day="2026-10-28"]'), check("calendar-shell")]),

@@ -5,6 +5,7 @@ import json
 import re
 import time
 from dataclasses import asdict
+from contextvars import ContextVar
 
 from ..agent.policy import Tier
 from ..integrations.config import ServerConfig, tool_record
@@ -26,6 +27,7 @@ _SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,99}")
 _TOOL = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 COMPOSIO_SERVER = "connectors_composio"
 GOOGLE_SERVER = "connectors_google"
+_CALENDAR_READ = ContextVar("calendar_read", default=None)
 
 
 def _text(params: dict, key: str, *, optional=False) -> str:
@@ -754,7 +756,7 @@ class ConnectorsService:
             if not entries or all(c.draft_only for c in entries) and re.search(r"(^|_)(SEND|POST|PUBLISH)(_|$)", tool):
                 return None
             # Use exactly the classifier shown in Connections, including provider hints.
-            kinds.append(all(_kind(next((t for t in self._tool_catalog.get(c.id, []) if t["slug"] == tool),
+            kinds.append((_CALENDAR_READ.get() is self and tool == "GOOGLECALENDAR_EVENTS_LIST") or all(_kind(next((t for t in self._tool_catalog.get(c.id, []) if t["slug"] == tool),
                                         {"slug": tool}), c.id.split(":", 1)[1]) == "read" for c in entries))
         return kinds
 
@@ -791,6 +793,47 @@ class ConnectorsService:
         except Exception:
             # Status refresh is best effort; tools remain unavailable until reconfirmed.
             pass
+
+    async def call_calendar(self, args):
+        """The calendar's sole Composio read; keep its provider envelope and decoding together."""
+        from ..agent.plugins import tool_key
+
+        entry = self.store.connectors.get("composio:googlecalendar")
+        if (entry is None or entry.status != "ACTIVE" or not entry.enabled
+                or "GOOGLECALENDAR_EVENTS_LIST" not in entry.enabled_tools
+                or "GOOGLECALENDAR_EVENTS_LIST" in entry.disabled_tools
+                or not _validate(args, TOOLS["calendar_list_events"][1])):
+            raise ConnectorFailure("blocked")
+        envelope = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_LIST", "arguments": args}]}
+        # The catalog may not be loaded at startup. Only this fixed core read carries the exception,
+        # in this async context; model calls still use the catalog classifier and ordinary gate.
+        token = _CALENDAR_READ.set(self)
+        try:
+            if self._execution(envelope) != [True] or not self.allow_call(COMPOSIO_SERVER, META_EXECUTE, envelope, "auto"):
+                raise ConnectorFailure("blocked")
+            result = await self.hub.call(tool_key(COMPOSIO_SERVER, META_EXECUTE), envelope, approver="auto")
+        finally:
+            _CALENDAR_READ.reset(token)
+        if not result.ok:
+            raise ConnectorFailure("network")
+        def checked(value):
+            if (not isinstance(value, dict) or value.get("successful") is False
+                    or value.get("error") or value.get("error_count", 0) > 0):
+                raise ValueError
+            return value
+        try:
+            data = (result.mcp_result or {}).get("structuredContent")
+            if data is None:
+                data = json.loads(result.text)
+            data = checked(checked(data)["data"])
+            response = checked(data["results"][0]["response"])
+            data = checked(response["data"])
+            data = checked(data.get("response_data", data))
+            if not isinstance(data.get("items"), list):
+                raise ValueError
+            return data
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+            raise ConnectorFailure("response") from None
 
     async def call_google(self, name, args):
         if not self.tool_available(GOOGLE_SERVER, name) or not _validate(args, TOOLS[name][1]):

@@ -2,12 +2,12 @@
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
 // here and say where they come from. Home opens it.
 import * as api from "../api";
-import { occurrences } from "../automation-calendar";
 import { closePanel, openEventDetail, openEventEditor, panelOpen, type EventDraft } from "../calendar-popover";
-import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, memberSource, monthEntries, OWN_SOURCE, ROUTINE_DRAWN_MS, type CalendarEntry, type Segment } from "../calendar-view";
+import { allDayBars, chipClock, chipColor, chipHTML, dayLayout, dismissOffer, entryOfItem, googleMark, googleNoticeHTML, GOOGLE_SOURCE, isAllDayRow, isRunException, memberSource, monthEntries, OWN_SOURCE, routineEntries, type CalendarEntry, type Segment } from "../calendar-view";
 import { describeError, formatClock } from "../format";
 import { getLocale, onLocaleChange, t } from "../i18n";
 import { dayName, faceHTML, primaryFirst, primaryIdOf } from "../members";
+import { openMemberThread } from "../team-navigation";
 import { openRoutineDialog } from "../routine-dialog";
 import { dateKey, localDay, monthDays, monthGrid, monthLabel, shiftDay } from "../schedule-picker";
 import type { AppContext, Member, Page, Routine, RoutineRun } from "../types";
@@ -20,10 +20,12 @@ export const runStatus = (status: string): string => t(status === "skipped" ? "a
 
 type Period = "day" | "week" | "month";
 const HIDDEN_KEY = "raphael.calendar.hidden";
+const VIEW_KEY = "raphael.calendar.view";
 const MINUTE = 60_000;
 const SNAP = 15;
-/** Below this content width the rail is a drawer and the week shows fewer days. */
+/** Below this page width the rail is a drawer. Week columns use the grid's actual width. */
 const NARROW = 760;
+const MIN_WEEK_WIDTH = 520;
 const DRAG_PX = 4;
 
 type Drag =
@@ -50,9 +52,17 @@ export function createAutomationsPage(app: AppContext): Page {
   let shown = new Map<string, CalendarEntry>();
   const hidden = new Set<string>();
   try { for (const key of JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")) if (typeof key === "string") hidden.add(key); } catch { /* All of it shows when storage is unavailable. */ }
+  try { const saved=localStorage.getItem(VIEW_KEY); if(saved==="day" || saved==="week" || saved==="month") period=saved; } catch { /* The default week remains usable without storage. */ }
 
   const member = (id: number): Member | undefined => members.find(m => m.id === id);
   const narrow = (): boolean => el.clientWidth > 0 && el.clientWidth <= NARROW;
+  // Before the first grid exists, allow for its 216px border-box rail, margins and borders.
+  const calendarWidth = (): number => el.querySelector<HTMLElement>('.au-calendar-main')?.clientWidth ||
+    Math.max(0, el.clientWidth - (narrow() ? 26 : 234));
+  const choosePeriod = (value: Period): void => {
+    period=value;
+    try { localStorage.setItem(VIEW_KEY,value); } catch { /* The choice still holds for this window. */ }
+  };
   const hourHeight = (): number => parseFloat(el.style.getPropertyValue("--au-hour")) || 48;
   const edit = (routine?: Routine, memberId?: number, day?: string, time?: string): void => {
     openRoutineDialog({ members, routine, memberId, date: day, time, onSaved: () => void load(), onDeleted: () => void load() });
@@ -69,9 +79,10 @@ export function createAutomationsPage(app: AppContext): Page {
       google = home.calendar_google;
       logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
       if (focusedHomeItem) {
-        const target = [...el.querySelectorAll<HTMLElement>("[data-calendar-item]")].find(item => item.dataset.calendarItem === focusedHomeItem);
+        const target = [...el.querySelectorAll<HTMLElement>("[data-calendar-item]")].find(item => item.dataset.calendarItem === focusedHomeItem ||
+          (focusedHomeItem.startsWith("rhythm:") && item.dataset.calendarItem?.startsWith(focusedHomeItem.split(":").slice(0,2).join(":")+":")));
         target?.scrollIntoView?.({ block: "center" }); target?.focus({ preventScroll: true });
-        if (detailOnLoad && target && shown.has(focusedHomeItem)) { detailOnLoad = false; openDetail(target, shown.get(focusedHomeItem)!); }
+        if (detailOnLoad && target && shown.has(target.dataset.calendarItem!)) { detailOnLoad = false; openDetail(target, shown.get(target.dataset.calendarItem!)!); }
       }
       if (createOnLoad) { createOnLoad = false; startCreate(null); }
       // Home's cached window serves the first paint; a month of its own is read from Google once it is there to read.
@@ -92,8 +103,9 @@ export function createAutomationsPage(app: AppContext): Page {
     const day = localDay(dateKey(date));
     if (period === "day") return { start: day, n: 1, end: shiftDay(day, 1) };
     if (period === "month") { const [first] = monthDays(date); return { start: first!, n: 42, end: shiftDay(first!, 42) }; }
-    if (el.clientWidth > 0 && el.clientWidth < 1500) {
-      const n = el.clientWidth < 1100 ? 3 : 5;
+    const width=calendarWidth();
+    if (el.clientWidth > 0 && width < MIN_WEEK_WIDTH) {
+      const n=Math.max(1,Math.min(3,Math.floor((width-52)/100)));
       return { start: day, n, end: shiftDay(day, n) };
     }
     const start = shiftDay(day, -((date.getDay() + 6) % 7));
@@ -103,20 +115,19 @@ export function createAutomationsPage(app: AppContext): Page {
     if (period === "day") return start.toLocaleDateString(getLocale(), { year: "numeric", month: "long", day: "numeric" });
     if (period === "month") return monthLabel(date);
     const last = shiftDay(end, -1);
+    if (Math.round((end.getTime()-start.getTime())/86_400_000)<7) {
+      const options: Intl.DateTimeFormatOptions={month:"numeric",day:"numeric",...(start.getFullYear()!==last.getFullYear()?{year:"numeric"}:{})};
+      const first=start.toLocaleDateString(getLocale(),options), final=last.toLocaleDateString(getLocale(),options);
+      return first===final ? first : `${first}–${final}`;
+    }
     if (last.getMonth() === start.getMonth()) return monthLabel(start);
     return `${monthLabel(start)} – ${last.getFullYear() === start.getFullYear() ? last.toLocaleDateString(getLocale(), { month: "long" }) : monthLabel(last)}`;
   }
 
   /** Everything the calendar holds in a period, whatever the rail hides. */
   function entriesIn(start: Date, end: Date): CalendarEntry[] {
-    const now = Date.now();
-    const future = routines.flatMap(r => occurrences(r, start, end, r.schedule?.max_runs ? Math.max(0, r.schedule?.max_runs - (runCounts.get(r.id) ?? 0)) : Infinity));
-    const history = routines.flatMap(routine => (logs.get(routine.id) ?? []).map(run => ({ routine, run, at: run.scheduled ?? run.started })).filter(o => o.at >= start.getTime() && o.at < end.getTime() && o.at <= now));
-    const runs: { routine: Routine; at: number; run?: RoutineRun }[] = [...history, ...future.filter(o => !history.some(h => h.routine.id === o.routine.id && h.at === o.at))];
-    const scheduled = runs.map((o): CalendarEntry => ({
-      id: `routine:${o.routine.id}:${o.at}`, kind: "routine", title: o.routine.title, start: o.at, end: o.at + ROUTINE_DRAWN_MS, allDay: false,
-      source: memberSource(o.routine.member_id), member: member(o.routine.member_id), routine: o.routine, run: o.run,
-    }));
+    const scheduled = routines.flatMap(r => routineEntries(r, member(r.member_id), start, end, logs.get(r.id) ?? [],
+      r.schedule?.max_runs ? Math.max(0, r.schedule.max_runs - (runCounts.get(r.id) ?? 0)) : Infinity));
     const kept = items.map(entryOfItem).filter(entry => entry.start < end.getTime() && Math.max(entry.end, entry.start + 1) > start.getTime());
     return [...kept, ...scheduled];
   }
@@ -127,8 +138,7 @@ export function createAutomationsPage(app: AppContext): Page {
     const views: { value: Period; label: string }[] = [{ value: "day", label: t("auto.day") }, { value: "week", label: t("auto.week") }, { value: "month", label: t("auto.month") }];
     return `<header class="au-toolbar">` +
       iconButton("calendar", t("auto.tools"), ' data-au="tools" aria-haspopup="dialog"', "au-tools-toggle") +
-      btn(esc(t("auto.today")), "", ' data-au="today"') +
-      `<div class="au-step">${iconButton("left", t("auto.previous"), ' data-au="prev"')}${iconButton("right", t("auto.following"), ' data-au="next"')}</div>` +
+      `<div class="au-step au-date-nav">${iconButton("left", t("auto.previous"), ' data-au="prev"')}${btn(esc(t("auto.today")), "au-today", ` data-au="today"${new Date()>=start && new Date()<end ? " disabled" : ""}`)}${iconButton("right", t("auto.following"), ' data-au="next"')}</div>` +
       `<h1>${esc(titleOf(start, end))}</h1><span class="au-spacer"></span>` +
       iconButton("plus", t("auto.create"), ' data-au="new"', "au-toolbar-new") +
       sel(views, period, t("auto.view"), ' data-au="view"') + `</header>`;
@@ -150,9 +160,9 @@ export function createAutomationsPage(app: AppContext): Page {
       `<label class="au-awake" title="${esc(t("auto.keepAwake"))}"><span>${esc(t("auto.awake"))}</span>${tg(awake, t("auto.keepAwake"), ' data-au="awake"')}</label></aside>`;
   }
   const entryAttrs = (entry: CalendarEntry, label: string): string =>
-    ` data-au="entry" data-entry="${esc(entry.id)}" data-calendar-item="${esc(entry.id)}" title="${esc(label)}" aria-label="${esc(label)}"${focusedHomeItem === entry.id ? ' aria-current="true"' : ""}`;
+    ` data-au="entry" data-entry="${esc(entry.id)}" data-calendar-item="${esc(entry.id)}" title="${esc(label)}" aria-label="${esc(label)}"${entry.run ? ` data-status="${entry.run.status}"` : ""}${focusedHomeItem === entry.id ? ' aria-current="true"' : ""}`;
   const labelOf = (entry: CalendarEntry): string =>
-    [entry.kind === "routine" ? entry.member?.name : "", entry.title, chipClock(entry), entry.run ? runStatus(entry.run.status) : ""].filter(Boolean).join(" · ");
+    [entry.kind === "routine" ? entry.member?.name : "", entry.title, entry.rhythm ? entry.timing : chipClock(entry), entry.run ? runStatus(entry.run.status) : ""].filter(Boolean).join(" · ");
   /** The ⋯ a right click on an own event presses (R-UI-44, R-UI-56). It takes no room; the popover has one to see. */
   const moreOf = (entry: CalendarEntry): string =>
     entry.kind === "own" ? iconButton("more", t("members.more", { p0: entry.title }), ` data-au="event-more" data-entry="${esc(entry.id)}" aria-haspopup="menu" aria-expanded="false"`, "au-event-more") : "";
@@ -160,7 +170,7 @@ export function createAutomationsPage(app: AppContext): Page {
   function barHTML(entry: CalendarEntry, column: number, span: number, row: number, startsBefore: boolean, endsAfter: boolean): string {
     const label = labelOf(entry), focused = entry.id === focusedHomeItem ? " is-home-focus" : "";
     return `<div class="au-event au-bar${startsBefore ? " starts-before" : ""}${endsAfter ? " ends-after" : ""}" data-wrap="${esc(entry.id)}" style="grid-column:${column + 2}/span ${span};grid-row:${row + 1}">` +
-      chipHTML(entry, `is-line au-all-day-event${focused}`, entryAttrs(entry, label), { clock: false }) + moreOf(entry) +
+      chipHTML(entry, `is-line au-all-day-event${focused}`, entryAttrs(entry, label), { clock: false, face: entry.rhythm ? 20 : 0 }) + moreOf(entry) +
       (entry.kind === "own" && entry.allDay && !endsAfter ? `<i class="au-bar-edge" data-edge="right"></i>` : "") + `</div>`;
   }
   function chipOfSegment(part: Segment): string {
@@ -169,11 +179,11 @@ export function createAutomationsPage(app: AppContext): Page {
     const top = at.getHours() + at.getMinutes() / 60, drawn = Math.max(hours, 0.4), short = hours < 0.75;
     const place = `top:calc(${top} * var(--au-hour));height:calc(${drawn} * var(--au-hour) - 2px);left:calc(${part.lane * 100 / part.lanes}% + 1px);width:calc(${100 / part.lanes}% - 3px)`;
     const label = labelOf(entry), focused = entry.id === focusedHomeItem ? " is-home-focus" : "";
-    const cls = entry.kind === "routine" ? `au-occurrence${entry.run ? " is-past" : ""}` : entry.kind === "event" ? `au-calendar-event${focused}${past ? " is-past" : ""}` : `au-own-event${focused}${past ? " is-past" : ""}`;
+    const cls = entry.kind === "routine" ? `au-occurrence${entry.run && !isRunException(entry) ? " is-past" : ""}` : entry.kind === "event" ? `au-calendar-event${focused}${past ? " is-past" : ""}` : `au-own-event${focused}${past ? " is-past" : ""}`;
     const chip = chipHTML(entry, `${cls}${short ? " is-line" : ""}`, `${entryAttrs(entry, label)}${entry.run ? ` data-run="${entry.run.id}" data-status="${entry.run.status}"` : ""}`, { face: short ? 0 : 20 });
     const mark = entry.run ? `<i class="au-history-mark" data-status="${entry.run.status}"></i>` : "";
     const edge = entry.kind === "own" && part.end === entry.end ? `<i class="au-event-edge" data-edge="bottom"></i>` : "";
-    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${part.lanes > 1 && period !== "day" ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${mark}${moreOf(entry)}${edge}</div>`;
+    return `<div class="au-event${entry.kind === "own" ? " is-movable" : ""}${period !== "day" && (part.lanes > 1 || calendarWidth()/range().n < 120) ? " is-tight" : ""}" data-wrap="${esc(entry.id)}" data-part-start="${part.start}" style="${place}">${chip}${mark}${moreOf(entry)}${edge}</div>`;
   }
   const draftTitle = (): string => draft?.title.trim() || t("cal.title");
   function draftOnDay(key: string): string {
@@ -215,8 +225,8 @@ export function createAutomationsPage(app: AppContext): Page {
       const key = dateKey(day), other = day.getMonth() !== date.getMonth();
       const label = day.toLocaleDateString(getLocale(), { month: "long", day: "numeric", weekday: "long" });
       const chips = monthEntries(entries, key).map(entry => {
-        const focused = entry.id === focusedHomeItem ? " is-home-focus" : "", past = entry.end <= Date.now() ? " is-past" : "";
-        return `<div class="au-event is-line${entry.kind === "own" ? " is-movable" : ""}" data-wrap="${esc(entry.id)}">${chipHTML(entry, `is-line${focused}${past}`, entryAttrs(entry, labelOf(entry)), { clock: !entry.allDay })}${moreOf(entry)}</div>`;
+        const focused = entry.id === focusedHomeItem ? " is-home-focus" : "", past = entry.end <= Date.now() && !isRunException(entry) ? " is-past" : "";
+        return `<div class="au-event is-line${entry.kind === "own" ? " is-movable" : ""}" data-wrap="${esc(entry.id)}">${chipHTML(entry, `is-line${focused}${past}`, entryAttrs(entry, labelOf(entry)), { clock: !entry.allDay, face: entry.rhythm ? 16 : 0, timing: false })}${moreOf(entry)}</div>`;
       }).join("");
       const placeholder = draft && dateKey(new Date(draft.start)) === key ? `<div class="au-event is-line au-draft"><span class="cal-chip btn is-own is-line"><span class="cal-chip-copy"><b>${esc(draftTitle())}</b></span></span></div>` : "";
       return `<div class="au-month-cell${other ? " is-other" : ""}${key === today ? " is-today" : ""}" data-month-day="${key}"${key === today ? ' aria-current="date"' : ""}>${btn(String(day.getDate()), "au-day-num", ` data-au="open-day" data-date="${key}" aria-label="${esc(label)}"`)}` +
@@ -256,6 +266,8 @@ export function createAutomationsPage(app: AppContext): Page {
     }
   }
   function fitHours(previousHour: number | null = null): void {
+    // Flex gives the title its width first; reveal timing only when none of it is clipped.
+    for (const timing of el.querySelectorAll<HTMLElement>('.is-rhythm small')) timing.style.visibility = timing.scrollWidth <= timing.clientWidth ? "visible" : "hidden";
     const grid = el.querySelector<HTMLElement>(".au-calendar-scroll"), head = grid?.querySelector<HTMLElement>(".au-grid-head");
     if (!grid || !head || !grid.clientHeight) return;
     const room = grid.clientHeight - head.offsetHeight, height = Math.max(28, Math.min(54, room / 11));
@@ -292,6 +304,11 @@ export function createAutomationsPage(app: AppContext): Page {
   // ---------- making and changing ----------
 
   function openDetail(chip: HTMLElement, entry: CalendarEntry): void {
+    if (entry.run?.turn_id && entry.member) { openMemberThread(app, entry.member.id, entry.run.turn_id); return; }
+    if (entry.rhythm && entry.routine) {
+      const today = localDay(dateKey(new Date()));
+      entry = {...entry, runs: entriesIn(today, shiftDay(today, 1)).find(item => item.rhythm && item.routine?.id === entry.routine?.id)?.runs ?? []};
+    }
     const rect = chip.getBoundingClientRect();
     const own = entry.kind === "own";
     openEventDetail(rect, entry, {
@@ -299,6 +316,8 @@ export function createAutomationsPage(app: AppContext): Page {
       onEdit: own ? () => openEditor(rect, { id: entry.eventId, title: entry.title, start: entry.start, end: entry.end, allDay: entry.allDay, notes: entry.notes ?? "" }) : undefined,
       onMore: own ? button => askToDelete(button, entry) : undefined,
       onOpenRoutine: entry.routine ? () => edit(entry.routine) : undefined,
+      onRun: run => { if (run.turn_id && entry.member) openMemberThread(app, entry.member.id, run.turn_id); },
+      onOff: entry.rhythm && entry.routine ? () => { void api.routinesUpdate(entry.routine!.id, {enabled:false}).then(()=>load()).catch(error=>toaster.info(describeError(error))); } : undefined,
     });
   }
   function askToDelete(button: HTMLElement, entry: CalendarEntry): void {
@@ -368,7 +387,7 @@ export function createAutomationsPage(app: AppContext): Page {
     else if (act === "new") startCreate(target);
     else if (act === "entry") { const entry = shown.get(target.dataset.entry!); if (entry) openDetail(target, entry); }
     else if (act === "event-more") { const entry = shown.get(target.dataset.entry!); if (entry) askToDelete(target, entry); }
-    else if (act === "open-day") { period = "day"; navigate(localDay(target.dataset.date!)); }
+    else if (act === "open-day") { choosePeriod("day"); navigate(localDay(target.dataset.date!)); }
     else if (act === "source") {
       const key = target.dataset.source!;
       if (hidden.has(key)) hidden.delete(key); else hidden.add(key);
@@ -378,7 +397,7 @@ export function createAutomationsPage(app: AppContext): Page {
     else if (act === "awake") { e.preventDefault(); (target as HTMLButtonElement).disabled = true; void api.keepAwakeSet(!awake).then(value => { awake = value; draw(); }).catch(error => { (target as HTMLButtonElement).disabled = false; toaster.info(describeError(error)); }); }
     else if (act === "view") {
       openMenu(target, [{ value: "day", label: t("auto.day") }, { value: "week", label: t("auto.week") }, { value: "month", label: t("auto.month") }], period, value => {
-        period = value as Period; resetPosition = true; draw();
+        choosePeriod(value as Period); resetPosition = true; draw();
         el.querySelector<HTMLElement>('[data-au="view"]')?.focus({ preventScroll: true });
       });
     }
@@ -543,7 +562,7 @@ export function createAutomationsPage(app: AppContext): Page {
   el.addEventListener("dragstart", onDragStart);
   el.addEventListener("dragover", e => { if ((e.target as Element).closest("[data-slot]") && e.dataTransfer?.types.includes("application/x-raphael-member")) e.preventDefault(); });
   el.addEventListener("drop", e => { const slot = (e.target as Element).closest<HTMLElement>("[data-slot]"); if (!slot) return; e.preventDefault(); const value = e.dataTransfer?.getData("application/x-raphael-member"); if (!value) return; const id = Number(value); if (members.some(m => m.id === id)) edit(undefined, id, slot.dataset.slot, `${slot.dataset.hour!.padStart(2, "0")}:00`); });
-  app.onEvent(event => { if (visible && !drag && ["RoutinesChanged", "CalendarChanged", "MembersChanged", "ConnectionsChanged", "CoreReady"].includes(event.type)) void load(); });
+  app.onEvent(event => { if (visible && !drag && ["AgentTurn", "AgentQuestion", "AgentQuestionClosed", "RoutinesChanged", "CalendarChanged", "MembersChanged", "ConnectionsChanged", "CoreReady"].includes(event.type)) void load(); });
   onLocaleChange(() => { if (visible) { closePanel(); draw(); void load(); } });
   return {
     id: "automations", el,

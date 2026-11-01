@@ -4,7 +4,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog, confirmDelete, type Dialog } from "./member-dialogs";
 import { dayName, faceHTML, HOUR_STEPS, isTime, ROUTINE_TITLE_MAX, ROUTINE_PROMPT_MAX, routineText, routineStatus } from "./members";
-import { dateKey, openDatePicker } from "./schedule-picker";
+import { dateKey, openDatePicker, windowTimes } from "./schedule-picker";
 import type { Member, Routine, RoutineSchedule } from "./types";
 import { btn, esc, ico, openMenu, sel, toaster } from "./ui";
 import "./automations.css";
@@ -32,6 +32,8 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   let time = plan?.time ?? o.time ?? `${String(next.getHours()).padStart(2, "0")}:00`;
   let days = new Set(plan?.kind === "weekly" ? plan.days : [new Date(`${date}T00:00`).getDay()]);
   let hours = plan?.kind === "every" ? plan.hours : 3;
+  let windowFrom = plan?.kind === "every" ? plan.from ?? "" : "";
+  let windowTo = plan?.kind === "every" ? plan.to ?? "" : "";
   let ending = plan?.max_runs ? "after" : plan?.until ? "until" : "never";
   let until = plan?.until ?? date;
   let count = String(plan?.max_runs ?? 10);
@@ -51,10 +53,13 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   function body(): string {
     const kinds: [RoutineSchedule["kind"], string][] = [["once", t("auto.once")], ["daily", t("members.daily")], ["weekdays", t("auto.weekdays")], ["weekly", t("members.weekly")], ["every", t("members.every")]];
     return `<input class="mb-fin au-title" id="au-title" maxlength="${ROUTINE_TITLE_MAX}" placeholder="${esc(t("auto.what"))}" aria-label="${esc(t("auto.what"))}" value="${esc(title)}">` +
-      (when ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${esc(routineText({ ...routine!, when }))}</p><label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label><p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routineStatus(routine!))}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : `<section class="au-field"><h3>${esc(t("auto.when"))}</h3><div class="au-start"><span>${esc(t("auto.starts"))}</span>${btn(esc(date), "", ' data-dlg="date" aria-label="' + esc(t("auto.date")) + '"')}<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(time)}" aria-label="${esc(t("auto.time"))}" placeholder="00:00"></div>` +
+      (when ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${esc(routineText({ ...routine!, when }))}</p><label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label><p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routineStatus(routine!))}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : `<section class="au-field"><h3>${esc(t("auto.when"))}</h3><div class="au-start"><span>${esc(t("auto.starts"))}</span>${btn(esc(date), "", ' data-dlg="date" aria-label="' + esc(t("auto.date")) + '"')}<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(kind === "every" && windowFrom ? windowFrom : time)}"${kind === "every" && windowFrom ? " disabled" : ""} aria-label="${esc(t("auto.time"))}" placeholder="00:00"></div>` +
       `<div class="au-chips">${kinds.map(([value, label]) => btn(esc(label), "sm", ` data-dlg="kind" data-kind="${value}" aria-pressed="${kind === value}"`)).join("")}</div>` +
       (kind === "weekly" ? `<div class="au-chips">${[1,2,3,4,5,6,0].map(n => btn(esc(dayName(n)), "sm", ` data-dlg="day" data-day="${n}" aria-pressed="${days.has(n)}"`)).join("")}</div>` : "") +
-      (kind === "every" ? sel(HOUR_STEPS.map(n => ({ value: String(n), label: t("members.everyHours", { p0: n }) })), String(hours), t("members.hours"), ' data-dlg="hours"') : "") + `</section>`) +
+      `<div class="au-repeat-options${kind === "every" ? "" : " is-reserved"}"${kind === "every" ? "" : ' inert aria-hidden="true"'}>` +
+      sel(HOUR_STEPS.map(n => ({ value: String(n), label: t("members.everyHours", { p0: n }) })), String(hours), t("members.hours"), ' data-dlg="hours"') +
+      `<div class="au-window">${sel([{value:"",label:t("auto.anyTime")}, ...windowTimes(windowFrom || "08:00")], windowFrom, t("auto.windowFrom"), ' data-dlg="window-from"')}` +
+      `<span>–</span>${sel(windowTimes(windowTo || "23:00"), windowTo || "23:00", t("auto.windowTo"), ' data-dlg="window-to"')}</div></div></section>`) +
       `<section class="au-field"><h3>${esc(t("auto.who"))}</h3><div class="au-members">${o.members.filter(m => !when || m.id === memberId).map(m => btn(faceHTML(m, 30) + `<span>${esc(m.name)}</span>${memberId === m.id ? ico("check") : ""}`, "", ` data-dlg="member" data-member="${m.id}" aria-pressed="${memberId === m.id}"${routine ? " disabled" : ""}`)).join("")}</div></section>` +
       `<label class="au-field"><span class="au-label">${esc(t("members.instructions"))}</span><textarea id="au-prompt" class="mb-fin mb-ta" rows="4" maxlength="${ROUTINE_PROMPT_MAX}" aria-label="${esc(t("members.instructions"))}">${esc(prompt)}</textarea></label>` +
       (when ? "" : btn(ico(more ? "down" : "right") + esc(t(more ? "auto.less" : "auto.more")), "sm", ` data-dlg="more" aria-expanded="${more}"`) +
@@ -66,13 +71,14 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   async function save(): Promise<void> {
     if (saving) return;
     read();
+    if (!when && kind === "every" && windowFrom && (!isTime(windowFrom) || !isTime(windowTo) || windowFrom >= windowTo)) { toaster.info(t("auto.needsWindow")); return; }
     const start = new Date(`${date}T${time}`);
     if (!title.trim() || !prompt.trim() || (when ? !when.filter.equals.trim() : !isTime(time) || !Number.isFinite(start.getTime()) || (kind === "weekly" && !days.size) || (ending === "after" && (!/^\d+$/.test(count) || Number(count) < 1 || Number(count) > 10000)) || (ending === "until" && until < date))) {
       toaster.info(t("auto.needs")); return;
     }
     if (!when && !routine && kind === "once" && start.getTime() <= Date.now()) { toaster.info(t("auto.future")); return; }
     const common = { start_date: date, ...(ending === "after" ? { max_runs: Number(count) } : {}), ...(ending === "until" ? { until } : {}) };
-    const schedule: RoutineSchedule = kind === "every" ? { kind, hours, time, ...common } : kind === "weekly" ? { kind, days: [...days].sort(), time, ...common } : { kind, time, ...common };
+    const schedule: RoutineSchedule = kind === "every" ? { kind, hours, time, ...common, ...(windowFrom ? {from:windowFrom, to:windowTo} : {}) } : kind === "weekly" ? { kind, days: [...days].sort(), time, ...common } : { kind, time, ...common };
     saving = true;
     dialog.el.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled = true;
     try {
@@ -97,6 +103,8 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       else if (act === "more") { more = !more; draw(); }
       else if (act === "date" || act === "until") openDatePicker(target, act === "date" ? date : until, key => { if (act === "date") date = key; else until = key; draw(); dialog.el.querySelector<HTMLElement>(`[data-dlg="${act}"]`)?.focus(); });
       else if (act === "hours") openMenu(target, HOUR_STEPS.map(n => ({ value: String(n), label: t("members.everyHours", { p0: n }) })), String(hours), n => { hours = Number(n); draw(); });
+      else if (act === "window-from") openMenu(target, [{value:"",label:t("auto.anyTime")}, ...windowTimes(windowFrom || "08:00")], windowFrom, value => { windowFrom = value; if (value && !windowTo) windowTo = "23:00"; draw(); dialog.el.querySelector<HTMLElement>('[data-dlg="window-from"]')?.focus(); });
+      else if (act === "window-to") openMenu(target, windowTimes(windowTo || "23:00"), windowTo, value => { windowTo = value; if (!windowFrom) windowFrom = "08:00"; draw(); dialog.el.querySelector<HTMLElement>('[data-dlg="window-to"]')?.focus(); });
       else if (act === "end") openMenu(target, endChoices(), ending, value => { ending = value; draw(); });
       else if (act === "delete" && routine) void confirmDelete(routine.title).then(async yes => {
         if (!yes) return;

@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 53
+LATEST = 54
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -1543,7 +1543,7 @@ def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_pat
     raw.close()
 
     upgraded = db.connect(path)
-    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == 53
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == LATEST
     assert SecretCardStore(upgraded).get(login.id) == login
     assert upgraded.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
     with upgraded:

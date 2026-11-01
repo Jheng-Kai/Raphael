@@ -37,6 +37,15 @@ from ..agent.speaker import Speaker, is_raphael_name
 from ..clock import wall_clock_ms
 from .schedule import Schedule, ScheduleError, parse_schedule
 
+# Shared read projection for routine_runs r and its agent_turns t. Waiting for children alone is not an owner question.
+ROUTINE_RUN_STATUS_SQL = """CASE WHEN r.finished IS NOT NULL THEN r.status
+    WHEN EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id=r.turn_id
+        AND w.state IN ('running','waiting','queued') AND (
+            EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=w.id AND q.result IS NULL)
+            OR EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=w.id AND q.state='waiting')
+        )) THEN 'confirm'
+    ELSE COALESCE(t.status,r.status) END"""
+
 NAME_MAX = 16
 ROLE_MAX = 24
 PERSONALITY_MAX = 2000

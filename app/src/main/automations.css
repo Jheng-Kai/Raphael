@@ -13,6 +13,11 @@
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .au-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-xs); }
 .au-time.mb-fin { width: 90px; font-variant-numeric: tabular-nums; }
+.au-repeat-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--sp-2); min-height: var(--h-ctl); }
+.au-repeat-options.is-reserved { visibility: hidden; }
+.au-repeat-options > .sel { width: 100%; }
+.au-window { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.au-window .sel { flex: 1; min-width: 0; padding-inline: var(--sp-2); font-variant-numeric: tabular-nums; }
 .au-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .au-chips .btn { border-radius: var(--r-pill); font-size: var(--fs-xs); }
 .au-chips .btn[aria-pressed="true"], .au-members .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
@@ -107,6 +112,9 @@
 .au-toolbar > .btn, .au-step { flex-shrink: 0; }
 .au-spacer { flex: 1; }
 .au-step { display: flex; }
+.au-date-nav .btn { border: 0; background: transparent; }
+.au-date-nav .btn:hover:not(:disabled) { background: var(--hover); }
+.au-date-nav .btn:active:not(:disabled) { background: var(--pressed); }
 .au-calendar { display: flex; min-height: 0; flex: 1; }
 .au-calendar-side { width: 216px; flex-shrink: 0; display: flex; flex-direction: column; padding: 0 var(--sp-3) var(--sp-3) var(--sp-4); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .au-calendar-side::-webkit-scrollbar { display: none; }
@@ -188,6 +196,7 @@
 .au-month-chips { flex: 1; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
 .au-month-chips > .au-event { flex: none; position: relative; height: 20px; }
 .au-month-chips > .au-event[hidden] { display: none; }
+.au-month-chips .is-rhythm small { max-width: none; }
 .is-drop { background: var(--selected); }
 
 .au-empty-hint { position: absolute; left: 52px; right: 0; top: 52%; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--text-3); pointer-events: none; }
@@ -207,6 +216,13 @@
 .au-pop .action-row { margin: 0; padding: 0; border: 0; background: transparent; }
 .au-pop .btn.au-pop-routine { margin-right: auto; gap: var(--sp-1); padding-inline: var(--sp-2); font-size: var(--fs-xs); }
 .au-pop-detail { gap: var(--sp-2); padding-top: var(--sp-2); }
+.au-pop-detail:has(.au-rhythm-runs) { overflow: visible; }
+.au-rhythm-runs { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.au-rhythm-runs .btn { gap: var(--sp-1); font-variant-numeric: tabular-nums; }
+.au-rhythm-runs [data-status="error"] { color: var(--danger); }
+.au-rhythm-runs [data-status="confirm"] { color: var(--warn); }
+.au-rhythm-runs .btn:disabled { opacity: 1; color: var(--text-3); }
+.au-pop-routine-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 .au-pop-tools { display: flex; justify-content: flex-end; gap: var(--sp-1); margin-right: calc(-1 * var(--sp-2)); }
 .au-pop-detail h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .au-pop-time, .au-pop-status { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
@@ -214,8 +230,9 @@
 .au-pop-from { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-1) 0 0; font-size: var(--fs-xs); color: var(--text-2); }
 .au-pop-from > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 .au-pop .btn.au-pop-open { align-self: flex-start; margin-top: var(--sp-1); }
+.au-pop .au-pop-routine-actions .btn { align-self: auto; margin-top: 0; height: var(--h-ctl); }
 
-/* A narrow window: the rail is a drawer from the left, and a week shows fewer days. */
+/* A narrow window: the rail is a drawer from the left. */
 .au-calendar-tools { position: fixed; z-index: 130; left: 0 !important; top: 0 !important; bottom: 0; width: 280px; max-width: calc(100vw - 16px); max-height: none !important; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; background: var(--panel); border-right: 1px solid var(--edge); box-shadow: 0 0 0 100vmax var(--scrim), var(--pop); animation: au-drawer 0.18s ease-out; }
 .au-calendar-tools .au-calendar-side { width: 100%; box-sizing: border-box; min-height: 100%; padding: calc(var(--window-controls-height) + var(--sp-3)) var(--sp-4) var(--sp-4); }
 @keyframes au-drawer { from { transform: translateX(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -225,4 +242,11 @@
   .au-toolbar { padding-inline: var(--sp-3); }
   .au-toolbar h1 { margin-left: var(--sp-1); font-size: var(--fs-lg); }
   .au-calendar-main { margin-inline: var(--sp-3); }
+}
+@container calendar (max-width: 520px) {
+  .au-toolbar { flex-wrap: wrap; }
+  .au-toolbar h1 { order: 1; flex-basis: 100%; margin-left: 0; }
+  .au-month-cell { padding-inline: 2px; }
+  .au-month-chips .cal-chip.is-rhythm.btn { padding-inline: 2px; }
+  .au-month-chips .cal-chip.is-rhythm .cal-chip-copy { gap: 0; }
 }

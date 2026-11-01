@@ -71,6 +71,20 @@ async function mount() {
 }
 
 describe("the hero", () => {
+  test("Home rhythm copy keeps only its face and title and exceptions remain visible", async () => {
+    const sample=overview(5), base={id:"rhythm:1",kind:"routine" as const,title:"Review samples",summary:"",at_ms:new Date(2026,9,27).getTime(),member_id:1,name:"Sample",avatar:"",turn_id:null,conversation_id:null,routine_id:1,all_day:true};
+    sample.calendar_items=[{...base,rhythm:true,rhythm_schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}},...(["error","confirm"] as const).map((run_status,i)=>({...base,id:`run:${i}`,all_day:false,run_status}))];
+    sample.calendar_counts={"2026-10-27":3};
+    queue.splice(0,queue.length,sample);
+    const {page}=await mount();
+    const bars=[...page.el.querySelectorAll('.is-rhythm')];
+    expect(bars.length).toBeGreaterThan(0);
+    expect(bars.every(bar=>bar.querySelector('.av') && bar.querySelector('b')?.textContent===base.title && !bar.querySelector('small, time'))).toBe(true);
+    const marks=[...page.el.querySelectorAll('.cal-run-mark')];
+    expect(marks.length).toBeGreaterThan(0);
+    expect(marks.every(mark=>!mark.closest('.cal-chip')!.classList.contains('is-past'))).toBe(true);
+    page.hide();page.el.remove();
+  });
   test("the month has weekday headings, today and schedule dots, and opens the chosen day", async () => {
     const sample = overview(5);
     sample.calendar_days = ["2026-10-02", "2026-10-30"];
@@ -84,7 +98,7 @@ describe("the hero", () => {
     page.el.querySelector<HTMLButtonElement>('[data-home-select="2026-10-30"]')!.click();
     expect(app.go).toHaveBeenLastCalledWith("automations", "2026-10-30");
     page.el.querySelector<HTMLButtonElement>('.ho-calendar > .ho-target')!.click();
-    expect(app.go).toHaveBeenLastCalledWith("automations", expect.stringMatching(/^calendar-week:2026-10-27$/));
+    expect(app.go).toHaveBeenLastCalledWith("automations");
     page.hide(); page.el.remove();
   });
   const own = (title: string): HomeOverview["calendar"][number] => ({ id: "own:4", kind: "own", event_id: 4, title, summary: "", at_ms: new Date(2026, 9, 27, 14).getTime(), end_ms: new Date(2026, 9, 27, 15).getTime(), member_id: -1, name: "", avatar: "", turn_id: null, conversation_id: null, routine_id: null, all_day: false, notes: "", added_by: null });

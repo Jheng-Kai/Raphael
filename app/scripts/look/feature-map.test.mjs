@@ -35,6 +35,7 @@ describe("maintained verification feature map", () => {
         allowedWidths.push([1120,720,1920,1180,1280]);
         allowedWidths.push([1120,720,1920,1280]);
         if (name === "connections-mcp") allowedWidths.push([1120, 720, 1920, 1180]);
+        if (name === "automations" && options.selected.every(scene => ["calendar-remember", "calendar-view-reload", "calendar-week-fit", "calendar-today-controls"].includes(scene.name))) allowedWidths.push([900, 480]);
         expect(allowedWidths, `${name}: ${command}`).toContainEqual(options.widths);
         if (options.widths.includes(1920)) expect(options.heights[1920], `${name}: ${command}`).toBe(1080);
         if (options.widths.includes(1180)) expect(options.heights[1180], `${name}: ${command}`).toBe(780);

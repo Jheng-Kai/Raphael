@@ -2,6 +2,128 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  const rhythmTitle = (bar, timingAllowed) => {
+    const title=bar.querySelector('b'), copy=bar.querySelector('.cal-chip-copy'), timing=bar.querySelector('small');
+    require(title?.textContent==='Gmail 與行程檢查','the rhythm fixture exercises a long title');
+    require(title.getBoundingClientRect().width>=Math.min(title.scrollWidth,copy.clientWidth)-1,'the rhythm title gets all the width it can use before timing');
+    if(!timingAllowed) require(!timing && bar.querySelector('.av'),'month and Home keep only the face and title');
+    else {
+      require(timing,'day and week retain optional full timing');
+      const shown=getComputedStyle(timing).visibility!=='hidden';
+      require(!shown || timing.scrollWidth<=timing.clientWidth,'timing is whole or hidden, never truncated');
+      if(copy.clientWidth>=title.scrollWidth+timing.scrollWidth+1) require(shown,'timing appears when the full title and timing fit');
+    }
+  };
+  if (name.startsWith('calendar-remember') || name.startsWith('calendar-view-')) {
+    const calendar=document.querySelector('.au-page:not([hidden])'), month=calendar?.querySelector('.au-month-view');
+    const state={title:calendar?.querySelector('.au-toolbar h1')?.textContent,month:!!month,first:calendar?.querySelector('[data-month-day]')?.dataset.monthDay};
+    require(state.month,'the chosen month view remains active');
+    for(const more of [...month.querySelectorAll('.cal-more')].filter(visible)) require(more.scrollWidth<=more.clientWidth+1,'the month overflow count fits its button');
+    for(const interval of [...month.querySelectorAll('.is-rhythm small')].filter(visible)) {
+      const box=interval.getBoundingClientRect(), copy=interval.closest('.cal-chip-copy').getBoundingClientRect();
+      require(interval.scrollWidth<=interval.clientWidth+1 && box.left>=copy.left-1 && box.right<=copy.right+1,'the whole month interval stays inside its chip');
+    }
+    if(name==='calendar-remember-save') window.__look.calendarRemember=state;
+    if(name==='calendar-remember-return') require(JSON.stringify(state)===JSON.stringify(window.__look.calendarRemember),'returning from Home or a conversation keeps the same date and view');
+    if(name==='calendar-view-stored' || name==='calendar-view-reload') require(localStorage.getItem('raphael.calendar.view')==='month','the view is a stored preference');
+    if(name==='calendar-view-reload') {
+      const today=new Date(), key=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      require(month.querySelector(`[data-month-day="${key}"][aria-current="date"]`),'a fresh launch starts on today with the stored view');
+      require(calendar.querySelector('.au-calendar-side [aria-pressed="true"]')?.dataset.miniDate===key,'the previous launch date is not persisted');
+    }
+    return {check:name,...state};
+  }
+  if(name==='calendar-week-fit') {
+    const main=document.querySelector('.au-page:not([hidden]) .au-calendar-main'), columns=[...main.querySelectorAll('.au-day-col')];
+    const expected=main.clientWidth>=520?7:Math.max(1,Math.min(3,Math.floor((main.clientWidth-52)/100)));
+    require(columns.length===expected,`${expected} days fit the actual calendar width ${main.clientWidth}`);
+    const slots=[...main.querySelectorAll('[data-all-day]')];
+    for(let i=0;i<columns.length;i++) {
+      const a=columns[i].getBoundingClientRect(), b=slots[i].getBoundingClientRect();
+      require(Math.abs(a.left-b.left)<1 && Math.abs(a.right-b.right)<1,'all-day slots line up with the hour columns');
+    }
+    const bars=[...main.querySelectorAll('.au-bar')];
+    require(bars.some(bar=>bar.querySelector('.is-rhythm')) && bars.some(bar=>bar.querySelector('.is-own')),'rhythm and real all-day bars are both present');
+    for(const bar of bars) {
+      const first=Number(bar.style.gridColumnStart)-2, span=Number(bar.style.gridColumnEnd.replace('span','').trim());
+      const a=columns[first].getBoundingClientRect(), b=columns[first+span-1].getBoundingClientRect(), box=bar.getBoundingClientRect();
+      require(Math.abs(box.left-a.left-2)<1 && Math.abs(box.right-b.right+3)<1,'each bar spans its exact day columns');
+    }
+    if(expected<7) {
+      const heading=main.closest('.au-page').querySelector('h1'), title=heading.textContent;
+      require(title.includes(String(Number(columns[0].dataset.day.slice(-2)))) && title.includes(String(Number(columns.at(-1).dataset.day.slice(-2)))),'the fallback title names its actual dates');
+      require(heading.scrollWidth<=heading.clientWidth+1,'the narrow date range title stays readable');
+    }
+    return {check:name,days:columns.length,width:main.clientWidth};
+  }
+  if(name.startsWith('calendar-nav-')) {
+    const group=document.querySelector('.au-page:not([hidden]) .au-date-nav'), buttons=[...group.querySelectorAll('button')], today=group.querySelector('[data-au="today"]');
+    require(buttons.map(button=>button.dataset.au).join(',')==='prev,today,next','the quiet control is previous, today, next at every width');
+    const boxes=buttons.map(button=>{const box=button.getBoundingClientRect();return [box.x,box.y,box.width,box.height];});
+    require(buttons.every(button=>parseFloat(getComputedStyle(button).borderTopWidth)===0),'date navigation has no border at rest');
+    if(name==='calendar-nav-away') { require(!today.disabled,'today is available away from its range'); window.__look.calendarNavigation=boxes; }
+    if(name==='calendar-nav-hover') {
+      const probe=document.createElement('span');probe.style.color='var(--hover)';group.append(probe);
+      const color=getComputedStyle(probe).color;probe.remove();
+      require(getComputedStyle(today).backgroundColor===color,'today uses the shared hover surface');
+    }
+    if(name==='calendar-nav-today') {
+      require(today.disabled && Number(getComputedStyle(today).opacity)<1,'today dims when this view already holds it');
+      require(boxes.every((box,i)=>box.every((value,j)=>Math.abs(value-window.__look.calendarNavigation[i][j])<.5)),'dimming today never moves the controls');
+    }
+    return {check:name,boxes};
+  }
+  if (name.startsWith("calendar-rhythm") && name!=="calendar-rhythm-hidden") {
+    const month=!!document.querySelector('.au-month-view');
+    const bars=[...document.querySelectorAll('.au-page:not([hidden]) .is-rhythm')];
+    require(bars.length>0,"the rhythm has a quiet bar");
+    require(!document.querySelector('.au-day-col .cal-chip[data-entry^="routine:91:"]:not([data-status])'),"ordinary rhythm occurrences never fill the hours");
+    require(!bars.some(bar=>bar.querySelector('time')),"a rhythm never has a clock");
+    for(const bar of bars.filter(visible)) rhythmTitle(bar,!month);
+    for (const mark of document.querySelectorAll('.au-page:not([hidden]) .cal-run-mark')) {
+      const chip=mark.closest('.cal-chip');
+      require(!chip.classList.contains('is-past') && Number(getComputedStyle(chip).opacity)===1,"failed and waiting runs never fade as past work");
+    }
+    if (month) for (const cell of document.querySelectorAll('.au-month-cell')) require(cell.querySelectorAll('.is-rhythm').length<=1,"at most one rhythm line per day");
+    else require(document.querySelector('.au-all-day-row .is-rhythm .av'),"the bar keeps its member face");
+    require(document.querySelector('.au-page .cal-chip[data-entry^="routine:91:"][data-status="error"]'),"the failure keeps its timed chip");
+    require(document.querySelector('.au-page .cal-chip[data-entry^="routine:91:"] .cal-run-mark[data-status="confirm"]'),"the waiting run keeps its timed chip");
+    require(document.querySelector('.au-page .cal-chip[data-entry^="routine:92:"] time'),"the daily routine remains a timed chip");
+    if (name==="calendar-rhythm-popover") {
+      const panel=document.querySelector('.au-pop-detail');
+      require(visible(panel) && panel.querySelectorAll('[data-rhythm-time]').length===6,"today's six runs share the existing popover");
+      for (const state of ['done','error','confirm','coming']) require(panel.querySelector(`[data-status="${state}"] .i`),`${state} has an icon`);
+      require(panel.querySelector('[data-pop="open-routine"]') && panel.querySelector('[data-pop="off"]'),"edit and off are in the detail");
+      const edit=panel.querySelector('[data-pop="open-routine"]'), off=panel.querySelector('[data-pop="off"]');
+      const a=edit.getBoundingClientRect(), b=off.getBoundingClientRect(), x=edit.querySelector('span').getBoundingClientRect(), y=off.querySelector('span').getBoundingClientRect();
+      require(Math.abs(a.top-b.top)<.5 && Math.abs(a.height-b.height)<.5 && Math.abs(x.top-y.top)<.5 && Math.abs(x.bottom-y.bottom)<.5,"edit and off share one row height and text baseline");
+      const box=panel.getBoundingClientRect();require(box.bottom<=innerHeight && panel.scrollHeight<=panel.clientHeight+1,"the popover fits without an inner scroll");
+    }
+    return {check:name,bars:bars.length,month};
+  }
+  if (name==="calendar-rhythm-hidden") {
+    require(!document.querySelector('.au-page:not([hidden]) .is-rhythm') && !document.querySelector('.au-page:not([hidden]) [data-entry^="routine:91:"]'),"one member checkbox hides bar and exception chips together");
+    return {check:name};
+  }
+  if (name==="home-calendar-rhythm") {
+    const bar=[...document.querySelectorAll('.ho-calendar .is-rhythm')].find(visible);
+    require(visible(bar) && !bar.querySelector('time'),"Home draws the same quiet rhythm");
+    rhythmTitle(bar,false);
+    for (const mark of document.querySelectorAll('.ho-calendar .cal-run-mark')) require(!mark.closest('.cal-chip').classList.contains('is-past'),"Home exceptions never carry is-past");
+    return {check:name};
+  }
+  if (name==="calendar-google-composio") {
+    require(window.__look.data.managedConnectors.some(c=>c.id==='composio:googlecalendar' && c.status==='ACTIVE') && !window.__look.data.managedConnectors.some(c=>c.id==='google'),"only Composio is connected");
+    require(document.querySelector('.au-page .cal-chip.is-event') && !document.querySelector('.au-page .cal-notice'),"the successful Composio reading is drawn");
+    return {check:name};
+  }
+  if (name==="routine-window" || name==="routine-window-saved") {
+    require(document.querySelector('[data-dlg="window-from"]')?.textContent.includes(name.endsWith('saved')?'07:00':'08:00'),"the window start is a real shared control");
+    require(document.querySelector('[data-dlg="window-to"]')?.textContent.includes('23:00'),"the end is retained");
+    require(!document.querySelector('.au-routine-dialog select, .au-routine-dialog input[type="time"]'),"no native time or select control");
+    if (name.endsWith('saved')) require(window.__look.calls.some(c=>c.method==='routines.update' && c.params.id===91 && c.params.schedule.from==='07:00' && c.params.schedule.to==='23:00'),"one update saves the whole rhythm");
+    return {check:name};
+  }
   if (name.startsWith('polish-')) {
     const ruler = root => ['.mc-depth', '.mc-depth-title', '.mc-track', '.mc-range', '.mc-dots', '.mc-dot', '.mc-stops', '.mc-stop[data-on="true"]'].map(selector => {
       const el = document.querySelector(`${root} ${selector}`), s = getComputedStyle(el), b = el.getBoundingClientRect();
@@ -2352,14 +2474,13 @@ export function checkRendered(name, context = {}) {
     require(!document.querySelector('.au-pop-detail'), "a drag is not a click");
     return { check: name, start, end };
   }
-  if (name === "calendar-google-off" || name === "calendar-google-closed" || name === "calendar-google-failed" || name === "calendar-google-members") {
+  if (name === "calendar-google-off" || name === "calendar-google-closed" || name === "calendar-google-failed") {
     const rail = [...document.querySelectorAll('.au-calendar-side')].find(visible);
     const notice = rail.querySelector('.cal-notice');
     const words = notice?.textContent ?? "";
     if (name === "calendar-google-off") require(/未連接/.test(words) && visible(notice.querySelector('[data-calendar-go]')) && visible(notice.querySelector('[data-calendar-dismiss]')), "not connected is said, with the place to connect it, and can be closed");
     if (name === "calendar-google-closed") require(/未連接/.test(words) && !notice.querySelector('.btn'), "closed, only the words stay");
     if (name === "calendar-google-failed") require(/讀不到/.test(words) && /設定/.test(notice.querySelector('[data-calendar-go]')?.textContent ?? "") && !notice.querySelector('[data-calendar-dismiss]'), "a failed read says so and names where to check");
-    if (name === "calendar-google-members") require(/成員/.test(words) && visible(notice.querySelector('[data-calendar-go]')), "connected elsewhere is said plainly");
     require(!rail.querySelector('[data-source="google"]'), "no row for a calendar that is not read");
     require(document.querySelector('.au-page .cal-chip.is-own'), "own events always show");
     return { check: name };
@@ -2412,8 +2533,8 @@ export function checkRendered(name, context = {}) {
     const compact = grid.closest('.au-page').clientWidth <= 760;
     require(visible(side) !== compact, "the month and members remain visible at 1120px; compact tools start below 760px content width");
     require(visible(document.querySelector('[data-au="tools"]')) === compact, "compact calendar tools have a toolbar icon");
-    const contentWidth = grid.closest('.au-page').clientWidth;
-    require(columns.length === 1 || columns.length === (contentWidth < 1100 ? 3 : contentWidth < 1500 ? 5 : 7), `a week keeps readable day widths: ${columns.length}`);
+    const contentWidth = grid.closest('.au-calendar-main').clientWidth;
+    require(columns.length === 1 || columns.length === (contentWidth >= 520 ? 7 : Math.max(1,Math.min(3,Math.floor((contentWidth-52)/100)))), `a week uses seven days unless its actual content is too narrow: ${columns.length}`);
     require(getComputedStyle(grid).scrollbarWidth === "none", "the grid scrolls with no visible bar");
     if (visible(side)) {
       require(side.getBoundingClientRect().right <= grid.getBoundingClientRect().left + 1, "the month and what it shows sit in a rail on the left");

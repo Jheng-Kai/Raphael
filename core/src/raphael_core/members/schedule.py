@@ -40,6 +40,8 @@ class Schedule:
     start_date: str = ""
     max_runs: int | None = None
     until: str = ""
+    from_time: str = ""
+    to_time: str = ""
 
     def to_json(self) -> dict[str, Any]:
         value: dict[str, Any] = {"kind": self.kind}
@@ -49,6 +51,8 @@ class Schedule:
             value["days"] = list(self.days)
         if self.kind == "every":
             value["hours"] = self.hours
+            if self.from_time:
+                value.update({"from": self.from_time, "to": self.to_time})
         if self.start_date:
             value["start_date"] = self.start_date
         if self.max_runs is not None:
@@ -84,12 +88,12 @@ def parse_schedule(value: Any) -> Schedule:
     if count is not None and (_whole(count) is None or not 1 <= count <= 10000):
         raise ScheduleError("max_runs must be a whole number from 1 to 10000")
     time = value.get("time", schedule.time)
-    if schedule.kind == "every" and (start or "time" in value) and (not isinstance(time, str) or not _TIME.fullmatch(time)):
+    if schedule.kind == "every" and not schedule.from_time and (start or "time" in value) and (not isinstance(time, str) or not _TIME.fullmatch(time)):
         raise ScheduleError("a start date needs HH:MM")
     if schedule.kind == "once" and not start:
         raise ScheduleError("once needs start_date")
     return Schedule(schedule.kind, time=time, days=schedule.days, hours=schedule.hours,
-                    start_date=start, max_runs=count, until=until)
+                    start_date=start, max_runs=count, until=until, from_time=schedule.from_time, to_time=schedule.to_time)
 
 
 def _parse_kind(value: Any) -> Schedule:
@@ -103,7 +107,11 @@ def _parse_kind(value: Any) -> Schedule:
         hours = _whole(value.get("hours"))
         if hours is None or not 1 <= hours <= MAX_HOURS:
             raise ScheduleError(f"hours must be a whole number from 1 to {MAX_HOURS}")
-        return Schedule("every", hours=hours)
+        first, last = value.get("from", ""), value.get("to", "")
+        if "from" in value or "to" in value:
+            if not all(isinstance(time, str) and _TIME.fullmatch(time) for time in (first, last)) or first >= last:
+                raise ScheduleError("from and to must be HH:MM, with from before to")
+        return Schedule("every", hours=hours, from_time=first, to_time=last)
     time = value.get("time")
     if not isinstance(time, str) or not _TIME.fullmatch(time):
         raise ScheduleError("time must be HH:MM")
@@ -144,6 +152,19 @@ def next_run(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> 
 
 def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int | None:
     """The first moment strictly after `after_ms` at which `schedule` is due, in ms."""
+    if schedule.kind == "every" and schedule.from_time:
+        start = _local(after_ms, tz)
+        if schedule.start_date:
+            first = datetime.fromisoformat(schedule.start_date).replace(tzinfo=tz)
+            start = max(start, first)
+        first_minute, last_minute = [int(time[:2]) * 60 + int(time[3:]) for time in (schedule.from_time, schedule.to_time)]
+        for offset in range(2):
+            day = (start + timedelta(days=offset)).replace(hour=0, minute=0, second=0, microsecond=0)
+            for minute in range(first_minute, last_minute + 1, schedule.hours * 60):
+                due = _ms(day + timedelta(minutes=minute))
+                if due > after_ms:
+                    return due
+        raise AssertionError("a window is due by the next local day")
     anchor = None
     if schedule.start_date:
         anchor = datetime.fromisoformat(schedule.start_date + "T" + (schedule.time or "00:00"))

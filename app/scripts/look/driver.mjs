@@ -127,6 +127,10 @@ export async function perform(page, step, evidenceDirectory) {
     });
   }, step);
   switch (step.action) {
+    case "reload":
+      await page.reload({waitUntil:"networkidle0",timeout:20000});
+      await page.waitForSelector('.page-home:not([hidden]) .ho-hero',{visible:true,timeout:10000});
+      break;
     case 'polish-caption': {
       const dialog = await page.$('.mb-dialog') ?? await page.$('.modal-scrim:not([hidden]) .modal');
       const before = await page.evaluate(() => window.__look.calls.length);

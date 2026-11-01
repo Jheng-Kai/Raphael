@@ -991,7 +991,7 @@ class App(Router):
                 return self.agent.computer_scope_busy(*scope[1:])
             return scope[0] == "async" and not scope[1].done()
         self.vm_tools.scope_busy = computer_scope_busy
-        self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors))
+        self.home = HomeOverview(self._conn, self, self.members, calendar_events=ConnectedCalendar(self, self.connectors, notify=self.notify))
         self.home.register()
         self.calendar.shown, self.calendar.zone, self.calendar.google_state = self.home.between, self.home.zone, self.home.google_state
         self.vm.timezone = lambda: self.home.timezone_name
@@ -1203,6 +1203,7 @@ class App(Router):
             self._conn.close()
 
         steps: list[tuple[str, Callable[[], Awaitable[None]]]] = [
+            ("stop the calendar refresh", self.home.calendar_events.aclose),
             ("end room routing calls", self.rooms.aclose),
             ("cancel the dictation", close_dictation),
             ("close the level meter", close_meter),

@@ -4,12 +4,13 @@
 import { formatClock } from "./format";
 import type { GoogleCalendarState, HomeItem } from "./home-types";
 import { t } from "./i18n";
-import { faceHTML, RAPHAEL_ID } from "./members";
-import { dateKey, shiftDay } from "./schedule-picker";
+import { faceHTML, RAPHAEL_ID, scheduleText } from "./members";
+import { dateKey, localDay, shiftDay } from "./schedule-picker";
+import { occurrences } from "./automation-calendar";
 import { iconHTML } from "./service-mark";
 import { slimeColorOf } from "./slime";
 import type { Routine, RoutineRun } from "./types";
-import { btn, esc, iconButton } from "./ui";
+import { btn, esc, ico, iconButton } from "./ui";
 import "./calendar-view.css";
 
 export type EntryKind = "own" | "routine" | "event";
@@ -31,6 +32,33 @@ export interface CalendarEntry {
   eventId?: number;
   routine?: Routine;
   run?: RoutineRun;
+  rhythm?: boolean;
+  timing?: string;
+  runs?: { at: number; run?: RoutineRun }[];
+}
+
+export function isRhythm(schedule: Routine["schedule"]): boolean {
+  if (schedule?.kind !== "every" || schedule.hours >= 24) return false;
+  const minutes = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+  return !schedule.from || !schedule.to || minutes(schedule.to) - minutes(schedule.from) >= schedule.hours * 60;
+}
+
+/** Scheduled work shares one quiet bar; only a failure or owner question interrupts the hours. */
+export function routineEntries(routine: Routine, member: CalendarPerson | undefined, from: Date, to: Date, history: readonly RoutineRun[], remaining = Infinity): CalendarEntry[] {
+  const runs = history.map(run => ({at:run.scheduled ?? run.started,run})).filter(o=>o.at>=from.getTime() && o.at<to.getTime());
+  const upcoming = occurrences(routine,from,to,remaining).filter(o=>!runs.some(r=>r.at===o.at));
+  const moments: {at:number;run?:RoutineRun}[] = [...runs,...upcoming].sort((a,b)=>a.at-b.at);
+  const timed = (o: {at:number;run?:RoutineRun}): CalendarEntry => ({id:`routine:${routine.id}:${o.at}`,kind:"routine",title:routine.title,start:o.at,end:o.at+ROUTINE_DRAWN_MS,allDay:false,
+    source:memberSource(routine.member_id),member,routine,run:o.run});
+  if (!isRhythm(routine.schedule)) return moments.map(timed);
+  const keys=[...new Set(moments.map(o=>dateKey(new Date(o.at))))];
+  const bars: CalendarEntry[]=[];
+  for (const key of keys) {
+    const start=localDay(key).getTime(), end=shiftDay(localDay(key),1).getTime(), previous=bars[bars.length-1];
+    if (previous?.end===start) previous.end=end;
+    else bars.push({...timed({at:start}),id:`rhythm:${routine.id}:${key}`,end,allDay:true,rhythm:true,timing:scheduleText(routine.schedule),runs:moments});
+  }
+  return [...bars,...moments.filter(o=>o.run && ["error","confirm"].includes(o.run.status)).map(timed)];
 }
 
 export const OWN_SOURCE = "own";
@@ -52,16 +80,20 @@ export const chipColor = (member: CalendarPerson | undefined): string =>
 export const chipClock = (entry: { allDay: boolean; start: number }): string => (entry.allDay ? t("auto.allDay") : formatClock(entry.start));
 
 /** The inside of a chip: its time and title, then who it is about. */
-export function chipBody(entry: Pick<CalendarEntry, "kind" | "title" | "allDay" | "start" | "member">, o: { clock?: boolean; face?: number } = {}): string {
-  const time = o.clock === false ? "" : `<time>${esc(chipClock(entry))}</time>`;
+type ChipEntry = Pick<CalendarEntry, "kind" | "title" | "allDay" | "start" | "member" | "rhythm" | "timing"> & {run?: Pick<RoutineRun,"status">};
+export const isRunException = (entry: Pick<ChipEntry,"run">): boolean => !!entry.run && ["error","confirm"].includes(entry.run.status);
+export function chipBody(entry: ChipEntry, o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
+  const time = o.clock === false || entry.rhythm ? "" : `<time>${esc(chipClock(entry))}</time>`;
   const lead = entry.kind === "event" ? googleMark() : entry.member && o.face ? faceHTML(entry.member, o.face) : "";
-  return `<span class="cal-chip-copy">${time}<b>${esc(entry.title)}</b></span>${lead}`;
+  const status = entry.run && ["error","confirm"].includes(entry.run.status) ? `<span class="cal-run-mark" data-status="${entry.run.status}" aria-label="${esc(t(entry.run.status === "error" ? "auto.error" : "auto.waiting"))}">${ico(entry.run.status === "error" ? "x" : "info")}</span>` : "";
+  const copy = `<span class="cal-chip-copy">${time}<b>${esc(entry.title)}</b>${entry.rhythm && entry.timing && o.timing !== false ? `<small>&#160;${esc(entry.timing)}</small>` : ""}</span>`;
+  return entry.rhythm ? `${lead}${copy}` : `${copy}${status}${lead}`;
 }
 
 /** The one chip of the calendar, on the page and on Home. `cls` and `attrs` place it. */
-export function chipHTML(entry: Pick<CalendarEntry, "kind" | "title" | "allDay" | "start" | "member">, cls = "", attrs = "", o: { clock?: boolean; face?: number } = {}): string {
+export function chipHTML(entry: ChipEntry, cls = "", attrs = "", o: { clock?: boolean; face?: number; timing?: boolean } = {}): string {
   const style = entry.kind === "routine" || entry.kind === "own" ? chipColor(entry.member) : "";
-  return btn(chipBody(entry, o), `cal-chip is-${entry.kind}${cls ? ` ${cls}` : ""}`, `${style}${attrs}`);
+  return btn(chipBody(entry, o), `cal-chip is-${entry.kind}${entry.rhythm ? " is-rhythm" : ""}${cls ? ` ${cls}` : ""}`, `${style}${attrs}`);
 }
 
 /** Its time from start to end, as a popover says it. */
@@ -131,7 +163,7 @@ export function allDayBars(entries: readonly CalendarEntry[], days: readonly Dat
     const from = a < first ? 0 : keys.indexOf(a), to = b > last ? keys.length - 1 : keys.indexOf(b);
     return [from, to, a < first, b > last];
   };
-  const ordered = [...shown].sort((a, b) => span(a)[0] - span(b)[0] || span(b)[1] - span(a)[1] || a.start - b.start || a.id.localeCompare(b.id));
+  const ordered = [...shown].sort((a, b) => Number(!!a.rhythm) - Number(!!b.rhythm) || span(a)[0] - span(b)[0] || span(b)[1] - span(a)[1] || a.start - b.start || a.id.localeCompare(b.id));
   const taken: number[][] = [];
   const bars: Bar[] = [], more = keys.map(() => 0);
   for (const entry of ordered) {
@@ -148,7 +180,7 @@ export function allDayBars(entries: readonly CalendarEntry[], days: readonly Dat
 /** The entries of one day of a month's grid, the all-day ones first. */
 export function monthEntries(entries: readonly CalendarEntry[], key: string): CalendarEntry[] {
   return entries.filter(entry => { const { first, last } = entryDays(entry); return first <= key && last >= key; })
-    .sort((a, b) => Number(isAllDayRow(b)) - Number(isAllDayRow(a)) || a.start - b.start || a.id.localeCompare(b.id));
+    .sort((a, b) => Number(isAllDayRow(b)) - Number(isAllDayRow(a)) || Number(!!a.rhythm) - Number(!!b.rhythm) || a.start - b.start || a.id.localeCompare(b.id));
 }
 
 // ---------- what the calendar says of Google ----------
@@ -171,7 +203,7 @@ export function dismissOffer(state: GoogleCalendarState): void {
 export function googleNoticeHTML(state: GoogleCalendarState | undefined, o: { go: string; dismiss: string; wordsAfter?: boolean }): string {
   if (!state || state === "connected") return "";
   const failed = state === "unreadable";
-  const words = t(failed ? "cal.googleFailed" : state === "members_only" ? "cal.googleMembersOnly" : "cal.googleOff");
+  const words = t(failed ? "cal.googleFailed" : "cal.googleOff");
   const closed = !failed && offerDismissed(state);
   if (closed && !o.wordsAfter) return "";
   const action = closed ? "" : btn(esc(t(state === "not_connected" ? "cal.googleConnect" : "cal.googleCheck")), "sm", ` ${o.go}`);

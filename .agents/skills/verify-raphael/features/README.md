@@ -1,9 +1,20 @@
 # Raphael feature map
 
-## Owner polish (2026-11-01)
+## Calendar navigation review (2026-11-01)
 
-See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
+See [Automations](automations.md#calendar-navigation-review-2026-11-01). Scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls, both themes at 1120,900,720,1920x1080,480. The date lives only in the page instance; view choice survives reload. Seven columns use the actual calendar width, with a dated fallback only below 520px.
 
+## Calendar rhythms and Composio readings (2026-11-01)
+
+See [Automations](automations.md#calendar-rhythms-and-composio-readings-2026-11-01)
+and [Home](home.md#calendar-rhythm-2026-11-01). Selected scenes:
+calendar-rhythm-week, calendar-rhythm-day, calendar-rhythm-month,
+calendar-rhythm-popover, calendar-rhythm-hidden, home-calendar-rhythm,
+automations-google-composio, automation-window, automation-window-menu,
+automation-window-saved, automations-calendar, automations-all-day,
+automation-edit, details-routines and home-own-events. Run both themes at
+1120,720,1920x1080. The brief prohibits network, live/provider, cargo,
+native journeys and judge; fixtures do not prove those boundaries.
 ## Work channels, file restore and private login (2026-11-01)
 
 See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
@@ -530,3 +541,6 @@ explicitly prohibited by this brief; fixture acceptance does not prove OS clicks
 
 [Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths. This updated map is staged under `.fold` because `.agents` is protected.
 
+## Conversation connection management (2026-11-01)
+
+See [Connections/MCP](connections-mcp.md#connections-from-a-conversation-2026-11-01) for the editable proposal, shared secret/local consent cards, dynamic API/CLI/background offers and selected look matrix. R-MCP-CHAT-01/02 extend the existing allow-all and durable owner-card contracts.

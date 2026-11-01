@@ -22,6 +22,12 @@
 .cal-chip.is-line .cal-chip-copy { display: flex; align-items: baseline; gap: var(--sp-1); flex: 1; }
 .cal-chip.is-line time { flex: none; min-height: 0; line-height: inherit; }
 .cal-chip.is-line b { display: block; flex: 1; min-width: 0; white-space: nowrap; text-overflow: ellipsis; }
+.cal-chip.is-rhythm.btn { align-items: center; gap: var(--sp-1); }
+.cal-chip.is-rhythm .cal-chip-copy { align-items: center; gap: 0; }
+.cal-chip.is-rhythm b { flex: 0 0 auto; max-width: 100%; }
+.cal-chip.is-rhythm small { flex: 0 1 auto; min-width: 0; max-width: none; overflow: hidden; visibility: hidden; white-space: nowrap; font-size: var(--fs-2xs); color: var(--text-2); }
+.cal-run-mark { display: inline-flex; flex: none; color: var(--warn); }
+.cal-run-mark[data-status="error"] { color: var(--danger); }
 
 .cal-chip > .av { position: absolute; top: 2px; right: 3px; }
 .cal-chip.is-line > .av { position: static; flex: none; }

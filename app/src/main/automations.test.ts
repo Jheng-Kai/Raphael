@@ -30,6 +30,88 @@ beforeEach(()=>{
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
 });
 
+test("one every routine saves and reopens its daytime window through real controls", async () => {
+  openRoutineDialog({members, routine: {...plan, schedule: {kind:"every", hours:3, from:"08:00", to:"23:00"}}});
+  expect(document.querySelector('[data-dlg="window-from"]')?.textContent).toContain("08:00");
+  expect(document.querySelector<HTMLInputElement>('#au-time')?.value).toBe("08:00");
+  expect(document.querySelector<HTMLInputElement>('#au-time')?.disabled).toBe(true);
+  click('[data-dlg="window-from"]'); click('#app-popover [data-value="07:00"]');
+  click('[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:"every",hours:3,from:"07:00",to:"23:00"})}));
+});
+
+test.each(["day","month"])("the chosen %s view survives a fresh page but its date starts today", async view => {
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show("2026-10-24");await flush();
+  click('[data-au="view"]');click(`#app-popover [data-value="${view}"]`);click('[data-au="next"]');
+  const before=page.el.querySelector('.au-toolbar h1')!.textContent;
+  page.hide();page.show();await flush();
+  expect(page.el.querySelector('.au-toolbar h1')!.textContent).toBe(before);
+  expect(localStorage.getItem('raphael.calendar.view')).toBe(view);
+  page.hide();page.el.remove();
+  const fresh=createAutomationsPage(app());document.body.append(fresh.el);fresh.show();await flush();
+  expect(!!fresh.el.querySelector('.au-month-view')).toBe(view==='month');
+  expect(fresh.el.querySelector('[aria-current="date"]')).not.toBeNull();
+  fresh.hide();
+});
+
+test.each([null,"invalid"])("an empty or invalid stored view %s defaults to week", async stored => {
+  if(stored) localStorage.setItem('raphael.calendar.view',stored);
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);page.hide();
+});
+
+test("unavailable browser storage still allows choosing and returning to a view", async () => {
+  const read=vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new Error('Unavailable');});
+  const write=vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Unavailable');});
+  const page=createAutomationsPage(app());document.body.append(page.el);
+  try {
+    page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);
+    click('[data-au="view"]');click('#app-popover [data-value="month"]');page.hide();page.show();await flush();
+    expect(page.el.querySelector('.au-month-view')).not.toBeNull();
+  } finally {page.hide();page.el.remove();read.mockRestore();write.mockRestore();}
+});
+
+test.each([761,844,624,720,1644,480])("week columns fit %i px of app content", async width => {
+  const page=createAutomationsPage(app());Object.defineProperty(page.el,'clientWidth',{get:()=>width});
+  document.body.append(page.el);page.show('calendar-week:2026-10-24');await flush();
+  expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(width<520?3:7);
+  if(width<520) expect(page.el.querySelector('.au-toolbar h1')!.textContent).toContain('24');
+  page.hide();
+});
+
+test("today shares an ordered quiet group with the arrows and is disabled when the view holds today", async () => {
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  expect([...page.el.querySelectorAll('.au-date-nav button')].map(button=>(button as HTMLElement).dataset.au)).toEqual(['prev','today','next']);
+  expect(page.el.querySelector<HTMLButtonElement>('[data-au="today"]')!.disabled).toBe(true);
+  click('[data-au="next"]');expect(page.el.querySelector<HTMLButtonElement>('[data-au="today"]')!.disabled).toBe(false);
+  click('[data-au="today"]');expect(page.el.querySelector<HTMLButtonElement>('[data-au="today"]')!.disabled).toBe(true);
+  page.hide();
+});
+
+test.each(["calendar-day", "calendar-month"])("%s keeps exceptions legible and month rhythms concise", async view => {
+  api.routinesList.mockResolvedValue({routines:[{...plan,schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}}]});
+  api.routineRuns.mockResolvedValue({runs:["error","confirm"].map((status,i)=>({id:i+1,routine_id:1,started:new Date(`2026-10-24T${i?"14":"11"}:00`).getTime(),finished:null,status,turn_id:i+1,summary:"",cost:0}))});
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show("2026-10-24");await flush();
+  if(view==="calendar-month"){click('[data-au="view"]');click('#app-popover [data-value="month"]');await flush();}
+  const exceptions=[...page.el.querySelectorAll('.cal-chip .cal-run-mark')];
+  expect(exceptions).toHaveLength(2);
+  expect(exceptions.every(mark=>!mark.closest('.cal-chip')!.classList.contains('is-past'))).toBe(true);
+  const bar=page.el.querySelector('.is-rhythm')!;
+  if(view==="calendar-month") {
+    expect(bar.querySelector('small, time')).toBeNull();
+    expect(bar.querySelector('.av')).not.toBeNull();
+  } else expect(bar.textContent).toContain("Every 3 hours");
+  expect(bar.textContent!.includes("08:00")).toBe(view!=="calendar-month");
+  page.hide();
+});
+
+test("window occurrences restart at the first time each local day", () => {
+  const from=localDay("2026-10-24");
+  const routine={...plan,next_run:new Date("2026-10-24T08:00").getTime(),schedule:{kind:"every" as const,hours:3,from:"08:00",to:"23:00"}};
+  expect(occurrences(routine,from,shiftDay(from,2)).map(o=>new Date(o.at).getHours())).toEqual([8,11,14,17,20,23,8,11,14,17,20,23]);
+  expect(occurrences(routine,shiftDay(from,1),shiftDay(from,2),7).map(o=>new Date(o.at).getHours())).toEqual([8]);
+});
+
 test("routine editor saves the chosen weekdays, owner, date and end count",async()=>{
   openRoutineDialog({members,memberId:2,date:"2030-10-24",time:"09:00"});
   field("#au-title","Morning report");field("#au-prompt","Read progress");
@@ -87,6 +169,12 @@ test("a Home event opens its exact day and highlights the corresponding Calendar
 
 test("live routine notifications refresh the list, and hide invalidates pending responses",async()=>{
   const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();api.routinesList.mockResolvedValue({routines:[{...plan,title:"Changed"}]});events.forEach(fn=>fn({type:"RoutinesChanged",member_id:1}));await flush();expect(page.el.textContent).toContain("Changed");page.hide();
+});
+
+test.each(["AgentTurn","AgentQuestion","AgentQuestionClosed"])("%s refreshes the calendar's real run statuses", async type => {
+  const page=createAutomationsPage(app());document.body.append(page.el);page.show();await flush();
+  api.routineRuns.mockClear();events.forEach(fn=>fn({type,member_id:1,status:"confirm"}));await flush();
+  expect(api.routineRuns).toHaveBeenCalled();page.hide();
 });
 
 test("calendar tools retain month navigation and awake state, close on date selection and hide",async()=>{
@@ -213,13 +301,13 @@ test("an own event keeps who added it and is one entry from its item",()=>{
  expect(entryOfItem(google("g","Out",at(9),at(10)))).toMatchObject({kind:"event",source:"google"});
 });
 
-test("a week leaves readable day widths beside the rail and returns to seven days with enough room",async()=>{
+test("a truly narrow week names its days and returns to seven columns with enough room",async()=>{
  const page=createAutomationsPage(app());document.body.append(page.el);
- let width=814;vi.spyOn(page.el,"clientWidth","get").mockImplementation(()=>width);
+ let width=480;vi.spyOn(page.el,"clientWidth","get").mockImplementation(()=>width);
  page.show("calendar-week:2026-10-24");await flush();
  expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(3);
  expect(page.el.querySelector('.au-day-col')?.getAttribute('data-day')).toBe("2026-10-24");
- width=1200;page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(5);
+ width=844;page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);
  width=1600;page.show();await flush();expect(page.el.querySelectorAll('.au-day-col')).toHaveLength(7);
  page.hide();
 });
@@ -383,10 +471,10 @@ describe("what the calendar says of Google",()=>{
   expect(page.el.querySelector('[data-source="google"]')).not.toBeNull();
   page.hide();
  });
- test("connected through a service the calendar cannot read is not called disconnected",async()=>{
-  const {page}=await open("members_only");
-  const words=page.el.querySelector('.cal-notice')!.textContent!;
-  expect(words).toContain("Members can read");expect(words).not.toContain("isn't connected");
+ test("a successful Composio reading shows the Google source row",async()=>{
+  const {page}=await open("connected");
+  expect(page.el.querySelector('.cal-notice')).toBeNull();
+  expect(page.el.querySelector('[data-source="google"]')).not.toBeNull();
   page.hide();
  });
 });

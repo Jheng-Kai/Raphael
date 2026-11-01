@@ -1266,6 +1266,55 @@ PRAGMA user_version = 53;
 COMMIT;
 """
 
+def _merge_daily_windows(conn):
+    import json
+    import re
+    from ..clock import wall_clock_ms
+    from ..members.schedule import next_run, parse_schedule, ScheduleError
+
+    groups = {}
+    cursor = conn.execute("SELECT * FROM routines ORDER BY id")
+    cursor.row_factory = sqlite3.Row
+    for row in cursor.fetchall():
+        try:
+            schedule = parse_schedule(json.loads(row["schedule"]))
+        except (ValueError, TypeError, ScheduleError):
+            continue
+        if schedule.kind != "daily" or schedule.start_date or schedule.until or schedule.max_runs or row["when_json"]:
+            continue
+        key = (row["member_id"], row["prompt"], row["app_name"], row["enabled"])
+        groups.setdefault(key, []).append((row, schedule.time))
+    with conn:
+        for rows in groups.values():
+            times = sorted(int(time[:2]) * 60 + int(time[3:]) for _, time in rows)
+            if len(times) < 2:
+                continue
+            step = times[1] - times[0]
+            if step <= 0 or step % 60 or any(b - a != step for a, b in zip(times, times[1:])):
+                continue
+            kept = rows[0][0]
+            schedule = parse_schedule({"kind": "every", "hours": step // 60,
+                                       "from": f"{times[0] // 60:02}:{times[0] % 60:02}",
+                                       "to": f"{times[-1] // 60:02}:{times[-1] % 60:02}"})
+            last = max((row["last_run_ms"] for row, _ in rows if row["last_run_ms"] is not None), default=None)
+            title = re.sub(r"\s*[（(]\d{1,2}:\d{2}[）)]\s*$", "", kept["title"])
+            conn.execute("UPDATE routines SET schedule=?,title=?,last_run_ms=?,next_run_ms=? WHERE id=?",
+                         (json.dumps(schedule.to_json()), title, last, next_run(schedule, wall_clock_ms()) if kept["enabled"] else None, kept["id"]))
+            for row, _ in rows[1:]:
+                rid = row["id"]
+                conn.execute("UPDATE routine_runs SET routine_id=? WHERE routine_id=?", (kept["id"], rid))
+                conn.execute(
+                    "INSERT INTO routine_receipts(routine_id,item_id,item,state) SELECT ?,item_id,item,state FROM routine_receipts WHERE routine_id=?"
+                    " ON CONFLICT(routine_id,item_id) DO UPDATE SET item=excluded.item,state=excluded.state"
+                    " WHERE (CASE excluded.state WHEN 'fired' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END)"
+                    " > (CASE routine_receipts.state WHEN 'fired' THEN 2 WHEN 'pending' THEN 1 ELSE 0 END)", (kept["id"], rid))
+                conn.execute("DELETE FROM routine_receipts WHERE routine_id=?", (rid,))
+                conn.execute("DELETE FROM routines WHERE id=?", (rid,))
+        conn.execute("PRAGMA user_version = 54")
+
+
+_MIGRATIONS[54] = _merge_daily_windows
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

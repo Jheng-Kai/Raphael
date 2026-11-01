@@ -1,5 +1,6 @@
 import type { Status } from "./types";
 import type { CliAllowances } from "./run-analytics-types";
+import type { RoutineSchedule } from "./types";
 
 export interface HomeItem {
   id: string;
@@ -20,9 +21,12 @@ export interface HomeItem {
   event_id?: number;
   notes?: string;
   added_by?: number | null;
+  rhythm?: boolean;
+  rhythm_schedule?: RoutineSchedule;
+  run_status?: string;
 }
 /** What the calendar can say of Google: not connected and could-not-read are never taken for an empty calendar. */
-export type GoogleCalendarState = "connected" | "not_connected" | "unreadable" | "members_only";
+export type GoogleCalendarState = "connected" | "not_connected" | "unreadable";
 export interface HomeOverview {
   generated_at_ms: number;
   report: Status;

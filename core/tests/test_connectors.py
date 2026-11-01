@@ -69,7 +69,10 @@ async def test_home_calendar_uses_only_enabled_private_google_tool(tmp_path, con
         service.google._access, service.google._expires = "access-private", float("inf")
         await service.sync_google()
     stamp = lambda value: int(datetime.fromisoformat(value).timestamp() * 1000)
-    events = await ConnectedCalendar(router, service)(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
+    calendar = ConnectedCalendar(router, service)
+    events = await calendar(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
+    await asyncio.gather(*calendar._tasks.values())
+    events = await calendar(stamp("2026-10-24T00:00:00+00:00"), stamp("2026-10-31T00:00:00+00:00"))
     assert len(requests) == (1 if state in ("active", "expired") else 0)
     if state == "active":
         assert [e["id"] for e in events] == ["event:timed", "event:all-day"]
@@ -92,6 +95,33 @@ def setup_service(tmp_path, conn, responder, **options):
     service = ConnectorsService(tmp_path, vault, hub, transport=httpx.MockTransport(responder), **options)
     service.register(router)
     return router, service, hub, vault
+
+
+async def test_calendar_core_read_works_with_empty_catalog_without_widening_the_model_gate(tmp_path, conn):
+    from types import SimpleNamespace
+    router, service, hub, vault = setup_service(tmp_path, conn, lambda request: pytest.fail("no HTTP"))
+    entry = Connector("composio:googlecalendar", "composio")
+    entry.status, entry.enabled_tools = "ACTIVE", ["GOOGLECALENDAR_EVENTS_LIST", "GOOGLECALENDAR_EVENTS_DELETE"]
+    service.store.connectors[entry.id] = entry
+    vault.set("connectors:composio:key", "fake")
+    service.tool_available = lambda server, name: True
+    assert service._tool_catalog == {}
+    args = {"calendarId": "primary", "timeMin": "2026-10-24T00:00:00Z", "timeMax": "2026-10-31T00:00:00Z",
+            "singleEvents": True, "orderBy": "startTime", "maxResults": 2500}
+    envelope = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_LIST", "arguments": args}]}
+    assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", envelope, "auto")
+    async def call(key, received, *, approver):
+        assert service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", received, approver)
+        write = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_DELETE", "arguments": {}}]}
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", write, "auto")
+        return SimpleNamespace(ok=True, mcp_result=None, text=json.dumps({"successful": True,
+            "data": {"results": [{"response": {"successful": True, "data": {"items": []}}}], "error_count": 0}}))
+    hub.call = call
+    assert await service.call_calendar(args) == {"items": []}
+    assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", envelope, "auto")
+    entry.enabled = False
+    with pytest.raises(ConnectorFailure):
+        await service.call_calendar(args)
 
 
 async def test_v31_patch_omits_the_rejected_expected_config_version():

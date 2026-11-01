@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any, NotRequired, TypedDict
@@ -10,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .clock import wall_clock_ms
 from .connectors.http import ConnectorFailure
 from .members.schedule import next_run
+from .members.store import ROUTINE_RUN_STATUS_SQL
 from .own_calendar import CalendarStore, own_item
 from .protocol import RpcError, invalid_params
 
@@ -17,12 +19,12 @@ TODAY_LIMIT = 12
 REPORT_LIMIT = 8
 CALENDAR_LIMIT = 24
 CALENDAR_EVENT_LIMIT = 2500
+CALENDAR_READ_TIMEOUT = 12
+CALENDAR_RANGE_LIMIT = 24
 # What the calendar can say of Google, so that "not connected" and "could not read it" are never taken for "no events".
 GOOGLE_CONNECTED = "connected"
 GOOGLE_NOT_CONNECTED = "not_connected"
 GOOGLE_UNREADABLE = "unreadable"
-# Connected through a service whose tools the members call, while the calendar reads only the owner's own sign-in.
-GOOGLE_MEMBERS_ONLY = "members_only"
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +47,9 @@ class HomeItem(TypedDict):
     event_id: NotRequired[int]
     notes: NotRequired[str]
     added_by: NotRequired[int | None]
+    rhythm: NotRequired[bool]
+    rhythm_schedule: NotRequired[dict]
+    run_status: NotRequired[str]
 
 
 class DictationNumbers(TypedDict):
@@ -97,9 +102,19 @@ def _event_end(event: dict, at: int, zone: tzinfo) -> int:
 class ConnectedCalendar:
     """Read the private Google calendar through its existing connector policy."""
 
-    def __init__(self, router, connectors):
+    def __init__(self, router, connectors, *, now_ms=wall_clock_ms, notify=None):
         self.router, self.connectors = router, connectors
         self.failed = False  # the last read of a connected calendar did not come back
+        self.now_ms, self.notify = now_ms, notify
+        self._cache = OrderedDict()
+        self._attempts = OrderedDict()
+        self._tasks = {}
+
+    async def aclose(self):
+        tasks = list(self._tasks.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _connectors(self) -> dict[str, dict]:
         return {c["id"]: c for c in (await self.router.call("connectors.status", {"refresh": False})).get("connectors", [])}
@@ -109,34 +124,104 @@ class ConnectedCalendar:
         google = connectors.get("google")
         return bool(google and google["status"] == "ACTIVE" and "calendar_list_events" in google["enabled_tools"])
 
+    @staticmethod
+    def _composio_readable(connectors: dict[str, dict]) -> bool:
+        toolkit = connectors.get("composio:googlecalendar", {})
+        return (toolkit.get("status") == "ACTIVE" and toolkit.get("enabled", True)
+                and "GOOGLECALENDAR_EVENTS_LIST" in toolkit.get("enabled_tools", [])
+                and "GOOGLECALENDAR_EVENTS_LIST" not in toolkit.get("disabled_tools", []))
+
     async def state(self) -> str:
         """What the owner is told of Google beside the calendar. Reads no provider."""
         connectors = await self._connectors()
-        if self._readable(connectors):
-            return GOOGLE_UNREADABLE if self.failed else GOOGLE_CONNECTED
         toolkit = connectors.get("composio:googlecalendar")
-        if toolkit and toolkit["status"] == "ACTIVE":
-            return GOOGLE_MEMBERS_ONLY
+        if self._readable(connectors) or self._composio_readable(connectors):
+            return GOOGLE_UNREADABLE if self.failed else GOOGLE_CONNECTED
         if any(c and c["status"] == "EXPIRED" for c in (connectors.get("google"), toolkit)):
             return GOOGLE_UNREADABLE
         return GOOGLE_NOT_CONNECTED
 
     async def __call__(self, start_ms: int, end_ms: int) -> list[HomeItem]:
+        key = (start_ms, end_ms)
+        connections = await self._connectors()
+        if not (self._readable(connections) or self._composio_readable(connections)):
+            self._cache.clear()
+            self._attempts.clear()
+            return []
+        if key not in self._tasks and self.now_ms() - self._attempts.get(key, -60_000) >= 60_000:
+            self._keep(self._attempts, key, self.now_ms())
+            self._tasks[key] = asyncio.create_task(self._refresh(key))
+        elif key in self._attempts:
+            self._attempts.move_to_end(key)
+        return self._kept(start_ms, end_ms) or []
+
+    @staticmethod
+    def _keep(store, key, value):
+        store[key] = value
+        store.move_to_end(key)
+        while len(store) > CALENDAR_RANGE_LIMIT:
+            store.popitem(last=False)
+
+    def _kept(self, start_ms, end_ms):
+        key = (start_ms, end_ms)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        # A member's narrower list can reuse the same reading that the month's window drew.
+        for (first, last), items in reversed(self._cache.items()):
+            if first <= start_ms and last >= end_ms:
+                self._cache.move_to_end((first, last))
+                return [item for item in items if start_ms <= item["at_ms"] < end_ms]
+        return None
+
+    async def read(self, start_ms: int, end_ms: int) -> list[HomeItem]:
+        """A member waits for its first reading; the window always returns immediately."""
+        await self(start_ms, end_ms)
+        kept = self._kept(start_ms, end_ms)
+        if kept is not None:
+            return kept
+        task = self._tasks.get((start_ms, end_ms))
+        if task is not None:
+            result = await asyncio.shield(task)
+            if result is not None:
+                return result
+        return self._kept(start_ms, end_ms) or []
+
+    async def _refresh(self, key):
+        before = (self._cache.get(key, []), self.failed)
         try:
-            async with asyncio.timeout(12):
-                self.failed = False
-                if not self._readable(await self._connectors()):
+            async with asyncio.timeout(CALENDAR_READ_TIMEOUT):
+                connections = await self._connectors()
+                direct = self._readable(connections)
+                if not (direct or self._composio_readable(connections)):
                     return []
-                response = await self.connectors.call_google("calendar_list_events", {
+                start_ms, end_ms = key
+                args = {
                     "calendarId": "primary", "singleEvents": True, "orderBy": "startTime", "maxResults": CALENDAR_EVENT_LIMIT,
                     "timeMin": datetime.fromtimestamp(start_ms / 1000, UTC).isoformat(),
                     "timeMax": datetime.fromtimestamp(end_ms / 1000, UTC).isoformat(),
-                })
-        except (ConnectorFailure, RpcError, TimeoutError) as exc:
+                }
+                response = await self.connectors.call_google("calendar_list_events", args) if direct else await self.connectors.call_calendar(args)
+                current = await self._connectors()
+                if not (self._readable(current) if direct else self._composio_readable(current)):
+                    self._cache.clear()
+                    return
+                items = self._parse(response, start_ms, end_ms)
+                if key in self._attempts:
+                    self._keep(self._cache, key, items)
+                self.failed = False
+                return items
+        except Exception as exc:
             # Provider failures must not hide pending work or expose private diagnostics; the window says it could not read.
             logger.warning("Google Calendar could not be read: %s", type(exc).__name__)
             self.failed = True
-            return []
+        finally:
+            self._tasks.pop(key, None)
+            if before != (self._cache.get(key, []), self.failed) and self.notify:
+                self.notify("calendar.changed", {})
+
+    @staticmethod
+    def _parse(response, start_ms, end_ms):
         try:
             zone = ZoneInfo(response.get("timeZone", "UTC"))
         except (ValueError, TypeError, ZoneInfoNotFoundError):
@@ -200,6 +285,8 @@ class HomeOverview:
             return await self.router.call("usage.allowances", {"refresh": False})
 
     async def _events(self, start, end, refresh):
+        if isinstance(self.calendar_events, ConnectedCalendar):
+            return await self.calendar_events(start, end)
         key = (start, end)
         if not refresh:
             return self._calendar if self._calendar_key == key else []
@@ -270,7 +357,8 @@ class HomeOverview:
                            "turn_id": None, "conversation_id": None, "routine_id": routine.id, "all_day": False}
                           for at in self._due(routine, start, end, zone)]
         try:
-            items += [event for event in await self.calendar_events(start, end) if start <= event["at_ms"] < end]
+            read = self.calendar_events.read if isinstance(self.calendar_events, ConnectedCalendar) else self.calendar_events
+            items += [event for event in await read(start, end) if start <= event["at_ms"] < end]
             self._calendar_failed = False
         except (ConnectionError, TimeoutError):
             self._calendar_failed = True
@@ -354,7 +442,7 @@ class HomeOverview:
             month_counts[key] = month_counts.get(key, 0) + 1
             candidates = month_items.setdefault(key, [])
             candidates.append(value)
-            candidates.sort(key=lambda item: (item["at_ms"], item.get("id", "")))
+            candidates.sort(key=lambda item: (0 if item.get("all_day") and not item.get("rhythm") else 1 if item.get("rhythm") else 2, item["at_ms"], item.get("id", "")))
             del candidates[3:]
             calendar_days.add(key)
 
@@ -386,8 +474,32 @@ class HomeOverview:
                         today.append(occurrence)
                 due = next_run(routine.schedule, due, tz=zone)
             # The month marks every scheduled day, independently of the bounded seven-day preview.
+            schedule = routine.schedule
+            minute = lambda time: int(time[:2]) * 60 + int(time[3:])
+            rhythm = schedule.kind == "every" and schedule.hours < 24 and (
+                not schedule.from_time or minute(schedule.to_time) - minute(schedule.from_time) >= schedule.hours * 60)
+            marked = set()
             for at in self._due(routine, month_start, month_end, zone):
-                month_item(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id))
+                if not rhythm:
+                    month_item(item("routine", f"{routine.id}:{at}", routine.member_id, routine.title, at, routine=routine.id))
+                    continue
+                day = datetime.fromtimestamp(at / 1000, zone).replace(hour=0, minute=0, second=0, microsecond=0)
+                key = day.date().isoformat()
+                if key not in marked:
+                    marked.add(key)
+                    value = item("routine", f"{routine.id}:{key}", routine.member_id, routine.title, int(day.timestamp()*1000), routine=routine.id)
+                    value.update(id=f"rhythm:{routine.id}:{key}", rhythm=True, rhythm_schedule=schedule.to_json(), all_day=True,
+                                 end_ms=int((day + timedelta(days=1)).timestamp()*1000))
+                    month_item(value)
+            if rhythm:
+                for run in self.conn.execute(
+                    f"SELECT r.*, COALESCE(r.scheduled,r.started) AS at, {ROUTINE_RUN_STATUS_SQL} AS current_status"
+                    " FROM routine_runs r LEFT JOIN agent_turns t ON t.id=r.turn_id WHERE r.routine_id=? AND COALESCE(r.scheduled,r.started)>=? AND COALESCE(r.scheduled,r.started)<? ORDER BY at,r.id",
+                    (routine.id, month_start, month_end)):
+                    if run["current_status"] in ("error", "confirm"):
+                        value = item("routine", f"{routine.id}:{run['at']}", routine.member_id, routine.title, run["at"], routine=routine.id, turn=run["turn_id"])
+                        value["run_status"] = run["current_status"]
+                        month_item(value)
         events, allowances = await asyncio.gather(self._events(month_start, month_end, refresh), self._allowances(refresh))
         events = [*self._own_items(month_start, month_end, zone, people), *events]
         for event in events:

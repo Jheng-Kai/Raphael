@@ -40,6 +40,16 @@ def test_hourly_confirmation_uses_a_single_hour(language, expected):
     assert text.endswith(f" · {expected} Review")
 
 
+@pytest.mark.parametrize("language,prefix", [("zh-TW", "每 {hours} 小時"), ("ja", "{hours}時間ごと"), ("en", "Every {hours} hours")])
+@pytest.mark.parametrize("hours", [1, 3])
+@pytest.mark.parametrize("action", ["routine_create", "routine_update", "routine_delete"])
+def test_windowed_every_confirmation_keeps_hour_wording_and_window(language, prefix, hours, action):
+    schedule = {"kind": "every", "hours": hours, "from": "08:00", "to": "23:00"}
+    text = routine_event(action, {"routine": {"title": "Review", "schedule": schedule}}, language)
+    timing = "Every hour" if language == "en" and hours == 1 else prefix.format(hours=hours)
+    assert text.endswith(f" · {timing} · 08:00–23:00 Review")
+
+
 @pytest.mark.parametrize("language,expected", [
     ("zh-TW", "當 Example 有符合 label = review 的新項目"),
     ("ja", "Example に label = review と一致する新しい項目があるとき"),

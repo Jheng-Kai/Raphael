@@ -47,6 +47,23 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert rig.conn.total_changes == before
 
 
+async def test_home_draws_one_rhythm_per_day_with_timed_failure_and_waiting_exceptions(home, rig):
+    from datetime import datetime
+    routine = (await rig.call("routines.create", {"member_id": 0, "title": "Sample review", "prompt": "Review samples",
+        "schedule": {"kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}}))["routine"]
+    day = datetime.fromtimestamp(rig.wall()/1000, rig.service._tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    for hour, status in [(8, "done"), (11, "error"), (14, "confirm")]:
+        at = int(day.replace(hour=hour).timestamp()*1000)
+        rig.conn.execute("INSERT INTO routine_runs(routine_id,scheduled,started,status) VALUES(?,?,?,?)", (routine["id"],at,at,status))
+    rig.conn.commit()
+    value = await rig.call("home.overview")
+    key = day.date().isoformat()
+    items = [item for item in value["calendar_items"] if datetime.fromtimestamp(item["at_ms"]/1000, rig.service._tz).date().isoformat()==key]
+    assert len([item for item in items if item.get("rhythm")]) == 1
+    assert [item.get("run_status") for item in items if not item.get("rhythm")] == ["error", "confirm"]
+    assert value["calendar_counts"][key] == 3
+
+
 async def test_local_home_does_not_wait_for_live_allowances_or_calendar(home, rig, monkeypatch):
     calls = []
     async def allowances(params):
@@ -194,11 +211,12 @@ async def test_changing_month_requests_that_grid_and_rejects_invalid_keys(home, 
 
 
 async def test_month_agenda_keeps_three_earliest_items_and_full_daily_counts(home, rig):
-    await rig.call("routines.create", {"member_id": 0, "title": "Hourly", "prompt": "Report",
-                                      "schedule": {"kind": "every", "hours": 1}})
+    for hour in range(8, 12):
+        await rig.call("routines.create", {"member_id": 0, "title": "Daily review", "prompt": "Report",
+                                          "schedule": {"kind": "daily", "time": f"{hour:02}:00"}})
     value = await rig.call("home.overview")
     assert len(value["calendar_counts"]) == 42
-    assert set(value["calendar_counts"].values()) == {24}
+    assert set(value["calendar_counts"].values()) == {4}
     assert len(value["calendar_items"]) == 42 * 3
     for key in value["calendar_counts"]:
         from datetime import datetime

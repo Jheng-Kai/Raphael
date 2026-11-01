@@ -348,6 +348,27 @@ export function installMock(fixture, config = {}, target = window) {
     data.home.calendar_days = Object.keys(data.home.calendar_counts);
   };
   reproject();
+  if (variant.calendarRhythm) {
+    const rhythm = { id:91, member_id:1, title:"Gmail 與行程檢查", prompt:"整理樣本狀態。", schedule:{kind:"every",hours:3,from:"08:00",to:"23:00"}, enabled:true,last_run:octoberAt(24,14),next_run:octoberAt(24,17) };
+    data.routines = [rhythm,{...rhythm,id:92,title:"每日摘要",schedule:{kind:"daily",time:"09:00"},next_run:octoberAt(24,9)}];
+    data.routineRuns = [[8,"done"],[11,"error"],[14,"confirm"]].map(([hour,status],i)=>({id:901+i,routine_id:91,scheduled:octoberAt(24,hour),started:octoberAt(24,hour),finished:status==="confirm"?null:octoberAt(24,hour)+60000,status,turn_id:2,summary:"樣本報告",cost:0}));
+    data.home.calendar_events = [own(80,"樣本整理日",octoberAt(24,0),octoberAt(25,0),{all_day:true})];
+    const person = data.members.find(m=>m.id===1);
+    const bars=Array.from({length:42},(_,i)=>{
+      const day=new Date(2026,8,28+i), key=`${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,'0')}-${String(day.getDate()).padStart(2,'0')}`;
+      return {...daily,id:`rhythm:91:${key}`,routine_id:91,title:rhythm.title,member_id:1,name:person.name,avatar:person.avatar,at_ms:day.getTime(),end_ms:new Date(day.getFullYear(),day.getMonth(),day.getDate()+1).getTime(),all_day:true,rhythm:true,rhythm_schedule:rhythm.schedule};
+    });
+    const exceptions=data.routineRuns.filter(r=>r.status!=="done").map(r=>({...daily,id:`routine:91:${r.scheduled}`,routine_id:91,title:rhythm.title,at_ms:r.scheduled,member_id:1,name:person.name,avatar:person.avatar,run_status:r.status,all_day:false}));
+    data.home.calendar_items=[...data.home.calendar_events,...bars,...exceptions];
+    data.home.calendar_counts=Object.fromEntries(bars.map(b=>[new Date(b.at_ms+43200000).toISOString().slice(0,10),1]));
+    data.home.calendar_counts['2026-10-24']=4;
+    data.home.calendar_days=Object.keys(data.home.calendar_counts);
+  }
+  if (variant.calendarComposio) {
+    data.managedConnectors = data.managedConnectors.filter(c=>c.id!=="google" && c.id!=="composio:googlecalendar");
+    data.managedConnectors.push({id:"composio:googlecalendar",kind:"composio",name:"Google Calendar",status:"ACTIVE",enabled:true,enabled_tools:["GOOGLECALENDAR_EVENTS_LIST"]});
+    data.home.calendar_google="connected";
+  }
   if (variant.homeSparse || variant.homeEmpty) {
     data.home.calendar_days = []; data.home.calendar_items = []; data.home.calendar_counts = {}; data.home.calendar_events = [];
     data.home.today = []; data.home.reports = []; data.home.calendar = [];
@@ -534,7 +555,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "home.overview": {
         if (!p.month) return {...data.home,report:data.status};
         const shift = at => { const old = new Date(at), [year,month] = p.month.split('-').map(Number); return new Date(year,month-1,Math.min(old.getDate(),new Date(year,month,0).getDate()),old.getHours(),old.getMinutes()).getTime(); };
-        const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,...(item.end_ms===undefined?{}:{end_ms:at_ms+item.end_ms-item.at_ms}),id:item.kind==='routine'?`routine:${item.routine_id}:${at_ms}`:item.id}; };
+        const project = item => { const at_ms=shift(item.at_ms);return {...item,at_ms,...(item.end_ms===undefined?{}:{end_ms:at_ms+item.end_ms-item.at_ms}),id:item.kind==='routine' && !item.rhythm?`routine:${item.routine_id}:${at_ms}`:item.id}; };
         const calendar_items = data.home.calendar_items.map(project), calendar_events = data.home.calendar_events.map(project);
         const calendar_counts = Object.fromEntries(Object.entries(data.home.calendar_counts).map(([key,count])=>[new Date(shift(new Date(`${key}T12:00:00`).getTime())).toISOString().slice(0,10),count]));
         return {...data.home,calendar_items,calendar_events,calendar_counts,calendar_days:Object.keys(calendar_counts),report:data.status};

@@ -23,8 +23,9 @@ class HarnessToolError(Exception):
 
 
 SCHEDULE = {
-    "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. every: every so many hours. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
+    "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. every: every so many hours. Several times a day within part of the day is one routine with hours, from and to, never one routine per time. Example: every 3 hours, not at night = hours:3, from:08:00, to:23:00. The window restarts at from each local day and includes to when due. Supply both from and to, with from before to. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
     "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"},
+                   "from": {"type": "string", "description": "HH:MM, optional every window start"}, "to": {"type": "string", "description": "HH:MM, optional every window end"},
                    "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "until": {"type": "string", "description": "YYYY-MM-DD"}, "max_runs": {"type": "integer"}}, "required": ["kind"],
 }
 WHEN = {
@@ -203,6 +204,8 @@ def routine_event(name: str, data: dict, language: str) -> str:
     elif kind == "every":
         hours = schedule.get("hours", 1)
         timing = {"zh-TW": f"每 {hours} 小時", "ja": f"{hours}時間ごと", "en": "Every hour" if hours == 1 else f"Every {hours} hours"}[language]
+        if schedule.get("from"):
+            timing += f" · {schedule['from']}–{schedule['to']}"
     else:
         timing = words[3] + " " + str(schedule.get("time", ""))
     if schedule:
