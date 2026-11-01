@@ -762,8 +762,21 @@ export function checkRendered(name, context = {}) {
     const codex = window.__look.data.clis.flatMap(cli => cli.models).find(model => chosen.startsWith(model.id))?.name;
     if (name === "member-model-own" || name === "member-model-kept") require(composer === codex, `this member's composer shows its model: ${composer} / ${codex}`);
     if (name === "member-model-others") require(composer !== codex, `another member's composer does not: ${composer}`);
-    if (name === "member-model-settings") require(document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-tname').textContent !== codex, "Settings keep Raphael's model");
+    if (name === "member-model-settings") require(!document.querySelector('.modal-scrim [data-row="agent-model"]'), "Settings do not say what anyone answers on");
     return { check: name, chosen, raphael };
+  }
+  if (name === "room-question-card") {
+    const card = document.querySelector('.au-room-pane .ra-bgq .permission-card');
+    require(visible(card), "the card is in the group");
+    require(card.getBoundingClientRect().bottom <= document.querySelector('.au-room-pane .composer').getBoundingClientRect().top + 1, "above the composer");
+    require(document.querySelector('[data-room="1"] .mb-dot.is-wait'), "the group's row says something waits");
+    require(!document.querySelector('.mb-col [data-member="1"] .mb-dot.is-wait'), "the member's row does not");
+    return { check: name };
+  }
+  if (name === "question-reminder") {
+    const toast = document.querySelector('.toast [data-question-room]').closest('.toast');
+    require(toast.textContent.includes("小晴") && toast.textContent.includes("等你回答"), `says who waits: ${toast.textContent}`);
+    return { check: name };
   }
   if (name === "composer-url-chip") {
     const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), mirror = field.querySelector(".cmp-mirror"), chip = mirror.querySelector(".url-chip");
@@ -841,7 +854,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "models-responsive") {
     const rows = [...document.querySelectorAll('.row-model')];
-    require(rows.length === 4, "all four model purposes remain available");
+    require(rows.length === 3, "Raphael's quick question and what serves dictation remain available");
     for (const row of rows) {
       const label = row.querySelector('.lbl').getBoundingClientRect(), picker = row.querySelector('.ctl').getBoundingClientRect();
       if (innerWidth <= 820) require(picker.top >= label.bottom - 1 && Math.abs(picker.left - label.left) < 1, "narrow model rows place purpose and price above the picker");
@@ -1251,7 +1264,7 @@ export function checkRendered(name, context = {}) {
       for (const selector of ['.mlead', '.mt']) require(Math.max(...columns(selector)) - Math.min(...columns(selector)) <= 1, `${selector} aligns in one column`);
     }
     if (name === "p02-picker") require(document.querySelectorAll(".room-picked span").length === 2, "Raphael and the selected colleague have chips");
-    if (name === "p02-fallback") require(document.querySelector(".au-room-controls").textContent.includes("群組預設"), "fallback is visible");
+    if (name === "p02-fallback") require(document.querySelector(".au-room-controls").textContent.includes("預設成員"), "fallback is visible");
     if (name === "p02-blocked") {
       const lines = eventLines(3), rows = [...document.querySelectorAll('.au-room-thread > li')];
       require(lines.every(line => line.closest('.au-room-thread > li.room-intent-blocked')), "blocked replies are lines of the thread");
@@ -1577,13 +1590,11 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "room-wrapup") {
     const card = document.querySelector('.au-room-wrapup');
-    require(visible(card), "the wrap-up is visible");
+    require(visible(card), "the closing message is visible");
     const answer = getComputedStyle(card.querySelector('.ans')), ordinary = getComputedStyle(document.querySelector('.au-room-message:not(.au-room-wrapup) .ra .ans'));
-    require(answer.borderLeftWidth === '0px' && answer.borderTopWidth === '0px' && answer.backgroundColor === ordinary.backgroundColor && answer.paddingLeft === ordinary.paddingLeft, "the wrap-up is Raphael's ordinary message, not a bordered card");
-    require(card.querySelector('.au-room-author')?.textContent === '拉斐爾' && visible(card.querySelector('.ra-face .av')) && !/討論收束/.test(card.textContent), "face and name lead the wrap-up like every room message");
-    require([...card.querySelectorAll('.au-room-wrapup-section h3')].map(heading => heading.textContent).join('|') === '結論|待你決定|下一步', "wrap-up has three labelled sections");
-    require(card.querySelectorAll('.au-room-wrapup-owner').length === 3, "next steps style each named owner");
-    for (const text of ['小晴：', '小森：', '拉斐爾：']) require(card.textContent.includes(text), `wrap-up preserves ${text}`);
+    require(answer.borderLeftWidth === '0px' && answer.borderTopWidth === '0px' && answer.backgroundColor === ordinary.backgroundColor && answer.paddingLeft === ordinary.paddingLeft, "it is a reply like any other");
+    require(card.querySelector('.au-room-author')?.textContent === '拉斐爾' && visible(card.querySelector('.ra-face .av')), "face and name lead it like every reply");
+    require(!card.querySelector('h1, h2, h3, h4') && !/###|結論|待你決定|下一步/.test(card.textContent), "no template headings");
     require(card.getBoundingClientRect().right <= innerWidth, "the wrap-up fits the viewport");
     return { check: name, author: 0 };
   }
@@ -2307,11 +2318,10 @@ export function checkRendered(name, context = {}) {
     const composer = document.querySelector(".composer .cmp-model .mp-trigger .mp-tname").textContent;
     require(named && composer === named, `the composer shows the saved model: ${composer} / ${saved}`);
     if (name === "model-sync-composer") require(saved.startsWith("cli:codex:gpt-6.1"), `the composer's choice is what the core holds: ${saved}`);
-    if (name !== "model-sync-composer") {
-      const row = document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-tname').textContent;
-      require(row === composer, `Settings and the composer agree: ${row} / ${composer}`);
+    if (name === "model-sync-settings") {
+      require(!document.querySelector('.modal-scrim [data-row="agent-model"]'), "Settings have no row for what Raphael answers on");
+      require(document.querySelector('.modal-scrim [data-row="quick-model"]')?.textContent.includes("拉斐爾的快速提問"), "the quick question says it is Raphael's");
     }
-    if (name === "model-sync-both") require(!saved.startsWith("cli:codex"), `the choice in Settings is what the core holds: ${saved}`);
     return { check: name, saved };
   }
   if (name === "composer-model-reading") {
@@ -2381,10 +2391,8 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "settings-chatgpt-row") {
-    const row = document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-trigger');
-    require(row.querySelector(".mp-tname").textContent === "GPT-6-Sol", "the plan's model");
-    require(document.querySelector('.modal-scrim [data-price="agent-model"]').textContent === "訂閱", `on the plan, not 價格未知: ${document.querySelector('.modal-scrim [data-price="agent-model"]').textContent}`);
-    require(row.querySelector(".logo, .mono svg") && !row.querySelector(".mono .i"), "with its maker's mark, not the plain one");
+    const price = document.querySelector('.modal-scrim [data-price="quick-model"]').textContent;
+    require(price === "訂閱", `on the plan, not 價格未知: ${price}`);
     return { check: name };
   }
   if (name === "permission-menu") {
@@ -3075,20 +3083,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, open: event.open };
   }
   if (name === "bot-message-from" || name === "bot-exchange-count" || name === "bot-exchange-expanded") {
-    // The asked member's chat: one centred line where the question came, never a pasted transcript.
-    const event = document.querySelector('.exchange-event[data-exchange="71"]');
-    const [line] = eventLines(1);
-    const words = name === "bot-message-from" ? "訊息來自 小森" : "4 則訊息往來：小森";
-    require(line.textContent === words, `the line reads ${words}: ${line.textContent}`);
+    // What a colleague handed over: one centred line where the owner's words would be, then the member's own turn.
+    const event = document.querySelector('.exchange-event[data-exchange="71"]'), line = event.querySelector("summary");
+    require(line.textContent.trim() === "訊息來自 小森", `the line reads who it came from: ${line.textContent}`);
     require(visible(line.querySelector('.av')), "the line carries the asker's face");
-    require(document.querySelector('.tn[data-id="2"]').getBoundingClientRect().bottom <= event.getBoundingClientRect().top, "the question sits where it came, after the member's own earlier turn");
-    require(!document.querySelector('.exchange-row .bubble'), "a colleague's question is never an owner bubble");
-    if (name === "bot-exchange-expanded") {
-      const messages = [...event.querySelectorAll('.exchange-message')].filter(visible);
-      require(event.open && messages.length === 4, `every question and answer is shown: ${messages.length}`);
-      require(messages.map(message => message.querySelector('b').textContent).join("|") === "小森|小晴|小森|小晴", "each speaker is named once, in order");
-      require(!/^(?:小森|小晴)[:：]/m.test(messages.map(message => message.querySelector('.message-text').textContent).join("\n")), "no line carries a speaker label");
-    } else require(!event.open, "the line starts closed");
+    require(document.querySelector('.tn[data-id="2"]').getBoundingClientRect().bottom <= event.getBoundingClientRect().top, "it sits where it came, after the member's own earlier turn");
+    require(!document.querySelector('.tn[data-id="71"] .me'), "a colleague's request is never an owner bubble");
+    if (name === "bot-exchange-expanded") require(event.open && [...event.querySelectorAll('.exchange-message')].filter(visible).length === 1, "it opens on what was asked");
+    else require(!event.open, "the line starts closed");
     return { check: name, words: line.textContent };
   }
   if (name === "global-private-memory") {

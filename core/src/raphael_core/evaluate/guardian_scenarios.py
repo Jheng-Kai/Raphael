@@ -70,8 +70,8 @@ def cells(registry=(), catalog=(), *, servers=()):
         ('room_created', 'real_turn_taking', 'pending_mentions', 'chief_wrapup', 'no_self_reply', 'private_link_once',
          'primary_contact_in_every_turn', 'production_state'),
         'P01/P02a-b', 'meeting'))
-    result.append(ScenarioCell('S07.short-wrapup','Short discussion conclusion (P04 scope)',
-        '請簡短回報，然後由幕僚長結論。',('chief_last','single_wrapup','reply_relation'),'P04','short-wrapup'))
+    result.append(ScenarioCell('S07.short-wrapup','A short report ends with no summary nobody asked for',
+        '請簡短回報。',('no_summary','reply_relation'),'P04','short-wrapup'))
     result.append(ScenarioCell('S08.completion','Evidence completion (P04 scope)',
         '現在完成工作並回報證據。',('evidence','chief_last','status_only'),'P04','immediate-room-work'))
     result.append(ScenarioCell('S08.meeting-actions', 'Meeting actions start now', SCENARIOS[7].prompt,

@@ -2107,7 +2107,7 @@ async def test_without_a_key_the_assistant_still_runs_commands_and_says_why_it_c
     assert (done["prefix"], done["text"]) == ("了", "")
     assert actions.calls == [("press_key", "volume_mute", 1)]
     refused = await app.call("agent.ask", ask_params("what is the weather", "en", "a2"))
-    assert (refused["prefix"], refused["text"]) == ("Negative", "No OpenRouter key is set.")
+    assert refused["prefix"] == "Negative" and "provider is not connected" in refused["text"]
 
 
 async def test_a_dictation_for_the_assistant_and_its_question_go_together(make_app):

@@ -19,8 +19,7 @@ export const sourceOf = (turn: AgentTurn): string => turn.source || VOICE;
 /** One line of the thread: the heading of a day, a turn, or what one colleague asked in a row. */
 export type ThreadItem =
   | { kind: "day"; key: string; label: string }
-  | { kind: "turn"; key: string; turn: AgentTurn }
-  | { kind: "exchange"; key: string; turns: AgentTurn[] };
+  | { kind: "turn"; key: string; turn: AgentTurn };
 
 /** Whether a turn is a colleague's question or hand-off to this member, not the owner's own words. */
 export const exchangeTurn = (turn: AgentTurn): boolean =>
@@ -49,16 +48,11 @@ export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadI
   for (const turn of oldestFirst) {
     if (!visibleTurn(turn)) continue;
     const label = dayLabel(turn.created_at_ms, nowMs);
-    const last = items[items.length - 1];
-    if (exchangeTurn(turn) && label === day && last?.kind === "exchange" && last.turns[0].peer_id === turn.peer_id) {
-      last.turns.push(turn);
-      continue;
-    }
     if (label !== day) {
       day = label;
       items.push({ kind: "day", key: `day:${label}`, label });
     }
-    items.push(exchangeTurn(turn) ? { kind: "exchange", key: `exchange:${turn.id}`, turns: [turn] } : { kind: "turn", key: `turn:${turn.id}`, turn });
+    items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
   }
   return items;
 }

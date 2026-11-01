@@ -37,14 +37,14 @@ async def look_twice_then_report(rig):
 # --- a task from start to end ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model", ["@local:text"])
-async def test_background_tasks_use_auxiliary_api_model(make_rig, model):
+@pytest.mark.parametrize("model", ["@local:text", "@chatgpt:gpt-6.1-terra?effort=high", "@mine:big"])
+async def test_a_background_task_stays_on_the_model_chosen_and_never_on_the_auxiliary_one(make_rig, model):
     rig = make_rig()
     SettingsStore(rig.conn).set("assistant_model", "anthropic/claude-haiku-5.5")
     rig.client.replies = [report("Finished.")]
     rig.submit(model=model)
     await rig.wait_for_reports()
-    assert rig.client.chat_calls[0]["model"] == "anthropic/claude-haiku-5.5"
+    assert rig.client.chat_calls[0]["model"].split("?effort=")[0] == model.split("?effort=")[0]
 
 
 async def test_a_task_is_carried_out_step_by_step_and_reported(make_rig, plugins, calls):

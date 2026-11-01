@@ -46,6 +46,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.chatgptSignedIn) {
     data.chatgpt = { signed_in: true, email: "owner@example.test", plan_scope_granted: true };
     data.settings.agent_model = "@chatgpt:gpt-6-sol?effort=medium";
+    data.settings.quick_model = "";
   }
   if (variant.modelsMany) {
     for (let index = 1; index <= 40; index++) data.catalog.llm.push({ ...data.catalog.llm[0], id: `maker/model-${index}`, name: `Model ${index}`, created_at_ms: index });
@@ -89,11 +90,11 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.p04Blocked) {
     data.roomHandoffs=[{...data.roomHandoff,state:"failed",reason:"missing_artifact",result:"",evidence:[]}];
     data.messages.at(-1).text="尚未取得檔案，目前沒有可驗收結果。";
-    data.messages.push({...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"### 結論\n目前沒有可驗收的成果。\n\n### 待決定\n小晴的檔案尚未完成，請決定是否重試。\n\n### 下一步\n- 小晴：補齊檔案後重新驗收。"});
+    data.messages.push({...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴的檔案尚未完成，補齊後可以重新驗收，要不要重試由你決定。"});
   }
   if (variant.p04Short) {
     data.messages=[data.messages[0],{...data.messages[1],text:"目前沒有交付成果，需要先取得來源權限。"},
-      {...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"### 結論\n目前沒有可驗收的成果。\n\n### 待決定\n請提供來源權限。\n\n### 下一步\n- 小晴：取得權限後處理。"}];
+      {...data.roomWrapupMessage,reply_to:null,reply_to_member:null,text:"目前沒有可驗收的成果。小晴還需要來源的權限，取得後就會處理。"}];
   }
   if (variant.roomThinking) { data.messages.push(...data.roomThinkingMessages); data.roomExchanges.push(data.roomActiveExchange); }
   if (variant.p03Handoff) {
@@ -466,6 +467,8 @@ export function installMock(fixture, config = {}, target = window) {
         desktopSessions.delete(p.session); return {};
       }
       case "settings.get": return { settings: data.settings };
+      // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
+      case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
         if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
@@ -611,7 +614,11 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "agent.speech.status": return data.speech;
       case "agent.question.open": return null;
-      case "background.questions.list": return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
+      case "background.questions.list": {
+        if (variant.roomQuestion && p.room_id === 1) return { questions: [{ id: "room-q", task_id: 950, member_id: 1, prefix: "問", text: "本機指令", tier: "T2", created_at_ms: data.now, expires_at_ms: data.now + 1800000, room_id: 1,
+          permission: { id: "room-q", source: "background", kind: "local_command", service: "小晴", tool: "local_exec", summary: "Get-ChildItem -LiteralPath app -Force", reason: "D:\\專案", digest: "room-digest", always: false, state: "pending", expires_at_ms: data.now + 1800000 } }] };
+        return { questions: localQuestion && p.member_id === 1 ? [localQuestion] : [] };
+      }
       case "owner_questions.answer": {
         const turn = data.turns.find(turn => turn.owner_questions?.some(question => question.id === p.id));
         const question = turn?.owner_questions.find(question => question.id === p.id);
@@ -665,7 +672,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "rooms.list": return { rooms: data.rooms.map(room => {
         const messages = data.messages.filter(message => message.room_id === room.id && (message.member_id == null || message.status === "done" && message.text.trim() && !/^[(（]?\s*pass\s*[)）]?[.。]?$/i.test(message.text.trim()))).sort((a, b) => b.id - a.id);
         const latest = messages[0];
-        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null,
+        return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
           unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
       }) };
       case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };

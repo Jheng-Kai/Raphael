@@ -150,9 +150,12 @@ def _to_turn(row: sqlite3.Row) -> Turn:
     return Turn(**data)
 
 
-# A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it
-# (`handoff`), written in its thread outside its private conversations. Room work stays in rooms.
+# A member's exchanges with colleagues: what another member asked it (`ask_member`) or handed it (`handoff`), kept
+# outside its private conversations. Room work stays in rooms.
 _EXCHANGES = "scope = 'exchange' AND peer_id IS NOT NULL"
+# What its own page lists of them: work handed to it, since that is where it does the work. A question is the asker's
+# record alone (`_colleague_events`): a member the owner never spoke to would otherwise fill up with other members' talk.
+_HANDED = _EXCHANGES + " AND EXISTS (SELECT 1 FROM worker_tasks w WHERE w.turn_id = agent_turns.id AND w.mode = 'work')"
 # The turns the model reads as the conversation (`is_readable`), as SQL.
 _READABLE = (
     f"(status = 'done' OR (status IN ({', '.join(repr(status) for status in UNFINISHED)})"
@@ -166,7 +169,7 @@ def _anything(step: Step) -> bool:
 
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
     """The conditions of a member's thread as its chat lists it, and their params."""
-    scopes = f"(scope = 'private' OR ({_EXCHANGES}))" if exchanges else "scope = 'private'"
+    scopes = f"(scope = 'private' OR ({_HANDED}))" if exchanges else "scope = 'private'"
     where, params = f"{scopes} AND member_id = ?", [member_id]
     if conversation_id is not None:
         where += " AND conversation_id = ?"
@@ -431,7 +434,7 @@ class AgentHistory:
     ) -> list[Turn]:
         """The thread of `member_id`, newest first. `before_id` keeps the turns made before that
         one: the cursor for the next page. With `exchanges`, what colleagues asked or handed the
-        member (`_EXCHANGES`) is among them, where it came: the line its own chat shows."""
+        member (`_HANDED`) is among them, where it came."""
         where, params = _thread(member_id, conversation_id, exchanges)
         if before_id is not None:
             where += " AND id < ?"

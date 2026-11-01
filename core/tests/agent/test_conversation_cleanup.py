@@ -24,7 +24,8 @@ def test_exchange_is_delivered_to_one_conversation_and_never_reappears_in_a_new_
     turn = exchange(history, conversation_id=other)
     assert history.get(turn).conversation_id == other
     assert history.list(conversation_id=first, exchanges=True) == []
-    assert [t.id for t in history.list(conversation_id=other, exchanges=True)] == [turn]
+    # A colleague's question is the asker's record: the asked member's page does not list it.
+    assert history.list(conversation_id=other, exchanges=True) == []
     assert history.after(0, conversation_id=first, exchanges=True) == []
 
 
@@ -36,6 +37,8 @@ def test_a_delegated_work_turn_keeps_its_delivery_conversation(conn):
         model="fake/model", request="Review this", stage="review", mode="work", done_when="Reviewed", language="en")
     turn = history.get(tasks.get(task_id).turn_id)
     assert turn.conversation_id == conversations.main(member.id)
+    # Work handed over stays with whoever does it.
+    assert [t.id for t in history.list(member_id=member.id, conversation_id=turn.conversation_id, exchanges=True)] == [turn.id]
     other = conversations.create(member.id)["id"]
     assert history.list(member_id=member.id, conversation_id=other, exchanges=True) == []
     conn.execute("DELETE FROM conversations WHERE id=?", (turn.conversation_id,))

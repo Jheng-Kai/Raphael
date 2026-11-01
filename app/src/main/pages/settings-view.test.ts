@@ -174,7 +174,7 @@ test("服務 is in the 拉斐爾 tab, after its settings and before the memory, 
   const picker = tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } }, brain: { ...brain, vision_model: "anthropic/claude-haiku-5.5" } });
   expect(picker).toMatch(/<span class="mp-slot" data-model-picker="vision"><button type="button" class="sel mp-trigger"[^>]*data-k="svc-vision">/);
   expect(picker).toContain('<strong class="mp-tname">Claude Haiku 5.5</strong>');
-  expect(tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } } })).toContain('<strong class="mp-tname">與回答相同</strong>');
+  expect(tab("agent", { services: { ...emptyServicesView(), open: { kind: "vision", service: "model" } } })).toContain('<strong class="mp-tname">與拉斐爾相同</strong>');
   for (const id of ["general", "dictation", "connections", "messaging", "usage", "data", "about"] as const) {
     expect(tab(id, { services: emptyServicesView() })).not.toContain("data-svc");
   }
@@ -191,18 +191,17 @@ test.each(["zh-TW", "en", "ja"] as const)("About exposes localized help and feed
 });
 
 test.each([catalog, "loading", "failed"] as const)("a CLI answer is priced as subscription regardless of API catalog availability", (source) => {
-  expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "cli:codex" } }))["agent-model"]).toBe("訂閱");
+  expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "cli:codex" } }))["quick-model"]).toBe("訂閱");
 });
 
 test.each([catalog, "loading", "failed"] as const)("a ChatGPT plan answer is priced as subscription regardless of API catalog availability", (source) => {
-  expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "@chatgpt:gpt-5" } }))["agent-model"]).toBe("訂閱");
+  expect(priceTexts(view({ catalog: source, brain: { ...brain, agent_model: "@chatgpt:gpt-5" } }))["quick-model"]).toBe("訂閱");
 });
 
-test("answer and inherited quick prices keep the catalog identity when effort is selected", () => {
+test("an inherited quick price keeps the catalog identity when effort is selected", () => {
   const plain = priceTexts(view());
   const selected = priceTexts(view({ brain: { ...brain, agent_model: brain.agent_model + "?effort=high", quick_model: "" } }));
-  expect(selected["agent-model"]).toBe(plain["agent-model"]);
-  expect(selected["quick-model"]).toBe(plain["agent-model"]);
+  expect(selected["quick-model"]).toBe(plain["quick-model"]);
 });
 const IDS = PANES.map((p) => p.id);
 const LOCALES = ["zh-TW", "en", "ja"] as const;
@@ -309,7 +308,7 @@ describe("the rules for every tab, in every language", () => {
     expect(described(tab("general"))).toEqual([]);
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
-    expect(described(tab("models"))).toEqual(["拉斐爾的回答", "快速提問", "整理文字", "語音轉文字"]);
+    expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字"]);
     expect(described(tab("usage"))).toEqual(["金鑰"]);
   });
 });
@@ -463,7 +462,8 @@ describe("Models", () => {
   test("puts providers and model choices on Models, existing usage controls and analytics slot on Usage", () => {
     const html = tab("models");
     expect(groups(html)).toEqual(["使用的模型", "訂閱帳號", "供應商"]);
-    expect(names(html)).toEqual(["拉斐爾的回答", "快速提問", "整理文字", "語音轉文字"]);
+    expect(names(html)).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字"]);
+    expect(html).not.toContain('data-row="agent-model"');
     expect(html.indexOf('data-pv="directory"')).toBeGreaterThanOrEqual(0);
     expect(html.indexOf('data-pv="directory"')).toBeGreaterThan(html.indexOf('data-row="stt-model"'));
     expect(html).not.toContain('data-row="raphael-spend"');
@@ -514,7 +514,7 @@ describe("Models", () => {
     for (const [name, k, role, price, chosen] of [
       ["語音轉文字", "stt-model", "stt", "每分鐘 $0.0067", "Scribe v2"],
       ["整理文字", "model", "cleanup", "輸入 $0.10 / 輸出 $0.40 每百萬 token", "GPT-6 Luna"],
-      ["拉斐爾的回答", "agent-model", "answer", "輸入 $0.10 / 輸出 $0.40 每百萬 token", "GPT-6 Luna"],
+      ["拉斐爾的快速提問", "quick-model", "answer", "輸入 $0.10 / 輸出 $0.40 每百萬 token", "GPT-6 Luna"],
     ]) {
       const row = rowOf(html, name);
       expect(row).toContain(`data-row="${k}"`);
@@ -535,7 +535,7 @@ describe("Models", () => {
 
   test("gives each picker the catalog, what is chosen and the row's name", () => {
     const look = modelPickerLook(view(), "answer");
-    expect(look).toMatchObject({ role: "answer", key: "agent-model", label: "拉斐爾的回答", current: "openai/gpt-6-luna", catalog, loading: false, showPrice: false, disabled: false });
+    expect(look).toMatchObject({ role: "answer", key: "quick-model", label: "拉斐爾的快速提問", current: "openai/gpt-6-luna", catalog, loading: false, showPrice: false, disabled: false });
     expect(modelPickerLook(view({ brain: { ...brain, stt_cloud_model: "openai/gpt-transcribe" } }), "stt").current).toBe("openai/gpt-transcribe");
   });
 
@@ -583,7 +583,7 @@ describe("Models", () => {
     expect(rowOf(tab("models", { catalog: "loading" }), "整理文字")).toContain(">價格載入中…</span>");
     expect(modelPickerLook(view({ catalog: "loading" }), "cleanup")).toMatchObject({ catalog: null, loading: true });
     expect(modelPickerLook(view({ catalog: "failed" }), "cleanup")).toMatchObject({ catalog: null, loading: false });
-    expect(priceTexts(view({ catalog: "failed" }))).toEqual({ model: "", "agent-model": "", "quick-model": "", "stt-model": "", note: "目前無法取得模型價格。" });
+    expect(priceTexts(view({ catalog: "failed" }))).toEqual({ model: "", "quick-model": "", "stt-model": "", note: "目前無法取得模型價格。" });
     expect(tab("models", { catalog: "failed" })).toContain('目前無法取得模型價格。');
   });
 
@@ -676,7 +676,7 @@ describe("搜尋設定", () => {
     expect(where("連接")[0]).toBe("connections:連接");
     expect(where("telegram")).toEqual(["messaging:訊息平台"]);
     expect(where("OPENROUTER")).toEqual(["models:新增供應商", "usage:金鑰", "usage:OpenRouter 帳號本月用量"]);
-    expect(where("模型")).toEqual(["models:模型與用量", "models:語音轉文字", "models:整理文字", "models:拉斐爾的回答"]);
+    expect(where("模型")).toEqual(["models:模型與用量", "models:語音轉文字", "models:整理文字", "models:拉斐爾的快速提問"]);
     expect(where("Models & usage")[0]).toBe("models:模型與用量");
   });
 
@@ -740,7 +740,7 @@ describe("while the core does not answer", () => {
     expect(rowOf(agent, "問拉斐爾")).not.toContain("disabled");
     const usage = tab("usage", down);
     expect(usage).not.toContain('id="limit-input"');
-    for (const name of ["語音轉文字", "整理文字", "拉斐爾的回答"]) expect(rowOf(tab("models", down), name)).toMatch(/data-k="[\w-]+" disabled>/);
+    for (const name of ["語音轉文字", "整理文字", "拉斐爾的快速提問"]) expect(rowOf(tab("models", down), name)).toMatch(/data-k="[\w-]+" disabled>/);
   });
 });
 

@@ -1256,7 +1256,7 @@
   ],
   "roomWrapupMessage": {
     "id": 6, "room_id": 1, "member_id": 0,
-    "text": "### 結論\n先完成測試，再安排上線。\n\n### 待決定\n你希望今天完成檢查後上線，還是延到明天？\n\n### 下一步\n- 小晴：完成最後兩項文案與流程檢查。\n- 小森：更新時程，整理上線清單。\n- 拉斐爾：收到你的決定後確認交付安排。",
+    "text": "大家的看法是先完成測試再安排上線。小晴會把最後兩項文案和流程檢查完，小森更新時程和上線清單。今天檢查完就上線，還是延到明天，要請你決定。",
     "created": 1792807260000, "status": "done", "request_id": null,
     "reply_to": 5, "turn_id": 1, "reply_to_member": 2, "origin_message_id": 1, "kind": "wrapup"
   },

@@ -99,7 +99,7 @@ The voice alone may use the fast router, with recent conversation included. The 
 let any assistant ask any other (`ask_member`), and add a member at the owner's request
 (`create_member`, 《了。已建立「…」。》). The one asked answers through `answer_for`, as itself and
 never on the desktop, within a chain at most two deep and with no cycle (`Speaker.can_ask`); the
-exchange is written in the two threads alone. Nobody waits at the overlay for such an answer, so
+exchange is the asker's record, on the asked member's page only if it is handed work. Nobody waits at the overlay for such an answer, so
 when one of its calls needs a yes (a tier, or a safety rule that asks) none of its calls is made
 there: the request goes to the background as a task of the one asked (`ask_in_background`), which
 stops at that call with a question waiting in that thread, answered in the app alone (the
@@ -148,7 +148,7 @@ from ..integrations.pool import McpPool
 from ..brain.providers.base import ModelProvider
 from ..brain.providers.registry import ProviderRouter
 from ..brain.secrets import KeyStore
-from ..brain.settings import DEFAULTS, SettingsStore, api_model
+from ..brain.settings import DEFAULTS, SettingsStore, api_model, hosted_providers
 from ..brain.spend import SpendTracker
 from ..protocol import INVALID_PARAMS, RpcError, invalid_params
 from ..router import Router as RpcRouter
@@ -1203,7 +1203,7 @@ class AgentService:
         if blocked is None:
             try:
                 decision = await self._decider.classify(
-                    ask.text, api_model(self._settings, settings.model),
+                    ask.text, self._on_its_service(settings.model),
                     ledger, background_line(self._briefs(ask.speaker.id)),
                     context=self._before_run(ask.speaker, ask.conversation_id),
                 )
@@ -1447,7 +1447,7 @@ class AgentService:
             return self._finish(
                 ask, "operate", "negative", phrase(language, "computer_unavailable"), ledger
             )
-        model = api_model(self._settings, settings.model)
+        model = self._on_its_service(settings.model)
         if self._tool_support.supports(model) is False:
             return self._finish(ask, "operate", "negative", phrase(language, "computer_model"), ledger)
         limit = settings.limit_usd
@@ -1884,7 +1884,7 @@ class AgentService:
                         return ToolOutcome(False, "presence_required")
                     if ask.declined:  # the owner said no in this request: not another way to the same end
                         return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
-                    if self._computer is None or self._tool_support.supports(api_model(self._settings, settings.model)) is False:
+                    if self._computer is None or self._tool_support.supports(self._on_its_service(settings.model)) is False:
                         return ToolOutcome(False, "unavailable")
                     request = args.get("request")
                     if not isinstance(request, str) or not request.strip():
@@ -1953,6 +1953,7 @@ class AgentService:
                         query = args.get("query")
                         if not isinstance(query, str) or not query.strip():
                             return ToolOutcome(False, "bad_arguments")
+                        # Only for the search service the owner picked in Settings, OpenRouter's, which takes no other model.
                         search_model = api_model(self._settings, settings.model)
                         result = await self._tool(ask, self._tools.web_search(query, search_model, ledger), name)
                     elif name in ("web_read", "show"):
@@ -2223,6 +2224,11 @@ class AgentService:
                     )
                 )
         return list(await asyncio.gather(*jobs)) if jobs else []
+
+    def _on_its_service(self, model: str) -> str:
+        """The model for a small job of this turn, on the service the owner chose. Only a CLI brain, which takes no such
+        call, has its small jobs done elsewhere."""
+        return api_model(self._settings, model, api_providers=hosted_providers(self._client))
 
     def _step(
         self,
@@ -3667,7 +3673,7 @@ class AgentService:
         if decision.source != "local":
             try:
                 answer = await self._decider.resolve_open(
-                    text, await self._catalog.names(), api_model(self._settings, settings.model), ledger
+                    text, await self._catalog.names(), self._on_its_service(settings.model), ledger
                 )
             except AgentFailure as error:
                 answer, failure = None, error

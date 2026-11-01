@@ -56,7 +56,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
             if child:
                 calls=[] if any(m['role']=='tool' for m in messages) else [('Guardian__read',{})]
             else:
-                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'Close this exchange' in messages[0]['content'] or 'Close this exchange' in str(messages) else [('handoff',arguments())]
+                calls=[] if any(m['role']=='tool' for m in messages) or 'handoff_results' in str(messages) or 'where this has landed' in messages[0]['content'] or 'where this has landed' in str(messages) else [('handoff',arguments())]
             self.turns=iter([('已讀取信件。'+driver.nonce if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     def arguments():
@@ -68,7 +68,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
         async def run(self,*,endpoint,token,system,user,**kwargs):
             yield Event('model','owner-model')
             child='Acceptance criteria' in system
-            if child or ('Delegated work results' not in user and 'Close this exchange' not in user):
+            if child or ('Delegated work results' not in user and 'where this has landed' not in user):
                 async with httpx.AsyncClient() as http:
                     response=await http.post(endpoint,headers={'Authorization':'Bearer '+token},json={
                         'jsonrpc':'2.0','id':1,'method':'tools/call','params':{
@@ -138,7 +138,7 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
             messages=kwargs['messages']
-            calls=[] if any(m['role']=='tool' for m in messages) or 'Close this exchange' in str(messages) else [('Guardian__read',{})]
+            calls=[] if any(m['role']=='tool' for m in messages) or 'where this has landed' in str(messages) else [('Guardian__read',{})]
             self.turns=iter([('已讀取信件。' if not calls else '',calls)])
             return await super().chat_tools(**kwargs)
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
@@ -605,7 +605,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
     made=[]
     class Client(FakeClient):
         async def chat_tools(self,**kwargs):
-            asked=not any(m['role']=='tool' for m in kwargs['messages']) and 'Close this exchange' not in str(kwargs['messages'])
+            asked=not any(m['role']=='tool' for m in kwargs['messages']) and 'where this has landed' not in str(kwargs['messages'])
             call=asked and len(made)<calls
             made.extend([1] if call else [])
             self.turns=iter([('' if call else '好了。',[('Guardian__read',{})] if call else [])])

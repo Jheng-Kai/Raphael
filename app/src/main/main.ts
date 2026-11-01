@@ -7,6 +7,7 @@ import * as api from "./api";
 import { createAutomationsPage } from "./pages/automations";
 import { createHome } from "./pages/home";
 import { configureRooms } from "./group-chats";
+import { mountQuestionReminder } from "./question-reminder";
 import { createAgent } from "./pages/agent";
 import { createDictionary } from "./pages/dictionary";
 import { createHistory } from "./pages/history";
@@ -157,6 +158,7 @@ async function start(): Promise<void> {
   const agent = createAgent(ctx);
   const settings = createSettings(ctx);
   configureRooms(ctx);
+  mountQuestionReminder(ctx);
   registerNavigationPages({ automations: createAutomationsPage });
   const pages: Record<MainPageId | "settings", Page> = { home: createHome(ctx), dictation, agent, settings, automations: createNavigationPage("automations", ctx) };
 

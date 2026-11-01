@@ -23,7 +23,8 @@ import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
 import { messageExpandHTML } from "./message-preview";
-import { TYPED, VOICE, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { TYPED, VOICE, exchangeTurn, hasDetail, highlightHTML, sourceOf } from "./conversation";
+import { receivedLineHTML } from "./exchange-line";
 import { isBotRename, isSettledDraftTurn, settledDraftHTML } from "./member-draft";
 import { messageHTML, replyContentHTML } from "./message-content";
 import type { MentionTarget } from "./mention-text";
@@ -848,7 +849,9 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   // resumed once its connector cards were connected
   const routine = sourceOf(turn) === "routine";
   const resumed = sourceOf(turn) === "connector";
-  const said = turn.question.trim() !== "" && !routine && !resumed;
+  // what a colleague handed this member says who from, in place of the owner's words
+  const handed = exchangeTurn(turn);
+  const said = turn.question.trim() !== "" && !routine && !resumed && !handed;
   const asked = said || (turn.attachments?.length ?? 0) > 0;
   const live = turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
@@ -864,6 +867,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   return (
     `<li class="tn" data-id="${id}" data-status="${esc(turn.status)}"${live ? ' data-live="true"' : ""}>` +
     (routine ? routineLineHTML(turn) : "") +
+    (handed ? receivedLineHTML(turn, look) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
       ? `<div class="me">${ownerFaceHTML()}` +

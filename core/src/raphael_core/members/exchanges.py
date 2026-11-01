@@ -1,7 +1,8 @@
-"""Bounded room exchanges: route, serialize, follow explicit handoffs, optionally wrap up.
+"""Room exchanges: everyone reads every message and decides for themselves whether to speak. No one hands out the floor.
 
-All member turns use the background worker. Only this orchestration state is new;
-personas, tool approvals, timeouts and member capability checks stay in that worker.
+Those with something to say speak one at a time, each reading what the one before said; then everyone reads
+again, until no one has more to say. An address is always answered. All member turns use the background worker;
+only this orchestration state is new, and personas, tool approvals and capability checks stay in that worker.
 """
 import asyncio
 import json
@@ -10,29 +11,20 @@ from dataclasses import dataclass
 
 from ..agent.ledger import Ledger
 from ..brain.spend import SpendTracker
-from ..brain.settings import api_model
+from ..brain.settings import DEFAULTS
 from ..protocol import RpcError
 
-# What bounds the members talking among themselves unasked: the turns of one slice of discussion, the hand-offs and the
-# interjections they make on their own. They never bound an address: a colleague named in a reply (or the owner's
-# message) is owed a reply (`room_reply_intents`), however many turns and hops there have been, and a slice that
-# is full goes on by itself. Grok Bot's documentation has no such numbers; these are only how far chatter goes.
+# What bounds the members talking among themselves unasked: the turns of one slice of discussion, the hand-offs and how many
+# times the room is read after a message (kept in the column `chime_ins`). They never bound an address: a colleague named in a
+# reply (or the owner's message) is owed a reply (`room_reply_intents`), however many turns and hops there have been, and a slice
+# that is full goes on by itself. Grok Bot's documentation has no such numbers; these are only how far chatter goes.
 MAX_TURNS = 6
 MAX_HOPS = 3
-MAX_CHIME_INS = 2
-MIN_CONFIDENCE = .6
-# A room reply already takes seconds; a real choice is worth more than a fast fallback to Raphael.
-DECISION_TIMEOUT_S = 5.0
-
-
-@dataclass(frozen=True)
-class ResponderDecision:
-    candidates: tuple
-    choice: int | str | None
-    confidence: float
-    timeout_s: float
-    fallback: str
-    model: str
+MAX_ROUNDS = 3
+# How long a member takes to read the room; one who takes longer stays quiet this time.
+LISTEN_TIMEOUT_S = 20.0
+# What a member reads of the room to decide; the turn itself reads all of it.
+LISTEN_MESSAGES = 40
 
 
 def is_pass(text):
@@ -177,57 +169,81 @@ class RoomExchanges:
                 return row["id"], row["member_id"]
         return None
 
-    async def decide(self, room, exchange, phase, candidates):
-        if not candidates:
-            return None
-        if self.spend.is_over(self.rooms._settings.get("monthly_limit_usd")):
-            return None
-        ledger = Ledger(self.spend)
-        model = api_model(self.rooms._settings, self.rooms._settings.get("agent_model"))
-        choice, confidence, failure = None, 0, "unavailable"
+    async def _heard(self, speaker, model, colleagues, transcript, ledger, unanswered):
+        """What one member decided: whether it speaks, how much that matters, and why it could not say, if so."""
         try:
-            origin = self.conn.execute("SELECT thread_id FROM room_messages WHERE id=? AND room_id=?",
-                                       (exchange.origin_message_id, room['id'])).fetchone()
-            if origin is None:
-                return None
-            if not self.decision:
-                return None
-            answer = await asyncio.wait_for(self.decision.room_responder(
-                transcript=self.transcript(room, origin['thread_id']),
-                members=[{"id":s.id, "name":s.name, "role":s.role, "personality":s.personality}
-                         for s in self.rooms._members.roster() if s.id in candidates],
-                phase=phase, model=model, ledger=ledger,
-            ), DECISION_TIMEOUT_S)
-            confidence = answer.get("confidence", 0)
-            choice = answer.get("choice")
-            if type(confidence) in (int, float) and MIN_CONFIDENCE <= confidence <= 1 and (
-                    choice in ("everyone", "none") or type(choice) is int and choice in candidates):
-                failure = "" if phase == "chime" or choice != "none" else "no_responder"
-                return choice if not failure else None
-            failure = "low_confidence" if type(confidence) in (int, float) and 0 <= confidence < MIN_CONFIDENCE else "invalid_decision"
-            return None
+            answer = await asyncio.wait_for(self.decision.room_listener(
+                member={"name":speaker.name or 'Raphael', "role":speaker.role, "personality":speaker.personality},
+                colleagues=colleagues, transcript=transcript, model=model.split("?effort=")[0],
+                ledger=ledger, unanswered=unanswered), LISTEN_TIMEOUT_S)
         except TimeoutError:
-            failure = "timeout"
-            return None
+            return {"member":speaker.id, "speak":False, "urgency":0, "failure":"timeout"}
         except Exception:
-            # No key, a timeout or an unavailable router follows the saved room default.
-            return None
-        finally:
+            return {"member":speaker.id, "speak":False, "urgency":0, "failure":"unavailable"}
+        urgency = answer.get("urgency")
+        return {"member":speaker.id, "speak":answer.get("speak") is True,
+                "urgency":urgency if type(urgency) in (int, float) else 0, "failure":""}
+
+    async def listen(self, room, exchange, candidates, *, first=False, unanswered=False):
+        """Everyone in `candidates` reads the room and decides for themselves, each on their own model. Returns those who will
+        speak, whoever cares most first, and whether anyone could be heard at all. A CLI or local brain takes no small question:
+        it reads an owner's message in a real turn and may pass."""
+        if not self.decision or self.spend.is_over(self.rooms._settings.get("monthly_limit_usd")):
+            return [], False
+        origin = self.conn.execute("SELECT thread_id FROM room_messages WHERE id=? AND room_id=?",
+                                   (exchange.origin_message_id, room['id'])).fetchone()
+        if origin is None:
+            return [], False
+        transcript = self.transcript(room, origin['thread_id'])[-LISTEN_MESSAGES:]
+        people = [s for s in self.rooms._members.roster() if s.id in self.rooms._ids(room)]
+        default = self.rooms._settings.get("agent_model") or DEFAULTS["agent_model"]
+        asked, themselves = [], []
+        for speaker in people:
+            if speaker.id in candidates:
+                # The roster is only who is who; a member's model is on the member itself.
+                model = self.rooms._members.speaker(speaker.id).model or default
+                if self.decision.can_ask(model):
+                    asked.append((speaker, model))
+                elif first:
+                    themselves.append(speaker.id)
+        ledger = Ledger(self.spend)
+        heard = await asyncio.gather(*(self._heard(speaker, model,
+            [{"name":s.name or 'Raphael', "role":s.role} for s in people if s.id != speaker.id], transcript, ledger, unanswered)
+            for speaker, model in asked))
+        speaking = [one["member"] for one in sorted(heard, key=lambda one: -one["urgency"]) if one["speak"]]
+        current = self.get(exchange.origin_message_id)
+        if current:
+            self.update(current.origin_message_id, cost=current.cost + ledger.total,
+                        routing=json.dumps({"listened":heard, "themselves":themselves, "fallback":""}))
+        return speaking + themselves, bool(themselves) or any(not one["failure"] for one in heard)
+
+    async def first_speakers(self, room, exchange, ids):
+        """Who speaks on an owner's message that addresses no one. If no one can be heard, the room's saved default, which the
+        room says. If everyone stays quiet, the chief of staff still does not leave a request unanswered; thanks get nothing."""
+        if room["default_responder"] != "auto":
+            return self.fallback(room), False
+        speaking, heard = await self.listen(room, exchange, ids, first=True)
+        if speaking:
+            self.update(exchange.origin_message_id, chime_ins=1)
+            return speaking, False
+        if not heard:
             current = self.get(exchange.origin_message_id)
             if current:
-                from dataclasses import asdict
-                decision = ResponderDecision(tuple(candidates), choice if type(choice) in (int,str) else None,
-                    confidence if type(confidence) in (int,float) and 0 <= confidence <= 1 else 0,
-                    DECISION_TIMEOUT_S, failure, model)
-                self.update(current.origin_message_id, cost=current.cost + ledger.total,
-                            routing=json.dumps(asdict(decision)))
+                self.update(current.origin_message_id, routing=json.dumps({**json.loads(current.routing), "fallback":"unavailable"}))
+            return self.fallback(room), False
+        self.update(exchange.origin_message_id, chime_ins=MAX_ROUNDS)
+        chief = self.rooms._members.primary_id()
+        if chief not in ids:
+            return [], False
+        speaking, _ = await self.listen(room, exchange, [chief], first=True, unanswered=True)
+        return speaking, True
 
     async def start(self, room, origin, language, attachments, recipient=None):
         # A new owner message takes priority without replaying completed actions.
         with self.conn:
             # Owner interjections take priority, but already accepted explicit addresses survive.
             self.conn.execute("UPDATE room_exchanges SET chime_ins = ?, pending = '[]', reason='interjection' "
-                              "WHERE room_id = ? AND state IN ('queued','running')", (MAX_CHIME_INS, room["id"]))
+                              "WHERE room_id = ? AND state IN ('queued','running')", (MAX_ROUNDS, room["id"]))
             self.conn.execute("INSERT INTO room_exchanges (origin_message_id, room_id, state, language, pending) "
                               "VALUES (?, ?, 'queued', ?, ?)",
                               (origin, room["id"], language, json.dumps([{"member":recipient,"reply_to_member":None,
@@ -363,12 +379,15 @@ class RoomExchanges:
                 if pending is None:
                     owner = self.conn.execute("SELECT text FROM room_messages WHERE id = ?", (exchange.origin_message_id,)).fetchone()[0]
                     targets = self.rooms._targets(room, owner)
-                    if not targets:
-                        choice = await self.decide(room, exchange, "route", ids)
-                        targets = ids if choice == "everyone" else [choice] if type(choice) is int else self.fallback(room)
-                    pending = [{"member":i,"reply_to_member":None,"reply_to":exchange.origin_message_id,"handoff":False} for i in targets]
+                    if targets:
+                        pending = [{"member":i,"reply_to_member":None,"reply_to":exchange.origin_message_id,"handoff":False} for i in targets]
+                    else:
+                        # Nobody was addressed, so nobody replies "to" anyone: they are just talking.
+                        chosen, unanswered = await self.first_speakers(room, exchange, ids)
+                        pending = [{"member":i,"reply_to_member":None,"reply_to":None,"handoff":False,"heard":True,
+                                    **({"unanswered":True} if unanswered else {})} for i in chosen]
                 pending = [p for p in pending if p["member"] in ids and
-                           (p.get('round') or p["member"] not in spoken or p["handoff"])]
+                           (p.get('round') or p.get('heard') or p["member"] not in spoken or p["handoff"])]
                 planned = pending
                 with self.conn:
                     for intent in self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id", (exchange.origin_message_id,)).fetchall():
@@ -380,17 +399,14 @@ class RoomExchanges:
                     pending = [{"member":intent['recipient_id'], "reply_to_member":source[0],
                                 "reply_to":intent['source_message_id'], "handoff":source[0] is not None,
                                 "intent_id":intent['id']}]
-                if not pending and exchange.chime_ins < MAX_CHIME_INS and exchange.turns_taken < MAX_TURNS - 1 and exchange.hops < MAX_HOPS:
-                    candidates = [i for i in ids if i not in spoken]
-                    choice = await self.decide(room, exchange, "chime", candidates)
-                    if type(choice) is int and choice in candidates:
-                        last = self.last_reply(exchange.origin_message_id)
-                        source = last if last and last[1] != choice else None
-                        pending = [{"member":choice,"reply_to_member":source[1] if source else None,
-                                    "reply_to":source[0] if source else exchange.origin_message_id,"handoff":False}]
-                        self.update(exchange.origin_message_id, chime_ins=exchange.chime_ins + 1)
-                    else:
-                        self.update(exchange.origin_message_id, chime_ins=MAX_CHIME_INS)
+                exchange = self.get(exchange.origin_message_id)
+                if (not pending and not exchange.meeting and exchange.turns_taken and exchange.chime_ins < MAX_ROUNDS
+                        and exchange.turns_taken < MAX_TURNS and exchange.hops < MAX_HOPS):
+                    # What was just said is a new message, and everyone but the one who said it reads it.
+                    last = self.last_reply(exchange.origin_message_id)
+                    speaking = (await self.listen(room, exchange, [i for i in ids if i != last[1]]))[0] if last else []
+                    pending = [{"member":i,"reply_to_member":None,"reply_to":None,"handoff":False,"heard":True} for i in speaking]
+                    self.update(exchange.origin_message_id, chime_ins=exchange.chime_ins + 1 if pending else MAX_ROUNDS)
                 # Any owner interjection/stop received during a routing call wins before submission.
                 exchange = self.get(exchange.origin_message_id)
                 if (not exchange or exchange.stop_requested or exchange.cost >= cap or
@@ -413,8 +429,10 @@ class RoomExchanges:
                                (exchange.origin_message_id,chief)).fetchone())
                 if (not pending or closing) and any(row['state'] in ('queued','running','waiting') for row in work):
                     return
-                # A member's failed reply is named in the wrap-up; any other block ends the exchange without one.
+                # A member's failed reply is named in what the chief says; any other block ends the exchange without it.
+                # Only a meeting closes and only work handed out reports back: a discussion just ends when no one has more to say.
                 wrapup = (exchange.turns_taken >= 1 and chief in ids and not exchange.wrapup_sent and
+                          (exchange.meeting or closing or bool(work)) and
                           (not pending or closing) and not self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked' "
                               "AND reason!='worker' AND reason NOT LIKE 'cli!_%' ESCAPE '!'", (exchange.origin_message_id,)).fetchone())
                 if wrapup:

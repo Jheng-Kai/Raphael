@@ -13,10 +13,10 @@ import { mountConversationScroll } from "./conversation-scroll";
 import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
-import { roomWrapupHTML } from "./room-wrapup";
 import { createAttachmentMedia } from "./attachment-media";
 import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
+import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, messageActionsHTML } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
@@ -234,6 +234,13 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   composer.el.querySelector('.cmp-quote')!.addEventListener('click',e=>{if((e.target as Element).closest('[data-room-act="cancel-reply"]')){replyTo=undefined;draw();composer.input.focus();}});
   const status=document.createElement('div');status.className="au-room-controls";el.querySelector('.ra-dock')!.prepend(status);
+  // A member's question waits here, where the talk is, not on that member's page.
+  const questions = createBackgroundQuestions({
+    memberId: () => 0, roomId: () => roomId, manageLocal: () => _app.go("settings", "agent"),
+    asker: q => { const who = person(q?.member_id ?? null); return who ? { face: faceHTML(who, 22), name: who.name } : { face: "", name: "" }; },
+    changed: () => { changed(); scroll.scrollTop = scroll.scrollHeight; },
+  });
+  const questionSlot = document.createElement("div"); questionSlot.className = "ra-bgq"; questionSlot.append(questions.element); status.after(questionSlot);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
   function draw():void {
     if(!room)return;
@@ -276,7 +283,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running",m.kind==="wrapup"?source=>roomWrapupHTML(source,list.members.map(member=>member.name)):undefined)}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn) : ""}</div></div>`}</li>`;
     }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
     const restorePages = pagesHost.carry(thread, nextThread);
     const restoreTyped = carryTyped(thread, nextThread);
@@ -314,7 +321,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
   }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(!opened)return;if(roomId)drafts.set(roomId,composer.input.value);drop.reset();attachmentMedia.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;if(roomId)drafts.set(roomId,composer.input.value);drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
@@ -338,14 +345,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}
   });
   window.addEventListener("room-deleted",event=>{if(opened&&roomId===(event as CustomEvent<number>).detail)close();});
-  const listener=():void=>{if(opened&&el.isConnected)void refresh();};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
+  const listener=():void=>{if(opened&&el.isConnected){void refresh();void questions.load();}};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   return {el,close,refresh,async open(id:number){
     if(roomId)drafts.set(roomId,composer.input.value);
-    attachmentMedia.reset();
+    attachmentMedia.reset();questions.reset();
     opened=true;generation++;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
     composer.setTaskState("idle");composer.setDraft(drafts.get(id)??"");el.hidden=false;
-    await refresh();
+    await refresh();void questions.load();
     if(opened&&roomId===id&&room){canOlder=messages.length===100;draw();scroll.scrollTop=scroll.scrollHeight;composer.input.focus();}
   },get active(){return opened;}};
 }
@@ -359,7 +366,7 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
       .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
-        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p">${esc(plainLine(replyBody(room.preview ?? "")))}</span></span>${room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
+        return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : plainLine(replyBody(room.preview ?? "")))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
       }).join("");
   };
   const load = async (): Promise<void> => {

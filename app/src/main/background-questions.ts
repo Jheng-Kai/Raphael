@@ -77,8 +77,10 @@ export function backgroundQuestionHTML(q: BackgroundQuestion, busy = false, aske
 export interface BackgroundQuestionsHost {
   /** The member whose thread this is (0 is Raphael). */
   memberId(): number;
+  /** The room whose questions these are, when they wait in a room rather than a member's thread. */
+  roomId?(): number | undefined;
   /** Who asks in this thread (absent: Raphael). Read each time a card is drawn. */
-  asker?(): Asker;
+  asker?(question?: BackgroundQuestion): Asker;
   /** The cards changed (one came or went): the page may keep its thread at the bottom. */
   changed?(): void;
   manageLocal?(): void;
@@ -118,7 +120,7 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
     const before = new Map<string, Element>();
     for (const card of [...element.children]) before.set((card as HTMLElement).dataset.bgqCard ?? "", card);
     const cards = shown.map((q) => {
-      const html = backgroundQuestionHTML(q, answering.has(q.id), host.asker?.());
+      const html = backgroundQuestionHTML(q, answering.has(q.id), host.asker?.(q));
       const old = before.get(q.id);
       if (old && drawn.get(old) === html) return old;
       const made = document.createElement("template");
@@ -143,9 +145,10 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", { member_id: host.memberId() });
+      const room = host.roomId?.();
+      const next = await core<{ questions: BackgroundQuestion[] }>("background.questions.list", room === undefined ? { member_id: host.memberId() } : { room_id: room });
       if (mine !== loads) return;
-      shown = next.questions;
+      shown = next?.questions ?? [];
     } catch {
       if (mine !== loads) return; // the cards that were there stay until the core answers again
     }

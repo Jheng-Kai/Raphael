@@ -253,11 +253,10 @@ npm run look -- meeting-open-room meeting-chief-event member-mentions-bots-apps 
 
 ## Consulting a colleague and the shared memory (P14)
 
-Grok Bot's two sides of a question: the asker's chat shows 「已詢問 X」 (handoff-line.ts), which opens on
-the question that was sent and the answer, and the asked member's own chat shows 「訊息來自 Y」 with Y's
-face where the question came (exchange-line.ts); several in a row from one colleague on one day fold into
-「N 則訊息往來：Y」, as Grok Bot words it, opening on each question and answer with each speaker named once,
-never a pasted transcript or a per-line label. Both ways of asking leave the same record, the asked
+Grok Bot shows a question on both sides. The owner chose otherwise (R-AG-34): a member they never spoke to would fill up
+with other members' talk. So the asker's chat alone shows 「和 X 討論」 (handoff-line.ts), which opens on the question and the
+answer; the asked member's page does not list it. Work handed over stays in the receiver's own chat, a turn like any other
+under 「訊息來自 Y」 with Y's face (exchange-line.ts), since that is where it thinks. Both are Both ways of asking leave the same record, the asked
 member's exchange turn: `ask_member` answers in the asker's turn, a `handoff` in consult mode runs as the
 asked member's task with its own notes and conversation, and a private chat turn that consulted that way
 comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every

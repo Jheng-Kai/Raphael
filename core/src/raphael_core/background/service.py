@@ -116,7 +116,7 @@ from ..agent.tools import ToolResult, Tools
 from ..brain.catalog import CatalogEntry, context_window
 from ..brain.pricing import builtin_catalog
 from ..brain.providers.base import ModelProvider
-from ..brain.settings import DEFAULTS, SettingsStore, api_model
+from ..brain.settings import DEFAULTS, SettingsStore
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
 from ..members.activity import Activity, current, member_turn
@@ -645,6 +645,7 @@ class BackgroundService:
         for method, handler in {
             "worker.cancel": self._cancel,
             "owner_questions.answer": self.owner_questions.answer,
+            "background.waiting.list": self._waiting_list,
             "worker.rerun": self._rerun,
             "worker.announce_pending": self._announce_pending,
             "background.questions.list": self._questions_list,
@@ -1076,6 +1077,7 @@ class BackgroundService:
         return {
             "id": task.id,
             "state": task.state,
+            "mode": task.mode,
             "created_at_ms": task.created_at_ms,
             "started_at_ms": task.started_at_ms,
             "finished_at_ms": task.finished_at_ms,
@@ -1220,10 +1222,8 @@ class BackgroundService:
         # its own brain; any other continuation goes on from the run that paused.
         answering = recovered is not None and 'spec' not in recovered
         room_cli = selected_model.startswith("cli:")
-        # A hosted reference reaches its own service through the router, never quietly the auxiliary model on another bill.
-        # ChatGPT counts signed in or not: its own failure says to sign in again.
-        hosted = getattr(self._client, "api_providers", lambda: ())
-        model = selected_model if room_cli else api_model(self._settings, selected_model, api_providers={"chatgpt", *hosted()})
+        # What the owner chose is what answers. A brain that cannot do this says so in its own failure, on no one else's bill.
+        model = selected_model
         context = self._context(task)
         # A consultation is answered from what the asked member knows: its notes and its own
         # conversation with the owner. Only the answer goes back. A room's turn or work a colleague
@@ -1708,9 +1708,9 @@ class BackgroundService:
             "expires_at_ms": question.expires_at_ms,
         }
 
-    def waiting_questions(self, member_id: int | None = None) -> list[dict[str, Any]]:
-        """The questions that wait for the owner now, the oldest first (of one member, or of
-        all), as `background.questions.list` gives them."""
+    def waiting_questions(self, member_id: int | None = None, room_id: int | None = None) -> list[dict[str, Any]]:
+        """The questions that wait for the owner now, the oldest first (in one member's thread, in one
+        room, or all), as `background.questions.list` gives them."""
         self.sweep_questions()
         try:
             rows = self._store.waiting_questions(member_id)
@@ -1724,6 +1724,11 @@ class BackgroundService:
                 continue
             view = self._question_view(q)
             paused = self._paused[q.task_id]
+            task = self._store.get(q.task_id)
+            view["room_id"] = task.room_id if task else None
+            # A question waits where it was asked: a room's turn in the room, never also in the member's thread.
+            if (room_id is not None and view["room_id"] != room_id) or (member_id is not None and view["room_id"] is not None):
+                continue
             if is_local(paused.waiting.ref.key):
                 from pathlib import Path
                 first = not self._settings.get("local_commands_seen")
@@ -1737,13 +1742,28 @@ class BackgroundService:
 
     def waiting_members(self) -> set[int]:
         """The members a question waits in the thread of (0 is Raphael)."""
-        return {question["member_id"] for question in self.waiting_questions()} | {q["member_id"] for q in self.owner_questions.pending()}
+        waiting = [*self.waiting_questions(), *self.owner_questions.pending()]
+        return {question["member_id"] for question in waiting if question.get("room_id") is None}
+
+    async def _waiting_list(self, params: dict) -> dict:
+        """Everyone who waits for the owner now, in order: what the app reminds of."""
+        waiting = sorted([*self.waiting_questions(), *self.owner_questions.pending()], key=lambda question: question.get("created_at_ms") or 0)
+        return {"waiting": [{"id": question["id"], "member_id": question["member_id"], "room_id": question.get("room_id"),
+                             "member_name": (self._member_name(question["member_id"]) if self._member_name and question["member_id"] else None) or ""}
+                            for question in waiting]}
+
+    def waiting_rooms(self) -> set[int]:
+        """The rooms a question waits in."""
+        waiting = [*self.waiting_questions(), *self.owner_questions.pending()]
+        return {question["room_id"] for question in waiting if question.get("room_id") is not None}
 
     async def _questions_list(self, params: dict) -> dict:
-        member_id = params.get("member_id")
+        member_id, room_id = params.get("member_id"), params.get("room_id")
         if member_id is not None and type(member_id) is not int:
             raise invalid_params("member_id must be a whole number or null")
-        return {"questions": self.waiting_questions(member_id)}
+        if room_id is not None and type(room_id) is not int:
+            raise invalid_params("room_id must be a whole number or null")
+        return {"questions": self.waiting_questions(member_id, room_id)}
 
     async def _answer(self, params: dict) -> dict:
         task_id, question_id = params.get("task_id"), params.get("question_id")

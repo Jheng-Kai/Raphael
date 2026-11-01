@@ -277,7 +277,7 @@ class RpcDriver:
         reasons = []
         for turn in turns:
             if turn.get("scope", "private") == "exchange":
-                continue  # a colleague's question in this chat is that colleague's, drawn as one line
+                continue  # work a colleague handed this chat is that colleague's request, not the owner's
             # A task resumed after its connector card carries on the owner's own request in this chat.
             if turn.get("member_id", 0) != member or turn.get("source") not in (source, RESUMED):
                 reasons.append("wrong_conversation_scope")
@@ -602,7 +602,7 @@ class RpcDriver:
             await asyncio.sleep(.02)
         messages=(await self.app.call('rooms.messages',{'room_id':room['id']}))['messages']
         wrapups=[m for m in messages if m['kind']=='wrapup']
-        reasons=[] if len(wrapups)==1 and messages[-1]['member_id']==0 and messages[-1]['status']=='done' else ['short_wrapup_missing']
+        reasons=[] if not wrapups and messages[-1]['member_id'] is not None and messages[-1]['status']=='done' else ['summed_up_unasked']
         return reasons,{'status':'done','text':' '.join(m['text'] for m in messages if m['member_id'] is not None)}
 
     async def stop_scenario(self):
@@ -762,9 +762,10 @@ class RpcDriver:
             reasons.append('source_event_missing')
         elif not any(event['state'] == 'done' and event['work_turn_id'] in {row['id'] for row in answered} for event in events):
             reasons.append('task_link_missing')
+        # A question between members is the asker's record: the asked member's page stays clean.
         theirs = (await self.app.call('agent.history.list', {'member_id': marketing}))['turns']
-        if not any(turn['scope'] == 'exchange' and turn['peer_id'] == mail for turn in theirs):
-            reasons.append('message_from_missing')
+        if any(turn['scope'] == 'exchange' and turn['peer_id'] == mail for turn in theirs):
+            reasons.append('question_on_both_sides')
         return reasons, {**result, 'viewer': mail}
 
     async def memory_scenario(self):

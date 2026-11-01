@@ -969,7 +969,7 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
-  preview?: string; last_at?: number | null; unread?: boolean; pinned?: boolean; hidden?: boolean;
+  preview?: string; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";

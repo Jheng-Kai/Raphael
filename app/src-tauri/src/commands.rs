@@ -535,6 +535,7 @@ const ALLOWED_METHODS: &[&str] = &[
     // owner's answer from that card: the one place such a question is answered
     // (`validate_core_call` checks it names its task and question and says yes or no).
     "background.questions.list",
+    "background.waiting.list",
     "background.answer",
     // Raphael's voice, in the settings: the 「Try it」 line is spoken in the voice that is set up,
     // and stopped by `tts.stop`. His answers are spoken by the core itself and need neither.

@@ -42,8 +42,8 @@ class OwnerQuestions:
         return [self.view(row) for row in self.conn.execute("SELECT * FROM owner_questions WHERE turn_id=? ORDER BY created_at_ms, rowid", (turn_id,))]
 
     def pending(self):
-        return [self.view(row) for row in self.conn.execute(
-            "SELECT q.* FROM owner_questions q JOIN worker_tasks t ON t.id=q.task_id "
+        return [{**self.view(row), "room_id": row["room_id"]} for row in self.conn.execute(
+            "SELECT q.*, t.room_id AS room_id FROM owner_questions q JOIN worker_tasks t ON t.id=q.task_id "
             "WHERE q.result IS NULL AND t.state IN ('running','waiting','queued') ORDER BY q.created_at_ms")]
 
     def open(self, task, kind, payload, card_id=""):

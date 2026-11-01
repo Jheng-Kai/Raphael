@@ -457,14 +457,14 @@ describe("停止", () => {
 const LOOK: TurnLook = { face: (loop) => `<i class="face${loop ? " loop" : ""}"></i>` };
 
 describe("a turn", () => {
-  test("a question asked of a colleague is one 已詢問 line naming the colleague, opening on the question and its answer", () => {
+  test("a question asked of a colleague is one 和 X 討論 line naming the colleague, opening on the question and its answer", () => {
     const asked = { task_id: null, source_turn_id: 5, work_turn_id: 9, member_id: 0, member_name: "", from_member_id: 4,
       stage_id: "", mode: "consult" as const, state: "done", reason: null, created_at_ms: T0, ready_at_ms: T0,
       dispatch_policy: "immediate" as const, result: "新品代號是 NX-1。", request: "新品代號是什麼？", evidence: [] };
     const look: TurnLook = { ...LOOK, memberName: (id) => (id === 4 ? "PM" : "拉斐爾"), memberFace: () => "<i></i>" };
     const html = turnHTML(turn(5, { handoffs: [asked] }), emptyTimelineState(), false, look);
     expect(html).toContain('data-handoff="x9"');
-    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("已詢問 拉斐爾");
+    expect(visible(html.slice(html.indexOf("<summary>"), html.indexOf("</summary>")))).toContain("和 拉斐爾 討論");
     const detail = visible(html.slice(html.indexOf('class="handoff-detail"')));
     expect(detail).toContain("PM");
     expect(detail).toContain("新品代號是什麼？");

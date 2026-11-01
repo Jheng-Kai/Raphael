@@ -172,8 +172,7 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "usage", label: "settings.usageMonthly" },
   { pane: "models", label: "settings.031", also: "settings.searchModel" },
   { pane: "models", label: "settings.035", also: "settings.searchModel" },
-  { pane: "models", label: "settings.agentModel", also: "settings.searchModel" },
-  { pane: "models", label: "conversations.quick", words: ["Alt", "Space"] },
+  { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
   { pane: "data", label: "data.retention", also: "settings.searchHistory" },
   { pane: "data", label: "data.dictationAll", also: "data.clearDictation" },
   { pane: "data", label: "data.conversationAll", also: "data.clearConversation" },
@@ -345,12 +344,12 @@ export const quickModels = (v: SettingsView) => [
  * choice again (`splitEffort`); under 「與回答相同」 the effort row is the answer model's.
  */
 export const quickPickerLook = (v: SettingsView): ModelPickerLook => ({
-  ...modelPickerLook(v, "answer"), key: "quick-model", label: t("conversations.quick"),
+  ...modelPickerLook(v, "answer"), key: "quick-model", label: t("settings.quickModel"),
   current: `${v.brain?.quick_model ?? ""}?effort=${v.brain?.quick_effort ?? "low"}`, inheritFrom: agentModel(v), defaultEffort: "low",
   lead: { id: "", name: t("services.sameAsAnswer") },
 });
 const quickRow = (v: SettingsView): string =>
-  row(t("conversations.quick"), priceSpan(v, "quick-model", "price num"),
+  row(t("settings.quickModel"), priceSpan(v, "quick-model", "price num"),
     modelPickerHTML(quickPickerLook(v)), { cls: "row-model", attrs: ' data-row="quick-model"' });
 export const agentCity = (v: SettingsView): string => v.brain?.agent_city ?? "";
 /** What one background task may spend, as the value of its dropdown (the core's default is 0.2). */
@@ -379,14 +378,12 @@ function chosenPrice(catalog: ModelCatalog, role: ModelRole, id: string): string
 export function priceTexts(v: SettingsView): Record<string, string> {
   const catalog = catalogOf(v);
   const local = sttIsLocal(v) ? t("settings.sttLocalPrice") : null;
-  const subscription = planRef(agentModel(v)) ? t("brains.subscription") : null;
   const quick = v.brain?.quick_model || agentModel(v);
   const quickSubscription = planRef(quick) ? t("brains.subscription") : null;
-  if (v.catalog === "loading") return { model: PRICES_LOADING(), "agent-model": subscription ?? PRICES_LOADING(), "quick-model": quickSubscription ?? PRICES_LOADING(), "stt-model": local ?? PRICES_LOADING(), note: "" };
-  if (!catalog) return { model: "", "agent-model": subscription ?? "", "quick-model": quickSubscription ?? "", "stt-model": local ?? "", note: t("settings.030") };
+  if (v.catalog === "loading") return { model: PRICES_LOADING(), "quick-model": quickSubscription ?? PRICES_LOADING(), "stt-model": local ?? PRICES_LOADING(), note: "" };
+  if (!catalog) return { model: "", "quick-model": quickSubscription ?? "", "stt-model": local ?? "", note: t("settings.030") };
   return {
     model: chosenPrice(catalog, "cleanup", cleanupModel(v)),
-    "agent-model": subscription ?? chosenPrice(catalog, "answer", agentModel(v)),
     "quick-model": quickSubscription ?? chosenPrice(catalog, "answer", quick),
     "stt-model": local ?? chosenPrice(catalog, "stt", sttModel(v)),
     note: pricingNote(catalog, v.now),
@@ -396,14 +393,15 @@ export function priceTexts(v: SettingsView): Record<string, string> {
 const priceSpan = (v: SettingsView, k: string, cls = ""): string =>
   `<span${cls ? ` class="${cls}"` : ""} data-price="${k}">${esc(priceTexts(v)[k] ?? "")}</span>`;
 
-// ---------- the three model rows ----------
-// Each row stands alone: its name with the price of what is chosen under it, in full words, and the
+// ---------- the model rows ----------
+// A member's model is chosen in its own conversation, so nothing here says what any member answers on: the rows are
+// Raphael's quick question and what serves dictation. Each row stands alone: its name with the price of what is chosen under it, in full words, and the
 // control, the model picker (model-picker.ts) of every OpenRouter model its role can use. The page
 // draws the picker's button here; settings.ts makes it work. `k` names the control and its price.
 
-/** The three model rows, in order: what each is for, the `k` of its control and its price, and its name. */
+/** What each picker is for: the `k` of its control and its price, and its name. The answer role has no row of its own: it lends 快速提問 its list. */
 export const MODEL_ROWS: readonly { role: ModelRole; k: string; label: () => string }[] = [
-  { role: "answer", k: "agent-model", label: () => t("settings.agentModel") },
+  { role: "answer", k: "quick-model", label: () => t("settings.quickModel") },
   { role: "cleanup", k: "model", label: () => t("settings.035") },
   { role: "stt", k: "stt-model", label: () => t("settings.031") },
 ];
@@ -735,7 +733,7 @@ function dataHTML(v: SettingsView): string {
 function modelsHTML(v: SettingsView): string {
   const providers = v.providers ?? emptyProvidersView();
   const selected = v.modelsTab ?? (v.pane === "usage" ? "usage" : "models");
-  const content = selected === "models" ? section(t("models.used"), [modelRow(v, MODEL_ROWS[0]), quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
+  const content = selected === "models" ? section(t("models.used"), [quickRow(v), ...MODEL_ROWS.slice(1).map(r => modelRow(v, r))], v.catalog === "failed" ? priceSpan(v, "note") : "") +
     cliBrainsHTML(v.cliBrains ?? emptyCliBrainsView()) + providersHTML(providers) + providersAddHTML(providers) :
     `<div data-usage-host></div><section class="sgroup" aria-label="${esc(t("models.usage"))}"><div class="slist">` + [
       keyRow(v),

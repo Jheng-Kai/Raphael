@@ -864,8 +864,9 @@ describe("a member's thread", () => {
     const line = $<HTMLDetailsElement>('.exchange-event[data-exchange="42"]');
     expect(line.querySelector("summary")!.textContent).toBe("訊息來自 拉斐爾");
     expect(line.open).toBe(false);
-    expect(document.querySelector('.tn[data-id="42"] .bubble')).toBeNull();
-    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["拉斐爾主人明天幾點有空？", "行程管家下午兩點以後"]);
+    expect(document.querySelector('.tn[data-id="42"] .me')).toBeNull();
+    expect([...line.querySelectorAll(".exchange-message")].map((message) => message.textContent)).toEqual(["主人明天幾點有空？"]);
+    expect(document.querySelector('.tn[data-id="42"] .ra')!.textContent).toContain("下午兩點以後");
   });
 
   test("the core is told which thread is on screen, and none once the page goes", async () => {

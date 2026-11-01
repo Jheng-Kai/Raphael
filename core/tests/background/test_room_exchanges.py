@@ -11,7 +11,7 @@ from raphael_core.memory.service import MemoryService
 from .conftest import report, until
 
 
-async def test_api_room_team_hands_off_and_wraps_up_through_shared_worker(make_rig, conn, tmp_path):
+async def test_api_room_team_talks_through_shared_worker_and_ends_by_itself(make_rig, conn, tmp_path):
     rig = make_rig()
     memory = MemoryService(conn, tmp_path / "memory", QuietModel(), MemoryKeyStore(), quiet_s=3600, start_delay_s=3600)
     members = MembersService(conn, tmp_path, background=rig.service, memory=memory, now_ms=rig.wall, tz=timezone.utc)
@@ -38,27 +38,22 @@ async def test_api_room_team_hands_off_and_wraps_up_through_shared_worker(make_r
     rig.client.replies.extend(report(text) for text in (
         "@Alice lead the release plan", "@Bob I propose shipping today", "@Alice I disagree: test first",
         "Agreed, I own testing",
-        "### Conclusion\nTest first.\n### Owner decision\nThe release date.\n### Next steps\nAlice owns testing; Bob owns rollout.",
     ))
     try:
         room = (await rig.rpc.call("rooms.create", {"name":"Release", "member_ids":[0,alice.id,bob.id]}))["room"]
         await rig.rpc.call("rooms.send", {"room_id":room["id"], "text":"Discuss a release plan", "request_id":"team", "language":"en"})
         await until(lambda: rooms._exchanges.latest(room["id"])["state"] == "done", timeout=10)
         messages = (await rig.rpc.call("rooms.messages", {"room_id":room["id"]}))["messages"]
-        assert [m["member_id"] for m in messages] == [None,0,alice.id,bob.id,alice.id,0]
-        assert [m["reply_to_member"] for m in messages[2:]] == [0,alice.id,bob.id,None]
-        # Live, Raphael's wrap-up came out as one line and its three headings ran together.
-        assert messages[-1]["kind"] == "wrapup" and messages[-1]["text"].splitlines() == [
-            "### Conclusion", "Test first.", "### Owner decision", "The release date.", "### Next steps",
-            "Alice owns testing; Bob owns rollout."]
-        assert len(rig.client.chat_calls) == 5 and not rig.client.replies and rig.reports() == []
+        assert [m["member_id"] for m in messages] == [None,0,alice.id,bob.id,alice.id]
+        assert [m["reply_to_member"] for m in messages[2:]] == [0,alice.id,bob.id]
+        assert all(m["kind"] == "message" for m in messages)
+        assert len(rig.client.chat_calls) == 4 and not rig.client.replies and rig.reports() == []
         await until(lambda: not rig.service.activity.running)
         for identifier in (0, alice.id, bob.id):
             activity = [data['state'] for method, data in rig.notifications
                         if method == 'member.activity' and data['member_id'] == identifier]
             assert activity[0] == 'thinking' and activity[-2:] == ['done', 'idle']
-        # Live, wrap-ups re-read the mail and even handed work off again: a conclusion only sums up.
-        assert rig.client.chat_calls[4]["tools"] == [] and rig.client.chat_calls[3]["tools"]
+        assert rig.client.chat_calls[3]["tools"]
         assert "PRECISE-PLANNER" in rig.client.chat_calls[1]["messages"][0]["content"]
         assert "CAUTIOUS-ENGINEER" in rig.client.chat_calls[2]["messages"][0]["content"]
         assert "I disagree: test first" in str(rig.client.chat_calls[3]["messages"])

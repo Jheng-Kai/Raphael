@@ -208,8 +208,8 @@ async def test_new_room_membership_requires_the_current_chief(rig, exchange):
 
 
 @pytest.mark.parametrize("switch", ["never", "before the owner speaks", "while the chief frames it", "after the first reply",
-                                    "while the wrap-up runs", "back to Raphael"])
-async def test_the_chief_concludes_a_room_once_and_the_exchange_runs_the_same_whenever_the_primary_changes(rig, exchange, switch):
+                                    "after the last reply", "back to Raphael"])
+async def test_the_exchange_runs_the_same_whenever_the_primary_changes(rig, exchange, switch):
     room, ids = await team(rig)
     alice, bob = ids
     if switch == "before the owner speaks":
@@ -222,20 +222,16 @@ async def test_the_chief_concludes_a_room_once_and_the_exchange_runs_the_same_wh
         await rig.call("members.set_primary", {"id": bob})
     await finish(rig, exchange, "Alice: testing is covered.")
     await finish(rig, exchange, "Bob owns release")
-    if switch == "while the wrap-up runs":
+    if switch == "after the last reply":
         await rig.call("members.set_primary", {"id": bob})
     if switch == "back to Raphael":
         await rig.call("members.set_primary", {"id": alice})
         await rig.call("members.set_primary", {"id": 0})
-    # the same members spoke in the same order, and Raphael's wrap-up is the last turn, once
-    concluding = alice if switch == "while the chief frames it" else bob if switch in ("before the owner speaks", "after the first reply") else 0
-    assert [turn["member_id"] for turn in rig.background.submitted] == [0, alice, bob, concluding]
-    assert "Close this exchange" in rig.background.submitted[-1]["text"]
-    await finish(rig, exchange, "### Conclusion\nDone.\n### Owner decision\nNone.\n### Next steps\nNone.")
+    # the same members spoke in the same order, and no one sums up by being the chief
+    assert [turn["member_id"] for turn in rig.background.submitted] == [0, alice, bob]
     result = await history(rig, room)
     assert result["exchange"]["state"] == "done"
-    wrapups = [m for m in result["messages"] if m["kind"] == "wrapup"]
-    assert [(m["member_id"], m["status"]) for m in wrapups] == [(concluding, "done")] and result["messages"][-1]["id"] == wrapups[0]["id"]
+    assert all(m["kind"] == "message" for m in result["messages"])
     assert sorted((await rig.call("rooms.list"))["rooms"][0]["member_ids"]) == [0, alice, bob]
     assert {i["state"] for i in result["exchange"]["reply_intents"]} <= {"done"}
 

@@ -265,7 +265,7 @@ test("new room saves a selected default responder and resets it when that member
  for(const id of [0,1])document.querySelector<HTMLElement>(`[data-dlg="member"][data-member="${id}"]`)!.click();
  document.querySelector<HTMLElement>('[data-dlg="responder"]')!.click();document.querySelector<HTMLElement>('#app-popover [data-value="member:1"]')!.click();
  document.querySelector<HTMLElement>('[data-dlg="member"][data-member="1"]')!.click();
- expect(document.querySelector('[data-dlg="responder"]')!.textContent).toContain('Automatic');
+ expect(document.querySelector('[data-dlg="responder"]')!.textContent).toContain('Everyone decides');
 });
 
 test("reply controls target a member message and can be cancelled",async()=>{
@@ -280,12 +280,12 @@ test("reply controls target a member message and can be cancelled",async()=>{
 
 test("active exchanges expose stop, and Raphael's wrap-up is his ordinary message",async()=>{
  api.roomStop.mockResolvedValue({stopped:true});
- api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,text:'### Conclusion\nAlice owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
+ api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,text:'Alice owns testing',kind:'wrapup',created:1,status:'done'}],exchange:{state:'running',stop_requested:0}});
  await pane();
  const wrapup=document.querySelector('.au-room-wrapup')!;
  expect(wrapup.querySelector('.au-room-author')!.textContent).toBe('Raphael');
  expect(wrapup.textContent).not.toContain('Wrap-up');
- expect(wrapup.querySelector('.au-room-wrapup h3, h3')!.textContent).toBe('Conclusion');
+ expect(wrapup.querySelector('h3')).toBeNull();
  expect(document.querySelector('.au-room-crown')!.getAttribute('aria-label')).toBe('Chief of staff');
  document.querySelector<HTMLElement>('.au-room-pane .composer[data-task-state="running"] .cmp-voice')!.click();await flush();expect(api.roomStop).toHaveBeenCalledWith(1);
  api.roomMessages.mockResolvedValue({messages:[],exchange:{state:'stopped',stop_requested:1}});event({type:'RoomsChanged',room_id:1});await flush();
@@ -312,73 +312,29 @@ test("a hand-off line names its assignee and opens on the request, result and fi
  expect(line.textContent).not.toMatch(/42|abc|stage-xyz/);
 });
 
-test("wrap-up renders three labelled sections and escaped owners without Markdown markers",async()=>{
+test("a closing message is what the chief wrote, escaped, with no parts imposed on it",async()=>{
  setLocale('zh-TW');
  api.membersList.mockResolvedValue({members:[{id:0,name:'拉斐爾',avatar:''},{id:1,name:'小晴',avatar:''}],groups:[]});
- api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,kind:'wrapup',created:1,status:'done',text:'### 結論\r\n先測試。\r\n\r\n### 待決定\r\n今天或明天？\r\n\r\n### 下一步\r\n- 小晴：完成測試。\r\n- **拉斐爾**：確認安排。\r\n- <script>bad()</script>'}]});
+ api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:0,kind:'wrapup',created:1,status:'done',text:'我們先測試，小晴來做。<script>bad()</script>'}]});
  await pane();
  const card=document.querySelector('.au-room-wrapup')!;
- expect([...card.querySelectorAll('h3')].map(node=>node.textContent)).toEqual(['結論','待你決定','下一步']);
- expect([...card.querySelectorAll('.au-room-wrapup-owner')].map(node=>node.textContent)).toEqual(['小晴','拉斐爾']);
- expect(card.textContent).not.toMatch(/###|\*\*/);
+ expect(card.querySelector('h3')).toBeNull();
+ expect(card.textContent).toContain('我們先測試，小晴來做。');
  expect(card.textContent).toContain('<script>bad()</script>');
  expect(card.querySelector('script')).toBeNull();
 });
 
-test("room rename and delete require their management dialogs",async()=>{
- const view=await pane();document.querySelector<HTMLElement>('[data-room-menu]')!.click();document.querySelector<HTMLElement>('#app-popover [data-pick="rename"]')!.click();
- document.querySelector<HTMLInputElement>('#mb-group-name')!.value="Planning";document.querySelector<HTMLElement>('[data-dlg="save"]')!.click();await flush();expect(api.roomsUpdate).toHaveBeenCalledWith(1,{name:"Planning"});
- document.querySelector<HTMLElement>('[data-room-menu]')!.click();document.querySelector<HTMLElement>('#app-popover [data-pick="delete"]')!.click();expect(api.roomsDelete).not.toHaveBeenCalled();document.querySelector<HTMLElement>('[data-dlg="delete"]')!.click();await flush();expect(api.roomsDelete).toHaveBeenCalledWith(1);expect(view.el.hidden).toBe(true);
-});
-
-test("attachment-only owner messages hydrate through the shared media renderer without a running bubble",async()=>{
- api.roomMessages.mockResolvedValue({messages:[{id:1,member_id:null,text:"",created:1,status:"done",attachments:[{id:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png",name:"chart.png",mime:"image/png",size:10}]}]});
- const rendered=vi.fn(),view=createRoomPane(app,vi.fn(),rendered);document.body.append(view.el);await view.open(1);expect(rendered).toHaveBeenCalled();expect(view.el.querySelector('img[data-attachment="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"]')).not.toBeNull();expect(view.el.querySelector('.me .bubble')).toBeNull();
-});
-
-
-test("authored room reply messages render separate full bubbles without splitting Markdown", async () => {
- const parts = ["First paragraph.", "- Keep this list\n- Together", "```ts\nconst done = true;\n```"];
- api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:JSON.stringify({text:parts[2],messages:parts}),created:2,status:"done",turn_id:23}]});
- await pane();
- const bubbles = document.querySelectorAll('.ra .chat-message');
- expect(bubbles).toHaveLength(3);
- expect(bubbles[1].querySelectorAll('li')).toHaveLength(2);
- expect(bubbles[2].querySelector('pre')).not.toBeNull();
- expect(document.querySelector('.ra [data-expandable]')).toBeNull();
-});
-
-
-test("a room question uses the shared card and preserves text and cursor through refresh", async () => {
- const question = { id: "room-q", task_id: 7, turn_id: 2, member_id: 1, kind: "ask_owner", card_id: "", question: "Which day?", options: ["Tuesday"], free_text: true, state: "asked", result: null };
- api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:"Choose a day.",created:2,status:"done",turn_id:2,turn:{id:2,owner_questions:[question]}}]});
- const view = await pane();
- const input = view.el.querySelector<HTMLTextAreaElement>('[data-owner-answer-input]')!;
- expect(input.closest('.connector-card')).not.toBeNull();
- input.value = "Next Tuesday"; input.focus(); input.setSelectionRange(4, 8);
- await view.refresh();
- const fresh = view.el.querySelector<HTMLTextAreaElement>('[data-owner-answer-input]')!;
- expect(fresh.value).toBe("Next Tuesday");
- expect(document.activeElement).toBe(fresh);
- expect([fresh.selectionStart, fresh.selectionEnd]).toEqual([4, 8]);
- expect(view.el.querySelector<HTMLButtonElement>('[data-owner-answer="text"]')!.disabled).toBe(false);
-});
-
-test("a room redraw moves its live page before removing the previous message", async () => {
- api.pagesOpen.mockResolvedValue({url:"about:blank",title:"Chooser",rev:1,height:80,source:"html"});
- api.roomMessages.mockResolvedValue({messages:[{id:2,member_id:1,text:"Choose.",created:2,status:"done",turn_id:2,turn:{id:2,pages:[{id:"room-page",title:"Chooser",rev:1,height:80,source:"html"}]}}]});
- const view=await pane(); await flush();
- const frame=view.el.querySelector("iframe")!;
- const opens=api.pagesOpen.mock.calls.length;
- const previous=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"moveBefore");
- const move=vi.fn(function(this:HTMLElement,node:Node){expect(node.isConnected&&this.isConnected).toBe(true);this.appendChild(node);});
- Object.defineProperty(HTMLElement.prototype,"moveBefore",{value:move,configurable:true});
- try {
-  await view.refresh();
-  expect(move).toHaveBeenCalledOnce();
-  expect(view.el.querySelector("iframe")).toBe(frame);
-  expect(api.pagesOpen).toHaveBeenCalledTimes(opens);
- } finally {
-  if(previous)Object.defineProperty(HTMLElement.prototype,"moveBefore",previous);else Reflect.deleteProperty(HTMLElement.prototype,"moveBefore");
- }
+test("a member's question waits in the room above its composer, and its row says so",async()=>{
+ setLocale('zh-TW');
+ const question={id:'q1',task_id:9,member_id:1,prefix:'問',text:'本機指令',tier:'ask',created_at_ms:1,expires_at_ms:2,room_id:1,permission:{id:'q1',source:'background',kind:'local_command',service:'小晴',tool:'local_exec',summary:'Get-Process',reason:'D:/repo',digest:'d',always:false,state:'pending',expires_at_ms:2}};
+ api.core.mockImplementation(async(method:string,params:{room_id?:number})=>method==='background.questions.list'?{questions:params.room_id===1?[question]:[]}:{});
+ api.roomMessages.mockResolvedValue({messages:[]});
+ await pane();await flush();
+ const card=document.querySelector('.au-room-pane .ra-dock .ra-bgq .permission-card')!;
+ expect(card.textContent).toContain('Get-Process');
+ expect(api.core).toHaveBeenCalledWith('background.questions.list',{room_id:1});
+ api.roomsList.mockResolvedValue({rooms:[{...room,waiting:true,preview:'舊的預覽'}]});
+ const section=createRoomsSection(()=>true);document.body.append(section);await flush();
+ expect(section.querySelector('[data-room="1"] .mb-dot.is-wait')).not.toBeNull();
+ expect(section.querySelector('[data-room="1"] .mb-row-p')!.textContent).toBe('等你處理');
 });

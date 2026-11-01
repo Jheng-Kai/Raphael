@@ -379,6 +379,12 @@ def checked(key: str, value: Any) -> tuple[str, Any]:
     return key, value
 
 
+def hosted_providers(client) -> set[str]:
+    """The services a model reference may name for API work, as the provider router knows them. ChatGPT counts
+    signed in or not: its own failure says to sign in again, where any other model would bill someone else."""
+    return {"chatgpt", *getattr(client, "api_providers", lambda: ())()}
+
+
 def api_model(settings, *candidates: object, api_providers=()) -> str:
     """Select a model for API work without inheriting a CLI or local model reference.
 

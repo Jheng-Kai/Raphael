@@ -381,10 +381,9 @@ export async function drive(name, context) {
     await click(page, '#nav [data-go="settings"]');
     await perform(page, { action: "settle-motion" });
     await click(page, '.modal-scrim [data-pane="models"]');
-    await wait(page, '.modal-scrim [data-model-picker="answer"] .mp-trigger');
-    const inSettings = await page.$eval('.modal-scrim [data-model-picker="answer"] .mp-tname', el => el.textContent);
-    await capture("settings-shows-it");
-    if (inSettings !== chosenName) throw new Error(`Settings show ${inSettings}, the composer ${chosenName}`);
+    await wait(page, '.modal-scrim [data-row="quick-model"] .mp-trigger');
+    if (await page.$('.modal-scrim [data-row="agent-model"]')) throw new Error("Settings still choose what Raphael answers on");
+    await capture("settings-has-no-answer-row");
     await page.keyboard.press("Escape");
     await page.waitForSelector(".modal-scrim", { hidden: true });
     const conversation = await newConversation(context);
@@ -400,26 +399,24 @@ export async function drive(name, context) {
     await capture("turn-on-codex");
     result.turn = { model: turn.model, status: turn.status, text: turn.text.slice(0, 80) };
     if (turn.status !== "done" || !turn.model.startsWith("cli:codex") || !turn.text.trim()) throw new Error(`The turn did not answer on Codex: ${JSON.stringify(result.turn)}`);
-    // One model answers for everyone: a member still holding its own gives it up when the owner chooses in its conversation.
+    // Each member holds its own: a choice in one conversation moves no one else.
     const { member: colleague } = await context.rpc("members.create", { name: "NativeSync", role: "Model sync" });
+    const { member: other } = await context.rpc("members.create", { name: "NativeOther", role: "Keeps its model" });
     await context.rpc("members.update", { id: colleague.id, model: "cli:claude:haiku" });
     await perform(page, { action: "member", id: colleague.id });
-    await until(async () => (await composerName()).includes("Haiku"), "the member's own model did not show while it held one");
-    await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:sonnet" });
+    await until(async () => (await composerName()).includes("Haiku"), "the member's own model did not show");
+    const raphael = await savedModel(), others = (await context.rpc("members.list", {})).members.find(row => row.id === other.id).model;
     await click(page, ".composer .cmp-model .mp-trigger");
     await wait(page, ".cb-menu");
     await click(page, ".cb-pick");
     await click(page, '.cb-menu [data-cb-source="cli:codex"]');
     await click(page, `.cb-menu [data-model="${id}"]`);
-    await until(async () => (await savedModel()).startsWith(id), "a member's composer did not choose the one model");
-    const kept = (await context.rpc("members.list", {})).members.find(row => row.id === colleague.id).model;
-    if (kept) throw new Error(`The member kept a model of its own: ${kept}`);
-    await capture("member-chose-for-everyone");
+    await until(async () => (await context.rpc("members.list", {})).members.find(row => row.id === colleague.id).model.startsWith(id), "the member's composer did not save its model");
+    if ((await savedModel()) !== raphael) throw new Error("A member's choice moved Raphael's model");
+    if ((await context.rpc("members.list", {})).members.find(row => row.id === other.id).model !== others) throw new Error("A member's choice moved another member");
+    await capture("member-chose-for-itself");
     await click(page, ".composer .cmp-model .mp-trigger");
     await page.waitForSelector(".cb-menu", { hidden: true });
-    await context.rpc("settings.set", { key: "agent_model", value: "cli:claude:haiku" });
-    await until(async () => (await composerName()).includes("Haiku"), "a change of the setting did not reach the composer");
-    await capture("change-reaches-composer");
     return;
   }
   if (name === "owner-words") {
@@ -741,19 +738,17 @@ export async function drive(name, context) {
       await capture(`${label}-reopened`);
       await click(page, '.model-chooser [data-dlg="close"]');
     };
+    await context.rpc("settings.set", { key: "agent_model", value: `${answer.id}?effort=high` });
     await click(page, '#nav [data-go="settings"]');
     await click(page, '.modal-scrim [data-pane="models"]');
     await click(page, '[data-models-tab="models"]');
-    await choose('[data-row]:not([data-row="quick-model"]) [data-model-picker="answer"] .mp-trigger', answer, "high", "answer");
-    await saved("agent_model", `${answer.id}?effort=high`, "answer");
-    await shown('[data-row="agent-model"] .mp-trigger', answer, "high", "answer");
     await choose('[data-k="quick-model"]', quick, "high", "quick");
     const settings = await saved("quick_model", quick.id, "quick");
     if (settings.quick_effort !== "high") await saved("quick_effort", "high", "quick");
     await shown('[data-k="quick-model"]', quick, "high", "quick");
     await capture("settings-saved");
-    const answerPrice = await page.$eval('[data-price="agent-model"]', element => element.textContent);
-    if (!answerPrice || answerPrice.includes("價格未知")) throw new Error("The selected reasoning model lost its catalog price");
+    const quickPrice = await page.$eval('[data-price="quick-model"]', element => element.textContent);
+    if (!quickPrice || quickPrice.includes("價格未知")) throw new Error("The selected reasoning model lost its catalog price");
     await click(page, '.modal-scrim [data-act="close"]');
     const assertTurn = async (model, effort, label, conversation) => {
       let before = 0;

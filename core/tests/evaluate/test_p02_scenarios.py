@@ -85,7 +85,7 @@ class P02Brain(FakeClient):
             return (f"共 {snapshot['count']} 位。{people}。{self.contact(snapshot, names)}。{self.chief(snapshot, names)}。"
                     f"應用程式：{apps or '無'}。已連結應用程式：{self.connected(snapshot)} 個。"), []
         if 'You are in a group chat' in user:
-            if 'Close this exchange' in user:
+            if 'where this has landed' in user:
                 return '決策：採用已核對的方案。負責人：PM；下一步：RD 核對證據。', []
             self.room_calls += 1
             target = 'PM' if snapshot['self_id'] == 1 else '行銷'

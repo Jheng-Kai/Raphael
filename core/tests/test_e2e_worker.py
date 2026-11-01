@@ -175,14 +175,14 @@ def test_a_task_is_handed_over_carried_out_by_the_worker_and_reported(spawn):
     assert b"Traceback" not in bytes(core.stderr), core.log()
 
 
-def test_the_fast_tier_goes_on_while_a_task_runs(spawn):
+def test_a_message_while_a_task_runs_joins_it_at_once(spawn):
     core = spawn()
     connect_the_fake_server(core, slow="T0")
     ask(core, "[delegate] this one is slow")
     wait_for(core, lambda: tool_call_under_way(core))
     started = time.monotonic()
-    answer = ask(core, "hello there")  # small talk, while the worker is under way
-    assert (answer["prefix"], answer["text"]) == ("Answer", "hello there")
+    answer = ask(core, "hello there")  # said while the worker is under way: it goes to the work
+    assert answer["steered"] is True
     assert time.monotonic() - started < 10
     result(core, "worker.cancel", {})
     wait_for(core, lambda: reports(core))

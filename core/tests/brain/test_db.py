@@ -525,7 +525,7 @@ def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_event
     reopened.close()
 
 
-def test_v47_gives_every_member_the_one_model(tmp_path):
+def test_a_member_47_cleared_gets_a_model_of_its_own_again_at_51(tmp_path):
     path = tmp_path / "v46.db"
     raw = sqlite3.connect(path)
     for version in range(1, 47):
@@ -536,7 +536,7 @@ def test_v47_gives_every_member_the_one_model(tmp_path):
     raw.close()
     migrated = db.connect(path)
     assert migrated.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "")
+    assert tuple(migrated.execute("SELECT name,model FROM members WHERE id=5").fetchone()) == ("Kept", "openai/gpt-6-luna")
 
 
 def test_v44_preserves_rooms_and_persists_sidebar_state(tmp_path):

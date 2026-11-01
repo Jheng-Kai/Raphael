@@ -55,7 +55,7 @@ test("快速提問 picks its effort inside the model list, as the answer model d
   api.brainsCli.mockResolvedValue({ clis: [{ id: "codex", name: "Codex", available: true, installed: true, logged_in: true,
     models: [{ id: "cli:codex:fast", name: "Fast", is_default: true, reasoning_efforts: ["medium", "low"] }] }] });
   await mount();
-  expect(page.el.querySelector('[data-row="quick-model"]')!.textContent).toContain("Quick questions");
+  expect(page.el.querySelector('[data-row="quick-model"]')!.textContent).toContain("Raphael's quick question");
   expect(page.el.querySelector('[data-row="quick-model"] .models-purpose-note')).toBeNull();
   expect(page.el.querySelector('[data-k="quick-model"] .mp-tname')!.textContent).toBe("Fast");
   expect(page.el.querySelector('[data-k="quick-model"] .mp-source')!.textContent).toContain("Codex");
@@ -154,7 +154,7 @@ test("models in use precede subscription accounts and providers, login uses the 
   click('[data-model-picker="answer"] .mp-trigger');
   expect(document.querySelector('[data-source="cli:claude"]')).not.toBeNull();
   click('[data-source="cli:claude"]'); click('.mp-opt[data-id="cli:claude:sonnet"]'); click('[data-dlg="use"]'); await flush();
-  expect(api.settingsSet).toHaveBeenCalledWith("agent_model", "cli:claude:sonnet");
+  expect(api.settingsSet).toHaveBeenCalledWith("quick_model", "cli:claude:sonnet");
   click('[data-model-picker="cleanup"] .mp-trigger');
   expect(document.querySelector('[data-source="cli:claude"]')).toBeNull();
 });
@@ -166,7 +166,7 @@ test.each(["usage", "models"] as const)("%s opens the single Models pane without
   expect(page.el.querySelectorAll('.set-list [data-pane="models"]')).toHaveLength(1);
   expect(page.el.querySelector('.set-list [data-pane="usage"]')).toBeNull();
   expect(page.el.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-models-tab")).toBe(alias);
-  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 4 : 0);
+  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 3 : 0);
   expect(page.el.querySelector('[data-fallback-purpose]')).toBeNull();
   expect(page.el.textContent).not.toContain("Fallback models");
   expect(api.settingsSet).not.toHaveBeenCalled();
@@ -334,7 +334,7 @@ test("a late catalog response cannot undo a newer provider notification in an op
 });
 
 test.each([
-  ["cleanup", "cleanup_model"], ["answer", "agent_model"], ["stt", "stt_cloud_model"],
+  ["cleanup", "cleanup_model"], ["answer", "quick_model"], ["stt", "stt_cloud_model"],
 ])("the %s purpose stores provider refs and still accepts plain OpenRouter slugs", async (role, setting) => {
   api.modelsCatalog.mockResolvedValue(direct);
   await mount();

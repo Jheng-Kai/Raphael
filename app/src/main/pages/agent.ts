@@ -60,7 +60,6 @@ import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, turnMatches, visibleTurn } from "../conversation";
-import { exchangeLineHTML } from "../exchange-line";
 import { carryTyped } from "../secret-card";
 import { openConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
@@ -769,9 +768,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const out = threadItems(base, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
-        : item.kind === "exchange"
-          ? { key: item.key, html: exchangeLineHTML(item.turns, shape), turnId: item.turns[item.turns.length - 1].id }
-          : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
+        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
     );
     if (!(searching && query.trim() !== "")) {
       // What is on its way stands under the day its turn will have, so it does not move when the turn comes.

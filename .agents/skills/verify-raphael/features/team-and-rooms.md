@@ -11,7 +11,19 @@ and a 2px ring matching the normal, hovered or selected row, or the header surfa
 Keep header and sidebar geometry identical; never crop the composite as one circle.
 
 Keep the existing room composer, mentions, roles, Stop, reply references, source
-events, durable handoffs and chief wrap-up. The same AgentService owns member work.
+events and durable handoffs. The same AgentService owns member work.
+
+Everyone in a room reads each message and decides for themselves, on their own model, through
+one small question (`room_listener`); a CLI or local brain reads an owner's message in a real turn
+and may pass. An address is always answered. Nothing hands out the floor or sums up unasked, and no
+turn is given a template: a meeting closes and finished work reports back in plain words (R-AG-02).
+A member's question waits above the room's composer, the room's row says so, and
+`question-reminder.ts` says it once when the owner is elsewhere (R-AG-34).
+
+```powershell
+npm run look -- room-question-card question-reminder --theme both --width 1120,720,1920x1080
+```
+
 Pin/hide and read position persist in SQLite migration 44. Hidden rooms appear in
 search and can be restored through their menu. Reading marks only the open room.
 Room previews ignore hidden pass replies and unresolved worker status.

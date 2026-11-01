@@ -879,6 +879,10 @@ export function createSettings(app: AppContext): SettingsPage {
         const button = document.createElement("button"); button.dataset.cli = id;
         void cliBrains.click(button);
       },
+      onChatgpt: (action) => {
+        const button = document.createElement("button"); button.dataset.chatgpt = action;
+        void cliBrains.click(button);
+      },
     }));
     const vision = body.querySelector<HTMLElement>('[data-model-picker="vision"]');
     if (vision) {
@@ -948,7 +952,7 @@ export function createSettings(app: AppContext): SettingsPage {
   /** A model chosen in a picker (a local speech model is chosen in its own tab: `useLocal`). */
   function chooseModel(role: ModelRole, id: string): Promise<void> {
     if (role === "stt") return changeStt(id);
-    return changeBrain(role === "cleanup" ? "cleanup_model" : "agent_model", id);
+    return changeBrain("cleanup_model", id);
   }
 
   async function changeAppearance(value: string): Promise<void> {

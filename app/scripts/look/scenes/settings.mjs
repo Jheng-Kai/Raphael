@@ -22,16 +22,15 @@ export default [
   scene("local-command-settings", "One shared local command dropdown beside computer use", [...settings("agent"), scroll('[data-k="local-commands"]'), check("local-command-setting"), click('[data-k="local-commands"]'), wait('.menu [data-value="never"]'), check("local-command-menu")]),
   ...["always", "never"].map(mode => scene(`local-command-setting-${mode}`, `Save the shared ${mode} command permission`, [...settings("agent"), scroll('[data-k="local-commands"]'), click('[data-k="local-commands"]'), click(`.menu [data-value="${mode}"]`), check("local-command-setting-saved") ])),
   scene("theme-clarity", "Computed real-entry surfaces have no fogging veil or tinted conversation gradient", [member(1), check("theme-clarity")]),
-  scene("model-sync", "A model chosen at the composer shows in Settings, and one chosen in Settings shows at the composer", [
+  scene("model-sync", "Raphael's model is chosen on his own page; Settings hold only his quick question", [
     click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
     click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'),
     ...settings("models"), check("model-sync-settings"),
-    click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait('.model-chooser .mc-row'), click('.model-chooser [data-source="openrouter"]'), click('.model-chooser .mc-row[aria-checked="false"]:not(:disabled)'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), check("model-sync-both"),
   ]),
   scene("model-sync-member", "A model chosen in a member's conversation stays that member's: Raphael, Settings and the others keep theirs", [
   member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("member-model-own"),
   click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), member(2), check("member-model-others"), member(1), check("member-model-kept"), ...settings("models"), check("member-model-settings")]),
-  scene("settings-chatgpt-row", "A model on the ChatGPT plan has its maker's mark and says it is on the plan", [...settings("models"), wait('.modal-scrim [data-model-picker="answer"] .mp-trigger .logo, .modal-scrim [data-model-picker="answer"] .mp-trigger .mono svg'), check("settings-chatgpt-row")], { chatgptSignedIn: true }),
+  scene("settings-chatgpt-row", "A model on the ChatGPT plan has its maker's mark and says it is on the plan", [...settings("models"), wait('.modal-scrim [data-row="quick-model"] .mp-trigger'), check("settings-chatgpt-row")], { chatgptSignedIn: true }),
   scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),
   scene("quick-effort-menu", "Quick questions pick their effort inside the shared model list, as the answer model does, starting quick (low)", [
