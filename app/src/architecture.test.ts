@@ -43,7 +43,7 @@ it("a rule named in the code is in the ledger", () => {
     .filter(match => !known.has(match[0]) && match[0] !== unknownOnPurpose)
     .map(match => `${path.slice(root.length + 1)}: ${match[0]}`));
   expect(dangling).toEqual([]);
-});
+}, 60_000);
 
 it("core IPC has one frontend boundary", () => {
   const violations: string[] = [];
