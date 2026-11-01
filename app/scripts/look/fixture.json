@@ -1,4 +1,9 @@
 {
+  "mcpProposalTools": [{ "kind": "write", "tools": ["save_sample"] }, { "kind": "read", "tools": ["read_sample", "list_samples"] }],
+  "mcpProposalCard": {
+    "id": "mcp-sample", "state": "draft", "revision": 1, "error": null, "first_local": true, "groups": [],
+    "fields": { "name": "Sample", "transport": "http", "command": "", "args": [], "url": "https://example.invalid/mcp", "env": [], "headers": [] }
+  },
   "mentionServices": [
     {
       "id": "demo-00",

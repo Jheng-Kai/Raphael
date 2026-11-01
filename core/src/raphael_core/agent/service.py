@@ -187,7 +187,7 @@ from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
 from .pages import Pages, PageError
 from .harness_tools import (
-    CALENDAR_LIST, CALENDAR_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
+    CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
     calendar_event, routine_event, tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
@@ -724,6 +724,12 @@ class AgentService:
             drafts.names = self._member_name
             drafts.colleague = self._colleague_id
         self._conn = conn
+        from ..integrations.proposals import ConnectionProposals
+        self._connection_proposals = (ConnectionProposals(conn, secret_cards._integrations, secret_cards=secret_cards,
+            notify=notify, gate=gate, ledger=lambda: Ledger(self._spend)) if secret_cards is not None else None)
+        if self._connection_proposals:
+            self._connection_proposals.resume = self.resume_turn
+            secret_cards.defer_resume = lambda turn: self._connection_proposals.pending(turn) and not self._gate.full_permission
         self._keys = keys
         # Raphael's voice (`services.speaker`): says the answers of the owner's own requests to
         # Raphael, and is stopped by a new request and by agent.cancel. None: the answers are
@@ -770,6 +776,8 @@ class AgentService:
         self._confirmations = Confirmations(clock)
         self._plugins = plugins
         self._gate = gate if gate is not None else ToolGate(plugins, conn=conn, now_ms=now_ms)
+        if self._connection_proposals:
+            self._connection_proposals.gate = self._gate
         self._conversation.changes = self._gate.step_changes
         self._background = background
         from types import SimpleNamespace
@@ -860,6 +868,8 @@ class AgentService:
         for method, handler in methods.items():
             router.register(method, handler)
         self.pages.register(router)
+        if self._connection_proposals:
+            router.register("integrations.proposal", self._connection_proposals.act)
 
     async def _allowances(self, params: dict) -> dict:
         from .cli.allowances import cached_allowances, read_allowances
@@ -923,6 +933,8 @@ class AgentService:
         """End the requests being thought about and close the HTTP client of the tools. A fold of
         the conversation that runs is ended too (the memory's own, by the memory)."""
         await self.pages.host.aclose()
+        if self._connection_proposals:
+            await self._connection_proposals.aclose()
         await asyncio.gather(*(loop.aclose() for loop in self._cli_loops))
         await self._cli_brains.aclose()
         if self._memory is None:
@@ -1843,11 +1855,12 @@ class AgentService:
             async def execute(call_id: str, name: str, args: dict) -> ToolOutcome:
                 nonlocal checked_batch, screenings
                 assert loop is not None
+                snapshot.refresh_plugins(self._plugins, ask.speaker.id)
                 if isinstance(loop, CliLoop) and name == "cli_permission":
                     return await self._cli_permission(ask, args, ledger, loop)
                 ref = snapshot.refs.get(name)
                 if ref is None:
-                    return ToolOutcome(False, "unknown_tool")
+                    return ToolOutcome(False, "unavailable", instruction="This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias.")
                 if name == "ask_owner":
                     from .owner_questions import question_input
                     try:
@@ -2060,6 +2073,12 @@ class AgentService:
                     loop.reload_note, loop.catalog_changed = COMPUTER_CHANGED, True
                 return True
             loop.refresh_computer = refresh_computer
+            def refresh_tools():
+                snapshot.refresh_plugins(self._plugins, ask.speaker.id)
+                extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
+                loop.tools[:] = [*snapshot.definitions, *extra]
+                return loop.tools
+            loop.refresh_tools = refresh_tools
             loop.owner_seen_urls = urls
         scope = (ask.speaker.id, ask.conversation_id)
         if not ask.nested:
@@ -2463,7 +2482,7 @@ class AgentService:
             return PASS
         if tool.key in HARNESS_TOOLS:
             # A card only shows a card: the owner's own sign-in, or the key they type, is the consent.
-            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB):
+            if tool.key in ("ask_owner", "routine_list", CALENDAR_LIST, "team_overview", "show", "computer", "show_page", "update_page", FIND_APP, CONNECT_APP, REQUEST_SECRET, EMAIL_DRAFT, SET_MY_JOB, "connections_list", "add_mcp_server"):
                 return PASS
             return await self._gate.screen(Proposed(tool.key, tool.description, summarize(call.arguments), narrow_scope(tool.key)), language=ask.language, ledger=ledger)
         if tool.key in TEAM_TOOLS:
@@ -2609,6 +2628,8 @@ class AgentService:
                 data = await self._calendar.tool(ask.speaker.id, name, args)
                 if name != CALENDAR_LIST:
                     self._message(ask, "event", calendar_event(name, data, ask.language))
+            elif name in CONNECTION_TOOLS:
+                data = await self._connection_tool(ask, name, args)
             elif name == CONNECT_APP:
                 if ask.resumption and ask.resumption.failure:
                     raise HarnessToolError("owner_action_required")
@@ -2742,20 +2763,103 @@ class AgentService:
         return {"status": "done" if result.ok else "error", "prefix": "", "text": "", "ok": result.ok,
                 "tool_result": result.data, "error": result.error, "turn_id": ask.turn_id}
 
-    async def _show_card(self, ask: _Ask, args: Mapping[str, Any]) -> dict:
+    async def _connection_tool(self, ask, name, args):
+        proposals = self._connection_proposals
+        if proposals is None:
+            raise HarnessToolError("unavailable")
+        hub = proposals.hub
+        if name == "connections_list":
+            rows = hub.connections()
+            for row in rows:
+                server = hub._config.get(row["id"])
+                if server:
+                    row["tool_states"] = [{"name": tool.name, "enabled": server.tool_on(tool)} for tool in server.tools]
+                elif hub.managed:
+                    entry = hub.managed.store.connectors.get(row["id"])
+                    row["tool_states"] = [{"name": tool, "enabled": tool not in entry.disabled_tools}
+                                          for tool in sorted(set(entry.enabled_tools) | set(entry.disabled_tools))] if entry else []
+            return {"connections": rows}
+        if not ask.background_owner and (ask.scope != "private" or ask.nested or ask.quick or ask.source not in _AT_THIS_COMPUTER):
+            raise HarnessToolError("private_chat_only")
+        if name == "add_mcp_server":
+            from ..computer.local_tools import ask_context
+            card = await proposals.propose(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+                language=ask.language, fields=args, done=ask.made, external=ask.background_owner or ask_context(ask)[1])
+            if self._gate.full_permission:
+                card = (await proposals.act({"id": card["id"], "revision": card["revision"], "operation": "test"}))["proposal"]
+                if card["state"] == "tested":
+                    card = (await proposals.act({"id": card["id"], "revision": card["revision"], "operation": "enable"}, resume=False))["proposal"]
+                    return {"enabled": True, "note": "The MCP server is enabled; continue using its tools."}
+            ask.waiting_apps.append(card["fields"]["name"])
+            ask.owner_card_ids = [card["id"]]
+            return {"card": "shown", "note": "The editable MCP card is shown. End this turn. The original task resumes once after testing and enabling; never claim its data yet."}
+        connection, operation = args.get("connection"), args.get("operation")
+        row = next((row for row in hub.connections() if row["id"] == connection), None)
+        if row is None:
+            raise HarnessToolError("unknown_connection")
+        managed = hub.managed and connection in hub.managed.store.connectors
+        if operation == "reconnect":
+            if managed:
+                entry = hub.managed.store.connectors[connection]
+                from ..connectors.apps import App, APPS
+                app = APPS["gmail"] if entry.kind == "google" else App(entry.id.split(":", 1)[-1], entry.name, "", entry.id.split(":", 1)[-1])
+                return await self._show_card(ask, {"reconnect": True}, app=app)
+            server = hub._config.get(connection)
+            if server.catalog_id:
+                return await self._show_card(ask, {"app": server.catalog_id, "reconnect": True})
+            fields = {key: getattr(server, key) for key in ("name", "transport", "command", "args", "url", "env", "headers")}
+            from ..computer.local_tools import ask_context
+            card = await proposals.propose(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+                language=ask.language, fields=fields, done=ask.made, existing=server, external=ask.background_owner or ask_context(ask)[1])
+            if self._gate.full_permission:
+                tested = (await proposals.act({"id": card["id"], "revision": card["revision"], "operation": "test"}))["proposal"]
+                if tested["state"] == "tested":
+                    await proposals.act({"id": card["id"], "revision": card["revision"], "operation": "enable"}, resume=False)
+                    return {"connected": True}
+            ask.waiting_apps.append(server.name)
+            ask.owner_card_ids = [card["id"]]
+            return {"card": "shown", "note": "Review and test the custom MCP card; the task resumes after enabling."}
+        if operation == "disconnect":
+            result = await (hub.managed._handler(hub.managed.disconnect, "disconnect")({"id": connection}) if managed else hub._disconnect({"id": connection}))
+        elif operation in ("enable", "disable", "tool_enable", "tool_disable"):
+            enabled = operation in ("enable", "tool_enable")
+            if managed:
+                entry = hub.managed.store.connectors[connection]
+                params = {"id": connection}
+                if operation.startswith("tool_"):
+                    tool = args.get("tool")
+                    known = set(entry.enabled_tools) | set(entry.disabled_tools)
+                    if tool not in known:
+                        raise ValueError("unknown tool")
+                    disabled = set(entry.disabled_tools)
+                    disabled.discard(tool) if enabled else disabled.add(tool)
+                    params["disabled_tools"] = sorted(disabled)
+                else:
+                    params["enabled"] = enabled
+                result = await hub.managed._handler(hub.managed.set_tools, "set_tools")(params)
+            else:
+                result = await (hub._set_tool_enabled({"id": connection, "tool": args.get("tool"), "enabled": enabled})
+                                if operation.startswith("tool_") else hub._set_enabled({"id": connection, "enabled": enabled}))
+        else:
+            raise ValueError("unknown operation")
+        if result.get("ok") is False:
+            raise HarnessToolError(result.get("error", "connection_failed"))
+        return {"connection": row["name"], "operation": operation, "changed": True}
+
+    async def _show_card(self, ask: _Ask, args: Mapping[str, Any], *, app=None) -> dict:
         """`connect_app`: the card of an app the request needs, in this private chat, holding what
         the request already did. The turn then waits for it; its connection resumes the request."""
         if self._cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
         if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
-        app = await self._cards.resolve(args.get("app"))
+        app = app or await self._cards.resolve(args.get("app"))
         if app is None:
             raise ValueError("unknown app")
         if "calendar" in app.id.lower() and means_own_calendar(ask.text):
             raise HarnessToolError("own_calendar")
         card = self._cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
-                                app=app, language=ask.language, done=ask.made)
+                                app=app, language=ask.language, done=ask.made, reconnect=args.get("reconnect") is True)
         if card is None:
             return {"app": app.name, "connected": True, "note": f"{app.name} is connected already: use its tools."}
         ask.waiting_apps.append(app.name)
@@ -2863,10 +2967,10 @@ class AgentService:
         found = self._team.find(name) if self._team is not None else None
         return None if found is None else found.id
 
-    async def background_owner_tool(self, task, name, arguments):
+    async def background_owner_tool(self, task, name, arguments, *, approval=None, action=None):
         """Use read-only app discovery and existing card services without granting desktop presence."""
         from .owner_questions import BACKGROUND_TOOLS
-        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS or not task.turn_id:
+        if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS | CONNECTION_TOOLS or not task.turn_id:
             return ToolResult(name, False, None, "blocked")
         origin = self._history.get(task.turn_id)
         speaker = self._speaker(task.member_id)
@@ -2877,7 +2981,7 @@ class AgentService:
         ask = _Ask(task.session_id, task.text, task.language, conversation_id=origin.conversation_id,
             turn_id=task.turn_id, speaker=speaker, scope=task.scope, room_id=task.room_id,
             source=RESUMED, background_owner=True)
-        result = await self._harness_call(ask, PlannedCall(harness_tool(name), arguments), None, None)
+        result = await self._harness_call(ask, PlannedCall(harness_tool(name), arguments), approval, action)
         if not result.ok:
             return result
         card = None
@@ -2888,6 +2992,11 @@ class AgentService:
             card = {"kind": name, "id": drafts[-1].id}
         elif name == "show_page":
             card = {"kind": name, "id": result.data["page_id"], "question": result.data.get("note", "")}
+        elif name == "add_mcp_server" and ask.owner_card_ids:
+            card = {"kind": name, "id": ask.owner_card_ids[0]}
+        elif name == "manage_connection" and ask.owner_card_ids:
+            kind = "add_mcp_server" if self._connection_proposals.pending(task.turn_id) else CONNECT_APP
+            card = {"kind": kind, "id": ask.owner_card_ids[0]}
         if card:
             result.data = {**result.data, "owner_card": card}
         return result
@@ -2904,6 +3013,9 @@ class AgentService:
                 self._secret_cards.store.move(card_id, "cancelled")
         elif kind == EMAIL_DRAFT and self._drafts:
             self._drafts.store.discard(identifier)
+        elif kind == "add_mcp_server" and self._connection_proposals:
+            row = self._connection_proposals._row(identifier)
+            await self._connection_proposals.act({"id": identifier, "revision": row["revision"], "operation": "cancel"})
 
     def sync_owner_cards(self):
         """Only completion metadata crosses back to the model; secret values never do."""
@@ -2935,6 +3047,11 @@ class AgentService:
                 state = draft.state if draft else "cancelled"
                 if state not in ("sent", "discarded", "cancelled"):
                     continue
+            elif kind == "add_mcp_server" and self._connection_proposals:
+                row = self._connection_proposals._row(identifier)
+                if row["state"] not in ("enabled", "cancelled"):
+                    continue
+                state = row["state"]
             else:
                 continue
             questions.settle(question["id"], {"state": "cancelled" if state in ("discarded", "expired") else state})
@@ -2948,26 +3065,38 @@ class AgentService:
         connected, the keys saved, the computer task ended after the owner's turn): the same request in
         the same thread, which now has what it needs. Whether it went on, and what it did, so that a
         retry after a failure repeats nothing."""
+        origin = self._history.get(turn_id)
+        proposals = self._connection_proposals
+        if proposals and proposals.pending(turn_id):
+            if self._gate.full_permission:
+                rows = proposals.conn.execute("SELECT * FROM connection_proposals WHERE turn_id=? AND state='draft'", (turn_id,)).fetchall()
+                for row in rows:
+                    tested = (await proposals.act({"id": row["id"], "revision": row["revision"], "operation": "test"}))["proposal"]
+                    if tested["state"] == "tested":
+                        await proposals.act({"id": row["id"], "revision": row["revision"], "operation": "enable"}, resume=False)
+            if proposals.pending(turn_id):
+                return Resumed(False)
         questions = getattr(self._background, "owner_questions", None)
-        if questions is not None and any(q["state"] == "asked" for q in questions.for_turn(turn_id)):
+        if questions is not None and any(q["state"] == "asked" or q["kind"] == "add_mcp_server" for q in questions.for_turn(turn_id)):
             self.sync_owner_cards()
             return Resumed(True)
-        origin = self._history.get(turn_id)
+        proposed = proposals.conn.execute("SELECT * FROM connection_proposals WHERE turn_id=? AND state='enabled'", (turn_id,)).fetchall() if proposals else []
         apps = self._cards.cards_of(turn_id) if self._cards is not None else []
         keys = self._secret_cards.cards_of(turn_id) if self._secret_cards is not None else []
-        if origin is None or not (apps or keys or report):
+        if origin is None or not (apps or keys or report or proposed):
             return Resumed(True)
         asking = self._inflight.get(origin.session_id)
         if asking is not None and not asking.done():  # the turn that asked ends first
             await asyncio.wait({asking}, timeout=30.0)
         if failure is not None and (self._history.get(turn_id) is None or self._was_cancelled(origin.session_id)):
             return Resumed(True)
-        resumption = Resumption(turn_id, tuple(card.name for card in apps if card.state == "connected"),
+        resumption = Resumption(turn_id, tuple([*(card.name for card in apps if card.state == "connected"), *(json.loads(row["fields"])["name"] for row in proposed)]),
                                 frozenset({*(done for card in [*apps, *keys] for done in card.done),
+                                           *(tuple(done) for row in proposed for done in json.loads(row["done"])),
                                            *(report.done if report is not None else ())}),
                                 secrets=tuple(dict.fromkeys(card.name for card in keys if card.state in ("saved", "resuming", "resumed"))),
                                 report=report, failure=failure)
-        language = report.language if report is not None else (apps or keys)[0].language
+        language = report.language if report is not None else (apps or keys)[0].language if apps or keys else proposed[0]["language"]
         result = await self.ask((f"failure-{turn_id}" if failure else f"connect-{turn_id}") + (f"-{attempt}" if attempt > 1 else ""), origin.question, language, RESUMED,
                                 member_id=origin.member_id, conversation_id=origin.conversation_id, resumption=resumption)
         written = self._history.get(result["turn_id"]) if type(result.get("turn_id")) is int and result["turn_id"] else None
@@ -4134,6 +4263,8 @@ class AgentService:
             self._computer.stop_session(session_id)
         if self._secret_cards is not None:
             self._secret_cards.cancel_session(session_id)
+        if self._connection_proposals:
+            self._connection_proposals.cancel_session(session_id)
         self._expire(self._confirmations.sweep())
         self._deny(self._confirmations.cancel_session(session_id))
         await asyncio.gather(*(loop.aclose() for loop in list(self._cli_loops) if loop.task and loop.task.cancelling()))
@@ -4388,6 +4519,7 @@ class AgentService:
         resumed = [turn.source_turn_id for turn in turns if turn.source == RESUMED and turn.source_turn_id]
         cards = self._cards.views([*ids, *resumed]) if self._cards is not None else {}
         keys = self._secret_cards.views([*ids, *resumed]) if self._secret_cards is not None else {}
+        proposals = self._connection_proposals.views(ids) if self._connection_proposals else {}
         hands = self._handbacks.views([*ids, *resumed]) if self._handbacks is not None else {}
         permitted = self._permissions.views(ids) if self._permissions is not None else {}
         drafted = self._drafts.views(ids) if self._drafts is not None else {}
@@ -4439,6 +4571,7 @@ class AgentService:
                     **({"resumed_app_names": [card["name"] for card in waited]} if waited else {}),
                     **({"resumed_app_logos": [card["logo"] for card in waited]} if waited else {}),
                     **({"secrets": asked_keys} if asked_keys else {}),
+                    **({"connection_proposals": proposals[turn.id]} if proposals.get(turn.id) else {}),
                     **({"resumed_secrets": list(dict.fromkeys(card["name"] for card in saved_keys))} if saved_keys else {}),
                     **({"computers": asked_hands} if asked_hands else {}),
                     **({"resumed_computers": list(dict.fromkeys(card["app"] for card in given_back))} if given_back else {}),

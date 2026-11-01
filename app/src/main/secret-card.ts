@@ -103,6 +103,18 @@ export function carryTyped(before: Element, after: Element): () => void {
   const kept: { id: string; value: string; focused: boolean; start: number | null; end: number | null }[] = [];
   const focus: { field: HTMLInputElement | HTMLTextAreaElement; start: number | null; end: number | null }[] = [];
   const resized: HTMLTextAreaElement[] = [];
+  for (const oldCard of before.querySelectorAll<HTMLElement>("[data-mcp-proposal]")) {
+    const freshCard = [...after.querySelectorAll<HTMLElement>("[data-mcp-proposal]")].find(card =>
+      card.dataset.mcpProposal === oldCard.dataset.mcpProposal && card.dataset.mcpRevision === oldCard.dataset.mcpRevision);
+    if (!freshCard) continue;
+    for (const old of oldCard.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("[data-mcp-field]")) {
+      const fresh = [...freshCard.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("[data-mcp-field]")].find(field => field.dataset.mcpField === old.dataset.mcpField);
+      if (!fresh || fresh.readOnly) continue;
+      fresh.value = old.value;
+      if (fresh instanceof HTMLTextAreaElement) resized.push(fresh);
+      if (old === document.activeElement) focus.push({ field: fresh, start: old.selectionStart, end: old.selectionEnd });
+    }
+  }
   const fields = "input[data-secret-input], input[data-login-user], textarea[data-owner-answer-input]";
   const identity = (input: HTMLInputElement | HTMLTextAreaElement): string => input.dataset.loginUser ? `login:${input.dataset.loginUser}` : input.dataset.secretInput ?? input.dataset.ownerAnswerInput ?? "";
   for (const old of before.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)) {

@@ -187,6 +187,18 @@ async def test_an_expired_sign_in_makes_a_reconnect_card(tmp_path, conn, fixture
     assert rig.resumed == [rig.turn, turn]
 
 
+async def test_explicit_reconnect_signs_in_even_when_the_current_tools_are_ready(tmp_path, conn, fixture):
+    rig = Rig(tmp_path, conn, fixture)
+    await rig.configure()
+    await rig.connect(rig.card())
+    opened = fixture.opened
+    turn = AgentHistory(conn).add(session_id="reconnect", question="Reconnect Gmail", route="answer", prefix="", text="", status="done", source="app")
+    card = rig.cards.show(turn_id=turn, member_id=0, conversation_id=None, app=APPS["gmail"], language="en", reconnect=True)
+    assert card.reconnect and rig.cards.ready_tools(APPS["gmail"])
+    _, card = await rig.connect(card)
+    assert card.state == "connected" and fixture.opened == opened + 1
+
+
 async def test_the_roster_counts_the_apps_tools_after_the_card_connects(tmp_path, conn, fixture):
     rig = Rig(tmp_path, conn, fixture)
     await rig.configure()

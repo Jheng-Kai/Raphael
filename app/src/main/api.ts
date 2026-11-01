@@ -400,6 +400,7 @@ export const integrationsSetToolEnabled = (id: string, tool: string, enabled: bo
 export const integrationsSetToolsEnabled = (id: string, tools: string[], enabled: boolean): Promise<Record<string, unknown>> =>
   core("integrations.set_tools_enabled", { id, tools, enabled });
 export const integrationsAudit = (limit = 8): Promise<{ entries: AuditEntry[] }> => core("integrations.audit", { limit });
+export const connectionProposal = (params: Record<string, unknown>): Promise<{ proposal: import("./types").ConnectionProposal }> => core("integrations.proposal", params);
 /** The owner's apps and how many are connected: the one count the sidebar, the 連接 tab and every model's roster share. */
 export const integrationsInventory = (): Promise<AppsInventory> => core("integrations.inventory");
 

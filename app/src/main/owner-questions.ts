@@ -1,5 +1,6 @@
 import { ownerQuestionAnswer } from "./api";
 import { describeError } from "./format";
+import { mountMcpProposals } from "./mcp-proposal";
 
 export function answerOwnerPage(thread: HTMLElement, pageId: string, text: string, changed: () => void): boolean {
   const card = thread.querySelector<HTMLElement>(`[data-owner-page="${CSS.escape(pageId)}"][data-card-state="asked"]`);
@@ -13,6 +14,7 @@ export function answerOwnerPage(thread: HTMLElement, pageId: string, text: strin
 
 /** A shared controller for private and room cards. The core owns every answer and continuation. */
 export function mountOwnerQuestions(thread: HTMLElement, changed: () => void): void {
+  mountMcpProposals(thread, changed);
   const busy = new Set<string>();
   thread.addEventListener("input", event => {
     const field = event.target as HTMLTextAreaElement;

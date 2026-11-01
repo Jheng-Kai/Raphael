@@ -275,12 +275,12 @@ class ConnectorCards:
             return False
 
     def show(self, *, turn_id: int, member_id: int, conversation_id: int | None, app: App, language: str,
-             done: Iterable[tuple[str, str]] = ()) -> Card | None:
+             done: Iterable[tuple[str, str]] = (), reconnect: bool = False) -> Card | None:
         """The card a task asks for, or None when the app is connected already."""
-        if self.ready_tools(app):
+        if self.ready_tools(app) and not reconnect:
             return None
         return self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
-                               app=app.id, language=language, reconnect=self._expired(app), done=done,
+                               app=app.id, language=language, reconnect=reconnect or self._expired(app), done=done,
                                app_name=app.name, provider=app.provider, app_logo=app.logo)
 
     def _needs_of(self, app: App) -> str:
@@ -295,7 +295,8 @@ class ConnectorCards:
 
     def view(self, card: Card) -> dict:
         """The card as the window draws it: its own state, and what pressing Connect needs to be given."""
-        app = APPS.get(card.app) or App(card.app, card.name, "", card.app, card.provider)
+        known = APPS.get(card.app)
+        app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
         needs = self._needs_of(app)
         return {**card.view(), "needs": needs, **({"toolkit": app.composio} if needs != SIGN_IN else {})}
 
@@ -349,7 +350,8 @@ class ConnectorCards:
         """The sign-in to use: the owner's own Google authorization first, then Composio."""
         vault = self._connectors.vault
         if app.provider == "builtin":
-            return "integrations.connect", {"catalog_id": app.id}
+            server = next((s for s in self._connectors.hub._config.servers() if s.catalog_id == app.id), None)
+            return "integrations.connect", {"id": server.id} if server else {"catalog_id": app.id}
         if app.provider == "google" and "google" in self._connectors.store.connectors and vault.get(PREFIX + "client_id"):
             return "connectors.google.connect", {}
         if vault.get(KEY):
@@ -387,11 +389,12 @@ class ConnectorCards:
                                        f"card or with Add on {name} in {WHERE}.")
 
     async def _sign_in(self, card: Card, fields: dict | None = None) -> None:
-        app = APPS.get(card.app) or App(card.app, card.name, "", card.app, card.provider)
+        known = APPS.get(card.app)
+        app = known if known and known.provider == card.provider else App(card.app, card.name, "", card.app, card.provider)
         diagnostic = None
         try:
             try:
-                if not self.ready_tools(app):
+                if card.reconnect or not self.ready_tools(app):
                     provider = self._provider(app)
                     if provider is None:
                         raise _Failed("needs_composio_key")

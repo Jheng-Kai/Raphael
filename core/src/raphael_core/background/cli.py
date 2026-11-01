@@ -68,6 +68,12 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
         tools=spec["tools"], attachments=run.attachments, progress=progress,
         thinking=lambda text: None, event=progress, execute=execute, quota=quota, wait_timeout_s=wait_s,
         rate_limit_waits=cli_loop.ROOM_RATE_LIMIT_WAITS_S, alive=run.touch)
+    def refresh_tools():
+        run.snapshot.refresh_plugins(run._gate.plugins, task.member_id)
+        extra = [item for item in loop.tools if item["function"]["name"] in ("cli_permission", "approve")]
+        loop.tools[:] = [*run.snapshot.definitions, *extra]
+        return loop.tools
+    loop.refresh_tools = refresh_tools
     return loop
 
 

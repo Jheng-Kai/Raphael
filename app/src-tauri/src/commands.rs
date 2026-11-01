@@ -417,6 +417,7 @@ const ALLOWED_PREFIXES: [&str; 8] = [
 // a messaging app has no way to reach any of them: only this window does.
 // A slice, not a fixed-length array: branches that each add a method merge without a count to fix.
 const ALLOWED_METHODS: &[&str] = &[
+    "integrations.proposal",
     "computer.viewer_status",
     "computer.teach",
     "computer.viewer_open",
@@ -2734,6 +2735,7 @@ mod tests {
             "agent.history.list",
             "agent.history.clear",
             "integrations.catalog",
+            "integrations.proposal",
             "integrations.connect",
             "integrations.connect_cancel",
             "integrations.add",

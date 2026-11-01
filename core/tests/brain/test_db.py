@@ -327,7 +327,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 52
+LATEST = 53
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -501,9 +501,16 @@ SCHEMA_V50 = {**SCHEMA_V49,
     "routine_receipts": ["routine_id INTEGER PK NOT NULL", "item_id TEXT PK NOT NULL",
                          "item TEXT NOT NULL DEFAULT ''", "state TEXT NOT NULL"],
 }
-
 SCHEMA_V52 = {**SCHEMA_V50, "computer_logins": [
     "member_id INTEGER PK NOT NULL", "origin TEXT PK NOT NULL", "reference TEXT NOT NULL"]}
+
+SCHEMA_V53 = {**SCHEMA_V52, "connection_proposals": [
+    "id TEXT PK", "turn_id INTEGER NOT NULL", "member_id INTEGER NOT NULL", "conversation_id INTEGER",
+    "language TEXT NOT NULL", "server_id TEXT NOT NULL", "fields TEXT NOT NULL", "external INTEGER NOT NULL DEFAULT 1", "state TEXT NOT NULL",
+    "revision INTEGER NOT NULL DEFAULT 1", "tested_digest TEXT NOT NULL DEFAULT ''", "error TEXT NOT NULL DEFAULT ''",
+    "done TEXT NOT NULL DEFAULT '[]'",
+]}
+
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
     path = tmp_path / "v47.db"
@@ -659,7 +666,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V52) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V53) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -677,7 +684,7 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V52.items():
+    for table, columns in SCHEMA_V53.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [
@@ -1514,4 +1521,38 @@ def test_v52_login_cards_preserve_pending_cards_and_the_turn_delete_trigger(tmp_
     upgraded.close()
     reopened = db.connect(path)
     assert reopened.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    reopened.close()
+
+
+def test_v53_follows_v52_and_keeps_login_references_and_both_card_tables(tmp_path):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.connectors.secret_cards import SecretCardStore
+
+    path = tmp_path / "login-before-proposals.db"
+    raw = sqlite3.connect(path)
+    raw.row_factory = sqlite3.Row
+    for version in range(1, 53):
+        step = db._MIGRATIONS[version]
+        step(raw) if callable(step) else raw.executescript(step)
+    assert raw.execute("PRAGMA user_version").fetchone()[0] == 52
+    turn = AgentHistory(raw).add(session_id="sample", question="Connect", route="answer", prefix="", text="", status="running", source="app")
+    login = SecretCardStore(raw).open(turn_id=turn, member_id=0, conversation_id=None, server_id="sample-reference",
+        kind="login", secret="login", name="https://example.invalid", language="en")
+    with raw:
+        raw.execute("INSERT INTO computer_logins VALUES (0,'https://example.invalid','sample-reference')")
+    raw.close()
+
+    upgraded = db.connect(path)
+    assert upgraded.execute("PRAGMA user_version").fetchone()[0] == 53
+    assert SecretCardStore(upgraded).get(login.id) == login
+    assert upgraded.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
+    with upgraded:
+        upgraded.execute("INSERT INTO connection_proposals (id,turn_id,member_id,language,server_id,fields,state) VALUES ('sample',?,0,'en','sample','{}','draft')", (turn,))
+        upgraded.execute("DELETE FROM agent_turns WHERE id=?", (turn,))
+    assert upgraded.execute("SELECT COUNT(*) FROM secret_cards").fetchone()[0] == 0
+    assert upgraded.execute("SELECT COUNT(*) FROM connection_proposals").fetchone()[0] == 0
+    upgraded.close()
+    reopened = db.connect(path)
+    assert reopened.execute("SELECT reference FROM computer_logins").fetchone()[0] == "sample-reference"
+    assert {"computer_logins", "connection_proposals"} <= schema_names(reopened, "table")
     reopened.close()

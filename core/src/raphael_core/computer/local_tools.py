@@ -44,6 +44,13 @@ def is_local(key):
     return key.startswith(LOCAL_PREFIX)
 
 
+def requires_command_approval(settings, command, *, external):
+    if settings.get("action_mode") == "bypass":
+        return False
+    return (settings.get("local_commands_mode") != "always" or external
+            or any(p.search(command) for p in _DANGEROUS) or bool(_OPAQUE.search(command)))
+
+
 def ask_context(ask, results=()):
     external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(getattr(r, "untrusted", False) for r in results)
                     or any(s.tool in ("web_search", "web_read", "read_attachment") or s.server not in (None, "Raphael", "local") for s in ask.steps))
@@ -94,11 +101,7 @@ class LocalTools:
         return self.settings.get("action_mode") == "bypass"
 
     def requires_approval(self, arguments):
-        if self._full_permission():
-            return False
-        command = arguments.get("command", "")
-        return (self.settings.get("local_commands_mode") != "always" or _CONTEXT.get()[1]
-                or any(p.search(command) for p in _DANGEROUS) or bool(_OPAQUE.search(command)))
+        return requires_command_approval(self.settings, arguments.get("command", ""), external=_CONTEXT.get()[1])
 
     def tier_for_call(self, key, arguments):
         if not is_local(key):

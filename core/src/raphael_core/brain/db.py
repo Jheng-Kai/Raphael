@@ -1242,6 +1242,30 @@ PRAGMA user_version = 52;
 COMMIT;
 """
 
+_MIGRATIONS[53] = """
+BEGIN;
+CREATE TABLE connection_proposals (
+  id TEXT PRIMARY KEY,
+  turn_id INTEGER NOT NULL REFERENCES agent_turns(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL,
+  conversation_id INTEGER,
+  language TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  fields TEXT NOT NULL,
+  external INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  tested_digest TEXT NOT NULL DEFAULT '',
+  error TEXT NOT NULL DEFAULT '',
+  done TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TRIGGER clear_connection_proposals AFTER DELETE ON agent_turns BEGIN
+  DELETE FROM connection_proposals WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 53;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 
@@ -1268,7 +1292,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     is its own transaction: one that fails leaves the database at the version before it.
     """
     (version,) = conn.execute("PRAGMA user_version").fetchone()
-    for target in range(version + 1, LATEST_VERSION + 1):
+    for target in sorted(target for target in _MIGRATIONS if version < target <= LATEST_VERSION):
         step = _MIGRATIONS[target]
         try:
             if callable(step):

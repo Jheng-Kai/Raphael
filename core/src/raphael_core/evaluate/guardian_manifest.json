@@ -432,6 +432,18 @@
     "raphael/core/find_app": {
       "scenario_ids": ["S14.gmail"],
       "expected_assertions": ["connector_card"]
+    },
+    "raphael/core/add_mcp_server": {
+      "scenario_ids": ["S19.http.none.accept", "S19.stdio.none.accept", "S19.http.api-key.missing-secret", "S19.http.none.edited-draft"],
+      "expected_assertions": ["editable_config", "test_digest", "tool_groups", "no_early_enable", "secret_vault"]
+    },
+    "raphael/core/connections_list": {
+      "scenario_ids": ["S20.connector-off", "S20.connector-on"],
+      "expected_assertions": ["live_grants"]
+    },
+    "raphael/core/manage_connection": {
+      "scenario_ids": ["S20.connector-off", "S20.connector-on", "S20.tool-off", "S20.tool-on", "S20.login", "S20.disconnect", "S20.revoke-in-flight"],
+      "expected_assertions": ["live_grants", "stale_alias_denied", "no_action_replay", "ui_roster_sync"]
     }
   }
 }

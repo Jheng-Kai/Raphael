@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale, t } from "./i18n";
 import { carryTyped, secretCardHTML, secretResumedLineHTML } from "./secret-card";
+import { mcpProposalHTML } from "./mcp-proposal";
 import { SERVICE_ICONS } from "./service-icons";
 import { emptyTimelineState, turnHTML, type TurnLook } from "./timeline";
 import type { AgentTurn, SecretCard } from "./types";
@@ -154,5 +155,24 @@ describe("a card drawn again", () => {
     const after = draw(secretCardHTML(card({ state: "saved" })));
     carryTyped(before, after)();
     expect(after.innerHTML).not.toContain("gsk-typed-by-the-test");
+  });
+
+  test("keeps MCP edits and both private login fields across the same redraw", () => {
+    const proposal = mcpProposalHTML({ id: "sample", state: "draft", revision: 1, error: null, first_local: true, groups: [],
+      fields: { name: "Sample", transport: "http", command: "", args: [], url: "https://example.invalid/mcp", env: [], headers: [] } });
+    const markup = proposal + secretCardHTML(card({ id: "login", login: true, name: "https://example.invalid", secret: "login" }));
+    const before = draw(markup);
+    const values: Record<string, string> = { '[data-mcp-field="name"]': "Sample edited", '[data-login-user="login"]': "sample-owner", '[data-secret-input="login"]': "sample-private-value" };
+    for (const [selector, value] of Object.entries(values)) before.querySelector<HTMLInputElement>(selector)!.value = value;
+    const edited = before.querySelector<HTMLInputElement>('[data-mcp-field="name"]')!;
+    edited.focus(); edited.setSelectionRange(2, 4);
+    const after = draw(markup);
+    const restore = carryTyped(before, after);
+    before.remove(); restore();
+    for (const [selector, value] of Object.entries(values)) expect(after.querySelector<HTMLInputElement>(selector)!.value).toBe(value);
+    expect(document.activeElement).toBe(after.querySelector('[data-mcp-field="name"]'));
+    expect(after.querySelector<HTMLButtonElement>('[data-act="card-save"]')!.disabled).toBe(false);
+    expect(after.innerHTML).not.toContain("sample-owner");
+    expect(after.innerHTML).not.toContain("sample-private-value");
   });
 });

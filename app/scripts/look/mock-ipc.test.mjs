@@ -5,6 +5,13 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it.each(["http", "stdio", "secret", "room"])("keeps the MCP %s scene card separate from its variant selector", async variant => {
+    const target = {}; installMock(fixture, { fixture: { mcpProposal: variant } }, target);
+    const history = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.list", params: { member_id: 1, conversation_id: 11 } });
+    const card = history.turns.find(turn => turn.id === 946).connection_proposals[0];
+    expect(card.fields.name).toBe("Sample");
+    expect(card.fields.transport).toBe(variant === "stdio" ? "stdio" : "http");
+  });
   it("keeps event routines exclusive of schedules and resets their baseline only when the condition changes", async () => {
     const target = {}; installMock(fixture, {}, target);
     const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke("core_call", { method, params });

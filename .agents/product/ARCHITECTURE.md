@@ -382,3 +382,13 @@ the exact membership with the current chief and posts only the agenda. It adds n
 addresses, rounds or automatic conclusion. Concrete assigned work retains the
 shared handoff gate and completed-work report path. Legacy meeting columns remain
 in SQLite for compatibility and confer no tool or speaking restriction.
+
+## Conversation connection proposals (2026-11-01)
+
+integrations/proposals.py owns the editable proposal state in migration 53 (52 is reserved by another worktree). It validates public fields through integrations/config.py, stores secret names only, tests through the existing McpConnector, enables through IntegrationsService and resumes the original turn through AgentService. SecretCards may defer task resumption until the proposal is enabled. Revision plus tested configuration/tool digests reject stale confirmation. The existing connector RPC wrapper supplies locks and redacted errors for managed app mutations.
+
+Snapshot.refresh_plugins rebuilds the current offer before each API model step and authenticated CLI tools/list. The worker receives replacement definitions with the model turn; the gate independently checks current grants on execution. Background owner waits reuse OwnerQuestions, release the worker and settle with completion metadata only. The private and room timelines share mcp-proposal.ts and the existing connector-card controls.
+
+After a CLI tool result changes the offer, the existing catalog-change restart carries completed results into the same task and makes the native CLI read the current list. Refresh preserves the CLI's native approve and cli_permission definitions.
+
+Migration 52 installs login cards and computer_logins before migration 53 installs connection_proposals; schema contracts include both. No live, provider or native acceptance is implied by fixture evidence.

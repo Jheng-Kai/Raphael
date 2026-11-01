@@ -2,6 +2,27 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("mcp-proposal-")) {
+    const card = document.querySelector('[data-mcp-proposal="mcp-sample"]');
+    require(visible(card) && card.classList.contains("connector-card"), "the shared connection card is visible");
+    require(!card.querySelector("pre, select, input[type=password]"), "configuration is editable controls, without JSON or secret values");
+    require([...card.querySelectorAll("*")].every(node => !["auto", "scroll"].includes(getComputedStyle(node).overflowY) || node.scrollHeight <= node.clientHeight + 1), "the card has no inner scroll panel");
+    require(card.scrollWidth <= card.clientWidth + 1, "the card reflows without horizontal overflow");
+    const calls = window.__look.calls.filter(call => call.method === "integrations.proposal");
+    require([...card.querySelectorAll("[data-mcp-field]")].every(field => field.matches("textarea.field") || field.closest(".field")), "public fields use the shared field component");
+    if (name === "mcp-proposal-edit") require(calls.some(call => call.params.operation === "edit" && call.params.fields.name === "Sample MCP"), "the real save action carries edited fields");
+    if (name === "mcp-proposal-tested") require(card.querySelectorAll(".mcp-tools").length === 2 && visible(card.querySelector('[data-mcp-operation="enable"]')), "both groups precede confirmation");
+    if (name === "mcp-proposal-stdio") require(card.querySelectorAll("[data-mcp-choice]").length === 4 && !calls.some(call => call.params.local_choice), "local execution waits for the owner's explicit choice");
+    if (name === "mcp-proposal-enabled") require(calls.filter(call => call.params.operation === "enable").length === 1 && !card.querySelector("button"), "the tested revision enables once and settles");
+    if (name === "mcp-proposal-cancelled") require(!calls.some(call => call.params.operation === "enable") && !card.querySelector("button"), "cancellation never enables");
+    if (name === "mcp-proposal-secret") {
+      const secret = document.querySelector('[data-secret-card="card-mcp-key"] input');
+      require(secret?.type === "password" && secret.value === "sample-owner-key", "values use the existing masked secret control");
+      require(!document.body.innerText.includes("sample-owner-key") && !JSON.stringify(calls).includes("sample-owner-key"), "values never enter proposal RPCs or visible chat text");
+      require(card.querySelector('[data-mcp-field="headers"]').value === "Authorization", "the editable proposal contains only the secret name");
+    }
+    return { check: name, operations: calls.map(call => call.params.operation) };
+  }
   if (["work-messaging", "work-pairing", "work-connected"].includes(name)) {
     const sections = document.querySelectorAll('[data-msg-kind]');
     require(sections.length === 3, 'all three channels use the existing settings group');

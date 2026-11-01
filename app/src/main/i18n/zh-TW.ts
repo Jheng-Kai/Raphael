@@ -3,6 +3,11 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "mcp.argLines": "參數（每行一個）", "mcp.secretNames": "秘密欄位名稱（以逗號分隔）",
+  "mcp.enable": "確認啟用", "mcp.draft": "待測試", "mcp.approval": "測試將在你的電腦執行這個指令",
+  "mcp.testing": "測試中…", "mcp.tested": "測試成功", "mcp.enabled": "已啟用", "mcp.cancelled": "已取消",
+  "mcp.missingSecret": "請先在秘密卡安全儲存所需的值。", "mcp.localDisabled": "本機指令已停用，請到設定 › 拉斐爾 › 本機指令開啟。",
+  "mcp.failed": "連線未完成，請檢查設定後重試。",
   "completion.members": "成員",
   "completion.groups": "群組",
   "completion.services": "連接的服務",

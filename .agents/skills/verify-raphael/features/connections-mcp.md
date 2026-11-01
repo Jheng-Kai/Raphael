@@ -589,3 +589,19 @@ The stable-connections-switch scene also opens Notion tool permissions and click
 both read/write group switches in both directions, retaining the control and
 layout above it within one pixel. automations-day visits day/week/day to cover
 both calendar period controls with the same generic stable-click contract.
+
+## Connections from a conversation (2026-11-01)
+
+The shared private/room MCP proposal card edits the name, command or URL, arguments and secret names. Secret values use SecretCards and the vault. Test initializes and discovers tools while disabled, groups read/write tools, then enables the tested revision and continues the original request. Stdio uses the existing local-command decisions. Edits invalidate discovery; cancellation settles secret cards too. Saving public fields has the shared stable-click check and the card has no inner scroll panel or JSON editor.
+
+The proposal keeps the connector-card mark, metadata and button styles. Its public URL/command form uses shared field controls and a 520px maximum width so local-command choices fit; it reflows within the same conversation column. Secret entry remains the original narrower SecretCard.
+
+connections_list/manage_connection share Settings' existing backend services. API, CLI tools/list and running background offers refresh at the next model step; execution still checks the current grant. Managed tool slugs remain subject to the existing envelope and draft-only policy.
+
+Selected matrix (both themes, 1120,720,1920x1080): mcp-proposal-edit, mcp-proposal-tested, mcp-proposal-enabled, mcp-proposal-stdio, mcp-proposal-cancelled, mcp-proposal-room, mcp-proposal-secret. Representative existing consumers: connector-slack, chat-secret-masked, local-command-consent.
+
+```powershell
+npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-proposal-stdio mcp-proposal-cancelled mcp-proposal-room mcp-proposal-secret connector-slack chat-secret-masked local-command-consent --theme both --width 1120,720,1920x1080
+```
+
+Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks. The current brief prohibits them.

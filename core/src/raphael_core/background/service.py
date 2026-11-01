@@ -509,7 +509,7 @@ class BackgroundService:
     def use_attachment_store(self, store) -> None:
         self._attachment_store = store
 
-    async def _owner_tool(self, task, name, arguments):
+    async def _owner_tool(self, task, name, arguments, *, approval=None, action=None):
         from ..agent.owner_questions import ASK_OWNER, question_input
         if not task.turn_id:
             return ToolResult(name, False, None, "conversation_required")
@@ -522,7 +522,7 @@ class BackgroundService:
             return ToolResult(name, True, {"owner_wait": question["id"]})
         if self._owner_tools is None:
             return ToolResult(name, False, None, "unavailable")
-        result = await self._owner_tools(task, name, arguments)
+        result = await self._owner_tools(task, name, arguments, **({"approval": approval, "action": action} if approval is not None or action is not None else {}))
         if result.ok and isinstance(result.data, dict) and (card := result.data.get("owner_card")):
             question = self.owner_questions.open(task, card["kind"],
                 {"question": card.get("question", ""), "options": [], "free_text": True,
@@ -1269,7 +1269,7 @@ class BackgroundService:
             diagnostics=(lambda: self.diagnostics(speaker, task.turn_id or task.source_turn_id)) if self.diagnostics else None,
             cost_cap=self._cost_cap,
             calendar=lambda name, arguments: self._calendar.tool(speaker.id, name, arguments),
-            owner_tool=lambda name, arguments: self._owner_tool(task, name, arguments),
+            owner_tool=lambda name, arguments, **kwargs: self._owner_tool(task, name, arguments, **kwargs),
             attachment_store=self._attachment_store,
             artifact=lambda payload: self._artifact(task, payload),
         )

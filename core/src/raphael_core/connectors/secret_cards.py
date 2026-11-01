@@ -208,6 +208,7 @@ class SecretCards:
         self.store = SecretCardStore(conn, now_ms, wait_ms)
         self._conn, self._integrations, self._notify = conn, integrations, notify
         self.resume: Callable[[int, int], Awaitable[object]] | None = None
+        self.defer_resume: Callable[[int], bool] | None = None
         self.failure = None
         self._reported_failures = set()
         self._tasks: set[asyncio.Task] = set()
@@ -311,7 +312,7 @@ class SecretCards:
                                                          "message": f"The secret could not be saved ({error})."}))
             return {"card": failed.view(), "saved": False}
         moved = self.store.move(card.id, "saved")
-        started = self.store.claim_resume(card.turn_id)
+        started = not (self.defer_resume and self.defer_resume(card.turn_id)) and self.store.claim_resume(card.turn_id)
         self._changed(moved or card)
         if started:
             self._start(card.turn_id)
@@ -320,7 +321,7 @@ class SecretCards:
     async def _retry(self, params: dict) -> dict:
         """Carry the task on again after a resume that failed, without asking for the key again."""
         card = self._card(params)
-        started = card.state == "saved" and self.store.claim_resume(card.turn_id)
+        started = card.state == "saved" and not (self.defer_resume and self.defer_resume(card.turn_id)) and self.store.claim_resume(card.turn_id)
         if started:
             self._changed(card)
             self._start(card.turn_id)

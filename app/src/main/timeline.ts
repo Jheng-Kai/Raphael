@@ -9,6 +9,7 @@ import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
+import { mcpProposalsHTML } from "./mcp-proposal";
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
 // in order. Events are small chips, questions mount inline, and pending work shares the live work line.
@@ -363,7 +364,7 @@ const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDone
 
 /** The same conversation cards and controls are used in private and room replies. */
 export function conversationCardsHTML(turn: AgentTurn): string {
-  return connectorCardsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn) +
+  return connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
     (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
 }
@@ -897,7 +898,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
       ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true)) + (turn.messages!.some(m => m.kind === "reply") ? "" : textAnswer)
       : workSectionHTML(turn, state, query, revealing) + permissionCardsHTML(turn, look.answerable, true) + textAnswer) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
-    connectorCardsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
+    connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
     permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn) +

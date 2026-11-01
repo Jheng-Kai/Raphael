@@ -77,6 +77,37 @@ async def test_after_a_tool_the_same_brain_continues_from_its_receipt(monkeypatc
     assert not rig.events and rig.loop.failure is None
 
 
+async def test_recovery_lists_current_connections_without_replaying_a_completed_call(monkeypatch, tmp_path):
+    import httpx
+
+    available = True
+    definition = {"type": "function", "function": {"name": "Sample__look", "description": "Read sample", "parameters": {"type": "object"}}}
+
+    async def play(loop, attempt):
+        nonlocal available
+        if attempt == 1:
+            await loop._tool("save", "save_draft", {"path": "draft.txt"})
+            available = False
+            yield Event("error", "network")
+        else:
+            request = rig.calls[-1]
+            async with httpx.AsyncClient(headers={"Authorization": "Bearer " + request["token"]}, trust_env=False) as http:
+                response = await http.post(request["endpoint"], json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            assert "Sample__look" not in {tool["name"] for tool in response.json()["result"]["tools"]}
+            assert "Saved receipt 17" in request["user"]
+            yield Event("final", "Continued with current access.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play)
+    rig.loop.tools = [definition]
+    def refresh():
+        rig.loop.tools[:] = [definition] if available else []
+        return rig.loop.tools
+    rig.loop.refresh_tools = refresh
+    result = await rig.loop.run()
+    assert result.final == "Continued with current access."
+    assert len(rig.calls) == 2 and len(rig.effects) == 1
+
+
 async def test_recovery_is_bounded_and_final_failure_accounts_for_work(monkeypatch, tmp_path):
     async def play(loop, attempt):
         if attempt == 1:

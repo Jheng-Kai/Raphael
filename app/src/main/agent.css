@@ -251,6 +251,17 @@
 /* The cards of a key (secret-card.ts) and of the owner's turn at the computer (computer-card.ts) are connector cards
    with a second row: the masked field and Save, or Stop and 我完成了. */
 .connector-card.has-form { row-gap: var(--sp-2); }
+.mcp-proposal { width: min(520px, 100%); }
+.mcp-fields, .mcp-tools, .mcp-proposal > .mcp-error { grid-column: 1 / -1; min-width: 0; }
+.mcp-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.mcp-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; font-size: var(--pa-sys); color: var(--text-2); }
+.mcp-field .field { color: var(--text); }
+.mcp-field input, .mcp-field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.mcp-field textarea { height: auto; min-height: var(--h-ctl); padding-block: var(--sp-2); resize: none; overflow: hidden; color: var(--text); }
+.mcp-proposal > .cc-actions { grid-column: 1 / -1; gap: var(--sp-2); flex-wrap: wrap; }
+.mcp-tools h4 { margin: 0; font-size: var(--pa-sys); color: var(--text-2); font-weight: 500; }
+.mcp-tools ul { margin: var(--sp-1) 0 0; padding-inline-start: var(--sp-4); overflow-wrap: anywhere; }
+.mcp-error { font-size: var(--pa-sys); color: var(--text-2); }
 .sc-form { grid-column: 2 / -1; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .sc-field { flex: 1 1 auto; min-width: 0; }
 .sc-form.sc-login { flex-direction: column; align-items: stretch; }

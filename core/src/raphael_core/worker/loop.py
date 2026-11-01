@@ -157,6 +157,7 @@ class Turn:
     responses_output: list[dict] = field(default_factory=list, repr=False)
     finish_reason: str = ""
     prompt_tokens: int = 0
+    tools: list[dict] | None = None
 
 
 @dataclass
@@ -282,6 +283,7 @@ async def _run_task(
     cancelled = cancelled if cancelled is not None else asyncio.Event()
     tools = list(tools)
     offered = {tool["function"]["name"] for tool in tools}
+    revoked: set[str] = set()
     conversation: list[dict[str, Any]] = (
         [dict(message) for message in messages]
         if messages
@@ -310,10 +312,15 @@ async def _run_task(
         return clock() + limits.seconds
 
     async def ask(room: int = 1) -> Turn:
-        nonlocal model_calls
+        nonlocal model_calls, offered
         check_before("limit_model", model_calls, limits.model_calls)
         chat = host.chat(messages, tools, room=room) if room > 1 else host.chat(messages, tools)
         turn = await _until(chat, cancelled, stall(), clock)
+        if turn.tools is not None:
+            revoked.update(offered - {tool["function"]["name"] for tool in turn.tools})
+            tools[:] = turn.tools
+            offered = {tool["function"]["name"] for tool in tools}
+            revoked.difference_update(offered)
         keeper.saw(turn.prompt_tokens, messages)
         model_calls += 1
         return turn
@@ -370,6 +377,7 @@ async def _run_task(
             for call in turn.calls:
                 # Every hand-off of a batch starts now; anything else in it waits for the delegated work.
                 refusal = (WAITING_FOR_WORK if dispatched and call.name != "handoff"
+                           else "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias." if call.name in revoked
                            else _refusal(call, offered, cut=turn.finish_reason == LENGTH))
                 if refusal is None:
                     check_before("limit_tool", tool_calls, limits.tool_calls)

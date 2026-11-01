@@ -158,6 +158,16 @@ export function installMock(fixture, config = {}, target = window) {
   // received by `integrations.card_save` and forgotten (`resumeFails`: the task does not continue; `signedIn`:
   // the page no longer asks for the sign-in when the owner presses 我完成了).
   if (variant.secretCard) data.turns.push(structuredClone(data.secretTurns[variant.secretCard]));
+  if (variant.mcpProposal) {
+    const card = structuredClone(data.mcpProposalCard);
+    if (variant.mcpProposal === "stdio") Object.assign(card.fields, { transport: "stdio", command: "sample-mcp", args: ["--stdio"], url: "" });
+    if (variant.mcpProposal === "secret") card.fields.headers = ["Authorization"];
+    const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
+      id: 946, session_id: "sample-mcp", question: "連接 Sample，查詢一筆範例資料。", text: "請確認這個連線。", status: "done", messages: [], steps: [], connection_proposals: [card] };
+    data.turns = [turn];
+    if (variant.mcpProposal === "secret") turn.secrets = [{ ...structuredClone(data.secretTurns.notion.secrets[0]), id: "card-mcp-key", name: "Sample", secret: "Authorization" }];
+    if (variant.mcpProposal === "room") data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 946, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
+  }
   if (variant.loginCard) {
     const turn = structuredClone(data.secretTurns.notion);
     Object.assign(turn, {id: 132, member_id: 1, conversation_id: 11, question: "請登入研究網站。", text: "請在安全卡片儲存登入資料，完成後我會接著工作。", steps: [], messages: []});
@@ -843,6 +853,22 @@ export function installMock(fixture, config = {}, target = window) {
           state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
         }, 0);
         return { card: copy(card), saved: true };
+      }
+      case "integrations.proposal": {
+        const turn = data.turns.find(turn => turn.connection_proposals?.some(card => card.id === p.id));
+        const card = turn?.connection_proposals.find(card => card.id === p.id);
+        if (!card || card.revision !== p.revision) throw new Error("Proposal changed");
+        if (p.operation === "edit") Object.assign(card, { fields: copy(p.fields), state: "draft", revision: card.revision + 1, groups: [] });
+        else if (p.operation === "test") {
+          if (card.fields.transport === "stdio" && !p.local_choice) card.state = "approval";
+          else Object.assign(card, { state: "tested", groups: copy(data.mcpProposalTools) });
+        } else if (p.operation === "enable") {
+          if (card.state !== "tested") throw new Error("Test the current configuration first");
+          card.state = "enabled";
+          turn.text = "已連接 Sample，查到一筆範例資料。";
+        } else if (p.operation === "cancel") card.state = "cancelled";
+        notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
+        return { proposal: copy(card) };
       }
       case "integrations.card_resume": {
         const turn = data.turns.find(item => item.secrets?.some(card => card.id === p.id));

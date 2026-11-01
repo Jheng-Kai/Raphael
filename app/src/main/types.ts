@@ -341,6 +341,7 @@ export interface AgentTurn {
   resumed_app_logos?: string[];
   /** The cards of the keys this turn's task waits for (`connectors.secret_cards`). */
   secrets?: SecretCard[];
+  connection_proposals?: ConnectionProposal[];
   /** The cards of the owner's turn at the computer this turn's task is paused on (`computer.handback`). */
   computers?: ComputerCard[];
   /** For a turn that resumed a task once its keys were saved: the connections they are for. */
@@ -360,6 +361,16 @@ export interface OwnerQuestion {
   id: string; task_id: number; turn_id: number; member_id: number; kind: string; card_id: string;
   question: string; options: string[]; free_text: boolean; state: "asked" | "answered" | "cancelled";
   result: { state: string; answer?: string } | null;
+}
+
+export interface ConnectionProposal {
+  id: string;
+  state: "draft" | "approval" | "testing" | "tested" | "enabled" | "cancelled";
+  revision: number;
+  fields: { name: string; transport: "http" | "stdio"; command: string; args: string[]; url: string; env: string[]; headers: string[] };
+  groups: { kind: "read" | "write"; tools: string[] }[];
+  error: string | null;
+  first_local: boolean;
 }
 
 /** A page a member made or a plugin brought, as a turn carries it; `pages.open` gives its address. */

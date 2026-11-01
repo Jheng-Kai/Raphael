@@ -155,6 +155,9 @@ class NarratedLoop:
             outage = Outage(RETRY_WAITS, PATIENT_WAITS, patient_ok=self.acted)
             while True:
                 try:
+                    refresh = getattr(self, "refresh_tools", None)
+                    if refresh is not None and tools:
+                        tools = refresh()
                     answer = await self.client.chat_tools(
                         model=self.model, fallbacks=self.fallbacks,
                         messages=list(messages), tools=list(tools), timeout_s=MODEL_SILENCE_S,
@@ -213,7 +216,7 @@ class NarratedLoop:
         return Turn(answer.content, [
             Call(call.id, call.name, call.arguments, call.raw_arguments) for call in answer.calls
         ], responses_output=getattr(answer, "responses_output", []), finish_reason=getattr(answer, "finish_reason", ""),
-            prompt_tokens=answer.prompt_tokens)
+            prompt_tokens=answer.prompt_tokens, tools=list(tools))
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await summary_reply(self.client, self.model, system=system, user=user, max_tokens=max_tokens)

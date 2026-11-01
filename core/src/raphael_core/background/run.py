@@ -523,6 +523,7 @@ class TaskRun:
 
     async def _chat(self, messages: list[dict], request_chars: int, room: int = 1, *, wrap_up: bool = False) -> dict:
         self._check(model=True, paid=True, final=wrap_up)
+        previous_tools = list(self.snapshot.definitions)
         self.model_calls += 1
         self.model_failure = None
         began = time.perf_counter()
@@ -534,6 +535,8 @@ class TaskRun:
             while True:
                 remaining = self._remaining_s()
                 try:
+                    task = self._store.get(self.task_id)
+                    self.snapshot.refresh_plugins(self._gate.plugins, task.member_id if task else 0)
                     turn = await self._guarded(asyncio.wait_for(self._client.chat_tools(
                         model=self.model,
                         # The task's own model answers with all of its time: live, a fallback model
@@ -616,6 +619,7 @@ class TaskRun:
                 self._progress(text)
         return {
             "content": turn.content,
+            **({"tools": list(self.snapshot.definitions)} if not wrap_up and previous_tools != self.snapshot.definitions else {}),
             **({"responses_output": turn.responses_output} if getattr(turn, "responses_output", None) else {}),
             # Only a reply the output limit cut off is reported as such.
             **({"finish_reason": "length"} if getattr(turn, "finish_reason", "") == "length" else {}),
@@ -654,6 +658,8 @@ class TaskRun:
         if ref is None or len(json.dumps(arguments, ensure_ascii=False)) > MAX_ARGUMENT_CHARS:
             # Not a tool the task was given: nothing to call, and nothing to audit.
             self._step(kind="tool", outcome="blocked", ms=_ms(began), reason="blocked")
+            if ref is None and name in self.snapshot._aliases:
+                return {**_refused(), "content": "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."}
             return _refused()
         sent: int | None = None
         detail: str | None = None
@@ -731,7 +737,7 @@ class TaskRun:
             return Screening(ASK)
         if ref.kind == BUILTIN:
             # Of Raphael's own, only adding a member (`agent.team`) and writing to the calendar are judged, by their own names.
-            if ref.name in CALENDAR_WRITES:
+            if ref.name in CALENDAR_WRITES or ref.name == "manage_connection":
                 self._check(paid=True)
                 proposed = Proposed(ref.name, HARNESS_DEFINITIONS[ref.name]["description"], summarize(arguments), narrow_scope(ref.name))
             elif ref.name != CREATE_MEMBER:
@@ -822,6 +828,8 @@ class TaskRun:
         finally:
             self._in_plugin_call = False
         text, cut = _cut(result.text)
+        if not result.ok and now is None and result.kind in ("blocked", "gone", "changed"):
+            text = "This tool is no longer enabled or connected. Read connections_list for current access; do not retry its old alias."
         reply = {
             "ok": result.ok,
             "kind": result.kind,
@@ -858,6 +866,10 @@ class TaskRun:
             # Adding a member that a rule asked about (T1: the owner's yes is all it waited for).
             began = time.perf_counter()
             result = await self._lookup(ref.name, waiting.arguments, approval=approval, action=action)
+            if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
+                self.waiting = Waiting(waiting.alias, ref, dict(waiting.arguments), waiting.call_id, waiting.tier, PASS,
+                                       result.data["owner_wait"])
+                raise stopped(WAITING)
             outcome = "ok" if result.ok else ("timeout" if result.error == "timeout" else "error")
             self._gate.record_builtin(ref.name, outcome=outcome, task_id=self.task_id)
             self._step(
@@ -928,7 +940,8 @@ class TaskRun:
         """(the reply, how it ended, the tier, the service it used) of one of Raphael's own."""
         gate = self._gate
         tier = gate.tier_now(ref.key)
-        judged = ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES
+        from ..agent.harness_tools import CONNECTION_TOOLS
+        judged = ref.name == CREATE_MEMBER or ref.name in CALENDAR_WRITES or ref.name == "manage_connection"
         try:
             if not judged:
                 gate.check(Action(ref.key, arguments), None, worker=True)
@@ -946,7 +959,7 @@ class TaskRun:
                     "truncated": False,
                 }
                 return reply, "blocked", tier.name, None
-            if needs_yes(False, screening):
+            if needs_yes(tier >= Tier.T2, screening) and not gate.full_permission:
                 if self.can_wait:
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, tier, screening)
                     raise stopped(WAITING)
@@ -954,7 +967,7 @@ class TaskRun:
                 return _refused(), "blocked", tier.name, None
         from ..agent.owner_questions import BACKGROUND_TOOLS
         from ..agent.harness_tools import ROUTINE_TOOLS
-        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS:
+        if ref.name in BACKGROUND_TOOLS or ref.name in ROUTINE_TOOLS or ref.name in CONNECTION_TOOLS:
             result = (await self._owner_tool(ref.name, arguments) if self._owner_tool else
                       ToolResult(ref.name, False, None, "unavailable"))
             if result.ok and isinstance(result.data, dict) and result.data.get("owner_wait"):
@@ -982,6 +995,9 @@ class TaskRun:
     async def _lookup(self, name: str, arguments: dict, *, approval: Approval | None = None, action: Action | None = None) -> ToolResult:
         """One of Raphael's own lookups. It never raises for a failure of the world."""
         try:
+            from ..agent.harness_tools import CONNECTION_TOOLS
+            if name in CONNECTION_TOOLS:
+                return await self._owner_tool(name, arguments, approval=approval, action=action) if self._owner_tool else ToolResult(name, False, None, "unavailable")
             from ..memory.growth import TOOLS as GROWTH_TOOLS
             if name in GROWTH_TOOLS:
                 if self._memory is None or not hasattr(self._memory, "growth"):

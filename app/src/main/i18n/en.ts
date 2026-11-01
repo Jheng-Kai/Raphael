@@ -4,6 +4,11 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "mcp.argLines": "Arguments (one per line)", "mcp.secretNames": "Secret names (comma separated)",
+  "mcp.enable": "Confirm and enable", "mcp.draft": "Not tested", "mcp.approval": "Testing runs this command on your PC",
+  "mcp.testing": "Testing…", "mcp.tested": "Test passed", "mcp.enabled": "Enabled", "mcp.cancelled": "Cancelled",
+  "mcp.missingSecret": "Save the required values securely in the secret card first.", "mcp.localDisabled": "Local commands are off. Enable them in Settings > Raphael > Local commands.",
+  "mcp.failed": "Connection incomplete. Check the configuration and try again.",
   "completion.members": "Members",
   "completion.groups": "Groups",
   "completion.services": "Connected services",

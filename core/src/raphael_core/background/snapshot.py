@@ -39,7 +39,7 @@ changed since the snapshot is refused.
 """
 
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..agent.gate import ATTACHMENT_TOOLS, MEMORY_READ_TOOLS, WEB_TOOLS
@@ -52,7 +52,7 @@ from ..agent.team import TEAM_TIER, TEAM_TOOLS, worker_definition
 from ..agent.harness_tools import CALENDAR_TOOLS, DEFINITIONS as HARNESS_DEFINITIONS, definitions_for, tool as harness_tool
 from ..memory.growth import DEFINITIONS as MEMORY_DEFINITIONS
 from ..agent.owner_questions import BACKGROUND_TOOLS
-from ..agent.harness_tools import ROUTINE_TOOLS
+from ..agent.harness_tools import ROUTINE_TOOLS, CONNECTION_TOOLS
 from ..computer.tools import PRESENCE_TOOLS
 from ..agent.toolpick import (
     PICK_MAX,
@@ -182,6 +182,42 @@ class Snapshot:
     refs: dict[str, ToolRef]
     definitions: list[dict[str, Any]]
     pool: Offer | None = None
+    max_tier: Tier = Tier.T3
+    _aliases: dict[str, str] = field(default_factory=dict, repr=False)
+
+    def refresh_plugins(self, plugins, member_id):
+        """Replace stale grants before offering tools again; a snapshot grants no lasting access."""
+        if plugins is None:
+            return
+        before = set(self.pool.by_alias) if self.pool else set()
+        for alias, tool in self.pool.by_alias.items() if self.pool else ():
+            self._aliases.setdefault(alias, tool.key)
+        shown = {alias for alias, ref in self.refs.items() if ref.kind == MCP}
+        try:
+            tools = [tool for tool in getattr(plugins, "offered_for", lambda _: plugins.offered())(member_id)
+                     if tool.tier <= self.max_tier or getattr(plugins, "is_computer_tool", lambda _: False)(tool.key)]
+        except Exception:
+            tools = []
+        native = {alias for alias, ref in self.refs.items() if ref.kind != MCP}
+        by_key = {key: alias for alias, key in self._aliases.items()}
+        offered = {}
+        for base, tool in make_offer(tools).by_alias.items():
+            alias, suffix = by_key.get(tool.key, base), 1
+            while alias in native or alias in self._aliases and self._aliases[alias] != tool.key:
+                suffix += 1
+                alias = f"{base[:56]}_{suffix}"
+            self._aliases[alias] = tool.key
+            offered[alias] = tool
+        self.pool = Offer(tools=list(offered.values()), by_alias=offered)
+        for alias in shown:
+            self.refs.pop(alias, None)
+        self.definitions[:] = [item for item in self.definitions if item["function"]["name"] not in shown]
+        new = set(self.pool.by_alias) - before
+        selected = new if len(new) <= MAX_OFFERED else set(self.pool.pinned_aliases)
+        self.show([alias for alias in self.pool.by_alias if alias in shown or alias in selected])
+        if self.hidden() and "find_tools" not in self.refs:
+            self.refs["find_tools"] = ToolRef(FIND, "find_tools", BUILTIN_SERVER, "find_tools", Tier.T0)
+            self.definitions.append({"type": "function", "function": {"name": "find_tools", **_DEFINITIONS["find_tools"]}})
 
     def hidden(self) -> list[str]:
         """The aliases of the pool that the task has not been shown."""
@@ -279,9 +315,9 @@ def take_snapshot(
         if name in TEAM_TOOLS:
             refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, TEAM_TIER)
             definitions.append(worker_definition(name))
-    snapshot = Snapshot(refs, definitions)
+    snapshot = Snapshot(refs, definitions, max_tier=max_tier)
     # What every path has, a task that runs by itself too: the owner's daily routine adds what it finds to today.
-    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS,
+    everywhere = ("self_check", "raphael_help", *CALENDAR_TOOLS, *sorted(CONNECTION_TOOLS),
                   *((*sorted(BACKGROUND_TOOLS), *sorted(ROUTINE_TOOLS)) if not interactive else ()))
     for name in everywhere:
         refs[name] = ToolRef(BUILTIN, name, BUILTIN_SERVER, name, harness_tool(name).tier)

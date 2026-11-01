@@ -15,6 +15,7 @@ EMAIL_DRAFT = "email_draft"
 SHOW_PAGE = "show_page"
 UPDATE_PAGE = "update_page"
 SET_MY_JOB = "set_my_job"
+CONNECTION_TOOLS = frozenset(("connections_list", "manage_connection", "add_mcp_server"))
 
 
 class HarnessToolError(Exception):
@@ -131,6 +132,16 @@ DEFINITIONS[ASK_OWNER] = definition(
      "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 80}},
      "free_text": {"type": "boolean"}}, ["question"])
 
+DEFINITIONS["connections_list"] = definition("List the current connected apps, custom MCP servers and their individual tool names and enabled states. Read this before manage_connection; ids are exact, never guessed.")
+DEFINITIONS["manage_connection"] = definition(
+    "Turn a connected app or one tool on/off, disconnect, or reconnect it from this conversation. Use the exact connection id and tool name from connections_list. The shared gate asks before a change unless the owner allowed everything. Reconnect shows the existing sign-in card; stop this turn and wait for the original task to resume. Revocation applies immediately to running tasks too.",
+    {"connection": {"type": "string"}, "operation": {"type": "string", "enum": ["enable", "disable", "tool_enable", "tool_disable", "disconnect", "reconnect"]}, "tool": {"type": "string"}}, ["connection", "operation"])
+DEFINITIONS["add_mcp_server"] = definition(
+    "Propose a custom MCP server on an editable card in this conversation. Supply public configuration and secret NAMES ONLY, never values in command, args or URL. The owner edits, tests initialization/discovery (a local command requires local-command approval), reviews read/write tool groups, and enables the exact tested configuration. Secrets go through the existing secret card directly into the vault. End this turn; the original work resumes once after enabling. Under allow-all, test and enable automatically but still ask for missing secrets; forbidden rules and disabled local commands still apply.",
+    {"name": {"type": "string"}, "transport": {"type": "string", "enum": ["http", "stdio"]},
+     "command": {"type": "string"}, "args": {"type": "array", "items": {"type": "string"}}, "url": {"type": "string"},
+     "env": {"type": "array", "items": {"type": "string"}}, "headers": {"type": "array", "items": {"type": "string"}}}, ["name", "transport"])
+
 for name, command in COMMANDS.items():
     if name == "open":
         properties = {"target_kind": {"type": "string", "enum": ["url", "app", "settings"]}, "target": {"type": "string", "description": "A public http(s) URL, installed app name, or Windows settings page name."}}
@@ -146,6 +157,7 @@ TIERS = {name: Tier.T0 if name in (ASK_OWNER, "self_check", "raphael_help", "sho
 ROUTINE_TOOLS = frozenset(name for name in DEFINITIONS if name.startswith("routine_"))
 DEFINITIONS.update(ADMIN_TOOLS)
 TIERS.update(ADMIN_TIERS)
+TIERS.update({"connections_list": Tier.T0, "add_mcp_server": Tier.T0, "manage_connection": Tier.T2})
 
 
 def definitions_for(speaker):

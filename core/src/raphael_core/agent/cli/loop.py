@@ -203,7 +203,13 @@ class CliLoop:
                                                         "behavior": "allow", "destination": "session"}]
                 receipt.update(status="answered", result=json.dumps(answer))
                 return ToolOutcome(True, content=json.dumps(answer))
+            previous_tools = list(self.tools)
             result = await self._execute(identifier, name, args)
+            refresh = getattr(self, "refresh_tools", None)
+            if refresh is not None and previous_tools != refresh() and not self.catalog_changed:
+                self.reload_note = ("The connected tools changed. Read the current tool list and continue the original task "
+                                    "from the completed tool results below; do not repeat successful actions.")
+                self.catalog_changed = True
             if not result.ok:
                 result.content = json.dumps(tool_failure(result.kind, result.content).wire(), ensure_ascii=False)
             note = self._guardrails.after_call(name, args, result).note
@@ -442,7 +448,7 @@ class CliLoop:
                 workspace = workspace_root / str(self.member_id) / str(self.conversation_id) / name
                 workspace.mkdir(parents=True, exist_ok=True)
                 await secure_directory(workspace)
-                async with RaphaelMcp(lambda: self.tools, self._tool) as server:
+                async with RaphaelMcp(lambda: getattr(self, "refresh_tools", lambda: self.tools)(), self._tool) as server:
                     self._session = self.sessions.get(self.member_id, self.model, self.conversation_id) if self.resume_session else None
                     quick = tuple(RATE_LIMIT_WAITS_S if self.rate_limit_waits is None else self.rate_limit_waits)
                     outage = Outage(quick, (), patient_ok=False)

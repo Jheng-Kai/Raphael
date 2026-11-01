@@ -4,6 +4,11 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "mcp.argLines": "引数（1行に1つ）", "mcp.secretNames": "秘密の項目名（コンマ区切り）",
+  "mcp.enable": "確認して有効にする", "mcp.draft": "未テスト", "mcp.approval": "テストでこのPCのコマンドを実行します",
+  "mcp.testing": "テスト中…", "mcp.tested": "テスト成功", "mcp.enabled": "有効", "mcp.cancelled": "キャンセル済み",
+  "mcp.missingSecret": "先に秘密カードから必要な値を安全に保存してください。", "mcp.localDisabled": "ローカルコマンドは無効です。設定 › ラファエル › ローカルコマンドで有効にしてください。",
+  "mcp.failed": "接続が完了しませんでした。設定を確認して再試行してください。",
   "completion.members": "メンバー",
   "completion.groups": "グループ",
   "completion.services": "接続したサービス",

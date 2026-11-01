@@ -80,7 +80,8 @@ class CoreHost:
         return Turn(content if isinstance(content, str) else "", calls,
                     responses_output=reply.get("responses_output", []),
                     finish_reason=LENGTH if reply.get("finish_reason") == LENGTH else "",
-                    prompt_tokens=prompt_tokens if type(prompt_tokens) is int else 0)
+                    prompt_tokens=prompt_tokens if type(prompt_tokens) is int else 0,
+                    tools=[item for item in reply["tools"] if _is_tool(item)] if isinstance(reply.get("tools"), list) else None)
 
     async def summarize(self, system: str, user: str, max_tokens: int) -> str:
         reply = await self._ask("host.summarize", {"system": system, "user": user, "max_tokens": max_tokens})
