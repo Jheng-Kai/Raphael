@@ -270,10 +270,10 @@
 .permission-card .cc-ask > span:last-child { text-wrap: pretty; }
 .permission-card .cc-was > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .permission-card[data-kind^="local_"] .cc-name { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
-.team-file { display: inline-flex; align-items: center; gap: var(--sp-1); margin: 0 2px; padding: 1px var(--sp-2); vertical-align: bottom; max-width: 26ch; border: 1px solid var(--edge); border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-weight: 500; cursor: pointer; }
-.team-file:hover { background: var(--hover); }
-.team-file svg { flex: none; width: 13px; height: 13px; }
-.team-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.team-file { display: inline-flex; align-items: center; gap: var(--sp-1); height: auto; min-height: 0; margin: 0 2px; padding: 1px var(--sp-2); vertical-align: bottom; max-width: 26ch; border: 1px solid var(--edge); border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-weight: 500; }
+.btn.team-file:hover { background: var(--hover); }
+.btn.team-file svg { flex: none; }
+.btn.team-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .local-command { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
 
 /* An email card (mail-card.ts): who sends it and to whom, the subject and the body, with 捨棄 and 傳送. A draft that is over

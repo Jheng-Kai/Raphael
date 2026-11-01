@@ -8,7 +8,7 @@ import { esc, ico, iconBtn } from "./ui";
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
 function pathHTML(path: string, query: string): string {
   if (!TEAM_FILE.test(path)) return `<code>${highlightHTML(path, query)}</code>`;
-  return `<button type="button" class="team-file" data-act="team-file-open" data-path="${esc(path)}" title="${esc(t("agent.openFile"))}">${ico("file")}<span>${highlightHTML(path.slice(path.lastIndexOf("/") + 1), query)}</span></button>`;
+  return `<button type="button" class="btn team-file" data-act="team-file-open" data-path="${esc(path)}" title="${esc(t("agent.openFile"))}">${ico("file")}<span>${highlightHTML(path.slice(path.lastIndexOf("/") + 1), query)}</span></button>`;
 }
 
 export function messageUrl(raw: unknown): string | null {
