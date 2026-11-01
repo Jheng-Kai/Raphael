@@ -169,6 +169,8 @@ class VmTools:
         target = self.vm.target(member_id)
         if self.vm.grants.allowed(member_id):
             native = [self.tools[key] for key in self.catalogs.get(target.key, []) if self.routes[key] == target] if self.vm.enabled else []
+        elif self.vm.grants.full_permission():
+            native = []  # Nobody would be asked, and the yes that gives itself would undo the owner's revoke.
         else:
             key = tool_key(f"computer-access-{member_id}", "request_computer")
             self.requests[key] = member_id
@@ -179,7 +181,10 @@ class VmTools:
         return self.offered_for(0)
 
     def has_own_computer(self, member_id):
-        return self.vm.grants.allowed(member_id)
+        if self.vm.grants.state(member_id) is True:
+            return True
+        # Opened by 全部允許 on a PC with no Docker there is no computer of its own, so the owner's desktop stays offered.
+        return self.vm.grants.allowed(member_id) and bool(self.catalogs.get(self.vm.target(member_id).key))
 
     def page_tool(self, server_id, name):
         return self.delegate.page_tool(server_id, name)

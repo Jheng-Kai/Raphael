@@ -14,8 +14,16 @@ class ComputerGrants:
         row = self.conn.execute("SELECT granted FROM computer_grants WHERE member_id=?", (member_id,)).fetchone()
         return None if row is None else bool(row[0])
 
+    def full_permission(self):
+        if self.conn is None:
+            return False
+        from ..brain.settings import SettingsStore
+        return SettingsStore(self.conn).get("action_mode") == "bypass"
+
     def allowed(self, member_id):
-        return self.state(member_id) is True
+        # 全部允許 opens the computer for as long as it is on and writes nothing. One the owner took away stays away.
+        state = self.state(member_id)
+        return state is True or (state is None and self.full_permission())
 
     def set(self, member_id, granted):
         if self.conn is None:

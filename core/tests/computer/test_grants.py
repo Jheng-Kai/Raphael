@@ -182,3 +182,39 @@ async def test_revoke_during_viewer_status_probe_prevents_launch(tmp_path):
         assert not vm.grants.allowed(0)
     finally:
         await viewer.aclose()
+
+
+async def test_allow_all_opens_the_computer_while_it_is_on_and_writes_no_grant(tmp_path, conn):
+    settings = SettingsStore(conn)
+    vm = LocalVm(tmp_path, runner=Runtime(), settings=settings)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    settings.set("action_mode", "bypass")
+    await hub.prepare(7)
+    names = [tool.name for tool in hub.offered_for(7)]
+    assert "get_desktop_state" in names and "request_computer" not in names
+    assert hub.has_own_computer(7)
+    assert conn.execute("SELECT COUNT(*) FROM computer_grants").fetchone()[0] == 0
+    settings.set("action_mode", "direct")
+    assert [tool.name for tool in hub.offered_for(7)] == ["request_computer"]
+    assert not hub.has_own_computer(7)
+
+
+async def test_a_computer_the_owner_took_away_stays_away_under_allow_all(tmp_path, conn):
+    settings = SettingsStore(conn)
+    vm = LocalVm(tmp_path, runner=Runtime(), settings=settings)
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    vm.grants.set(7, False)
+    settings.set("action_mode", "bypass")
+    await hub.prepare(7)
+    assert hub.offered_for(7) == []
+    assert vm.grants.state(7) is False
+
+
+async def test_allow_all_without_docker_leaves_the_owners_desktop_on_offer(tmp_path, conn):
+    settings = SettingsStore(conn)
+    vm = LocalVm(tmp_path, runner=Runtime(), settings=settings)
+    vm.desktop = Mock(installed=Mock(return_value=False))
+    hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), conn=conn, bridge=Bridge)
+    settings.set("action_mode", "bypass")
+    await hub.prepare(7)
+    assert hub.offered_for(7) == [] and not hub.has_own_computer(7)

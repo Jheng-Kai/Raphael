@@ -1122,7 +1122,8 @@ class ComputerRun:
             self._step(action, window.app, "blocked", time.perf_counter(), "forbidden")
             told = FORBIDDEN_BY_RULE.format(rule=screening.rule or "")
             return wrap_untrusted(name, told, ok=False)
-        if rules.needs_yes(verdict == safety.CONFIRM, screening, firm=True):  # a step that sends, deletes or buys never waives
+        # A step that sends, deletes or buys never waives, but for the owner's own 全部允許.
+        if not self._gate.full_permission and rules.needs_yes(verdict == safety.CONFIRM, screening, firm=True):
             builtin = verdict == safety.CONFIRM
             asked = Action(ACT_FINAL if builtin else name, dict(request))
             question = self._confirm_text(action, element, chord)

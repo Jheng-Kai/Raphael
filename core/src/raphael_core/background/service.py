@@ -97,6 +97,7 @@ from ..agent.history import VOICE, AgentHistory, Turn, is_unfinished
 from ..agent.ledger import Ledger
 from ..agent.narration import PUBLIC_PROGRESS_RULES
 from ..agent.persona import (
+    FULL_PERMISSION,
     PREFIXES,
     fit_text,
     language_reminder,
@@ -107,7 +108,7 @@ from ..agent.persona import (
 )
 from ..agent.plugins import preview
 from ..computer.local_tools import is_local, BACKGROUND_WAIT_S
-from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending
+from ..agent.policy import UNATTENDED_WAIT_S, Action, Approval, Confirmations, Outcome, Pending, Tier
 from ..agent.safety import asked_with
 from ..agent.speaker import MAX_DEPTH, RAPHAEL, RAPHAEL_NAMES, Speaker
 from ..agent.steps import REFUSED_REASONS, step_view as _step_view
@@ -133,7 +134,7 @@ from .brief import BRIEF_WINDOW_MS, TaskBrief, ToolUse
 from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from ..agent.toolpick import ToolPicker
-from .snapshot import BUILTIN_SERVER, Snapshot, refine, take_snapshot
+from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, refine, take_snapshot
 from .tasks import ARTIFACT_WORDS, FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
 
 logger = logging.getLogger(__name__)
@@ -1243,6 +1244,7 @@ class BackgroundService:
             speaker=speaker,
             team=team,
             turned_off=self._tools.turned_off(),
+            max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER,
         )
         if task.scope == "room" and self._metrics_conn.execute(
                 "SELECT 1 FROM room_messages WHERE turn_id=? AND kind='wrapup'", (task.turn_id,)).fetchone():
@@ -1310,6 +1312,8 @@ class BackgroundService:
         system += roster_prompt(self._team, speaker, language) + owner_context(self._settings)
         system += ('\nAssigned work starts NOW. Deadlines or dates in documents are context, never permission to defer. '
                    'Use handoff for real assignments, not @mentions. Return evidence of actions; a future-tense promise without action is incomplete.')
+        if self._gate.full_permission:
+            system += FULL_PERMISSION
         if task.mode:
             system += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
             system += HANDLES_REQUEST

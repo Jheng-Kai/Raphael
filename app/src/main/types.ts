@@ -573,7 +573,7 @@ export interface BrainSettings {
   owner_name?: string;
   owner_about?: string;
   owner_photo?: string;
-  action_mode?: "ask" | "direct";
+  action_mode?: "ask" | "direct" | "plan" | "bypass";
   local_commands_mode?: "ask" | "always" | "never";
   agent_fallbacks?: string[];
   cleanup_fallbacks?: string[];

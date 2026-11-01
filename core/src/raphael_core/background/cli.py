@@ -31,8 +31,8 @@ def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
 
     async def execute(call_id, name, arguments):
         if name == "cli_permission":
-            # Native shell/file permission is not an alternative to Raphael's tool gate.
-            return ToolOutcome(False, "use_mcp_tools")
+            # Native shell/file permission is not an alternative to Raphael's tool gate, unless the owner gave them all.
+            return ToolOutcome(True, None) if getattr(run._gate, "full_permission", False) else ToolOutcome(False, "use_mcp_tools")
         try:
             result = await run.tool({"call_id":call_id, "name":name, "arguments":arguments})
         except RpcError as error:

@@ -49,11 +49,12 @@ export function composerHTML(): string {
 }
 
 const MODE_CHANGED = "raphael:action-mode";
-type ActionMode = "direct" | "ask" | "plan";
+type ActionMode = "direct" | "ask" | "plan" | "bypass";
 const MODES = {
   direct: { name: "chat.modeDirect", hint: "chat.modeDirectHint" },
   ask: { name: "chat.modeAsk", hint: "chat.modeAskHint" },
   plan: { name: "chat.modePlan", hint: "chat.modePlanHint" },
+  bypass: { name: "chat.modeBypass", hint: "chat.modeBypassHint" },
 } as const;
 /** The one global choice of what a member may do without asking, named where the owner writes. */
 export function bindActionMode(button: HTMLElement): void {

@@ -184,3 +184,17 @@ async def test_room_draft_revisions_stay_in_their_room(wired):
     assert agent.service._drafts.store.get(second_id).subject == "Scheduling report"
     assert agent.service._drafts.store.get(first_id).turn_id == tasks[0].turn_id
     assert agent.service._drafts.store.open_in_chat(agent.service._drafts.store.get(first_id).holder_id, None) is None
+
+
+async def test_allow_all_still_asks_what_only_the_owner_knows(wired, client):
+    agent, background = wired
+    agent.settings.set("action_mode", "bypass")
+    client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday", "Tuesday"]}))]
+    await typed(agent, "Arrange a visit")
+    [turn] = await agent.turns()
+    [question] = turn["owner_questions"]
+    assert question["state"] == "asked" and turn["task"]["state"] == "waiting"
+    background.client.replies = [report("Scheduled.")]
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
+    await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
+    assert background.task(question["task_id"]).state == "done"

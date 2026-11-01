@@ -50,12 +50,17 @@ test("plus only attaches, and the permission mode is its own named control with 
  expect(pick).toHaveBeenCalledTimes(1);expect(document.querySelector("#app-popover")).toBeNull();
  view.el.querySelector<HTMLButtonElement>(".cmp-mode")!.click();await flush();
  const rows=[...document.querySelectorAll<HTMLElement>("#app-popover [data-value]")];
- expect(rows.map(row=>row.dataset.value)).toEqual(["direct","ask","plan"]);
+ expect(rows.map(row=>row.dataset.value)).toEqual(["direct","ask","plan","bypass"]);
  expect(rows.every(row=>row.querySelector(".mdesc")?.textContent)).toBe(true);
  api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "plan" } } : {});
  document.querySelector<HTMLButtonElement>('#app-popover [data-value="plan"]')!.click();await flush();
  expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"plan"});
  expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Plan");
+ api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "bypass" } } : {});
+ view.el.querySelector<HTMLButtonElement>(".cmp-mode")!.click();await flush();
+ document.querySelector<HTMLButtonElement>('#app-popover [data-value="bypass"]')!.click();await flush();
+ expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"bypass"});
+ expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Allow all");
 });
 test("voice records until manual Stop and learns an edited transcript only on send",async()=>{
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});

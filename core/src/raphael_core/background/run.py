@@ -768,7 +768,7 @@ class TaskRun:
                 }
                 self._gate.record_unrun(ref.key, outcome="blocked", task_id=self.task_id)
                 return reply, "blocked", now.name, None
-            if needs_yes(now >= Tier.T2, screening, firm=now >= Tier.T3):
+            if needs_yes(now >= Tier.T2 and not self._gate.full_permission, screening, firm=now >= Tier.T3):
                 if self.can_wait:
                     # The task pauses here; the service asks the owner (see the module).
                     self.waiting = Waiting(alias or ref.name, ref, dict(arguments), call_id, now, screening)

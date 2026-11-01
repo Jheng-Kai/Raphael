@@ -984,6 +984,12 @@ PLAN_MODE = (
     "\n<plan_mode>\nThe owner chose plan mode: change nothing yet. Look up what you need, then reply with a short numbered plan "
     "of what you would do, and stop there. Carry it out only after the owner has said yes to it in this conversation.\n</plan_mode>"
 )
+FULL_PERMISSION = (
+    "\n<full_permission>\nThe owner gave you every permission for this work and nothing waits for their yes. Do the whole job and "
+    "come back when it is done, with what came of it. Do not stop to confirm a step or to report progress. Ask the owner only "
+    "when you cannot go on without something only they know or can decide. Mail that is meant to go out, send rather than "
+    "draft.\n</full_permission>"
+)
 NEW_MEMBER = (
     "\n<new_member>\nYou were made a moment ago and have no job yet; your greeting has already asked the owner what you are for. "
     "If their message says what your job is, or what they want you to do for them from now on, then before you reply call the "

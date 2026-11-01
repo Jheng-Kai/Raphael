@@ -2397,7 +2397,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "permission-menu") {
     const rows = [...document.querySelectorAll("#app-popover [data-value]")];
-    require(rows.map(row => row.dataset.value).join() === "direct,ask,plan", "three modes");
+    require(rows.map(row => row.dataset.value).join() === "direct,ask,plan,bypass", "four modes");
     require(rows.every(row => row.querySelector(".mt")?.textContent.trim() && row.querySelector(".mdesc")?.textContent.trim()), "each says what it does");
     require(["left", "start"].includes(getComputedStyle(document.querySelector("#app-popover .menu-head")).textAlign), "the title stands on the left");
     require(new Set(rows.map(row => Math.round(row.querySelector(".mt").getBoundingClientRect().left))).size === 1, "the names line up on the left");

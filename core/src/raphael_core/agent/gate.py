@@ -96,6 +96,7 @@ class ToolGate:
             plugin_tier=None if plugins is None else plugins.tier_of,
             plugin_action_tier=getattr(plugins, "tier_for_call", None),
             ask_first=lambda name, tier: self.ask_first and tier > Tier.T0 and name != "ask_member",
+            full_permission=lambda: self.full_permission,
         )
         for name in (*WEB_TOOLS, *MEMORY_READ_TOOLS, *ATTACHMENT_TOOLS):
             self._registry.register(name, Tier.T0)
@@ -125,6 +126,12 @@ class ToolGate:
         """The owner reads a plan before anything is done. Whatever a model makes of that, the door still asks (`ask_first`)."""
         return self._settings is not None and self._settings.get("action_mode") == "plan"
 
+    @property
+    def full_permission(self) -> bool:
+        """The owner's 全部允許: nothing waits for a yes, and the work comes back done. What the owner forbade by a rule
+        stays forbidden, and only the owner can sign in or type a secret, so those still reach them."""
+        return self._settings is not None and self._settings.get("action_mode") == "bypass"
+
     # --- the registry ---------------------------------------------------------------------------
 
     def tier(self, name: str) -> Tier:
@@ -149,7 +156,7 @@ class ToolGate:
         for this computer (opening anything, the volume, the lock...) or a step of a run on the
         desktop when `worker` is true: those are for the user at the keyboard, never for a task
         that runs while they are away. A tool the owner said Always to (`waived`) needs no yes."""
-        if worker and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
+        if worker and not self.full_permission and (action.tool in COMMANDS or action.tool in COMPUTER_TIERS):
             raise NotApproved(action.tool)
         self._door(action, approval)
 
@@ -170,7 +177,8 @@ class ToolGate:
             if approval is None and self.waived(action):
                 return "user"
             raise
-        return "auto" if approval is None else "user"
+        # The owner's standing yes: a tool that takes only the owner's word is given it.
+        return "user" if self.full_permission or approval is not None else "auto"
 
     def waived(self, action: Action) -> bool:
         """Whether the owner said Always to this very tool (a narrow rule, `always_allow`) and it can be
@@ -223,6 +231,8 @@ class ToolGate:
         """What the owner's safety rules say of `proposed`, an action that changes something: PASS
         when there is no guard or no rule. Never raises but for a cancellation."""
         result = PASS if self._safety is None else await self._safety.screen(proposed, language=language, ledger=ledger)
+        if self.full_permission and result.verdict != "deny":
+            return PASS
         # Explicit denials win; a stored allow can never waive the owner's global quick switch, but for
         # the narrow rule the owner's own click made for this very tool (a rule that asks has won already).
         if self.ask_first and result.verdict != "deny":

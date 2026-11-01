@@ -90,7 +90,12 @@ class LocalTools:
     def tier_of(self, key):
         return Tier.T2 if key == tool_key("local", "local_exec") else Tier.T0 if is_local(key) else self.delegate.tier_of(key)
 
+    def _full_permission(self):
+        return self.settings.get("action_mode") == "bypass"
+
     def requires_approval(self, arguments):
+        if self._full_permission():
+            return False
         command = arguments.get("command", "")
         return (self.settings.get("local_commands_mode") != "always" or _CONTEXT.get()[1]
                 or any(p.search(command) for p in _DANGEROUS) or bool(_OPAQUE.search(command)))
@@ -128,7 +133,7 @@ class LocalTools:
             schema = JOB_SCHEMA if key.endswith("/local_job") else EXEC_SCHEMA
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
-            if not present or owner is None:
+            if (not present and not self._full_permission()) or owner is None:
                 return PluginResult(False, "presence_required", "Local commands need a card in a private conversation in the desktop app. A quick question, a group, a phone or Telegram cannot show one, so tell the owner to ask in a conversation.")
             if key.endswith("/local_job"):
                 job = self.jobs.get(arguments["job_id"])

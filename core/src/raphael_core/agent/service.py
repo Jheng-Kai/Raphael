@@ -171,7 +171,7 @@ from ..members.activity import Activity, member_turn, step as activity_step, too
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import COMPUTER_CHANGED, TOOLS_FOUND, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
-from .persona import NEW_MEMBER, PLAN_MODE
+from .persona import FULL_PERMISSION, NEW_MEMBER, PLAN_MODE
 from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
@@ -1769,6 +1769,8 @@ class AgentService:
                 system += NEW_MEMBER
             if self._gate.plan_first:
                 system += PLAN_MODE
+            if self._gate.full_permission:
+                system += FULL_PERMISSION
             if ask.exchange_speakers is not None:
                 system += "\nA colleague, another of the owner's assistants, asks you this for the owner. " + CONSULTED
             system += LEADERSHIP
@@ -1873,7 +1875,7 @@ class AgentService:
                         if screening.verdict == DENY:
                             loop.response = self._finish(ask, "answer", "negative", forbidden(ask.language, screening), ledger)
                             raise Stop("finished")
-                    if any(needs_yes((self._tier_now(planned) or Tier.T0) >= Tier.T2, screening,
+                    if not self._gate.full_permission and any(needs_yes((self._tier_now(planned) or Tier.T0) >= Tier.T2, screening,
                                      firm=(self._tier_now(planned) or Tier.T0) >= Tier.T3)
                            for (_, planned), screening in zip(batch, judged)):
                         loop.response = self.ask_in_background(ask, ledger)
@@ -2111,7 +2113,7 @@ class AgentService:
     async def _cli_permission(self, ask: _Ask, args: dict, ledger: Ledger, loop: CliLoop) -> ToolOutcome:
         if len(canonical(args)) > MAX_ARGUMENT_CHARS:
             return ToolOutcome(False, "bad_arguments")
-        if ask.source not in _AT_THIS_COMPUTER or ask.nested:
+        if not self._gate.full_permission and (ask.source not in _AT_THIS_COMPUTER or ask.nested):
             return ToolOutcome(False, "presence_required")
         if ask.declined:  # the owner said no in this request: the CLI's own actions wait for a new one
             return ToolOutcome(False, "declined", instruction=DECLINED_NOTE)
@@ -2119,6 +2121,9 @@ class AgentService:
         if screening.verdict == DENY:
             self._gate.record_unrun("cli_permission", outcome="denied")
             return ToolOutcome(False, "blocked")
+        if self._gate.full_permission:
+            self._gate.record_builtin("cli_permission", outcome="ok", approver="user")
+            return ToolOutcome(True, None)
         operation = args.get("command") or args.get("tool_name") or (args.get("toolCall") or {}).get("title") or args.get("method", "CLI action")
         shown = {"operation": operation, "details": args}
         call = PlannedCall(PluginTool("cli_permission", BUILTIN_SERVER, "cli_permission", "CLI native action", {}, Tier.T2), shown)
@@ -2352,7 +2357,7 @@ class AgentService:
         """Make the picked calls that need no yes, together, and add their results to `results`.
         If a call needs a yes the answer waits for it: that is the question to return instead, for
         the first such call; any others are not made (one question to a turn)."""
-        if self._drafts is not None and ask.speaker.draft_first:
+        if self._drafts is not None and ask.speaker.draft_first and not self._gate.full_permission:
             # This speaker writes mail as a draft for the owner to send (`email_draft`); a call of a tool that
             # sends it is not made, whatever the owner's rules say of sending (they still have the last word
             # over the speakers that may send).
@@ -2407,7 +2412,7 @@ class AgentService:
                 ask.admin_pending.append(call)
                 ask.admin_screenings.append(screening)
                 continue
-            if tier is not None and needs_yes(tier >= Tier.T2, screening, firm=tier >= Tier.T3):
+            if tier is not None and not self._gate.full_permission and needs_yes(tier >= Tier.T2, screening, firm=tier >= Tier.T3):
                 asking.append((call, screening))
             else:
                 automatic.append(call)
