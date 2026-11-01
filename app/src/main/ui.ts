@@ -115,6 +115,11 @@ export const tg = (on: boolean, label: string, attrs = ""): string =>
 export interface Choice {
   value: string;
   label: string;
+  /** A quiet section heading; headings never participate in option navigation. */
+  group?: string;
+  /** Packaging provenance, shown as small print under the description. */
+  source?: string;
+  aliases?: readonly string[];
   /**
    * What the closed dropdown shows when the label is too long for it (a microphone's driver in
    * brackets): the menu lists the label, and the dropdown's tooltip has it too.
@@ -407,7 +412,7 @@ function listenForMenuEvents(): void {
   if (menuListening) return;
   menuListening = true;
   document.addEventListener("keydown", (e) => {
-    if (!menu) return;
+    if (!menu || e.isComposing || e.keyCode === 229) return;
     if (menu.onKey?.(e)) {
       e.preventDefault();
       return;
@@ -663,8 +668,20 @@ export function openMenu(
   onPick: (value: string) => void,
   head?: string,
   actions: readonly MenuAction[] = [],
-  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean },
+  placement?: Pick<PopoverOptions, "placement" | "anchorRect"> & { selectionIndicator?: boolean; /** `false`: the focus stays where it is (a field an input method is composing in). */ focus?: boolean; completion?: boolean; className?: string; pageSize?: number },
 ): void {
+  if (placement?.pageSize && options.length > placement.pageSize) {
+    const pageSize = placement.pageSize;
+    const draw = (page: number): void => {
+      const start = page * pageSize;
+      openMenu(anchor, options.slice(start, start + pageSize), current, onPick, head, [
+        ...(page ? [{ label: t("completion.previous"), run: () => draw(page - 1) }] : []),
+        ...(start + pageSize < options.length ? [{ label: t("completion.next"), run: () => draw(page + 1) }] : []),
+        ...actions,
+      ], { ...placement, pageSize: undefined });
+    };
+    draw(0); return;
+  }
   const active = document.activeElement as HTMLElement | null;
   const again = menu && (menu.anchor === anchor || (!menu.anchor.isConnected && menu.anchor.dataset.k === anchor.dataset.k)) &&
     active && menu.el.contains(active) ? active : null;
@@ -674,13 +691,15 @@ export function openMenu(
     (head ? `<div class="menu-head" aria-hidden="true">${esc(head)}</div>` : "") +
     options
       .map(
-        (o) =>
-          `<button type="button" role="menuitemradio" tabindex="-1" data-value="${esc(o.value)}" aria-checked="${o.value === current}"` +
+        (o, index) =>
+          (o.group && o.group !== options[index - 1]?.group ? `<div class="menu-head" aria-hidden="true">${esc(o.group)}</div>` : "") +
+          `<button type="button" class="menu-choice" role="${placement?.completion ? "option" : "menuitemradio"}" tabindex="-1" data-value="${esc(o.value)}" ${placement?.completion ? `aria-selected="false" aria-posinset="${index + 1}" aria-setsize="${options.length}"` : `aria-checked="${o.value === current}"`}` +
           `${o.title ? ` title="${esc(o.title)}"` : ""}>` +
           (o.lead ? `<span class="mlead" aria-hidden="true">${o.lead}</span>` : "") +
           (o.desc
-            ? `<span class="mtd"><span class="mt">${esc(o.label)}</span><span class="mdesc">${esc(o.desc)}</span></span>`
+            ? `<span class="mtd"><span class="mt">${esc(o.label)}</span><span class="mdesc">${esc(o.desc)}</span>${o.source ? `<small class="msource">${esc(o.source)}</small>` : ""}</span>`
             : `<span class="mt">${esc(o.label)}</span>`) +
+          (!o.desc && o.source ? `<small class="msource">${esc(o.source)}</small>` : "") +
           (o.tag ? `<span class="mtag">${esc(o.tag)}</span>` : "") +
           (o.detail ? `<span class="md num">${esc(o.detail)}</span>` : "") +
           (placement?.selectionIndicator === false ? "" : `<span class="ck">${o.value === current ? CHECK : ""}</span>`) +
@@ -691,16 +710,49 @@ export function openMenu(
     actions
       .map(
         (a, i) =>
-          `<button type="button" role="menuitem" tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<button type="button" role="${placement?.completion ? "option" : "menuitem"}"${placement?.completion ? ' aria-selected="false"' : ""} tabindex="-1" class="menu-action" data-action="${i}"${a.busy ? ' aria-disabled="true"' : ""}${a.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
           `<span class="ck">${a.icon ? ico(a.icon) : ""}</span><span class="mtd"><span class="mt">${esc(a.label)}</span>${a.desc ? `<span class="mdesc">${esc(a.desc)}</span>` : ""}</span>${a.submenu ? ico("right") : ""}</button>`,
       )
       .join("");
   const el = openPopover(anchor, html, {
-    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}`,
     ...placement,
-    role: "menu",
+    className: `menu${detailed ? " detailed" : ""}${described ? " described" : ""}${placement?.placement === "beside" ? " menu-submenu" : ""}${placement?.completion ? " completion-menu" : ""}${placement?.className ? " " + placement.className : ""}`,
+    role: placement?.completion ? "listbox" : "menu",
     label: anchor.getAttribute("aria-label") ?? undefined,
+    onClose: placement?.completion ? () => { anchor.removeEventListener("keydown", completionKey, true); anchor.removeAttribute("aria-activedescendant"); } : undefined,
   });
+  if (placement?.completion && options.length > 1 && el.scrollHeight > el.clientHeight + 1) {
+    const rowHeight = Math.max(34, ...[...el.querySelectorAll("button")].map(row => row.getBoundingClientRect().height));
+    const headingsHeight = [...el.querySelectorAll(".menu-head")].reduce((height, head) => height + (head.getBoundingClientRect().height || 24) + 4, 0);
+    const pageSize = Math.max(1, Math.min(8, options.length - 1, Math.floor((el.clientHeight - headingsHeight - 34 * (actions.length + 2) - 16) / rowHeight)));
+    openMenu(anchor, options, current, onPick, head, actions, { ...placement, pageSize });
+    return;
+  }
+  let selected = 0;
+  const buttons = [...el.querySelectorAll<HTMLButtonElement>("button")];
+  function highlight(): void {
+    buttons.forEach((button, index) => {
+      button.id = `completion-${index}`;
+      if (button.hasAttribute("aria-selected")) button.setAttribute("aria-selected", String(index === selected));
+      button.setAttribute("aria-posinset", String(index + 1)); button.setAttribute("aria-setsize", String(buttons.length));
+      button.classList.toggle("is-active", index === selected);
+    });
+    if (buttons[selected]) anchor.setAttribute("aria-activedescendant", buttons[selected].id);
+  }
+  function completionKey(event: KeyboardEvent): void {
+    if (event.isComposing || event.keyCode === 229 || !["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"].includes(event.key)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.key === "Escape") { closeMenu(); return; }
+    if (event.key === "Enter" || event.key === "Tab") { buttons[selected]?.click(); return; }
+    selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+    highlight();
+  }
+  if (placement?.completion) {
+    anchor.addEventListener("keydown", completionKey, true);
+    el.addEventListener("pointerdown", event => event.preventDefault());
+    buttons.forEach((button, index) => button.addEventListener("pointermove", () => { selected = index; highlight(); }));
+    highlight();
+  }
   // The menu is only so wide (styles.css): a label it cuts short has its whole text as a tooltip.
   el.querySelectorAll<HTMLElement>("button").forEach((button) => {
     const label = button.querySelector<HTMLElement>(".mt");
@@ -723,7 +775,18 @@ export function openMenu(
   // action by its place.
   const remembered = again === null ? null : Array.from(el.querySelectorAll<HTMLElement>("button")).find((button) =>
     again.dataset.action !== undefined ? button.dataset.action === again.dataset.action : button.dataset.value === again.dataset.value);
-  if (placement?.focus !== false) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
+  if (placement?.focus !== false && !placement?.completion) (remembered ?? el.querySelector<HTMLElement>('[aria-checked="true"]') ?? el.querySelector<HTMLElement>("button") ?? el).focus();
+}
+
+/** Stable exact, prefix, then substring matches within each section, including alternate names. */
+export function matchingChoices(options: Choice[], query: string): Choice[] {
+  const needle = query.toLocaleLowerCase();
+  const score = (choice: Choice): number => Math.min(...[choice.value, ...(choice.aliases ?? [])].map(value => {
+    const name = value.toLocaleLowerCase();
+    return name === needle ? 0 : name.startsWith(needle) ? 1 : name.includes(needle) ? 2 : Infinity;
+  }));
+  const groups = [...new Set(options.map(option => option.group))];
+  return groups.flatMap(group => options.filter(option => option.group === group && score(option) < Infinity).sort((a, b) => score(a) - score(b)));
 }
 
 /** The check mark of a chosen item: drawn, so that it is the same in every font; the `check` of ICON,

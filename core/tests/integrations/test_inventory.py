@@ -12,7 +12,7 @@ from raphael_core.connectors.google import scopes_for
 from raphael_core.connectors.service import COMPOSIO_SERVER, META, META_EXECUTE, ConnectorsService
 from raphael_core.connectors.store import Connector
 from raphael_core.integrations import inventory
-from raphael_core.integrations.config import ServerConfig, tool_record
+from raphael_core.integrations.config import ConfigStore, ServerConfig, tool_record
 from raphael_core.integrations.service import IntegrationsService
 from raphael_core.router import Router
 
@@ -117,6 +117,26 @@ def test_a_list_without_states_is_read_as_the_roster_always_read_it():
     assert [(app["id"], app["state"], app["tools"], app["connected"]) for app in read.apps] == [
         ("a", "ready", 2, True), ("b", "needs_sign_in", 0, False)]
     assert "never-public" not in str(read.wire())
+
+
+async def test_service_recency_uses_successful_audit_without_exposing_tools_or_payloads(hub, rpc, servers):
+    identifier = await add(rpc, servers, "Notes")
+    hub._audit.add(server="Notes", tool="synthetic_read", tier=None, approver="auto", outcome="ok")
+    result = await rpc.call("integrations.inventory")
+    app = next(app for app in result["apps"] if app["id"] == identifier)
+    assert app["last_used_at"] > 0
+    assert "synthetic_read" not in str(app)
+    assert snapshot(Team(hub), 0, "en").apps[0]["last_used_at"] == app["last_used_at"]
+
+
+async def test_successful_service_use_refreshes_the_composer_inventory(hub, rpc, servers, monkeypatch, tmp_path):
+    identifier = await add(rpc, servers, "Notes")
+    changed = []
+    monkeypatch.setattr(hub, "_notify_change", lambda: changed.append(True))
+    result = await hub.call(f"mcp:{identifier}/look", {"topic": "synthetic notes"}, approver="auto")
+    assert result.ok and changed
+    assert (await rpc.call("integrations.inventory"))["apps"][0]["last_used_at"] > 0
+    assert ConfigStore(tmp_path).get(identifier).last_used_at > 0
 
 
 # --- the count ------------------------------------------------------------------------------------------------

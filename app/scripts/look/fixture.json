@@ -1,4 +1,454 @@
 {
+  "mentionServices": [
+    {
+      "id": "demo-00",
+      "name": "Notebook 00",
+      "enabled": true,
+      "state": "needs_sign_in",
+      "tools": 25,
+      "connected": false,
+      "aliases": [
+        "notes",
+        "archive-0"
+      ],
+      "last_used_at": 0,
+      "plugin": ""
+    },
+    {
+      "id": "demo-01",
+      "name": "Notebook 01",
+      "enabled": true,
+      "state": "needs_secret",
+      "tools": 25,
+      "connected": false,
+      "aliases": [
+        "notes",
+        "archive-1"
+      ],
+      "last_used_at": 1,
+      "plugin": ""
+    },
+    {
+      "id": "demo-02",
+      "name": "Notebook 02",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-2"
+      ],
+      "last_used_at": 2,
+      "plugin": ""
+    },
+    {
+      "id": "demo-03",
+      "name": "Notebook 03",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-3"
+      ],
+      "last_used_at": 3,
+      "plugin": ""
+    },
+    {
+      "id": "demo-04",
+      "name": "Notebook 04",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-4"
+      ],
+      "last_used_at": 4,
+      "plugin": ""
+    },
+    {
+      "id": "demo-05",
+      "name": "Notebook 05",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-5"
+      ],
+      "last_used_at": 5,
+      "plugin": ""
+    },
+    {
+      "id": "demo-06",
+      "name": "Notebook 06",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-6"
+      ],
+      "last_used_at": 6,
+      "plugin": ""
+    },
+    {
+      "id": "demo-07",
+      "name": "Notebook 07",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-7"
+      ],
+      "last_used_at": 7,
+      "plugin": ""
+    },
+    {
+      "id": "demo-08",
+      "name": "Notebook 08",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-8"
+      ],
+      "last_used_at": 8,
+      "plugin": ""
+    },
+    {
+      "id": "demo-09",
+      "name": "Notebook 09",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-9"
+      ],
+      "last_used_at": 9,
+      "plugin": ""
+    },
+    {
+      "id": "demo-10",
+      "name": "Notebook 10",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-10"
+      ],
+      "last_used_at": 10,
+      "plugin": ""
+    },
+    {
+      "id": "demo-11",
+      "name": "Notebook 11",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-11"
+      ],
+      "last_used_at": 11,
+      "plugin": ""
+    },
+    {
+      "id": "demo-12",
+      "name": "Notebook 12",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-12"
+      ],
+      "last_used_at": 12,
+      "plugin": ""
+    },
+    {
+      "id": "demo-13",
+      "name": "Notebook 13",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-13"
+      ],
+      "last_used_at": 13,
+      "plugin": ""
+    },
+    {
+      "id": "demo-14",
+      "name": "Notebook 14",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-14"
+      ],
+      "last_used_at": 14,
+      "plugin": ""
+    },
+    {
+      "id": "demo-15",
+      "name": "Notebook 15",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-15"
+      ],
+      "last_used_at": 15,
+      "plugin": ""
+    },
+    {
+      "id": "demo-16",
+      "name": "Notebook 16",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-16"
+      ],
+      "last_used_at": 16,
+      "plugin": ""
+    },
+    {
+      "id": "demo-17",
+      "name": "Notebook 17",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-17"
+      ],
+      "last_used_at": 17,
+      "plugin": ""
+    },
+    {
+      "id": "demo-18",
+      "name": "Notebook 18",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-18"
+      ],
+      "last_used_at": 18,
+      "plugin": ""
+    },
+    {
+      "id": "demo-19",
+      "name": "Notebook 19",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-19"
+      ],
+      "last_used_at": 19,
+      "plugin": ""
+    },
+    {
+      "id": "demo-20",
+      "name": "Notebook 20",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-20"
+      ],
+      "last_used_at": 20,
+      "plugin": ""
+    },
+    {
+      "id": "demo-21",
+      "name": "Notebook 21",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-21"
+      ],
+      "last_used_at": 21,
+      "plugin": ""
+    },
+    {
+      "id": "demo-22",
+      "name": "Notebook 22",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-22"
+      ],
+      "last_used_at": 22,
+      "plugin": ""
+    },
+    {
+      "id": "demo-23",
+      "name": "Notebook 23",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-23"
+      ],
+      "last_used_at": 23,
+      "plugin": ""
+    },
+    {
+      "id": "demo-24",
+      "name": "Notebook 24",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-24"
+      ],
+      "last_used_at": 24,
+      "plugin": ""
+    },
+    {
+      "id": "demo-25",
+      "name": "Notebook 25",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-25"
+      ],
+      "last_used_at": 25,
+      "plugin": ""
+    },
+    {
+      "id": "demo-26",
+      "name": "Notebook 26",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-26"
+      ],
+      "last_used_at": 26,
+      "plugin": ""
+    },
+    {
+      "id": "demo-27",
+      "name": "Notebook 27",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-27"
+      ],
+      "last_used_at": 27,
+      "plugin": ""
+    },
+    {
+      "id": "demo-28",
+      "name": "Notebook 28",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-28"
+      ],
+      "last_used_at": 28,
+      "plugin": ""
+    },
+    {
+      "id": "demo-29",
+      "name": "Notebook 29",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-29"
+      ],
+      "last_used_at": 29,
+      "plugin": ""
+    },
+    {
+      "id": "demo-30",
+      "name": "Notebook 30",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-30"
+      ],
+      "last_used_at": 30,
+      "plugin": ""
+    },
+    {
+      "id": "demo-31",
+      "name": "Notebook 31",
+      "enabled": true,
+      "state": "ready",
+      "tools": 25,
+      "connected": true,
+      "aliases": [
+        "notes",
+        "archive-31"
+      ],
+      "last_used_at": 31,
+      "plugin": "Field Notes"
+    }
+  ],
   "ownerQuestionCard": {
     "id": "owner-choice", "task_id": 940, "turn_id": 940, "member_id": 1,
     "kind": "ask_owner", "card_id": "", "question": "整理完成了。你希望哪一天寄出這份報告？",

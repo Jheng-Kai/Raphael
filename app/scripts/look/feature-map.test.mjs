@@ -12,7 +12,7 @@ const readMap = file => {
   const staged = resolve(root, ".fold/.agents/skills/verify-raphael", file);
   return readFileSync(existsSync(staged) ? staged : resolve(skill, file), "utf8");
 };
-const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding"];
+const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "composer-discovery"];
 
 describe("maintained verification feature map", () => {
   it("uses explicit modifier fields instead of unsupported Puppeteer key chords", () => {

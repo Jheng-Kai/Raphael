@@ -4,6 +4,14 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "completion.members": "Members",
+  "completion.groups": "Groups",
+  "completion.services": "Connected services",
+  "completion.commands": "Commands",
+  "completion.skills": "Skills",
+  "completion.all": "Show all {count}",
+  "completion.previous": "Previous",
+  "completion.next": "Next",
   "teach.start": "Teach a task",
   "missing.memberComputer": "Teaching needs this member's own computer. Choose a separate computer per member in computer settings.",
   "teach.stop": "Stop recording",
@@ -1502,7 +1510,6 @@ export const en = {
   "members.profile.retry": "Retry",
   "members.profile.noRoutines": "No routines yet",
   "members.profile.instructionsCount": "{count} / {max}",
-  "members.profile.slashCommands": "Member commands",
   "members.sidePin": "Pin",
   "members.sideUnpin": "Unpin",
   "members.sideUnread": "Mark unread",

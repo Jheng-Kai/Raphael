@@ -504,6 +504,11 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .menu .mtd .mt { white-space: normal; }
 .menu .mdesc { font-size: var(--fs-xs); line-height: 1.4; color: var(--text-3); text-wrap: pretty; }
 .menu-head { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); color: var(--text-3); text-align: left; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-1); }
+.completion-menu { overflow-y: hidden; }
+.completion-menu button.is-active { background: var(--hover); }
+.completion-menu button:hover:not(.is-active) { background: transparent; }
+.completion-menu .mdesc, .completion-menu .mtd .mt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu .msource { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-xs); color: var(--text-3); }
 /* An item that does something rather than choose (「重新搜尋麥克風」), after a line under the choices. */
 .menu-sep { height: 1px; margin: var(--sp-1) var(--sp-1); background: var(--line); }
 .menu .menu-action { color: var(--text); }

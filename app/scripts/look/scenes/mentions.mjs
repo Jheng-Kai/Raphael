@@ -7,8 +7,26 @@ const field = ".composer .cmp-input";
 const pick = name => [wait("#app-popover[data-team-mentions]"), click(`#app-popover [data-value="${name}"]`)];
 const words = [type(field, "請用 @"), ...pick("Notion"), type(field, "請用 @Notion 整理這份報告，再問 @"), ...pick("小森")];
 const chipped = [type(field, "@"), ...pick("Notion")];
+const discovery = {
+  mentionMany: true,
+  commands: [{ id: 61, member_id: 0, name: "review", description: "整理研究重點", template: "Review {input}" }],
+  skills: [
+    { id: 71, member_id: 0, name: "outline", slash_name: "outline", description: "整理文章架構", enabled: true, source: "https://github.com/example/notes/blob/main/SKILL.md" },
+    { id: 72, member_id: 0, name: "review", slash_name: "field-notes:review", description: "核對資料來源", enabled: true, source: "plugin:Field Notes", plugin: "Field Notes" },
+    { id: 73, member_id: 0, name: "review", slash_name: "desk-notes:review", description: "核對會議摘要", enabled: true, source: "plugin:Desk Notes", plugin: "Desk Notes" },
+  ],
+};
+const before = check("completion-before");
 
 export default [
+  scene("completion-mentions", "Mention headings and five recent services from thirty-two connections", [before, type(field, "@"), wait("#app-popover"), check("completion-mentions")], discovery),
+  scene("completion-filtered", "Alias search ranks services and caps visible results", [before, type(field, "@notes"), wait("#app-popover"), check("completion-filtered")], discovery),
+  scene("completion-expanded", "Show all opens services in place with bounded pages", [before, type(field, "@"), wait("#app-popover .menu-action"), click("#app-popover .menu-action"), check("completion-expanded")], discovery),
+  scene("completion-expanded-last", "Every service is reachable, including sign-in and key states", [before, type(field, "@"), wait("#app-popover .menu-action"), click("#app-popover .menu-action"), ...Array.from({ length: 3 }, () => click('#app-popover button[data-action]:last-child')), check("completion-expanded-last")], discovery),
+  scene("completion-group", "Group mentions limit members while retaining connected services", [room(1), before, type("#room-message", "@"), wait("#app-popover"), check("completion-group")], discovery),
+  scene("completion-slash", "Member commands and skills use the same grouped menu", [before, type(field, "/"), wait(".slash-menu"), check("completion-slash")], discovery),
+  scene("completion-plugin", "Plugin skill keeps its quiet source and description", [before, type(field, "/field"), wait(".slash-menu"), check("completion-plugin")], discovery),
+  scene("completion-clash", "Clashing names stay separate through selection", [before, type(field, "/review"), wait(".slash-menu"), check("completion-clash"), key("ArrowDown"), key("Tab"), check("completion-picked")], discovery),
   // The double @ of a Chinese input method: composing the @ typed it twice (a menu that took the focus ended the composition).
   scene("mention-ime-open", "The mention menu is drawn while the @ is still being composed, and the field keeps the focus",
     [ime(field, [{ compose: "@" }]), wait("#app-popover[data-team-mentions]"), check("mention-ime-open")], apps),

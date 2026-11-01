@@ -101,6 +101,7 @@ class ServerConfig:
     result_size_limit: int = DEFAULT_RESULT_SIZE
     managed_by: str = ""
     header_refs: dict[str, str] = field(default_factory=dict)
+    last_used_at: int = 0
 
     def tool(self, name: str) -> ToolRecord | None:
         return next((tool for tool in self.tools if tool.name == name), None)
@@ -305,6 +306,7 @@ def _server_to_json(server: ServerConfig) -> dict[str, Any]:
         "result_size_limit": server.result_size_limit,
         "managed_by": server.managed_by,
         "header_refs": server.header_refs,
+        **({"last_used_at": server.last_used_at} if server.last_used_at else {}),
     }
 
 
@@ -337,6 +339,7 @@ def _server_from_json(raw: Any) -> ServerConfig | None:
         revocation_url=raw["revocation_url"] if isinstance(raw.get("revocation_url"), str) else "",
         managed_by=raw.get("managed_by") if raw.get("managed_by") in ("composio", "google") else "",
         header_refs={"x-api-key": "connectors:composio:key"} if raw.get("managed_by") == "composio" else {},
+        last_used_at=raw["last_used_at"] if type(raw.get("last_used_at")) is int else 0,
     )
     checked = raw.get("tools_checked_at_ms")
     limit = raw.get("result_size_limit", DEFAULT_RESULT_SIZE)

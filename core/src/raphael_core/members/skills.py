@@ -2,9 +2,47 @@
 
 import json
 import re
+from contextlib import nullcontext
 from datetime import datetime
 
 from ..bots.homes import HomeError, digest
+
+
+def skill_plugin(text, source=""):
+    """Packaging is metadata, never a capability or authority."""
+    if source.startswith("plugin:"):
+        return source[7:].strip()[:100]
+    front = text[:4096].split("---", 2)
+    match = re.search(r"^plugin:[ \t]*([^\r\n]+)$", front[1], re.M) if len(front) == 3 and not front[0].strip() else None
+    return match[1].strip().strip("\"'")[:100] if match else ""
+
+
+def slash_part(name):
+    return re.sub(r"[^\w-]+", "-", name.casefold()).strip("-") or "skill"
+
+
+def stored_skill_name(name, plugin):
+    # Keep packaging namespaces inside the existing table's unique member/name identity.
+    return f"{plugin}:{name}" if plugin else name
+
+
+def slash_skills(skills, commands):
+    """One stable namespace for discovery and execution, scoped to this member."""
+    counts = {}
+    for item in [*commands, *[skill for skill in skills if skill["enabled"]]]:
+        name = slash_part(item["name"])
+        counts[name] = counts.get(name, 0) + 1
+    used = {command["name"].casefold() for command in commands}
+    result = []
+    for skill in skills:
+        name = slash_part(skill["name"])
+        token = f"{slash_part(skill.get('plugin') or 'skill')}:{name}" if counts.get(name, 0) > 1 else name
+        if token in used:
+            token += f"-{skill['id']}"
+        if skill["enabled"]:
+            used.add(token)
+        result.append({**skill, "slash_name": token})
+    return result
 
 
 class GrowingSkills:
@@ -24,7 +62,14 @@ class GrowingSkills:
                     updated = datetime.strptime(entry["id"].split("-")[0], "%Y%m%dT%H%M%S%f").isoformat()
                     break
         provenance = previous.get("provenance") or (skill["source"] if skill["source"] in ("learned", "owner") else "imported")
-        return {**skill, "provenance": provenance,
+        with path.open(encoding="utf-8") if path.exists() else nullcontext(None) as document:
+            metadata = document.read(4096) if document else ""
+            plugin = skill_plugin(metadata, skill["source"])
+        name = skill["name"]
+        if plugin and metadata:
+            from .capabilities import skill_metadata
+            name = skill_metadata(metadata)[0]
+        return {**skill, "name": name, **({"plugin": plugin} if plugin else {}), "provenance": provenance,
                 "revision": revision,
                 "learned_at": previous.get("learned_at") or (updated if provenance == "learned" else None),
                 "updated_at": updated}
@@ -54,7 +99,8 @@ class GrowingSkills:
         name, _ = skill_metadata(redact_secrets(text))
         identifier = args.get("id")
         skills = self.skills(member_id)
-        if any(s["id"] != identifier and s["name"].casefold() == name.casefold() for s in skills):
+        source = next((s["source"] for s in skills if s["id"] == identifier), "")
+        if any(s["id"] != identifier and s["name"].casefold() == name.casefold() and s.get("plugin", "").casefold() == skill_plugin(text, source).casefold() for s in skills):
             raise HomeError("a skill with that name already exists")
         if identifier is None and len(skills) >= MAX_SKILLS:
             raise HomeError("member skill limit reached")
@@ -140,7 +186,7 @@ class GrowingSkills:
         with self.conn:
             self.conn.execute("DELETE FROM member_skills WHERE member_id = ?", (member_id,))
             self.conn.executemany("INSERT INTO member_skills(id,member_id,name,description,enabled,source) VALUES (?,?,?,?,?,?)",
-                                 [(s["id"], member_id, s["name"], s["description"], s["enabled"], s["source"]) for s in restored])
+                                 [(s["id"], member_id, stored_skill_name(s["name"], s.get("plugin")), s["description"], s["enabled"], s["source"]) for s in restored])
         self._mirror(member_id, {s["id"]: {key: s.get(key) for key in ("provenance", "learned_at")} for s in restored})
 
     def reference_hashes(self, member_id, identifier):

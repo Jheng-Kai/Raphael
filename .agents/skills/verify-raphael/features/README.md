@@ -516,3 +516,7 @@ See [Dictation](dictation.md#passive-control-hit-regions-2026-11-01) for R-UI-70
 physical hit rectangles, held-button release, revision invalidation and the selected
 existing overlay/learned scene matrix. Cargo, native and automated judge are
 explicitly prohibited by this brief; fixture acceptance does not prove OS clicks.
+# Composer discovery (2026-11-01)
+
+[Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths. This updated map is staged under `.fold` because `.agents` is protected.
+

@@ -697,6 +697,19 @@ class ConnectorsService:
                         and permitted(name, scopes_for(entry.gmail, entry.calendar), entry.draft_only))
         return False
 
+    def record_used(self, server_id, name, arguments, at_ms):
+        if server_id == GOOGLE_SERVER:
+            entries = [self.store.connectors["google"]] if "google" in self.store.connectors else []
+        elif server_id == COMPOSIO_SERVER and name == META_EXECUTE:
+            slugs = {call.get("tool_slug") for call in arguments.get("tools", [])}
+            entries = [entry for entry in self.store.connectors.values() if entry.kind == "composio" and slugs.intersection(entry.enabled_tools)]
+        else:
+            entries = []
+        for entry in entries:
+            entry.last_used_at = at_ms
+        if entries:
+            self.store.save()
+
     def ready_tools_of(self, entry: Connector) -> list[str]:
         """The tools of one connector that a call can reach now: those the gate itself lets through
         (`tool_available`, `allow_call`) when the connector is signed in, on, and its server is on. The count

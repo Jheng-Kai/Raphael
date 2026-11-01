@@ -51,6 +51,10 @@ class AuditLog:
         self._conn = conn
         self._now_ms = now_ms
 
+    def last_used(self) -> dict[str, int]:
+        return {row["server"]: row["at_ms"] for row in self._conn.execute(
+            "SELECT server, max(at_ms) AS at_ms FROM tool_audit WHERE outcome = 'ok' GROUP BY server")}
+
     def add(
         self,
         *,

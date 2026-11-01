@@ -654,6 +654,11 @@ class IntegrationsService:
         entries = [self._server_entry(server) for server in self._config.servers() if not server.managed_by]
         if self.managed is not None:
             entries += [self._managed_entry(entry) for entry in self.managed.store.connectors.values()]
+        recent = self._audit.last_used()
+        for entry in entries:
+            at = entry.get("last_used_at", 0) or recent.get(entry["name"], 0)
+            if at:
+                entry["last_used_at"] = at
         return mark_duplicates(entries)
 
     def _server_entry(self, server: ServerConfig) -> dict[str, Any]:
@@ -662,7 +667,9 @@ class IntegrationsService:
         tools = sum(1 for tool in server.tools if server.tool_on(tool)) if server.enabled else 0
         return {"id": server.id, "name": server.name, "enabled": server.enabled, "status": status, "error": failure,
                 "tools": tools, "state": app_state(enabled=server.enabled, status=status, error=failure, tools=tools),
-                "services": [server.catalog_id] if server.catalog_id else [], "source": None}
+                "services": [server.catalog_id] if server.catalog_id else [], "source": None,
+                **({"last_used_at": server.last_used_at} if server.last_used_at else {}),
+                **({"plugin": entry.name} if server.catalog_id and (entry := catalog.find(server.catalog_id)) else {})}
 
     def _managed_entry(self, entry: Any) -> dict[str, Any]:
         """A Composio toolkit or the owner's own Google, by what the gate would let through now."""
@@ -681,7 +688,8 @@ class IntegrationsService:
         return {"id": entry.id, "name": name, "enabled": entry.enabled, "status": status, "error": error,
                 "tools": len(ready),
                 "state": app_state(enabled=entry.enabled, status=status, error=error, tools=len(ready), waiting=waiting),
-                "services": services, "source": entry.kind}
+                "services": services, "source": entry.kind,
+                **({"last_used_at": entry.last_used_at} if entry.last_used_at else {})}
 
     async def _inventory(self, params: dict) -> dict:
         return read_inventory(self.connections).wire()
@@ -857,6 +865,7 @@ class IntegrationsService:
     ) -> PluginResult:
         server_name, tool_name = self._names(key)
         usable = self._usable(key)
+        recovering = False
 
         def end(outcome: str, result: PluginResult) -> PluginResult:
             self._audit.add(
@@ -867,6 +876,17 @@ class IntegrationsService:
                 outcome=outcome,
                 task_id=task_id,
             )
+            if outcome == "ok" and usable is not None:
+                try:
+                    if usable[0].managed_by and self.managed:
+                        self.managed.record_used(usable[0].id, tool_name, arguments, self._now_ms())
+                    elif self._config.get(usable[0].id) is usable[0]:
+                        usable[0].last_used_at = self._now_ms()
+                        self._config.save()
+                except OSError as exc:
+                    logger.warning("Could not keep connection recency: %s", type(exc).__name__)
+            if outcome == "ok" and not recovering:
+                self._changed()
             return result
 
         if usable is None:
@@ -907,6 +927,7 @@ class IntegrationsService:
             self._fail(server.id, failure.kind)
             result = PluginResult(False, failure.kind)
             return end("timeout" if failure.kind == "timeout" else "error", result)
+        recovering = server.id in self._failure
         self._recover(server.id)
         if self._config.get(server.id) is server:
             # The server describes tools differently now: they are kept as they are (and stay on).

@@ -64,6 +64,61 @@ export function checkRendered(name, context = {}) {
     if (name === 'login-saved') require(!card.querySelector('input') && window.__look.calls.filter(call=>call.method==='integrations.card_save').length===1, 'save clears both fields in one call');
     return {check:name};
   }
+  if (name.startsWith('completion-')) {
+    const input = [...document.querySelectorAll('.composer textarea')].find(visible);
+    require(input, 'the real composer is visible');
+    if (name === 'completion-before') {
+      window.__look.completionComposerBottom = input.closest('.composer').getBoundingClientRect().bottom;
+      return {check:name};
+    }
+    if (name === 'completion-picked') {
+      require(input.value === '/field-notes:review ' && !document.querySelector('#app-popover'), 'Tab inserts the distinct skill token and closes the menu');
+      return {check:name, value:input.value};
+    }
+    const menu = document.querySelector('#app-popover'), box = menu?.getBoundingClientRect();
+    require(visible(menu), 'the shared completion menu is visible');
+    require(getComputedStyle(menu).position === 'fixed', 'completion is outside composer layout');
+    if (window.__look.completionComposerBottom !== undefined) require(Math.abs(input.closest('.composer').getBoundingClientRect().bottom - window.__look.completionComposerBottom) <= 1, 'the menu never pushes the composer');
+    require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= 32 && box.bottom <= innerHeight - 8, 'the menu stays inside the window');
+    require(menu.scrollHeight <= menu.clientHeight + 1 && getComputedStyle(menu).overflowY !== 'auto', 'all rows fit without an inner scrollbar');
+    const rows = [...menu.querySelectorAll('[data-value]')], values = rows.map(row => row.dataset.value);
+    const heads = [...menu.querySelectorAll('.menu-head')].map(head => head.textContent);
+    const painted = [...menu.querySelectorAll('button')].filter(row => !['rgba(0, 0, 0, 0)', 'transparent'].includes(getComputedStyle(row).backgroundColor));
+    require(painted.length <= 1, 'pointer and keyboard never paint two active rows');
+    require(painted.every(row => row.classList.contains('is-active')), 'the painted row is the keyboard selection');
+    require(!menu.querySelector('.menu-head[tabindex], .menu-head[role="option"]'), 'headings are not options or focus targets');
+    require(document.activeElement === input, 'completion keeps the input focus');
+    for (const row of rows) {
+      require(row.getBoundingClientRect().top >= box.top && row.getBoundingClientRect().bottom <= box.bottom, 'every option is visible');
+      require(!row.querySelector('.ck'), 'completion shares the ordinary row without a check column');
+      if (row.dataset.value?.startsWith('Notebook')) {
+        const tag = row.querySelector('.mtag')?.textContent ?? null;
+        const expected = row.dataset.value === 'Notebook 00' ? '需要登入' : row.dataset.value === 'Notebook 01' ? '需要金鑰' : null;
+        require(tag === expected, 'services only tag sign-in or key requirements');
+      }
+    }
+    if (name === 'completion-mentions' || name === 'completion-group') {
+      require(heads.join('|') === (name === 'completion-group' ? '成員|連接的服務' : '成員|群組|連接的服務'), 'sections follow owner order');
+      require(values.filter(value => value.startsWith('Notebook')).join('|') === [31,30,29,28,27].map(i=>`Notebook ${i}`).join('|'), 'only the five most recent ready services show');
+      require(menu.textContent.includes('顯示全部 32 個'), 'show all is a real action with the full count');
+      if (name === 'completion-group') {
+        const data = window.__look.data, allowed = data.rooms.find(room => room.id === 1).member_ids;
+        require(data.members.filter(member => !allowed.includes(member.id)).every(member => !values.includes(member.name)) && data.groups.every(group => !values.includes(group.name)), 'group membership limits mentions');
+      }
+    } else if (name === 'completion-filtered') {
+      require(values.length === 8 && heads.join('|') === '連接的服務', 'aliases filter across sections with eight results');
+    } else if (name === 'completion-expanded' || name === 'completion-expanded-last') {
+      require(values.length === 8 && heads.join('|') === '連接的服務' && input.value === '@', 'show all opens bounded service pages in place');
+      if (name.endsWith('-last')) require(values.includes('Notebook 00') && menu.textContent.includes('需要登入') && menu.textContent.includes('需要金鑰'), 'unready services follow ready services and keep their tags');
+    } else {
+      require(rows.every(row => row.querySelector('.mdesc')?.textContent), 'commands and skills have descriptions');
+      if (name === 'completion-slash' || name === 'completion-clash') require(heads.join('|') === '指令|技能', 'commands and skills have separate headings');
+      if (name === 'completion-plugin') require(heads.join('|') === '技能' && menu.querySelector('.msource')?.textContent === 'Field Notes', 'the plugin is quiet small print, never a section');
+      if (name === 'completion-clash') require(values.join('|') === 'review|field-notes:review|desk-notes:review', 'clashes show qualified plugin names');
+    }
+    require(!/MCP|toolkit/.test(menu.textContent), 'implementation kinds never appear in discovery');
+    return {check:name, headings:heads, values, box:{x:box.x,y:box.y,width:box.width,height:box.height}};
+  }
   if (name.startsWith('teach-')) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);

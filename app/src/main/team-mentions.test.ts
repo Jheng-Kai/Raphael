@@ -96,3 +96,71 @@ test("a composer's field gets the menu and the chips together", () => {
   expect(document.querySelectorAll(".cmp-mirror .mention-chip")).toHaveLength(1);
   mentions.refresh();
 });
+
+test.each([['ready', null], ['needs_sign_in', '需要登入'], ['needs_secret', '需要金鑰'], ['unknown', null]])("service state %s only tags sign-in or key requirements", (state, tag) => {
+  const roster = { ...list, team_context: { apps: [{ name: 'Notion', state }] } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: roster }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  expect(menu()!.querySelector('[data-value="Notion"] .mtag')?.textContent ?? null).toBe(tag);
+});
+
+test("mentions have non-option headings, five recent ready services and an in-place expansion", () => {
+  const apps = Array.from({ length: 30 }, (_, index) => ({ id: `service-${index}`, name: `Service ${index}`, state: index === 0 ? 'needs_sign_in' : 'ready', last_used_at: index }));
+  const many = { ...list, team_context: { apps } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: many }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  expect([...menu()!.querySelectorAll('.menu-head')].map(head => head.textContent)).toEqual(['成員', '群組', '連接的服務']);
+  expect(rows().filter(name => name.startsWith('Service'))).toEqual(['Service 29', 'Service 28', 'Service 27', 'Service 26', 'Service 25']);
+  expect(menu()!.querySelector('[data-value^="Service"] .mtag')).toBeNull();
+  const all = [...menu()!.querySelectorAll<HTMLButtonElement>('button')].find(row => row.textContent?.includes('顯示全部 30 個'))!;
+  expect(all).toBeDefined(); all.click();
+  expect(input.value).toBe('@');
+  expect(rows()).toContain('Service 24');
+  expect(menu()!.querySelector('[data-value^="Service"] .mtag')).toBeNull();
+  expect(menu()!.querySelector('.menu-head[role="option"]')).toBeNull();
+});
+
+test("filtered mentions rank aliases within sections, cap results and honor group recipients", () => {
+  const many = { ...list, team_context: { apps: Array.from({ length: 30 }, (_, index) => ({ name: `Service ${index}`, state: 'ready', aliases: ['notes'] })) } } as unknown as MembersList;
+  bindTeamMentions(input, () => ({ list: many, allowed: [1] }));
+  input.value = '@notes'; input.setSelectionRange(6, 6); input.dispatchEvent(new Event('input'));
+  expect(rows()).toHaveLength(8);
+  expect(menu()!.querySelector('.mtag')).toBeNull();
+  expect(rows()).not.toContain('研究組');
+  input.value = '@Raphael'; input.setSelectionRange(8, 8); input.dispatchEvent(new Event('input'));
+  expect(menu()).toBeNull();
+});
+
+test("Arrow keys cross section headings and Tab picks without sending or interrupting an input method", () => {
+  bindTeamMentions(input, () => ({ list }));
+  input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+  const send = vi.fn(); input.addEventListener('keydown', send);
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', isComposing: true, bubbles: true, cancelable: true }));
+  expect(input.value).toBe('@'); expect(send).toHaveBeenCalledTimes(1);
+  for (let index = 0; index < 4; index++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+  expect(document.getElementById(input.getAttribute('aria-activedescendant')!)?.textContent).toContain('研究組');
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+  expect(input.value).toBe('@研究組 '); expect(menu()).toBeNull(); expect(send).toHaveBeenCalledTimes(1);
+});
+
+test("a roster larger than the available height remains reachable in bounded pages", () => {
+  const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+  const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return this.id === 'app-popover' ? this.querySelectorAll('button').length * 34 + 60 : 0; } });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 220; } });
+  try {
+    const many = { ...list, members: Array.from({length:30},(_,id)=>({id,name:`Member ${id}`})) } as unknown as MembersList;
+    bindTeamMentions(input, () => ({ list: many }));
+    input.value = '@'; input.setSelectionRange(1, 1); input.dispatchEvent(new Event('input'));
+    expect(rows().length).toBeLessThan(8);
+    const next = [...document.querySelectorAll<HTMLButtonElement>('#app-popover .menu-action')].find(button=>button.textContent?.includes('下一頁'))!;
+    expect(next).toBeDefined(); next.click();
+    input.value = ''; input.dispatchEvent(new Event('input'));
+    expect(document.querySelector('#app-popover')).toBeNull();
+  } finally {
+    for (const [key, descriptor] of [['scrollHeight',scroll],['clientHeight',client]] as const) {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype,key,descriptor);
+      else delete (HTMLElement.prototype as unknown as Record<string,unknown>)[key];
+    }
+  }
+});

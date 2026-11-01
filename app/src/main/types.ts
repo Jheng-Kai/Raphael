@@ -916,7 +916,7 @@ export interface TeamContextSnapshot {
 export type AppState = "ready" | "duplicate" | "disabled" | "no_tools" | "needs_sign_in" | "needs_secret" | "error" | "unchecked" | "unknown";
 
 /** One app of the owner's inventory: only its name, its state and how many of its tools can be called now. */
-export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean }
+export interface InventoryApp { id: string; name: string; enabled: boolean; state: AppState; tools: number; connected: boolean; aliases?: string[]; plugin?: string; last_used_at?: number }
 
 /** `integrations.inventory`: the owner's apps and how many are connected (`count` is null unless `state` is `complete`). */
 export interface AppsInventory { state: "complete" | "partial" | "unknown"; count: number | null; apps: InventoryApp[] }
@@ -1221,6 +1221,6 @@ export interface McpCandidate {
 export interface McpPreview { candidates: McpCandidate[]; rejected: number }
 export interface McpTest { ok: boolean; tools: string[]; error?: string }
 /** Member-owned resources; command templates expand only in the core. */
-export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
+export interface MemberSkill { id: number; name: string; description: string; enabled: boolean; source: string; plugin?: string; slash_name?: string; provenance?: "learned" | "imported" | "owner"; revision?: string; learned_at?: string | null; updated_at?: string | null }
 export interface MemberCommand { id: number; name: string; description: string; template: string }
 export interface MemberVoice { id: string; name: string }

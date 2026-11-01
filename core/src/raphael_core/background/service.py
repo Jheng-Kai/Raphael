@@ -1282,9 +1282,14 @@ class BackgroundService:
             run.ledger.total = task.cost_usd
             run.restore_continuation(recovered.get("run_state", {}))
             run.reopen()
+        expand = getattr(self._team, "expand_command", None)
+        resolve = getattr(self._team, "resolve_slash", None)
+        request, skill_loaded = resolve(speaker.id, task.text) if resolve is not None else (
+            expand(speaker.id, task.text) if expand is not None else task.text, False)
+        run._memory_untrusted = run._memory_untrusted or skill_loaded
         system, user = _prompts(
             language,
-            task.text,
+            request,
             self._tools.local_time().data or {},
             context,
             limits,

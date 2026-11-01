@@ -4,6 +4,14 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "completion.members": "メンバー",
+  "completion.groups": "グループ",
+  "completion.services": "接続したサービス",
+  "completion.commands": "コマンド",
+  "completion.skills": "スキル",
+  "completion.all": "すべて表示 ({count})",
+  "completion.previous": "前へ",
+  "completion.next": "次へ",
   "teach.start": "一度やって教える",
   "missing.memberComputer": "実演にはメンバー専用のコンピューターが必要です。設定でメンバーごとのコンピューターを選んでください。",
   "teach.stop": "記録を停止",
@@ -1502,7 +1510,6 @@ export const ja = {
   "members.profile.retry": "再試行",
   "members.profile.noRoutines": "定期タスクはまだありません",
   "members.profile.instructionsCount": "{count} / {max}",
-  "members.profile.slashCommands": "メンバーのコマンド",
   "members.sidePin": "ピン留め",
   "members.sideUnpin": "ピン留めを解除",
   "members.sideUnread": "未読にする",

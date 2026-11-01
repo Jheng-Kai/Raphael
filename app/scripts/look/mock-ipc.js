@@ -385,6 +385,7 @@ export function installMock(fixture, config = {}, target = window) {
   // is listed and never counted. `inventoryUnreadable` is a core that cannot say.
   const inventory = () => {
     if (variant.inventoryUnreadable) return { state: "unknown", count: null, apps: [] };
+    if (variant.mentionMany) return { state: "complete", count: data.mentionServices.filter(app => app.connected).length, apps: data.mentionServices };
     const entries = [
       ...data.servers.map(server => {
         const tools = server.enabled ? server.tools.filter(tool => tool.enabled).length : 0;

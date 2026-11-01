@@ -41,6 +41,33 @@ describe("rendered look checks", () => {
     expect(result.mixedLanguage.map(item => item.word)).toEqual(['Save']);
     window.happyDOM.abort();
   });
+  it("completion checks reject a lost alias result and an inner scrollbar", () => {
+    const win = new Window();
+    win.document.body.innerHTML = `<div class="composer"><textarea></textarea></div><div id="app-popover" style="position:fixed;overflow-y:hidden"><div class="menu-head" aria-hidden="true">連接的服務</div>${Array.from({length:8},(_,i)=>`<button style="background:transparent" data-value="Notebook ${i}">Notebook ${i}</button>`).join('')}</div>`;
+    win.__look = {};
+    const rect = {left:100,right:300,top:100,bottom:300,width:200,height:200};
+    for (const el of win.document.querySelectorAll('*')) el.getBoundingClientRect = () => rect;
+    win.document.querySelector('textarea').focus();
+    vi.stubGlobal('window', win); vi.stubGlobal('document', win.document);
+    vi.stubGlobal('innerWidth',1120); vi.stubGlobal('innerHeight',800); vi.stubGlobal('getComputedStyle',win.getComputedStyle.bind(win));
+    try {
+      expect(checkRendered('completion-filtered').values).toHaveLength(8);
+      const noisy = win.document.createElement('span'); noisy.className = 'mtag'; noisy.textContent = '已連結';
+      win.document.querySelector('[data-value="Notebook 2"]').append(noisy);
+      expect(() => checkRendered('completion-filtered')).toThrow('only tag sign-in or key');
+      noisy.remove();
+      const active = win.document.querySelector('button');
+      active.style.backgroundColor = 'black';
+      expect(() => checkRendered('completion-filtered')).toThrow('keyboard selection');
+      active.classList.add('is-active');
+      expect(checkRendered('completion-filtered').values).toHaveLength(8);
+      active.style.backgroundColor = 'transparent';
+      win.document.querySelector('button').remove();
+      expect(() => checkRendered('completion-filtered')).toThrow('eight results');
+      win.document.querySelector('#app-popover').style.overflowY = 'auto';
+      expect(() => checkRendered('completion-filtered')).toThrow('inner scrollbar');
+    } finally { vi.unstubAllGlobals(); win.happyDOM.abort(); }
+  });
   it("teaching scenes wait for visible results and check owner publication explicitly", () => {
     const teaching = scenes.filter(scene => scene.name.startsWith('desktop-teach-'));
     expect(teaching).toHaveLength(6);

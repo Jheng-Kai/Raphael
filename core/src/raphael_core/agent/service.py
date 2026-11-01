@@ -1045,15 +1045,18 @@ class AgentService:
             raise invalid_params("there is no such member")
         conversation_id = self._destination(member_id, conversation_id, source, quick=quick)
         original_text = None
+        skill_loaded = False
+        resolve = getattr(self._team, "resolve_slash", None)
         expand = getattr(self._team, "expand_command", None)
-        if expand is not None:
-            expanded = expand(member_id, text)
+        if resolve is not None or expand is not None:
+            expanded, skill_loaded = resolve(member_id, text) if resolve is not None else (expand(member_id, text), False)
             if expanded != text:
                 original_text, text = text, expanded
         ask = _Ask(
             session_id=session_id,
             started_at_ms=self._now_ms(),
             original_text=original_text,
+            memory_untrusted=skill_loaded,
             text=text,
             language=normalize_language(ui_language),
             attachments=list(attachments),

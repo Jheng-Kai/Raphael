@@ -646,6 +646,9 @@ class MembersService:
     def expand_command(self, member_id: int, text: str) -> str:
         return self.capabilities.expand(member_id, text)
 
+    def resolve_slash(self, member_id: int, text: str) -> tuple[str, bool]:
+        return self.capabilities.resolve_slash(member_id, text)
+
     def enabled_skills(self, member_id: int) -> list[dict]:
         return [skill for skill in self.capabilities.skills(member_id) if skill["enabled"]]
 
