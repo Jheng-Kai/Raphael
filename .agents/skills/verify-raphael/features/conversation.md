@@ -912,3 +912,29 @@ generated-audio-room, generated-audio-missing, generated-audio-repair and owner-
 1120, 720 and 1920x1080. Compare the incoming and generated audio cards in each
 audio scene and compare the repair notice with the existing missing-voice scene.
 Fake Telegram, fake CLI and fixture audio are not live or native acceptance.
+
+
+## CLI recovery after recorded work (2026-11-01)
+
+Conversation members and background tasks share CliLoop's bounded transient
+recovery. A new request resumes the latest native session or starts with the
+original task, owner additions, recorded tool results and uncertain native steps.
+The model must check effects before repeating actions and use answered cards.
+No harness-side tool replay or model/billing fallback is allowed. Every post-action
+wait is progress; terminal text distinguishes completed/answered, failed and
+unconfirmed steps and says the remaining work is incomplete. Exact arguments and
+results are private model context, never public progress or final diagnostics.
+
+Offline coverage: `core/tests/agent/test_cli_recovery.py` covers Codex/Claude,
+missing/existing/nonpersistent sessions, transient errors/EOF, finite API waits,
+provider cooldowns, permanent failures, Stop, owner steering and in-flight receipts.
+`test_cli_brains.py::test_member_cli_recovers_after_an_answered_card_and_write`
+uses a real fake CLI subprocess, a conversation card and one memory write.
+`test_room_cli.py::test_background_cli_recovers_from_receipt_without_reopening_card`
+uses a fake CLI subprocess, the background permission card and one plugin call.
+Both prove the resumed prompt and final owner-visible result, with no API fallback.
+Existing room cancellation and card-expiry tests remain affected consumers.
+
+Core-only change: no new visual scene or frontend change. Run the selected core
+agent/background/members/worker/integrations suites. Live provider, native journeys,
+look and judge are explicitly outside this offline brief's authorization.

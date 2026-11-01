@@ -356,9 +356,10 @@ async def test_not_logged_in_never_starts_the_fake_cli(setup, tmp_path):
     assert result["text"] == "請先到設定 › 模型與用量 › 訂閱帳號，為 Antigravity 按下「連線」。"
 
 
-async def test_crash_does_not_publish_diagnostics_or_private_reasoning(setup, tmp_path, caplog):
+async def test_crash_does_not_publish_diagnostics_or_private_reasoning(setup, tmp_path, caplog, monkeypatch):
     rig, team = setup
     teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
     fake_brain(rig, tmp_path, '''import json, sys
 json.loads(sys.stdin.readline())
 print("PRIVATE-DIAGNOSTIC-SECRET",file=sys.stderr)
@@ -366,7 +367,7 @@ print(json.dumps({"type":"assistant","message":{"content":[{"type":"thinking","t
 sys.exit(1)
 ''')
     result = await typed(rig, "Hello", teacher.id)
-    assert result["text"] == "目前無法確認 Claude Code 這次失敗的原因，請保留原對話並重新嘗試一次，若仍失敗請回報問題。"
+    assert result["text"] == "Claude Code 目前無法連線，請確認網路後再試。"
     history = await rig.call("agent.history.list", {"member_id": teacher.id})
     assert "PRIVATE-DIAGNOSTIC-SECRET" not in json.dumps(history) + caplog.text
     assert "PRIVATE-REASONING" not in json.dumps(history) + caplog.text
@@ -400,6 +401,58 @@ for number, (name, arguments) in enumerate(CALLS,1):
         assert response["result"]["isError"] is (not ALLOWED)
 print(json.dumps({"type":"result","subtype":"success","result":"Finished."}),flush=True)
 '''.replace("CALLS", repr(calls)).replace("ALLOWED", repr(allowed)))
+
+
+def recovering_mcp(rig, tmp_path, calls, *, failure="overloaded"):
+    record = tmp_path / "recovery.jsonl"
+    fake_brain(rig, tmp_path, '''import json, sys, urllib.request
+from pathlib import Path
+def send(value): print(json.dumps(value), flush=True)
+record = Path(RECORD)
+user = json.loads(sys.stdin.readline())["message"]["content"]
+with record.open("a", encoding="utf-8") as out:
+    out.write(json.dumps({"user": user, "resumed": "--resume" in sys.argv}) + "\\n")
+send({"type":"system", "session_id":"recovery-session"})
+if len(record.read_text(encoding="utf-8").splitlines()) == 1:
+    config = json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    for number, (name, arguments) in enumerate(CALLS, 1):
+        packet = {"jsonrpc":"2.0", "id":number, "method":"tools/call", "params":{"name":name, "arguments":arguments}}
+        request = urllib.request.Request(config["url"], data=json.dumps(packet).encode(), headers={**config["headers"], "Content-Type":"application/json"})
+        result = json.load(urllib.request.urlopen(request, timeout=15))["result"]
+        assert not result["isError"], result
+    if FAILURE == "exit":
+        raise SystemExit(1)
+    send({"type":"result", "subtype":"error_during_execution", "is_error":True, "result":FAILURE})
+else:
+    assert "Do not repeat" in user and "do not ask them again" in user
+    assert all(name in user for name, arguments in CALLS)
+    send({"type":"result", "subtype":"success", "result":"The remaining work is finished."})
+'''.replace("RECORD", repr(str(record))).replace("CALLS", repr(calls)).replace("FAILURE", repr(failure)))
+    return record
+
+
+@pytest.mark.parametrize("failure", ["overloaded", "exit"])
+async def test_member_cli_recovers_after_an_answered_card_and_write(setup, tmp_path, client, monkeypatch, failure):
+    rig, team = setup
+    teacher = member(team, model="cli:claude")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", (0.0,))
+    record = recovering_mcp(rig, tmp_path, [
+        ("approve", {"tool_name": "Write", "input": {"path": "draft.txt"}}),
+        ("memory_update", {"target": "memory", "operations": [{"action": "add", "content": "Use examples."}]}),
+    ], failure=failure)
+    asked = await typed(rig, "Save a draft and remember my preference", teacher.id, language="en")
+    assert asked["status"] == "confirm"
+    result = await rig.confirm(asked["confirm"]["id"])
+    assert result["text"] == "The remaining work is finished."
+    first, resumed = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert not first["resumed"] and resumed["resumed"]
+    assert "allow" in resumed["user"]
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    assert turn["status"] == "done" and turn["model"] == "cli:claude"
+    assert sum(step["tool"] == "memory_update" for step in turn["steps"]) == 1
+    assert any("try again" in message["text"] for message in turn["messages"] if message["kind"] == "progress")
+    assert team.memory.own(teacher.id).read().count("Use examples.") == 1
+    assert not client.chat_calls and not client.json_calls
 
 
 async def test_cli_web_search_uses_auxiliary_api_model(setup, tmp_path, client):

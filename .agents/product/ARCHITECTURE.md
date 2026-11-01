@@ -315,3 +315,29 @@ explicitly add owner cards and own-member routine tools, without interactive=Tru
 The native allowlist exposes owner_questions.answer; it grants no execution approval.
 API and CLI/MCP conversation questions transfer the same turn to this worker rather
 than retaining a CLI process. All question states reuse the conversation card component.
+
+
+## CLI recovery after recorded work (2026-11-01)
+
+`agent/cli/loop.py` remains the single CLI engine used by AgentService and
+`background/cli.py`. A loop retains its latest native session even for turns that
+must not persist a conversation session. Its in-memory receipts record MCP tool
+arguments, bounded model-visible results and owner-card answers; native stream
+steps retain their status. Matching is scoped to each attempt so a later success
+cannot certify an earlier uncertain operation. A retry waits for an in-flight MCP
+call to settle before taking its context snapshot. Recovery requests carry the
+original task plus all accepted owner additions and treat receipts as untrusted
+data. The harness starts a new CLI request, never a tool replay.
+
+Post-action recovery uses the existing RETRY_WAITS and PATIENT_WAITS once each,
+with shared jitter and provider cooldown handling. This is finite (eight attempts
+at current defaults), unlike the API loop's indefinite patient tail. Before any
+action, existing private/background quick waits and the explicit no-retry option
+remain in force. Child EOF/incomplete reads are transport failures; protocol
+errors remain terminal. Each post-action wait is localized progress. Permanent
+failures and cancellation stop on the same model and billing source. Terminal
+summaries expose counts/status only; exact receipts stay out of public events.
+
+No RPC, Rust allowlist entry, migration, new worker, settings or frontend is added.
+Tests use generic fake CLI subprocesses and the existing authenticated MCP/gates.
+Real CLI subscription/service recovery and native UX require separate acceptance.

@@ -197,7 +197,8 @@ class Driver:
         except (OSError, ValueError, TimeoutError, EOFError, asyncio.IncompleteReadError) as error:
             self.native_diagnostic("transport", {"type": type(error).__name__, "message": str(error)})
             logger.warning("CLI transport failed: %s", type(error).__name__)
-            yield self._event("error", error)
+            yield self._event("error", {"kind": "network", "message": "CLI process ended before completion"}
+                              if isinstance(error, (EOFError, asyncio.IncompleteReadError)) else error)
         finally:
             try:
                 await self.interrupt()

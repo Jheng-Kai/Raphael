@@ -139,6 +139,7 @@ def scripted_cli(monkeypatch, *runs, waits=(0.0, 0.0)):
     monkeypatch.setattr("raphael_core.agent.cli.loop.Driver", Driver)
     monkeypatch.setattr("raphael_core.agent.cli.loop.RATE_LIMIT_WAITS_S", waits)
     monkeypatch.setattr("raphael_core.agent.cli.loop.ROOM_RATE_LIMIT_WAITS_S", waits)
+    monkeypatch.setattr("raphael_core.agent.cli.loop.PATIENT_WAITS", (0.0, 0.0))
     return played
 
 
@@ -177,9 +178,37 @@ async def test_cli_room_turn_reports_a_rate_limit_it_cannot_wait_out(make_rig, m
     await until(lambda: rig.task(task).state in ("done", "failed"))
     failed = rig.task(task)
     assert (failed.state, failed.reason) == ("failed", "cli_rate_limited")
-    assert failed.report_text == "Codex CLI is receiving too many requests right now. Try again shortly."
+    assert failed.report_text.startswith("Codex CLI is receiving too many requests right now. Try again shortly.")
+    if first:
+        assert "unconfirmed" in failed.report_text and "not completed" in failed.report_text
     assert AgentHistory(rig.conn).get(turn).status == "error"
-    assert len(played) == (1 if first else 3)
+    assert len(played) == (5 if first else 3)
+
+
+@pytest.mark.parametrize("failure", ["overloaded", "exit"])
+async def test_background_cli_recovers_from_receipt_without_reopening_card(make_rig, monkeypatch, tmp_path, calls, failure):
+    from members.test_cli_brains import recovering_mcp
+    rig = make_rig()
+    await rig.plugins.connect(look="T2")
+    monkeypatch.setattr("raphael_core.agent.cli.loop.ROOM_RATE_LIMIT_WAITS_S", (0.0,))
+    record = recovering_mcp(rig, tmp_path, [("Notes__look", {"topic": "draft"})], failure=failure)
+    task = rig.submit("Review the draft", model="cli:claude")
+    turn = AgentHistory(rig.conn).add(session_id="s1", question="Review the draft", route="answer",
+                                     prefix="", text="", status="running", source="app")
+    rig.service.attach_turn(task, turn)
+    await until(lambda: rig.task(task).state == "waiting")
+    [question] = rig.service.waiting_questions()
+    assert not calls
+    assert rig.service.answer(task, question["id"], True) == "approved"
+    await rig.wait_for_reports()
+    assert rig.task(task).state == "done" and rig.task(task).report_text == "The remaining work is finished."
+    assert calls == ["look"] and not rig.service.waiting_questions()
+    first, resumed = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert not first["resumed"] and resumed["resumed"]
+    assert "found draft" in resumed["user"]
+    assert any("try again" in line for line in progress(rig, task))
+    assert not rig.client.chat_calls
+    await until(lambda: not rig.service._cli_loops)
 
 
 async def test_stopping_a_room_turn_while_it_waits_out_a_rate_limit_cancels_it(make_rig, monkeypatch, tmp_path):
