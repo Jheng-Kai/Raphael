@@ -1,6 +1,6 @@
 import { isUiLocale, setLocale, t } from "../main/i18n";
 
-export interface LearnedNotice { words: string[]; token: string; language: string; theme?: string }
+export interface LearnedNotice { words: string[]; token: string; language: string; theme?: string; revision?: number }
 export interface LearnedActions {
   layout(token: string, width: number, height: number): Promise<unknown>;
   finish(token: string, undo: boolean): Promise<unknown>;

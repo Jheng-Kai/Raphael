@@ -504,3 +504,9 @@ fixed rounds or automatic conclusions, and
 [Conversation](conversation.md#background-app-discovery-2026-11-01) for background
 find_app, owner sign-in and same-task resumption, plus localized routine events.
 This is a core-only contract change; no rendered scene or frontend is changed.
+## Passive floating controls (2026-11-01)
+
+See [Dictation](dictation.md#passive-control-hit-regions-2026-11-01) for R-UI-70,
+physical hit rectangles, held-button release, revision invalidation and the selected
+existing overlay/learned scene matrix. Cargo, native and automated judge are
+explicitly prohibited by this brief; fixture acceptance does not prove OS clicks.

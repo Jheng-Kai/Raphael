@@ -7,7 +7,7 @@ use crate::core_process::{CoreApi, CoreProcess};
 
 const LABEL: &str = "learned";
 #[derive(Clone, Serialize)]
-pub struct Notice { words: Vec<String>, token: String, language: String, theme: String }
+pub struct Notice { words: Vec<String>, token: String, language: String, theme: String, revision: u64 }
 #[derive(Default)]
 struct State { current: Mutex<Option<Notice>>, channel: Mutex<Option<Channel<Notice>>> }
 
@@ -19,14 +19,20 @@ pub fn start(app: &AppHandle) -> tauri::Result<()> {
         .inner_size(500.0, 64.0).data_directory(crate::webview_data_dir(app)?).build()?;
     window.set_ignore_cursor_events(true)?;
     crate::overlay::apply_passive_style(&window);
+    app.state::<crate::overlay::mouse::Windows>().register(&window);
     Ok(())
 }
 
 pub fn publish(app: &AppHandle, words: &[String], undo: Option<&str>, language: &str) {
     if words.is_empty() { return; }
     let Some(state) = app.try_state::<State>() else { return; };
-    let notice = Notice { words: words.to_vec(), token: undo.unwrap_or_default().to_owned(), language: language.to_owned(), theme: app.get_webview_window(crate::MAIN_WINDOW).and_then(|w| w.theme().ok()).map(|theme| if theme == tauri::Theme::Dark { "dark" } else { "light" }.to_owned()).unwrap_or_else(|| "light".to_owned()) };
-    *state.current.lock().unwrap_or_else(PoisonError::into_inner) = Some(notice.clone());
+    let Some(mouse) = app.state::<crate::overlay::mouse::Windows>().get(LABEL) else { return; };
+    let theme = app.get_webview_window(crate::MAIN_WINDOW).and_then(|w| w.theme().ok()).map(|theme| if theme == tauri::Theme::Dark { "dark" } else { "light" }.to_owned()).unwrap_or_else(|| "light".to_owned());
+    let mut current = state.current.lock().unwrap_or_else(PoisonError::into_inner);
+    let revision = mouse.clear();
+    let notice = Notice { revision, words: words.to_vec(), token: undo.unwrap_or_default().to_owned(), language: language.to_owned(), theme };
+    *current = Some(notice.clone());
+    drop(current);
     let delivered = state.channel.lock().unwrap_or_else(PoisonError::into_inner).as_ref()
         .is_some_and(|channel| channel.send(notice).is_ok());
     if !delivered {
@@ -85,12 +91,12 @@ pub fn learned_layout(app: AppHandle, webview: Webview, token: String, width: f6
     let monitor = foreground_monitor(&app).or_else(|| app.primary_monitor().ok().flatten()).ok_or("no monitor")?;
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
-    let w = (width * scale).round().min(f64::from(work.size.width)) as u32;
-    let h = (height * scale).round() as u32;
+    let bounds = crate::overlay::mouse::ControlRect { x: 0.0, y: 0.0, width, height }.scaled(scale);
+    let w = bounds.width.round().min(f64::from(work.size.width)) as u32;
+    let h = bounds.height.round() as u32;
     window.set_size(PhysicalSize::new(w, h)).map_err(|e| e.to_string())?;
     window.set_position(PhysicalPosition::new(work.position.x + (work.size.width as i32 - w as i32) / 2,
         work.position.y + (f64::from(work.size.height) * 0.56) as i32)).map_err(|e| e.to_string())?;
-    window.set_ignore_cursor_events(false).map_err(|e| e.to_string())?;
     crate::overlay::apply_passive_style(&window);
     round_region(&window, w, h);
     Ok(())
@@ -112,7 +118,7 @@ pub async fn learned_finish(app: AppHandle, webview: Webview, token: String, und
     let mut current = state.current.lock().unwrap_or_else(PoisonError::into_inner);
     if current.as_ref().is_some_and(|n| n.token == token) {
         *current = None;
-        if let Some(window) = app.get_webview_window(LABEL) { let _ = window.set_ignore_cursor_events(true); }
+        if let Some(mouse) = app.state::<crate::overlay::mouse::Windows>().get(LABEL) { mouse.clear(); }
     }
     Ok(())
 }

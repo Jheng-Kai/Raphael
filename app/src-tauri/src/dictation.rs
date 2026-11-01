@@ -3238,8 +3238,10 @@ mod tests {
         greetings: Mutex<Vec<String>>,
         events: Mutex<Vec<String>>,
         timeline: Mutex<Vec<String>>,
+        /// Whether the question scene remains drawn, independently of cursor hit regions.
+        question_open: Mutex<bool>,
         /// Whether the real overlay window would take the mouse now: the rule of
-        /// `Overlay::publish`, applied to every call.
+        /// `Overlay::publish`, applied without any reported control rectangles.
         mouse: Mutex<bool>,
         paused_hide: Mutex<
             Option<(
@@ -3275,8 +3277,21 @@ mod tests {
             *self.mouse.lock().unwrap()
         }
 
-        /// What the real overlay does with the mouse for `event`.
+        fn question_open(&self) -> bool {
+            *self.question_open.lock().unwrap()
+        }
+
+        /// Track the drawn scene separately from the window's default click-through state.
         fn track(&self, event: OverlayEvent) {
+            match &event {
+                OverlayEvent::Ask(_) => *self.question_open.lock().unwrap() = true,
+                OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } | OverlayEvent::Say { .. }
+                | OverlayEvent::Notice { .. } | OverlayEvent::Operate { .. } | OverlayEvent::Hide
+                | OverlayEvent::Complete | OverlayEvent::Release => {
+                    *self.question_open.lock().unwrap() = false;
+                }
+                _ => {}
+            }
             if let Some(on) = takes_clicks(&event) {
                 *self.mouse.lock().unwrap() = on;
             }
@@ -7340,7 +7355,8 @@ mod tests {
                 vec![GREETING.zh],
                 "{mode:?}"
             );
-            assert!(c.overlay().mouse(), "{mode:?}: recording exposes Stop");
+            assert!(!c.overlay().question_open(), "{mode:?}: listening is not a confirmation card");
+            assert!(!c.overlay().mouse(), "{mode:?}: recording alone must not take the mouse");
             assert_eq!(c.cancel().last(), Some(true), "{mode:?}");
 
             if mode == DictationMode::Hold {
@@ -7372,6 +7388,8 @@ mod tests {
             );
             assert_eq!(c.core().count("dictation.start"), 2, "{mode:?}");
             assert!(c.paster().delivered().is_empty(), "{mode:?}");
+            assert!(!c.overlay().question_open(), "{mode:?}");
+            assert!(!c.overlay().mouse(), "{mode:?}");
         }
     }
 
@@ -8638,62 +8656,88 @@ mod tests {
         );
     }
 
-    // ---------- the mouse stays with a question until its reply ----------
+    // ---------- a question stays drawn until its reply without taking the whole window's mouse ----------
 
     #[tokio::test]
-    async fn a_click_leaves_the_mouse_with_the_question_until_the_reply_is_shown() {
+    async fn a_click_leaves_the_question_open_until_the_reply_is_shown() {
         let (c, turn, gate) = gated_question_on_screen(30_000).await;
-        assert!(c.overlay().mouse(), "the buttons must be clickable");
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse(), "opening a question alone must not take the mouse");
         c.on_confirm("c-1", true);
         until_stage(&c, AgentStage::Confirming).await;
         assert!(
-            c.overlay().mouse(),
-            "a second click on a button that is still drawn must not land in the app below"
+            c.overlay().question_open(),
+            "the question must stay drawn while its reply is pending"
         );
+        assert!(!c.overlay().mouse());
         gate.notify_one();
         turn.await.unwrap();
-        assert!(!c.overlay().mouse(), "the reply gives the corner back");
+        assert_eq!(c.overlay().events().last().unwrap(), "say:了|已複製到剪貼簿。");
+        assert!(!c.overlay().question_open(), "the reply replaces the question");
+        assert!(!c.overlay().mouse());
     }
 
     #[tokio::test]
-    async fn escape_leaves_the_mouse_with_the_question_until_the_reply_is_shown() {
+    async fn escape_leaves_the_question_open_until_the_reply_is_shown() {
         let (c, turn, gate) = gated_question_on_screen(30_000).await;
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         assert!(c.on_hotkey(Cancel, 5000).is_none());
         until_stage(&c, AgentStage::Confirming).await;
-        assert!(c.overlay().mouse());
+        assert!(c.overlay().question_open(), "Escape waits for the reply before replacing the question");
+        assert!(!c.overlay().mouse());
         gate.notify_one();
         turn.await.unwrap();
+        assert_eq!(c.overlay().events().last().unwrap(), "say:了|已複製到剪貼簿。");
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
     }
 
     #[tokio::test(start_paused = true)]
-    async fn the_clock_leaves_the_mouse_with_the_question_until_the_reply_is_shown() {
+    async fn the_clock_leaves_the_question_open_until_the_reply_is_shown() {
         let (c, turn, gate) = gated_question_on_screen(5_000).await;
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         tokio::time::advance(Duration::from_millis(5_000)).await;
         until_stage(&c, AgentStage::Confirming).await;
-        assert!(c.overlay().mouse());
+        assert!(c.overlay().question_open(), "timeout waits for the reply before replacing the question");
+        assert!(!c.overlay().mouse());
         gate.notify_one();
         turn.await.unwrap();
+        assert_eq!(c.overlay().events().last().unwrap(), "say:了|已複製到剪貼簿。");
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
     }
 
     #[tokio::test]
-    async fn whatever_ends_a_question_gives_the_mouse_back() {
+    async fn whatever_ends_a_question_closes_it_without_taking_the_mouse() {
         // Esc once more while the answer is awaited: the session is over and the overlay hidden.
         let (c, turn, gate) = gated_question_on_screen(30_000).await;
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         c.on_confirm("c-1", true);
         until_stage(&c, AgentStage::Confirming).await;
-        run(&c, Cancel, 6000).await;
+        assert!(c.overlay().question_open());
         assert!(!c.overlay().mouse());
+        run(&c, Cancel, 6000).await;
+        assert!(!c.overlay().question_open());
+        assert!(!c.overlay().mouse());
+        assert_eq!(c.overlay().events().last().unwrap(), "hide");
+        let after_cancel = c.overlay().events();
         gate.notify_one();
         turn.await.unwrap();
+        assert_eq!(c.overlay().events(), after_cancel, "no late reply after cancellation");
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
 
         // the core restarting
         let (c, turn) = question_on_screen(30_000).await;
-        assert!(c.overlay().mouse());
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         c.on_core_restarted();
         turn.await.unwrap();
+        assert_eq!(c.overlay().events().last().unwrap(), "hide");
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
 
         // a reply that cannot be shown is told as a notice, which is a scene of its own
@@ -8705,10 +8749,12 @@ mod tests {
         let c = controller(core, FakePaster::pasting("chrome.exe"));
         let turn = start_turn(&c).await;
         until_stage(&c, AgentStage::Asking).await;
-        assert!(c.overlay().mouse());
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         c.on_confirm("c-1", false);
         turn.await.unwrap();
         ends_with_notice(&c, ASK_FAILED.zh);
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
     }
 
@@ -8727,6 +8773,8 @@ mod tests {
         );
         let turn = start_turn(&c).await;
         until_stage(&c, AgentStage::Asking).await;
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         assert!(c.on_hotkey(HotkeyEvent::PasteLast, 6000).is_none());
         settle().await;
         assert!(c.paster().delivered().is_empty());
@@ -8738,13 +8786,16 @@ mod tests {
             "{:?}",
             c.overlay().events()
         );
-        assert!(c.overlay().mouse());
+        assert!(c.overlay().question_open(), "PasteLast must not replace the question with a notice");
+        assert!(!c.overlay().mouse());
         c.on_confirm("c-1", true);
         turn.await.unwrap();
         assert_eq!(
             c.overlay().events().last().unwrap(),
             "say:了|已複製到剪貼簿。"
         );
+        assert!(!c.overlay().question_open());
+        assert!(!c.overlay().mouse());
     }
 
     // ---------- a YES to a question that cannot be undone has to be armed ----------
@@ -9806,6 +9857,8 @@ mod tests {
         tokio::time::advance(Duration::from_secs(1)).await;
         settle().await;
         assert_eq!(c.overlay().events(), Vec::<String>::new(), "still in front");
+        assert!(!c.overlay().question_open(), "the question is in the main window");
+        assert!(!c.overlay().mouse());
 
         // The person leaves the window: the overlay asks, with the time that is left.
         set_front(&front, false);
@@ -9819,14 +9872,16 @@ mod tests {
             .parse()
             .unwrap();
         assert!((55_000..60_000).contains(&left), "{left}");
-        assert!(c.overlay().mouse(), "its buttons take the mouse");
+        assert!(c.overlay().question_open(), "the overlay now draws the question");
+        assert!(!c.overlay().mouse(), "opening a question alone must not take the mouse");
 
-        // Back in the window: the card has it, the overlay lets it go.
+        // Back in the window: its card has the question, and the overlay closes its scene.
         set_front(&front, true);
         tokio::time::advance(FRONT_POLL * 2).await;
         settle().await;
         assert_eq!(c.overlay().events().len(), 2);
         assert_eq!(c.overlay().events()[1], "hide");
+        assert!(!c.overlay().question_open());
         assert!(!c.overlay().mouse());
 
         // Away again, and answered on the overlay; the reply is said there too.
@@ -9834,6 +9889,8 @@ mod tests {
         tokio::time::advance(FRONT_POLL * 2).await;
         settle().await;
         assert!(c.overlay().events()[2].starts_with("ask:c-1|"));
+        assert!(c.overlay().question_open());
+        assert!(!c.overlay().mouse());
         c.on_confirm("c-1", true);
         turn.await.unwrap();
         assert_eq!(
@@ -9844,6 +9901,8 @@ mod tests {
             c.overlay().events().last().unwrap(),
             "say:了|已複製到剪貼簿。"
         );
+        assert!(!c.overlay().question_open(), "the reply replaces the returned question");
+        assert!(!c.overlay().mouse());
     }
 
     #[tokio::test]

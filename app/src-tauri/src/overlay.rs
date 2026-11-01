@@ -7,12 +7,12 @@
 //! the next paste would go to the wrong place. "Hidden" means that the page (`overlay.html`)
 //! draws nothing and stops its animation loop; the empty window stays where it is.
 //!
-//! The one time the window takes the mouse is while Raphael asks a YES/NO question
-//! ([`OverlayApi::ask`]): its buttons must be clickable. Clicking is not activating: the window has
+//! Only physical pixels reported as live controls take the mouse. A light cursor poll runs
+//! while those controls exist; a held button keeps its release. Clicking is not activating: the window has
 //! `WS_EX_NOACTIVATE` (tao gives it to a window that is not `focusable`, and
 //! [`apply_passive_style`] makes sure of it), so a click on a button reaches the page without the
 //! window becoming the foreground window, and the app the person was typing into keeps its focus.
-//! [`takes_clicks`] says which events open and close that time.
+//! [`takes_clicks`] clears obsolete geometry when the scene changes.
 //!
 //! The page learns what to do from [`OverlayEvent`]s on a channel that it opens once with the
 //! `overlay_subscribe` command, and answers a question with `overlay_confirm`. The rest of the app
@@ -26,6 +26,7 @@
 //! display turning off and on, the session locking, sleep, the webview's GPU process exiting), so
 //! that an emblem that nobody saw in a window that was in sight can be put next to it.
 
+pub(crate) mod mouse;
 mod screen;
 mod sight;
 
@@ -141,6 +142,8 @@ pub struct AskPrompt {
 pub enum OverlayEvent {
     /// A recording-only global key, interpreted by the shared UI cancellation gesture.
     CancelKey { reset: bool },
+    /// The page reports this revision after applying the preceding scene.
+    Mouse { revision: u64 },
     /// The emblem appears (the appear animation) and shows `mode`. A `line` (sent only when there
     /// is one) is Raphael's greeting to a question, written beside the emblem while he listens; a
     /// dictation shows the emblem alone.
@@ -181,7 +184,7 @@ pub enum OverlayEvent {
         hold: bool,
     },
     /// Raphael asks a question: the subtitle line 《`prefix`。`text`》 and two buttons under it.
-    /// The window takes the mouse until the question is over.
+    /// Only the live controls take the mouse while the question is open.
     Ask(AskPrompt),
     /// Delivery succeeded: show 100% briefly before the normal vanish animation.
     Complete,
@@ -363,14 +366,11 @@ fn confirmation_placement(mut placement: Placement, scale: f64) -> Placement {
 
 // ---------- the mouse ----------
 
-/// What an event does to whether the window takes the mouse: `Some(true)` for the question that
-/// needs its buttons clicked, `Some(false)` for everything that puts something else on the stage
-/// (the reply to the answer among them, so the corner is the apps' again as soon as the question
-/// is gone from the screen), `None` for what changes nothing on the stage.
+/// Scene changes clear the previous controls. Only reported rectangles can enable the mouse.
 pub(crate) fn takes_clicks(event: &OverlayEvent) -> Option<bool> {
     match event {
-        OverlayEvent::Ask(_) | OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } => Some(true),
-        OverlayEvent::Say { hold, .. } => Some(*hold),
+        OverlayEvent::Ask(_) | OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } => Some(false),
+        OverlayEvent::Say { .. } => Some(false),
         OverlayEvent::Notice { .. }
         | OverlayEvent::Operate { .. }
         | OverlayEvent::Complete
@@ -384,6 +384,7 @@ pub(crate) fn takes_clicks(event: &OverlayEvent) -> Option<bool> {
         | OverlayEvent::Learned { .. }
         | OverlayEvent::Settings { .. }
         | OverlayEvent::CancelKey { .. }
+        | OverlayEvent::Mouse { .. }
         | OverlayEvent::Avatar => None,
     }
 }
@@ -413,6 +414,7 @@ impl OverlayEvent {
     /// The event's `type`, for the log.
     fn kind(&self) -> &'static str {
         match self {
+            OverlayEvent::Mouse { .. } => "mouse",
             OverlayEvent::Show { .. } => "show",
             OverlayEvent::Mode { .. } => "mode",
             OverlayEvent::Level { .. } => "level",
@@ -525,9 +527,7 @@ pub struct Overlay {
     emblem_px: AtomicU32,
     question_open: AtomicBool,
     bus: Mutex<Bus>,
-    /// Whether the window takes the mouse now (see [`takes_clicks`]); the window starts out
-    /// letting it through. Held while the window is changed, so that two changes cannot cross.
-    clicks: Mutex<bool>,
+    mouse: Arc<mouse::Mouse>,
     /// When the window was created, and when it was last checked (ms after that): a long
     /// recording has no other event, and another window may come over the emblem meanwhile.
     born: Instant,
@@ -585,6 +585,7 @@ impl Overlay {
             screen::watch(&window, hwnd);
         }
 
+        let mouse = app.state::<mouse::Windows>().register(&window);
         let overlay = Arc::new(Overlay {
             app: app.clone(),
             window,
@@ -592,7 +593,7 @@ impl Overlay {
             emblem_px: AtomicU32::new(emblem_px),
             question_open: AtomicBool::new(false),
             bus: Mutex::new(Bus::new(emblem_px, subtitles, language)),
-            clicks: Mutex::new(false),
+            mouse,
             born: Instant::now(),
             last_sight_ms: AtomicU64::new(0),
         });
@@ -632,37 +633,19 @@ impl Overlay {
             && self.question_open.swap(question, Ordering::Relaxed) != question {
             self.place_window();
         }
-        // The window takes the mouse before the buttons appear, and lets it go as the page moves
-        // on to something else.
-        if let Some(on) = takes_clicks(&event) {
-            self.set_clicks(on);
-        }
-        lock(&self.bus).publish(event);
-    }
-
-    /// Makes the window take the mouse (`true`) or let it through (`false`). It never takes focus
-    /// either way: `WS_EX_NOACTIVATE` is part of the style that [`apply_passive_style`] puts
-    /// back after tao rebuilt it for this change.
-    fn set_clicks(&self, on: bool) {
-        let mut current = lock(&self.clicks);
-        if *current == on {
-            return;
-        }
-        match self.window.set_ignore_cursor_events(!on) {
-            Ok(()) => {
-                *current = on;
-                apply_passive_style(&self.window);
-                log::debug!(
-                    "overlay: the window {} the mouse",
-                    if on { "takes" } else { "lets through" }
-                );
-            }
-            Err(err) => log::warn!("could not change whether the overlay takes the mouse: {err}"),
+        let mut bus = lock(&self.bus);
+        let revision = takes_clicks(&event).map(|_| self.mouse.clear());
+        bus.publish(event);
+        if let Some(revision) = revision {
+            bus.publish(OverlayEvent::Mouse { revision });
         }
     }
 
     fn subscribe(&self, label: &str, channel: Channel<OverlayEvent>) {
-        lock(&self.bus).subscribe(label, channel);
+        let mut bus = lock(&self.bus);
+        let revision = self.mouse.clear();
+        bus.subscribe(label, channel);
+        bus.publish(OverlayEvent::Mouse { revision });
     }
 
     /// Puts the window in its corner of the primary monitor's work area, where the taskbar or the
@@ -1446,12 +1429,13 @@ mod tests {
     // ---- the mouse ----
 
     #[test]
-    fn questions_and_active_stop_controls_take_the_mouse() {
+    fn scene_events_never_enable_the_mouse_before_controls_are_measured() {
         let ask = OverlayEvent::Ask(prompt(Tier::T2));
-        assert_eq!(takes_clicks(&ask), Some(true));
-        assert_eq!(takes_clicks(&OverlayEvent::Show {mode:Mode::Listening,line:None}),Some(true));
-        assert_eq!(takes_clicks(&OverlayEvent::Mode {mode:Mode::Thinking,quiet:false,lines:Vec::new()}),Some(true));
+        assert_eq!(takes_clicks(&ask), Some(false));
+        assert_eq!(takes_clicks(&OverlayEvent::Show {mode:Mode::Listening,line:None}),Some(false));
+        assert_eq!(takes_clicks(&OverlayEvent::Mode {mode:Mode::Thinking,quiet:false,lines:Vec::new()}),Some(false));
         for ends in [
+            OverlayEvent::Say { hold: true, prefix: String::new(), text: String::new() },
             OverlayEvent::Say {
                 hold: false,
                 prefix: "答".into(),
@@ -1484,8 +1468,7 @@ mod tests {
 
     #[test]
     fn a_question_that_nobody_answers_is_over_with_the_next_thing_shown() {
-        // The window takes the mouse from the question until an event that ends it: replay the
-        // events of a few scenes the way `Overlay::publish` applies them.
+        // Scene changes invalidate old geometry; no scene alone may enable the mouse.
         let replay = |events: &[OverlayEvent]| {
             let mut takes = false;
             let mut seen = Vec::new();
@@ -1515,12 +1498,12 @@ mod tests {
         let level = OverlayEvent::Level { value: 0.2 };
         assert_eq!(
             replay(&[listening, thinking, ask.clone(), level.clone(), say.clone()]),
-            [true, true, true, true, false]
+            [false, false, false, false, false]
         );
         // the loudness of the room does not close the question; a hide does
         assert_eq!(
             replay(&[ask, level, OverlayEvent::Hide]),
-            [true, true, false]
+            [false, false, false]
         );
     }
 

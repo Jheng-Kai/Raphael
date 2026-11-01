@@ -962,6 +962,7 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "learned_layout" || command === "learned_finish") return;
+      if (command === "floating_controls") return;
       if (command === "overlay_log") return;
       if (command === "overlay_confirm") return;
       if (command === "overlay_cancel") { state.overlayChannel?.onmessage({type:"hide"});return; }

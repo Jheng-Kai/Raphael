@@ -274,3 +274,26 @@ on either side) resolves local boundary references/corrections. Successful list 
 keep item lines and numbering; explicit paragraph boundaries retain separate lists. One failed
 piece makes the whole dictation unsuccessful, with recovery text and its reason retained in
 history. The words are still pasted, so nothing is lost, and the NOT_CLEANED notice says so every time.
+
+## Passive control hit regions (2026-11-01)
+
+R-UI-70: the desktop overlay and learned notice start click-through. The real pages
+report visible physical client rectangles over the shell-only floating_controls IPC,
+allowlisted only for the calling overlay/learned window. The overlay reports the
+question card, question buttons, expansion button and Stop; the learned page reports
+its body and Undo. A 30 ms Tauri cursor-position poll exists only while bounds remain.
+Scene changes/notice completion clear holds and invalidate late geometry by revision.
+UI-thread setters also reject obsolete queued changes, so a worker enable cannot
+run after an immediate hide and restore interception.
+NOACTIVATE and keyboard/confirmation behavior remain unchanged.
+
+Selected existing scenes: overlay-confirm-short-120, overlay-confirm-long-150,
+overlay-confirm-expanded, overlay-working-cancel, overlay-transcribing,
+overlay-cleaning, overlay-step, overlay-long-answer and overlay-learned-pill, both
+themes at 1120,720,1920x1080. The actual desktop viewport remains native-sized.
+Frontend regressions: app/src/overlay/mouse-regions.test.ts; Rust geometry, hold,
+hide, scale and caller gates: overlay/mouse.rs, overlay.rs and commands.rs tests.
+Fixture evidence proves rendered controls and geometry reporting, not OS hit-testing,
+focus continuity, cross-app clicks or mixed-monitor DPI. Cargo, native journeys,
+provider calls and automated judge are prohibited by this task brief; the maintainer
+must run cargo test and native click-through/focus/DPI acceptance separately.

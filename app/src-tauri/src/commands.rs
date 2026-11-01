@@ -32,7 +32,7 @@
 //! - `window_hotkey` hands the hotkeys that the main window sees while it has the focus, and the
 //!   keyboard hook may not, to the hotkey service, which treats them as the hook's.
 //!
-//! Every command here belongs to the main window and refuses a call from any other webview
+//! Except for `floating_controls`, commands here belong to the main window and refuse a call from any other webview
 //! (`require_main`); the overlay page only loads its own files, but it is a webview too.
 //!
 //! [`start`] is called once from `setup` in `lib.rs`. Like the other parts of the app it takes
@@ -372,6 +372,28 @@ pub(crate) fn ensure_caller(label: &str, window: &str) -> Result<(), String> {
 
 fn require_main(webview: &Webview) -> Result<(), String> {
     ensure_caller(webview.label(), crate::MAIN_WINDOW)
+}
+
+// Only these passive pages may report geometry, and only for their own window.
+const FLOATING_CONTROL_WINDOWS: &[&str] = &[crate::OVERLAY_WINDOW, "learned"];
+fn floating_controls_allowed(label: &str) -> bool {
+    FLOATING_CONTROL_WINDOWS.contains(&label)
+}
+
+#[tauri::command]
+pub fn floating_controls(
+    app: AppHandle,
+    webview: Webview,
+    revision: u64,
+    rects: Vec<crate::overlay::mouse::ControlRect>,
+    held: bool,
+) -> Result<(), String> {
+    if !floating_controls_allowed(webview.label()) {
+        return Err("this window cannot report floating controls".into());
+    }
+    let mouse = app.state::<crate::overlay::mouse::Windows>()
+        .get(webview.label()).ok_or("floating window is missing")?;
+    mouse.report(revision, rects, held)
 }
 
 // ---------- calls to the core ----------
@@ -1957,6 +1979,16 @@ mod tests {
     // ---- which window may call a command ----
 
     #[test]
+    fn floating_controls_are_allowlisted_only_for_their_own_passive_windows() {
+        for label in ["overlay", "learned"] {
+            assert!(floating_controls_allowed(label));
+        }
+        for label in ["main", "worker", "", "other"] {
+            assert!(!floating_controls_allowed(label));
+        }
+    }
+
+    #[test]
     fn a_command_answers_only_to_the_window_it_belongs_to() {
         assert!(ensure_caller("main", "main").is_ok());
         assert!(ensure_caller("overlay", "overlay").is_ok());
@@ -1982,10 +2014,13 @@ mod tests {
                 .nth(1)
                 .and_then(|rest| rest.split('(').next())
                 .unwrap();
-            assert!(
-                body.contains("require_main("),
-                "`{name}` is a command of the main window and does not check its caller"
-            );
+            if name == "floating_controls" {
+                let first = body.split("-> Result<(), String> {").nth(1).unwrap().trim_start();
+                assert!(first.starts_with("if !floating_controls_allowed(webview.label())"));
+                assert!(body.contains("get(webview.label())"));
+            } else {
+                assert!(body.contains("require_main("), "`{name}` does not check its caller");
+            }
             checked.push(name.to_owned());
         }
         checked.sort();
@@ -2001,6 +2036,7 @@ mod tests {
                 "device_computer_app_remove",
                 "device_settings_get",
                 "device_settings_set",
+                "floating_controls",
                 "hotkeys_pause",
                 "hotkeys_practice",
                 "keyboard_has_altgr",

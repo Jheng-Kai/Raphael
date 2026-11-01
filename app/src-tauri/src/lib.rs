@@ -156,7 +156,9 @@ pub fn run() {
         })
         // Tauri keeps only the last `invoke_handler` call, so every command of the app goes into
         // this one list.
+        .manage(overlay::mouse::Windows::default())
         .invoke_handler(tauri::generate_handler![
+            commands::floating_controls,
             overlay::overlay_subscribe,
             overlay::overlay_log,
             overlay::overlay_confirm,

@@ -3,11 +3,13 @@
 // Rust (overlay.rs) sends events on a channel that this page opens once. The window itself is
 // transparent, click-through and never hidden: "hidden" here means the page draws nothing and
 // the animation loop (see emblem.ts) is stopped. Only a question exposes Stop and its confirmation
-// card. While a question accepts input the window takes the mouse (overlay.rs).
+// card. Only the measured live controls take the mouse (overlay/mouse.rs).
 //
 // The controller below holds all the logic and takes the emblem and the DOM through small
 // interfaces, so the tests run it in Node.
 
+import { reportMouseRegions } from "./mouse-regions";
+export { reportMouseRegions } from "./mouse-regions";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { cancelGesture } from "../shared/cancel-gesture";
 import "../shared/cancel-gesture.css";
@@ -46,6 +48,7 @@ export type AskTier = "T2" | "T3";
 
 /** The events overlay.rs sends (`OverlayEvent`). */
 export type OverlayEvent =
+  | { type: "mouse"; revision: number }
   | { type: "cancelkey"; reset: boolean }
   /** `line`: Raphael's greeting to a question, beside the emblem while he listens. A dictation has none. */
   | { type: "show"; mode: Mode; line?: string }
@@ -876,6 +879,7 @@ async function start(): Promise<void> {
     log: pageLog,
   });
   wireQuestion(controller, yes, no, always);
+  const mouse = reportMouseRegions(document.body, report => invoke("floating_controls", { ...report }));
   const stop = document.getElementById("overlay-stop") as HTMLButtonElement;
   stop.innerHTML = ico("stop") + '<span class="task-action-label overlay-stop-label"></span>';
   const stopLabel = stop.querySelector<HTMLElement>(".overlay-stop-label")!;
@@ -913,6 +917,7 @@ async function start(): Promise<void> {
   // Read afresh each time: the controller changes the phase while it handles an event.
   const phase = (): string => emblem.phase;
   const handle = guardHandler((event) => {
+    if (event.type === "mouse") { mouse.reset(event.revision); return; }
     if (event.type === "cancelkey") { if(event.reset)gesture.clear();else gesture.press();return; }
     if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }
     if (event.type === "show" || event.type === "mode") { taskRun++;taskActive=true;stop.hidden=true; }
