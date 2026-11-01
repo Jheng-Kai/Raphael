@@ -2147,7 +2147,7 @@ async def test_the_workers_methods_are_on_the_app_from_the_start(make_app):
 async def test_the_assistant_and_the_worker_go_through_the_one_gate(make_app):
     app = make_app()
     assert app.agent._gate is app.gate and app.background._gate is app.gate
-    assert app.gate.plugins is app.tool_hub and app.tool_hub.delegate is app.vm_tools and app.vm_tools.delegate is app.integrations
+    assert app.gate.plugins is app.tool_hub and app.tool_hub.delegate.delegate is app.vm_tools and app.vm_tools.delegate is app.integrations
     assert app.agent._plugins is app.tool_hub
 
 
