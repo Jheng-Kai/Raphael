@@ -79,7 +79,7 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
   }
   function billHTML(): string {
     const bill = report!.bill;
-    const purposeKey = { agent: "runs.work", stt: "usage.stt", cleanup: "usage.cleanup", memory: "usage.memory" } as const;
+    const purposeKey = { agent: "runs.work", stt: "usage.stt", cleanup: "usage.cleanup", memory: "usage.memory", image: "media.image", video: "media.video" } as const;
     const exclusions = [
       allowance.brains.length ? btn(t("runs.cliExcluded"), ' data-run-act="show-allowance"') : "",
       report!.fish_voice ? esc(t("runs.fishExcluded")) : "",

@@ -27,6 +27,13 @@ class Ledger:
         self.model: str | None = None
         self.calls: list[dict] = []
 
+    def include_media(self, billing: dict) -> None:
+        """Include a media call already recorded under its own spend purpose, without billing twice."""
+        cost = billing.get("cost_usd")
+        self.total += cost if isinstance(cost, (int, float)) and math.isfinite(cost) and cost >= 0 else 0
+        self.calls.append({"model": billing["model"], "at_ms": self._spend._now_ms(), "ms": 0,
+                           "tokens": 0, "cost_usd": cost or 0, "outcome": "ok" if cost is not None else "cost_unknown"})
+
     def add(
         self,
         *,

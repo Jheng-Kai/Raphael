@@ -446,6 +446,8 @@ class TaskRun:
                 tier=fields.get("tier"),
                 ms=fields.get("ms", 0),
                 reason=fields.get("reason"),
+                detail=fields.get("detail"),
+                cost_usd=fields.get("cost_usd"),
             )
             self._store.progress(
                 self.task_id,
@@ -645,7 +647,7 @@ class TaskRun:
 
     async def _tool(self, name: str, arguments: dict, call_id: str = "") -> dict:
         ref = self.snapshot.refs.get(name)
-        paying = ref is not None and ref.kind == BUILTIN and ref.name in _PAID_TOOLS
+        paying = ref is not None and (ref.kind == BUILTIN and ref.name in _PAID_TOOLS or ref.server == "media")
         self._check(tool=True, paid=paying)
         self.tool_calls += 1
         began = time.perf_counter()
@@ -657,6 +659,9 @@ class TaskRun:
         detail: str | None = None
         if ref.kind == MCP:
             reply, outcome, tier, sent = await self._plugin(ref, arguments, name, call_id)
+            if reply.get("billing"):
+                detail = json.dumps(reply["billing"])
+                self.ledger.include_media(reply["billing"])
             self._memory_untrusted = True
         elif ref.kind == FIND:
             reply, outcome, tier = self._find(arguments)
@@ -683,17 +688,24 @@ class TaskRun:
         }
         if detail is not None:
             fields["detail"] = detail
+        if reply.get("billing"):
+            fields["cost_usd"] = reply["billing"]["cost_usd"] or 0
         if ref.kind == MCP:
             self._end_step(sent, **fields)  # the step written when the call was sent
         else:
             self._step(kind="tool", **fields)
-        if reply.get("ok") and (name == "generate_audio" or ref is not None and ref.server == "computer" and ref.name == "attach_file"):
+        if reply.get("ok") and (name == "generate_audio" or ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
             from ..services.artifacts import artifact_payload
             payload = artifact_payload(reply.get("content", ""), self._attachment_store)
             if payload:
                 self._artifact(payload)
         if reply.get("kind") == "computer_permission_required":
             raise stopped("failed", "computer_permission_required")
+        if not reply.get("ok") and ref.server == "media":
+            from ..failures import missing_for
+            missing = missing_for(reply.get("kind"), ref.name)
+            if missing:
+                self._artifact({"missing": missing.wire()})
         return reply
 
     def continuation_state(self):
@@ -816,6 +828,7 @@ class TaskRun:
             "content": text,
             "truncated": cut or result.truncated,
             **({"blocks": result.blocks} if result.blocks else {}),
+            **({"billing": result.billing} if result.billing else {}),
         }
         if ref.server == "computer":
             task = self._store.get(self.task_id)
@@ -883,9 +896,13 @@ class TaskRun:
             self._in_plugin_call = False
         text, cut = _cut(result.text)
         outcome = _outcome_of(result)
+        if result.billing:
+            self.ledger.include_media(result.billing)
         self._end_step(
             sent, tool=ref.name, server=ref.server, tier=None if now is None else now.name,
             outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.kind),
+            detail=json.dumps(result.billing) if result.billing else None,
+            cost_usd=(result.billing["cost_usd"] or 0) if result.billing else None,
         )  # fmt: skip
         if result.ok:
             self.seen_urls.add_from(text)

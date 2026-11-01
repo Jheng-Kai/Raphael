@@ -151,6 +151,9 @@ export interface CliModel {
 
 /** A model of `models.catalog`. Prices are US$; null is unknown or does not apply. */
 export interface CatalogModel {
+  per_image?: number | null;
+  per_request?: number | null;
+  image_output_per_mtok?: number | null;
   effort_models?: Record<string, string>;
   description?: string;
   is_default?: boolean;
@@ -198,6 +201,8 @@ export interface ReplacedModel {
 
 /** `models.catalog`: models from enabled providers, by kind; legacy catalogs contain OpenRouter alone. */
 export interface ModelCatalog {
+  image?: CatalogModel[];
+  video?: CatalogModel[];
   /** Text in, text out: the cleanup and the answers. */
   llm: CatalogModel[];
   /** Speech to text. */
@@ -569,6 +574,8 @@ export interface DictionaryEntry {
 
 /** `settings.get`: the settings of the brain. */
 export interface BrainSettings {
+  image_model?: string;
+  video_model?: string;
   computer_ssh_alias?: string;
   chief_pinned?: boolean;
   owner_name?: string;

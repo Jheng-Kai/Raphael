@@ -76,6 +76,7 @@ import {
   WORKER_COST_CAPS,
   workerCostCap,
   MODEL_ROWS,
+  mediaRowPrice,
   canonicalPane,
   PANES,
   type SearchHit,
@@ -773,6 +774,10 @@ export function createSettings(app: AppContext): SettingsPage {
       return;
     }
     paintPrices();
+    for (const role of ["image", "video"] as const) {
+      const price = body.querySelector<HTMLElement>(`[data-media-price="${role}"]`);
+      if (price) price.textContent = mediaRowPrice(view(), role);
+    }
     for (const [role, picker] of pickers) picker.update(lookFor(role));
   }
 
@@ -913,7 +918,7 @@ export function createSettings(app: AppContext): SettingsPage {
               void cliBrains.click(button);
             },
             onChoose: (id) => void chooseModel(role, id),
-            onFavorite: (id, on) => void changeFavorite(role, id, on),
+            onFavorite: (id, on) => void changeFavorite(role === "image" || role === "video" ? "answer" : role, id, on),
             onUseLocal: (name) => void useLocal(name),
             onCancelLocal: () => void cancelLocal(),
             onDeleteLocal: (name) => void deleteLocal(name),
@@ -950,7 +955,8 @@ export function createSettings(app: AppContext): SettingsPage {
   }
 
   /** A model chosen in a picker (a local speech model is chosen in its own tab: `useLocal`). */
-  function chooseModel(role: ModelRole, id: string): Promise<void> {
+  function chooseModel(role: ModelRole | "image" | "video", id: string): Promise<void> {
+    if (role === "image" || role === "video") return changeBrain(role === "image" ? "image_model" : "video_model", id);
     if (role === "stt") return changeStt(id);
     return changeBrain("cleanup_model", id);
   }
@@ -1460,7 +1466,10 @@ export function createSettings(app: AppContext): SettingsPage {
         } else if (target === "models") {
           await providers.load();
           if (mine !== loads || !visible) return;
-          if (resource === "chatgpt") {
+          if (resource === "image" || resource === "video") {
+            const control = el.querySelector<HTMLElement>(`[data-row="${resource}-model"] [data-k="${resource}-model"]`);
+            control?.scrollIntoView({block: "center"}); control?.focus({preventScroll: true});
+          } else if (resource === "chatgpt") {
             const card = el.querySelector<HTMLElement>('[data-chatgpt-card]');
             card?.scrollIntoView({block: "center"}); card?.querySelector<HTMLElement>('button')?.focus();
           } else providers.openRepair(resource);

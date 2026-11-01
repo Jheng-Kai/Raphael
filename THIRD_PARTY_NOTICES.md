@@ -14,6 +14,13 @@ marks were copied.
 
 ## NousResearch/hermes-agent (MIT)
 
+Configured capability dispatch in `services/generation.py`, `generation_tools.py`
+and `brain/providers/clients.py` was informed by `tools/image_generation_tool.py`
+and `tools/video_generation_tool.py`: expose supported input types, require an
+explicit configured model and keep provider-specific generation behind one tool
+table. Raphael uses its own provider registry, bounded HTTP, attachments and
+background cancellation. No Hermes provider plugin or additional credentials are bundled.
+
 `core/src/raphael_core/computer/local_patterns.py` adapts `DANGEROUS_PATTERNS`
 from NousResearch/hermes-agent `tools/approval.py` (the pattern definitions are in
 `tools/approval_detection.py` at revision `c419cf7c`), with additional Windows
@@ -35,6 +42,12 @@ Upstream: https://github.com/milind-soni/OpenMausBot, revision
 `licenses/Apache-2.0.txt`.
 
 Modified ports and adaptations, with upstream file names:
+
+- `core/src/raphael_core/computer/datasets.py` and `dataset_runtime.py` were
+  informed by `server/data/tools.ts`: named DuckDB tables, CSV/Excel/Parquet import,
+  bounded SQL results and chart-file delivery. Raphael runs its own Python helper
+  through the existing member `vm_exec`, with workspace-only paths and first-use
+  dependencies; no `enterprise/` code or separate host database service is used.
 
 - The event routine contract in `members/events.py` and `agent/harness_tools.py`
   was informed by the app/event trigger separation in

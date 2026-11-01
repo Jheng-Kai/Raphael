@@ -877,6 +877,14 @@ class App(Router):
         from .computer.local_tools import LocalTools
         self.vm_tools = self.tool_hub
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")
+        from .services.generation import Generation
+        from .services.generation_tools import GenerationTools
+        from .services.fetch import PageFetcher
+        from .services.attachments import MAX_FILE_BYTES
+        self.generation = Generation(self.providers, self.attachment_store,
+            fetcher=PageFetcher(media=True, media_types=("image/png", "image/jpeg", "image/webp", "video/mp4"), max_bytes=MAX_FILE_BYTES, max_seconds=120,
+                                transport=offline_transport() if fake_llm else None))
+        self.tool_hub = GenerationTools(self.tool_hub, self.generation, self._conn)
         # The one gate every tool call goes through, the assistant's and the worker's.
         self.gate = ToolGate(
             self.tool_hub,

@@ -119,6 +119,71 @@ export function checkRendered(name, context = {}) {
     require(!/MCP|toolkit/.test(menu.textContent), 'implementation kinds never appear in discovery');
     return {check:name, headings:heads, values, box:{x:box.x,y:box.y,width:box.width,height:box.height}};
   }
+  if (name.startsWith('media-models-')) {
+    const image = document.querySelector('[data-row="image-model"]'), video = document.querySelector('[data-row="video-model"]');
+    require(visible(image) && visible(video), 'both media choices use existing visible model rows');
+    require(/API/.test(image.textContent) && /API/.test(video.textContent), 'both rows disclose the separate API bill');
+    if (name === 'media-models-unset') {
+      require(/未設定/.test(image.textContent) && /未設定/.test(video.textContent) && /沒有可用模型/.test(video.textContent), 'unset never chooses a model and video has no invented capability');
+      require(!/與回答相同/.test(image.textContent + video.textContent), 'unset media never inherits the conversational model');
+    } else if (name === 'media-models-set') {
+      require(/Gemini Image/.test(image.textContent) && /圖片輸出.*30/.test(image.textContent), 'the selected drawing model has its image token price');
+      require(/影片模型範例/.test(video.textContent) && /每次請求.*0.12/.test(video.textContent), 'video shows the explicit synthetic provider and request price');
+    } else if (name === 'media-models-menu') {
+      const menu = document.querySelector('.model-chooser');
+      require(visible(menu) && /每張.*0.04/.test(menu.textContent) && /每次請求.*0.025/.test(menu.textContent) && /圖片輸出/.test(menu.textContent), 'image-only models keep their real pricing units');
+      for (const price of menu.querySelectorAll('.mc-price')) {
+        const row = price.closest('.mc-row'), model = row.querySelector('.mc-model');
+        require(model.getBoundingClientRect().width >= 80 && price.getBoundingClientRect().right <= row.getBoundingClientRect().right,
+          'the model name and every price unit remain inside the existing picker row');
+      }
+    } else if (name === 'media-models-repair') {
+      require(['image-model', 'video-model'].includes(document.activeElement?.dataset.k), 'repair focuses the exact model control');
+    }
+    require(!window.__look.calls.some(c => c.method === 'settings.set' && ['image_model','video_model'].includes(c.params.key)), 'viewing or repair never chooses a paid model');
+    return {check:name};
+  }
+  if (name === 'generated-media-bill') {
+    const step = document.querySelector('.step-list');
+    require(visible(step) && /google\/gemini-image/.test(step.textContent) && /API 費用.*0.042/.test(step.textContent), 'the visible work step names the model and actual bill');
+    require(visible(step.querySelector('.step-detail')) && !step.querySelector('.step-why') && step.querySelector('.step-t')?.textContent === '畫圖', 'a successful drawing bill uses neutral detail and its own action title');
+    return {check:name};
+  }
+  if (name === 'generated-image' || name === 'generated-video') {
+    const selector = name === 'generated-image' ? 'img[data-attachment]' : 'video[data-attachment]';
+    const element = document.querySelector('.ra-body ' + selector);
+    require(document.querySelectorAll(selector).length === 1, 'the generated output is not also fabricated as owner input');
+    require(visible(element) && element.src.startsWith('blob:'), 'the stored media is loaded through attachments.get');
+    require(name !== 'generated-image' || element.naturalWidth > 0, 'the image decoded');
+    require(name !== 'generated-video' || element.controls && element.readyState >= 1, 'the existing video player has playable metadata');
+    return {check:name,id:element.dataset.attachment};
+  }
+  if (name === 'dataset-chart') {
+    require(visible(document.querySelector('.ra-body .attachment-file[data-id]')), 'the chart has a stored file action');
+    return {check:name};
+  }
+  if (name === 'dataset-table') {
+    const table = document.querySelector('.ra-body .message-table');
+    require(visible(table) && table.textContent.includes('36') && table.textContent.includes('台北'), 'the continued query renders actual table values');
+    return {check:name};
+  }
+  if (name === 'generated-missing') {
+    const note = [...document.querySelectorAll('.ra-body .missing-note')].find(visible);
+    require(visible(note) && /供應商/.test(note.textContent) && /畫圖|影片/.test(note.textContent), 'the visible notice names the capability and provider');
+    require(/尚未選擇.*模型/.test(note.textContent) && /API 費用/.test(note.textContent) && /不會自動/.test(note.textContent), 'the notice explains the explicit choice and separate bill without choosing');
+    require(visible(note.querySelector('[data-missing-repair="models"]')), 'the existing Models repair is offered');
+    return {check:name};
+  }
+  if (name === 'generated-video-running') {
+    require(visible(document.querySelector('.work-section.is-live')) && visible(document.querySelector('.composer[data-task-state="running"] .cmp-voice')), 'progress and the existing Stop remain visible');
+    require(document.body.textContent.includes('正在製作影片'), 'the latest video progress is visible');
+    return {check:name};
+  }
+  if (name === 'generated-video-cancelled') {
+    require(window.__look.calls.filter(c => c.method === 'worker.cancel').length === 1, 'Stop dispatches exactly one task cancellation');
+    require(!document.querySelector('.ra-body video[data-attachment]'), 'cancellation leaves no video artifact');
+    return {check:name};
+  }
   if (name.startsWith('teach-')) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);

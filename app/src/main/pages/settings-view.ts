@@ -173,6 +173,8 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "models", label: "settings.031", also: "settings.searchModel" },
   { pane: "models", label: "settings.035", also: "settings.searchModel" },
   { pane: "models", label: "settings.quickModel", also: "settings.searchModel", words: ["Alt", "Space"] },
+  { pane: "models", label: "media.image", words: ["image", "drawing"] },
+  { pane: "models", label: "media.video", words: ["video"] },
   { pane: "data", label: "data.retention", also: "settings.searchHistory" },
   { pane: "data", label: "data.dictationAll", also: "data.clearDictation" },
   { pane: "data", label: "data.conversationAll", also: "data.clearConversation" },
@@ -395,34 +397,38 @@ const priceSpan = (v: SettingsView, k: string, cls = ""): string =>
 
 // ---------- the model rows ----------
 // A member's model is chosen in its own conversation, so nothing here says what any member answers on: the rows are
-// Raphael's quick question and what serves dictation. Each row stands alone: its name with the price of what is chosen under it, in full words, and the
+// Raphael's quick question, dictation and explicit paid media services. Each row stands alone: its name with the price of what is chosen under it, in full words, and the
 // control, the model picker (model-picker.ts) of every OpenRouter model its role can use. The page
 // draws the picker's button here; settings.ts makes it work. `k` names the control and its price.
 
 /** What each picker is for: the `k` of its control and its price, and its name. The answer role has no row of its own: it lends 快速提問 its list. */
-export const MODEL_ROWS: readonly { role: ModelRole; k: string; label: () => string }[] = [
+export const MODEL_ROWS: readonly { role: ModelRole | "image" | "video"; k: string; label: () => string }[] = [
   { role: "answer", k: "quick-model", label: () => t("settings.quickModel") },
   { role: "cleanup", k: "model", label: () => t("settings.035") },
   { role: "stt", k: "stt-model", label: () => t("settings.031") },
+  { role: "image", k: "image-model", label: () => t("media.image") },
+  { role: "video", k: "video-model", label: () => t("media.video") },
 ];
 
 /**
  * What the picker of `role` is drawn from. Its button leaves the price out, which the row says
  * under its name, and it cannot be used while the core does not answer.
  */
-export function modelPickerLook(v: SettingsView, role: ModelRole): ModelPickerLook {
+export function modelPickerLook(v: SettingsView, role: ModelRole | "image" | "video"): ModelPickerLook {
   const { k, label } = MODEL_ROWS.find((r) => r.role === role)!;
+  const media = role === "image" || role === "video";
   return {
     role,
     key: k,
     label: label(),
-    current: role === "stt" ? sttModel(v) : role === "cleanup" ? cleanupModel(v) : agentModel(v),
+    current: media ? v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "" : role === "stt" ? sttModel(v) : role === "cleanup" ? cleanupModel(v) : agentModel(v),
     catalog: catalogOf(v),
     providers: v.providers?.providers,
     clis: role === "answer" ? v.cliBrains?.clis : undefined,
     ...(role === "answer" ? { chatgpt: v.cliBrains?.chatgpt ?? null, chatgptError: v.cliBrains?.chatgptError ?? "" } : {}),
     loading: v.catalog === "loading",
-    favorites: v.brain?.model_favorites?.[role] ?? [],
+    favorites: v.brain?.model_favorites?.[media ? "answer" : role as ModelRole] ?? [],
+    ...(media ? { lead: { id: "", name: t("media.unset"), source: "" } } : {}),
     ...(role === "stt" ? { local: localView(v) } : {}),
     showPrice: false,
     disabled: v.brain === null,
@@ -452,8 +458,16 @@ export function visionPickerLook(v: SettingsView): ModelPickerLook {
 }
 
 /** A model row: the purpose, its price and the primary picker. */
+export function mediaRowPrice(v: SettingsView, role: "image" | "video"): string {
+  const chosen = v.brain?.[role === "image" ? "image_model" : "video_model"] ?? "";
+  const models = catalogOf(v) ? modelsFor(catalogOf(v)!, role) : [];
+  const model = models.find(m => m.id === chosen);
+  return `${model ? priceDescription(model, role) : chosen ? t("media.unavailable") : t("media.unset")} · ${t("media.paid")}` +
+    (!chosen && !models.length && v.catalog !== "loading" ? ` · ${t("media.none")}` : "");
+}
 const modelRow = (v: SettingsView, { role, k, label }: (typeof MODEL_ROWS)[number]): string =>
-  row(label(), priceSpan(v, k, "price num"), modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
+  row(label(), role === "image" || role === "video" ? `<span data-media-price="${role}">${esc(mediaRowPrice(v, role))}</span>` : priceSpan(v, k, "price num"),
+    modelPickerHTML(modelPickerLook(v, role)), { cls: "row-model", attrs: ` data-row="${k}"` });
 
 // ---------- the OpenRouter rows ----------
 

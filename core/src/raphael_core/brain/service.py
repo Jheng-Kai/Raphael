@@ -930,6 +930,20 @@ class Brain:
                 pid = model["id"][1:].partition(":")[0] if model["id"].startswith("@") else "openrouter"
                 model["provider_id"] = pid
                 model["provider_name"] = self._providers.config(pid)["name"] if self._providers else "OpenRouter"
+        if self._providers:
+            for kind in ("image", "video"):
+                view[kind] = []
+                for row in self._providers.media_choices(kind):
+                    pid, _ = self._providers.resolve(row["reference"])
+                    view[kind].append({"id": row["reference"], "name": row["name"],
+                        "provider": self._providers.config(pid)["name"], "provider_id": pid,
+                        "provider_name": self._providers.config(pid)["name"],
+                        "input_per_mtok": row.get("price_in"), "output_per_mtok": row.get("price_out"),
+                        "image_output_per_mtok": row.get("image_output_per_mtok"),
+                        "per_image": row.get("per_image"), "per_request": row.get("per_request"),
+                        "per_minute": None, "free": False, "variable_price": False,
+                        "context_length": row.get("context"), "created_at_ms": None,
+                        "capabilities": {}, "roles": {}})
         return view
 
     def _replace_vanished(self, entries: list[CatalogEntry]) -> list[dict[str, str]]:

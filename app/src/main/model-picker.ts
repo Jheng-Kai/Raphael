@@ -39,14 +39,14 @@ export const DEFAULT_PICKER_STATE: PickerState = { query: "", sort: "price", pro
  * at images (the `vision_model` setting), which the catalog has no role for: it is any language
  * model that reads images.
  */
-export type PickerRole = ModelRole | "vision";
+export type PickerRole = ModelRole | "vision" | "image" | "video";
 
 /** The kind of model each role chooses among. */
-const KIND: Record<PickerRole, "llm" | "stt"> = { cleanup: "llm", answer: "llm", stt: "stt", vision: "llm" };
+const KIND: Record<PickerRole, "llm" | "stt" | "image" | "video"> = { cleanup: "llm", answer: "llm", stt: "stt", vision: "llm", image: "image", video: "video" };
 
 /** The models of the catalog that `role` chooses among: those of its kind. */
 export const modelsFor = (catalog: ModelCatalog, role: PickerRole): CatalogModel[] => {
-  const models = catalog[KIND[role]];
+  const models = catalog[KIND[role]] ?? [];
   return models.some((m) => modelRef(m) !== m.id) ? models.map((m) => ({ ...m, id: modelRef(m) })) : models;
 };
 
@@ -65,6 +65,7 @@ export const acceptsImages = (model: CatalogModel): boolean => model.input_modal
 
 /** Whether `role` can use `model`, and if not why: the core's word for a role of its catalog, ours for `vision`. */
 export function fitFor(model: CatalogModel, role: PickerRole): { usable: boolean; reason: string | null } {
+  if (role === "image" || role === "video") return { usable: true, reason: null };
   if (role === "vision") return acceptsImages(model) ? { usable: true, reason: null } : { usable: false, reason: "no_image_input" };
   const fit = model.roles[role];
   return { usable: fit?.usable === true, reason: fit?.reason ?? null };
@@ -89,6 +90,7 @@ const hasTokenPrice = (m: CatalogModel): boolean => m.input_per_mtok !== null ||
  * by the token, `$2.00 / $12 每百萬 token`. Else 免費, 價格不固定 (a router) or 價格未知.
  */
 export function priceText(model: CatalogModel, role: PickerRole): string {
+  if (role === "image" || role === "video") return mediaPrice(model);
   if (planRef(model.id)) return t("brains.subscription");
   if (model.variable_price) return t("picker.varies");
   if (model.free) return t("picker.free");
@@ -99,10 +101,19 @@ export function priceText(model: CatalogModel, role: PickerRole): string {
 
 /** The price in full words, for a screen reader: 「輸入 $0.10 / 輸出 $0.50 每百萬 token」. */
 export function priceDescription(model: CatalogModel, role: PickerRole): string {
+  if (role === "image" || role === "video") return mediaPrice(model);
   if (KIND[role] === "llm" && !model.variable_price && !model.free && hasTokenPrice(model)) {
     return t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) });
   }
   return priceText(model, role);
+}
+
+function mediaPrice(model: CatalogModel): string {
+  const units = [model.per_image == null ? "" : t("media.perImage", { p0: formatPerMtok(model.per_image) }),
+    model.per_request == null || model.per_request === 0 && (hasTokenPrice(model) || model.image_output_per_mtok != null) ? "" : t("media.perRequest", { p0: formatPerMtok(model.per_request) })];
+  const tokens = hasTokenPrice(model) ? t("pricing.002", { p0: perMtok(model.input_per_mtok), p1: perMtok(model.output_per_mtok) }) : "";
+  const images = model.image_output_per_mtok == null ? "" : t("media.imageTokens", { p0: formatPerMtok(model.image_output_per_mtok) });
+  return [...units, tokens, images].filter(Boolean).join(" · ") || t("pricing.001");
 }
 
 /** A context length in tokens, short: 1050000 -> `1.05M`, 131072 -> `131K`. */
@@ -142,6 +153,7 @@ export interface PickerRow {
 export interface PickerLead {
   id: string;
   name: string;
+  source?: string;
 }
 
 /** The lead as a row of the list: a model with its id and name and nothing else. */
@@ -513,6 +525,7 @@ export function chooserSources(o: ModelPickerLook): ChooserSource[] {
 /** A fallback is allowed only for an exact maker and model identifier, never a similar name. */
 export function chooserPrice(model: CatalogModel, models: readonly CatalogModel[], role: PickerRole): string {
   if (planRef(model.id)) return "";
+  if (role === "image" || role === "video") return priceText(model, role);
   if (model.free || model.variable_price || model.per_minute !== null || hasTokenPrice(model)) return priceText(model, role);
   const raw = model.id.replace(/^@[^:]+:/, "");
   const maker = model.provider.toLowerCase();
@@ -541,7 +554,7 @@ export function modelPickerSelection(o: ModelPickerLook): { name: string; source
   const name = local ? local.split(" · ").slice(1).join(" · ") : o.lead?.id === ref ? o.lead.name : model?.name ?? shortName(ref);
   const cli = CLIS.find((c) => ref.startsWith(`cli:${c.id}`))?.name;
   const from = local ? t("picker.tabLocal") : model ? connectionName(model) : ref.startsWith("cli:") ?
-    `${cli ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? t("chooser.same") : "";
+    `${cli ?? ""} ${t("brains.subscription")}` : o.lead?.id === ref ? o.lead.source ?? t("chooser.same") : "";
   const stale = !!ref && !!o.catalog && !o.loading && !model && !local && o.lead?.id !== ref;
   if (stale) return { name, source: t("missing.retired"), provider: cli ?? from, model };
   const source = inherited ? `${from} · ${t("services.sameAsAnswer")}` : from;

@@ -8,6 +8,7 @@ import {
   PickerList,
   acceptsImages,
   fitFor,
+  chooserPrice,
   modelPickerHTML,
   usableFor,
   formatContext,
@@ -25,6 +26,16 @@ import {
 import type { CatalogModel, ModelCatalog } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
+
+test("media chooser shows fixed and image-token prices without requiring text token prices", () => {
+  setLocale("zh-TW");
+  for (const role of ["image", "video"] as const) {
+    const model = llm("test/media", { input_per_mtok: null, output_per_mtok: null });
+    expect(chooserPrice({ ...model, per_image: .04 }, [], role)).toBe("每張 $0.04");
+    expect(chooserPrice({ ...model, per_request: .12 }, [], role)).toBe("每次請求 $0.12");
+    expect(chooserPrice({ ...model, image_output_per_mtok: 30 }, [], role)).toBe("圖片輸出 $30 每百萬 token");
+  }
+});
 
 test("direct connections stay grouped with favourites inside each group and OpenRouter last", () => {
   const direct = llm("gpt-5", { name: "GPT-5", provider_id: "p3", provider_name: "OpenAI" });

@@ -344,7 +344,9 @@
 :root[data-theme="dark"] .step-ic.logo-art .lg-d ~ .lg-l, :root[data-theme="dark"] .step-ic.logo-art .lg-l:has(+ .lg-d) { display: none; }
 .step-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-2); min-width: 0; padding-top: var(--sp-1); }
 .step-t { line-height: 1.45; overflow-wrap: anywhere; }
-.step-why { flex-basis: 100%; font-size: var(--pa-sys); line-height: 1.5; color: var(--err); }
+.step-why, .step-detail { flex-basis: 100%; font-size: var(--pa-sys); line-height: 1.5; }
+.step-why { color: var(--err); }
+.step-detail { color: var(--text-2); overflow-wrap: anywhere; }
 .step-end { display: inline-flex; align-items: center; gap: var(--sp-1); padding-top: var(--sp-1); }
 .step-ms { font-size: var(--pa-sys); color: var(--text-3); }
 .step-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; }

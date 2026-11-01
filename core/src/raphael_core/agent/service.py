@@ -2002,14 +2002,14 @@ class AgentService:
                     return ToolOutcome(False, "already_done", instruction=(
                         "This exact action was already done before the pause. Do not do it again."))
                 result = await execute(call_id, name, args)
-                if result.ok and (name == "generate_audio" or ref is not None and ref.server == "computer" and ref.name == "attach_file"):
+                if result.ok and (name == "generate_audio" or ref is not None and (ref.server == "media" or ref.server == "computer" and ref.name in ("attach_file", "dataset"))):
                     from ..services.artifacts import artifact_payload
                     payload = artifact_payload(result.content, self._attachment_store)
                     if payload:
                         self._message(ask, "media", json.dumps(payload, ensure_ascii=False))
-                elif name == "generate_audio":
+                elif name == "generate_audio" or ref is not None and ref.server == "media":
                     from ..failures import missing_for
-                    missing = missing_for(result.kind, name)
+                    missing = missing_for(result.kind, ref.name if ref is not None and ref.server == "media" else name)
                     if missing:
                         self._message(ask, "media", json.dumps({"missing": missing.wire()}, ensure_ascii=False))
                 if ref is not None and ref.server == "computer" and loop.refresh_computer():
@@ -2580,7 +2580,7 @@ class AgentService:
             return await self._harness_call(ask, call, approval, action, steps=steps)
         if call.tool.key in TEAM_TOOLS:
             return await self._team_call(ask, call, ledger, approval=approval, action=action, steps=steps)
-        return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps, ask=ask)
+        return await self._plugin_call(call, approval, action, steps=ask.steps if steps is None else steps, ask=ask, ledger=ledger)
 
     async def _harness_call(
         self, ask: _Ask, call: PlannedCall, approval: Approval | None, action: Action | None,
@@ -2981,6 +2981,7 @@ class AgentService:
         *,
         steps: list[Step],
         ask: _Ask | None = None,
+        ledger: Ledger | None = None,
     ) -> ToolResult:
         """Make a call of a plugin's tool through the policy's one door, and give its result as
         the answer is shown it. `approval` is the yes for it, if it had to be asked about; a call
@@ -3004,9 +3005,12 @@ class AgentService:
                 outcome.text += "\n[The owner can see this tool's page in the conversation.]"
             except PageError as error:
                 outcome.text += f"\n[Page refused: {error.kind}. {error}]"
+        if outcome.billing and ledger is not None:
+            ledger.include_media(outcome.billing)
         steps.append(
             self._step(
-                "tool", call.tool.name, call.tool.server, _plugin_outcome(outcome), began, outcome.kind
+                "tool", call.tool.name, call.tool.server, _plugin_outcome(outcome), began, outcome.kind,
+                json.dumps(outcome.billing) if outcome.billing else None
             )
         )
         result = _tool_result(call, outcome)

@@ -388,7 +388,26 @@ class ProviderRegistry:
         selected.update(row[0] for row in self._conn.execute("SELECT model FROM members WHERE model != ''"))
         local = BY_KIND.get(self.config(pid)["kind"], {}).get("local_context_hint", False)
         return {"models": [{**row, "context_warning": bool(local and row["context"] is not None
-                           and row["context"] < 65_536 and f"@{pid}:{row['id']}" in selected)} for row in rows]}
+                           and row["context"] < 65_536 and f"@{pid}:{row['id']}" in selected)} for row in rows if not row.get("generation_only")]}
+
+    def media_choices(self, kind):
+        choices = []
+        for pid in self.ids():
+            config = self.config(pid)
+            if config["kind"] not in ("openai", "xai", "openrouter", "google"):
+                continue
+            if kind == "video" and config["kind"] not in ("openai", "xai"):
+                continue
+            for row in self._models.get(pid, []):
+                reference = row["id"] if pid == "openrouter" else f"@{pid}:{row['id']}"
+                if kind in row.get("media", []) and self.available(reference):
+                    choices.append({**row, "reference": reference})
+        return choices
+
+    def remember_openrouter_media(self, rows):
+        metadata = [model_info(row, kind="openrouter") for row in rows]
+        self._models["openrouter"] = [row for row in metadata if row["media"]]
+        self._save()
 
     def catalog_entries(self):
         entries = []
@@ -397,6 +416,8 @@ class ProviderRegistry:
                 continue
             config = self.config(pid)
             for row in (self.chatgpt.auth.model_rows if pid == "chatgpt" else self._models.get(pid, [])):
+                if row.get("generation_only"):
+                    continue
                 caps = {"structured_output", "reasoning", "reasoning_off", "max_tokens"}
                 if row["tools"]:
                     caps.add("tool_calling")
@@ -626,7 +647,9 @@ class ProviderRouter:
         return await self.registry.client("openrouter").decide(**kwargs)
 
     async def models(self, timeout_s=5):
-        return await self.openrouter.models(timeout_s=timeout_s)
+        rows = await self.openrouter.models(timeout_s=timeout_s)
+        self.registry.remember_openrouter_media(rows)
+        return rows
 
     async def key_info(self, key=None, timeout_s=5):
         return await self.openrouter.key_info(key=key, timeout_s=timeout_s)

@@ -31,6 +31,7 @@ import type { MentionTarget } from "./mention-text";
 import { quoteHTML } from "./message-quote";
 import { previewCardsHTML } from "./link-previews";
 import { formatClock, formatUsd } from "./format";
+import { formatPerMtok } from "./pricing";
 import { SERVICE_ICONS, brandStyle, hasLogo, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import type { AgentStep, AgentTask, AgentTurn, MainEvent, MediaPayload, MessageQuote, TurnAttachment } from "./types";
 import { btn, esc, ico, iconBtn } from "./ui";
@@ -165,6 +166,8 @@ export function stepTitle(step: AgentStep): string {
   if (!step.tool) return t("agent.stepUnknown");
   if (step.kind === "command") return plain(COMMAND_TITLES[step.tool] ?? "agent.cmd.other");
   if (step.kind === "computer") return plain(COMPUTER_TITLES[step.tool] ?? "agent.computer.other");
+  if (step.server === "media" && step.tool === "image_generate") return t("media.image");
+  if (step.server === "media" && step.tool === "video_generate") return t("media.video");
   if (!step.server || step.server === RAPHAEL) {
     return plain(BUILTIN_TITLES[step.tool] ?? (builtinAccess(step.tool) === "read" ? "agent.tool.readOnly" : "agent.tool.changeOnly"));
   }
@@ -323,12 +326,23 @@ export function stepHTML(step: AgentStep, isNew: boolean): string {
     `<li class="step ${ok ? "is-ok" : "is-bad"}${isNew ? " is-new" : ""}">` +
     stepIcon(step) +
     `<span class="step-main"><span class="step-t"${tip ? ` title="${esc(tip)}"` : ""}>${esc(stepTitle(step))}</span>` +
+    mediaBillHTML(step) +
     (step.missing ? missingHTML(step.missing) : ok ? "" : `<span class="step-why">${esc(why)}</span>`) +
     `</span>` +
     `<span class="step-end"><span class="step-ms num">${esc(formatDuration(step.ms))}</span>` +
     `<span class="step-mark" role="img" aria-label="${esc(ok ? t("agent.ok") : why)}">${ok ? ico("check") : ico("x")}</span></span>` +
     `</li>`
   );
+}
+
+function mediaBillHTML(step: AgentStep): string {
+  if (step.server !== "media" || !step.detail) return "";
+  try {
+    const bill = JSON.parse(step.detail);
+    if (typeof bill.model !== "string" || !bill.model) return "";
+    const cost = typeof bill.cost_usd === "number" && Number.isFinite(bill.cost_usd) && bill.cost_usd >= 0 ? formatPerMtok(bill.cost_usd) : t("media.costUnknown");
+    return `<span class="step-detail">${esc(t("media.bill", { p0: bill.model, p1: cost }))}</span>`;
+  } catch { return ""; }
 }
 
 /** The step a task is at now: its words with light passing over them, the time since it began. */

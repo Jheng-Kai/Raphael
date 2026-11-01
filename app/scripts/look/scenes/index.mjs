@@ -1,6 +1,7 @@
 import sidebar from "./sidebar.mjs";
 import batch from "./batch.mjs";
 import workBatch from "./work-batch.mjs";
+import mediaData from "./media-data.mjs";
 import missing from "./missing.mjs";
 import ownerQuestions from "./owner-questions.mjs";
 import slime from "./slime.mjs";
@@ -24,4 +25,5 @@ import ownerRound9 from "./owner-round9.mjs";
 import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
 export const scenes = withOwnerRound4([...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
+scenes.push(...mediaData);
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

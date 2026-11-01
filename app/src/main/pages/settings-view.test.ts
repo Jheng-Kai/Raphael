@@ -308,7 +308,7 @@ describe("the rules for every tab, in every language", () => {
     expect(described(tab("general"))).toEqual([]);
     expect(described(tab("dictation"))).toEqual([]);
     // the key's status, the month's forecast, what the limit does, and what each model costs
-    expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字"]);
+    expect(described(tab("models"))).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
     expect(described(tab("usage"))).toEqual(["金鑰"]);
   });
 });
@@ -462,7 +462,7 @@ describe("Models", () => {
   test("puts providers and model choices on Models, existing usage controls and analytics slot on Usage", () => {
     const html = tab("models");
     expect(groups(html)).toEqual(["使用的模型", "訂閱帳號", "供應商"]);
-    expect(names(html)).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字"]);
+    expect(names(html)).toEqual(["拉斐爾的快速提問", "整理文字", "語音轉文字", "畫圖", "做影片"]);
     expect(html).not.toContain('data-row="agent-model"');
     expect(html.indexOf('data-pv="directory"')).toBeGreaterThanOrEqual(0);
     expect(html.indexOf('data-pv="directory"')).toBeGreaterThan(html.indexOf('data-row="stt-model"'));

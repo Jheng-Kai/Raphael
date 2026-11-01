@@ -118,6 +118,7 @@ class PageFetcher:
         max_bytes: int = MAX_BYTES,
         max_redirects: int = MAX_REDIRECTS,
         media: bool = False,
+        media_types: tuple[str, ...] | None = None,
     ) -> None:
         self._resolver = resolver
         self._transport = transport
@@ -125,6 +126,7 @@ class PageFetcher:
         self._max_bytes = max_bytes
         self._max_redirects = max_redirects
         self._media = media
+        self._media_types = media_types or ("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif")
 
     async def fetch(self, url: str) -> Fetched:
         """The page at `url`, or ServiceError of a kind (`common.ServiceError`)."""
@@ -199,7 +201,7 @@ class PageFetcher:
                     raise ServiceError("http_error")
                 kind, charset = _content_type(reply.headers.get("content-type", ""))
                 if kind not in (*PAGE_TYPES, PDF_TYPE) and not (
-                    self._media and kind in ("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif")
+                    self._media and kind in self._media_types
                 ):
                     raise ServiceError("unsupported_type")
                 declared = reply.headers.get("content-length", "")

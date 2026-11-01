@@ -36,6 +36,8 @@ const messages: Record<string, MissingKey> = {
   "microphone": "missing.microphone",
   "docker": "missing.docker",
   "member_computer": "missing.memberComputer",
+  "image_generation": "missing.imageGeneration",
+  "video_generation": "missing.videoGeneration",
   "audio_transcriber": "missing.audio_transcriber",
   "audio_ffmpeg": "missing.audio_ffmpeg",
   "audio_decode": "missing.audio_decode",
@@ -57,8 +59,9 @@ export function missingText(value: Missing): string {
 
 export function missingHTML(value: Missing): string {
   const repair = value.repair && repairs.has(value.repair) ? value.repair : null;
+  const resource = value.requirement === "image_generation" ? "image" : value.requirement === "video_generation" ? "video" : value.resource;
   return `<div class="missing-note" role="status"><span>${esc(missingText(value))}</span>` +
-    (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(value.resource)}"`) : "") + `</div>`;
+    (repair ? btn(esc(t("missing.open")), "sm", ` data-missing-repair="${esc(repair)}" data-missing-resource="${esc(resource)}"`) : "") + `</div>`;
 }
 
 export function noticeHTML(requirement: string, repair: string | null = null, resource = repair ?? "app"): string {

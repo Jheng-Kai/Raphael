@@ -1,5 +1,32 @@
 # Raphael architecture and checked boundaries
 
+## Member media and datasets (2026-11-01)
+
+GenerationTools wraps the existing hub for API, authenticated RaphaelMcp and background
+snapshots (A-03/A-04). The single SettingsStore DEFAULTS registry adds image_model and
+video_model, both empty until the owner explicitly chooses. No member/turn model context
+or auxiliary API fallback participates. The existing models.catalog response includes
+image/video lists from ProviderRegistry.media_choices, retaining generation_only models
+and discovered prices without making them conversational brains. Image-only endpoints
+receive only image output requests. Existing MODEL_ROWS and
+the shared picker render the two rows; repair follows Models and focuses the exact row.
+
+Generation validates the selected reference independently, reaches only configured
+credentialed provider endpoints, and keeps authenticated downloads on that endpoint.
+Public media URLs use the bounded public-address fetcher without provider credentials.
+AttachmentStore and existing media cards deliver validated output. Each response's actual
+cost, or reported usage priced with cached published rates, enters Ledger/SpendTracker
+under image/video before delivery errors can lose the bill. Usage bills retain those
+two purposes instead of grouping them as other. Unknown cost stays null in
+the visible receipt; the existing numeric spend records zero known cost, not a free-call
+claim. Work-step detail stores only model/cost metadata; the existing step renderer
+shows readable words. Parent ledgers include the cost without another spend row.
+
+Video keeps background progress and Stop. Cancellation prevents local publication and
+attempts OpenAI deletion; remote cancellation and billing are not guaranteed. Dataset
+work remains under member VM grants and explicit rules, installs pinned dependencies
+only on first workspace use, and needs no Docker layer. No new page, RPC or migration.
+
 ## Owner demonstration boundary (2026-11-01)
 
 `computer/teaching.py` binds an owner recording to DesktopViewer's captured target,

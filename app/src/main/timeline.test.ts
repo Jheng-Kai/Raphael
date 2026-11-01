@@ -32,6 +32,19 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("a paid media step shows its model and exact reported cost without a JSON envelope", () => {
+  setLocale("zh-TW");
+  const paid = step({ server: "media", tool: "image_generate", detail: JSON.stringify({model: "test/image-only", cost_usd: .042}) });
+  const html = stepHTML(paid, false);
+  expect(html).toContain("模型：test/image-only · API 費用：$0.042");
+  expect(html).not.toContain('cost_usd');
+  expect(html).toContain('class="step-detail"');
+  expect(html).not.toContain('class="step-why"');
+  expect(stepTitle(paid)).toBe("畫圖");
+  expect(stepTitle({ ...paid, tool: "video_generate" })).toBe("做影片");
+  expect(stepHTML({...paid, detail: JSON.stringify({model: "test/image-only", cost_usd: null})}, false)).toContain("費用未回報");
+});
+
 test("stored CLI envelopes never render as JSON in a conversation reply", () => {
   const envelope = JSON.stringify({ text: "Gmail needs a connection.", messages: ["Gmail needs a connection."], say_ja: "接続が必要です。" });
   for (const messages of [[], [{ seq: 1, kind: "reply" as const, text: envelope, at_ms: T0 }]]) {

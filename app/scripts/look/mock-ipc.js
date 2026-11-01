@@ -18,6 +18,22 @@ export function installMock(fixture, config = {}, target = window) {
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
   if (variant.fullPermission) data.settings.action_mode = "bypass";
+  if (variant.mediaModels) {
+    const media = { ...data.catalog.llm[0], id: "google/gemini-image", name: "Gemini Image", provider: "Google", provider_id: "openrouter", provider_name: "OpenRouter",
+      roles: {}, input_per_mtok: 2, output_per_mtok: 12, image_output_per_mtok: 30, reasoning_efforts: [], default_effort: null };
+    const unit = { ...media, provider: "Example", input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null };
+    data.catalog.image = [media, { ...unit, id: "test/image-unit", name: "圖片單價範例", per_image: .04 },
+      { ...unit, id: "test/image-request", name: "請求單價範例", per_request: .025 }];
+    data.catalog.video = [];
+    data.settings.image_model = ""; data.settings.video_model = "";
+    if (variant.mediaModels === "set") {
+      data.providers.push({ id: "media-openai", kind: "openai", name: "OpenAI", enabled: true, has_key: true, status: "ok", models: 1, base_url: "https://api.openai.com/v1" });
+      data.catalog.video = [{ ...media, id: "@media-openai:sora-test", name: "影片模型範例", provider: "OpenAI", provider_id: "media-openai", provider_name: "OpenAI",
+        input_per_mtok: null, output_per_mtok: null, image_output_per_mtok: null, per_request: .12 }];
+      data.settings.image_model = "google/gemini-image";
+      data.settings.video_model = "@media-openai:sora-test";
+    }
+  }
   if (variant.pluginsMany) {
     const base = [...data.pluginCatalog];
     for (let i = 0; i < data.pluginCatalogLoad.count; i++) {
@@ -80,6 +96,11 @@ export function installMock(fixture, config = {}, target = window) {
     runningTurn.messages = variant.running === "fresh" ? [] : runningTurn.messages.filter(message => message.kind !== "reply");
     if (variant.running === "fresh") runningTurn.steps = [];
     runningTurn.text = "";
+    if (variant.generatedProgress) {
+      runningTurn.question = "請製作辦公室宣傳影片。";
+      runningTurn.messages = [{seq:1,kind:"progress",text:"正在製作影片 · 40%",at_ms:data.now - 1000}];
+      runningTurn.steps = [{kind:"tool",tool:"video_generate",server:"media",outcome:"in_progress",ms:0,at_ms:data.now - 3000}];
+    }
     if (variant.stopBackground) {
       runningTurn.status = "done";
       runningTurn.task = { id: 71, state: "running", started_at_ms: data.now - 5000, finished_at_ms: null };
@@ -478,6 +499,7 @@ export function installMock(fixture, config = {}, target = window) {
       // A question opening later is not there at the first read, as one that opens while the owner is elsewhere.
       case "background.waiting.list": { data.waitingReads = (data.waitingReads ?? 0) + 1; return { waiting: variant.roomQuestion && (!variant.roomQuestionLate || data.waitingReads > 1) ? [{ id: "room-q", member_id: 1, member_name: "小晴", room_id: 1 }] : [] }; }
       case "attachments.get": {
+        if (variant.generatedFile?.id === p.id) return {mime:variant.generatedFile.mime,data:variant.generatedData};
         if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
         if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
         const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);

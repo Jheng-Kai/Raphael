@@ -71,6 +71,9 @@ DEFAULTS: dict[str, Any] = {
     # what a request is when Jev (agent/routing.py, not a setting) fails or is unsure.
     "agent_model": "openai/gpt-6-luna",
     "quick_model": "",
+    # Separate paid media calls require an explicit owner choice; empty never inherits a brain.
+    "image_model": "",
+    "video_model": "",
     "quick_effort": "low",
     # API-only work when the conversational brain is a subscription CLI or local model.
     "assistant_model": "",
@@ -181,7 +184,7 @@ _CHOICES: dict[str, tuple[Any, ...]] = {
 }
 # The settings that hold the id of an OpenRouter model.
 MODEL_SETTINGS = ("cleanup_model", "stt_cloud_model", "agent_model")
-OPTIONAL_MODEL_SETTINGS = ("vision_model", "router_model", "memory_model", "pdf_model", "assistant_model", "quick_model")
+OPTIONAL_MODEL_SETTINGS = ("vision_model", "router_model", "memory_model", "pdf_model", "assistant_model", "quick_model", "image_model", "video_model")
 FALLBACK_SETTINGS = tuple(purpose + "_fallbacks" for purpose in
                           ("agent", "cleanup", "router", "vision", "pdf", "stt", "memory"))
 _TRIMMED = (*MODEL_SETTINGS, "agent_city")

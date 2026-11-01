@@ -150,6 +150,9 @@ class VmTools:
 
     def _catalog(self, target, definitions):
         definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN)
+        if target.key != "shared":
+            from .datasets import DEFINITION
+            definitions["dataset"] = DEFINITION
         keys = []
         for name, definition in definitions.items():
             key = tool_key(f"computer-{target.key}", name)
@@ -347,6 +350,11 @@ class VmTools:
         if key not in self.tools:
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
         tool, target = self.tools[key], self.routes[key]
+        if tool.name == "dataset":
+            from .datasets import run_dataset
+            async def execute(name, args):
+                return await self.call(tool_key(f"computer-{target.key}", name), args, approver=approver, task_id=task_id, pool=pool)
+            return await run_dataset(arguments, execute, self.attachments)
         result = PluginResult(False, "blocked")
         try:
             scope = _SCOPE.get()

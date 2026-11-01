@@ -454,12 +454,15 @@ class TaskStore:
         tier: str | None = None,
         ms: int = 0,
         reason: str | None = None,
+        detail: str | None = None,
+        cost_usd: float | None = None,
     ) -> None:
         """End a step that was written as "in_progress"."""
         with self._conn:
             self._conn.execute(
-                "UPDATE worker_steps SET outcome = ?, tier = ?, ms = ?, reason = ? WHERE id = ?",
-                (outcome, tier, ms, reason, step_id),
+                "UPDATE worker_steps SET outcome = ?, tier = ?, ms = ?, reason = ?,"
+                " detail = COALESCE(?, detail), cost_usd = COALESCE(?, cost_usd) WHERE id = ?",
+                (outcome, tier, ms, reason, detail, cost_usd, step_id),
             )
 
     def settle_in_progress(self, task_id: int) -> None:

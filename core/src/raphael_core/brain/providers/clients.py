@@ -111,6 +111,16 @@ def model_info(raw: dict, *, kind: str) -> dict:
         except (KeyError, TypeError, ValueError, OverflowError):
             return None
     name = raw.get("display_name") or raw.get("displayName") or raw.get("name")
+    outputs = arch.get("output_modalities", raw.get("output_modalities", []))
+    outputs = outputs if isinstance(outputs, list) else []
+    media = [value for value in ("image", "video") if isinstance(outputs, list) and value in outputs]
+    # These endpoint families have a published media contract; discovery still supplies the model id.
+    if kind in ("openai", "xai") and model_id.startswith(("gpt-image-", "dall-e-", "grok-imagine-image")):
+        media = ["image"]
+    if kind in ("openai", "xai") and model_id.startswith(("sora-", "grok-imagine-video")):
+        media = ["video"]
+    if kind == "google" and model_id.startswith("gemini-") and "image" in model_id:
+        media = ["image"]
     return {
         "id": model_id, "name": name if isinstance(name, str) else model_id,
         "reasoning_efforts": chosen_efforts(kind, model_id),
@@ -120,7 +130,19 @@ def model_info(raw: dict, *, kind: str) -> dict:
         "tools": "tools" in params or raw.get("tools") is True or official_chat,
         "audio_in": "audio" in inputs or raw.get("audio_in") is True or is_transcription(kind, model_id),
         "price_in": price("prompt"), "price_out": price("completion"),
+        "image_output_per_mtok": price("image_output"),
+        "per_image": _unit_price(pricing.get("per_image")),
+        "per_request": _unit_price(pricing.get("request")),
+        "media": media, "image_input": "image" in inputs or bool(media and model_id.startswith(("gpt-image-", "grok-imagine-image", "gemini-"))),
+        "generation_only": bool(media and "text" not in outputs),
     }
+
+
+def _unit_price(value):
+    try:
+        return amount(float(value)) if not isinstance(value, bool) else None
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 class CompatibleProvider(OpenRouterClient):
@@ -319,7 +341,8 @@ class CompatibleProvider(OpenRouterClient):
             rows = await self._pages("/models", "data", timeout_s)
         if self.kind == "ollama":
             await self._ollama_capabilities(rows, timeout_s)
-        result = [model_info(row, kind=self.kind) for row in rows if generation_model(row, self.kind)]
+        result = [model_info(row, kind=self.kind) for row in rows
+                  if generation_model(row, self.kind) or model_info(row, kind=self.kind)["media"]]
         self._prices = {row["id"]: (row["price_in"], row["price_out"]) for row in result}
         return result
 

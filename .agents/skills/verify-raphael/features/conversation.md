@@ -1,5 +1,38 @@
 # Conversation
 
+## Member media (2026-11-01)
+
+The shared image_generate/video_generate tools use only the owner's explicit image_model
+and video_model settings. Both default unset: discovery is not consent. These separate
+paid API models are independent of every member's conversational brain, including CLI
+subscriptions; changing a brain changes neither setting. The owner chooses in existing
+Settings > Models & usage rows, with provider, per-image/per-request/token pricing when
+known and an explicit API-charge note. Image-only catalog entries remain selectable.
+No compatible discovered video model is shown as none available, never invented.
+
+Unset or removed providers show the shared inline notice and repair directly to the
+matching row without saving a choice. Paid responses record image/video spend, model and
+cost, including delivery failures. Work steps show those public metadata only; unknown
+cost is visibly unreported. Video keeps the existing live work, Stop and stored player.
+Generated output belongs only in media messages, not fabricated owner attachments.
+Data tables and SVG file cards continue using the existing rich reply and attachment UI.
+
+The unchanged dataset consumers remain mapped separately:
+
+```powershell
+npm run look -- dataset-table dataset-chart --theme both --width 1120,720,1920x1080
+```
+
+```powershell
+npm run look -- media-models-unset media-models-set media-models-menu generated-image-bill generated-image generated-video generated-image-missing generated-video-missing generated-image-repair generated-video-repair generated-video-running generated-video-cancelled quick-model-menu generated-audio-member running generated-audio-missing --theme both --width 1120,720,1920x1080
+```
+
+Inspect all sheets and full-size controls at both themes and all selected viewports.
+Compare media rows/pickers with quick-model-menu, stored media with generated-audio-member,
+running video with running, and inline repairs with generated-audio-missing. Fixture
+prices and media do not prove live billing, provider compatibility, native playback or
+external design acceptance. The brief prohibits network, native, cargo and judge.
+
 ## Owner round 10 connected apps and chosen models
 
 API and CLI brain prompts share the Composio discovery/execution contract:

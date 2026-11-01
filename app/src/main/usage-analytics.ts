@@ -29,10 +29,11 @@ const exactUsd = (value: number) => `US$${new Intl.NumberFormat("en-US", { minim
 const compact = (value: number) => value >= 1_000_000 ? `${+(value / 1_000_000).toFixed(1)}M`
   : value >= 1000 ? `${+(value / 1000).toFixed(1)}K` : `${+value.toPrecision(3)}`;
 
-type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.estimates">;
+type PlainUsageKey = Exclude<Extract<MessageKey, `usage.${string}`>, "usage.estimates"> | "media.image" | "media.video";
 const labelKeys: Record<string, PlainUsageKey> = {
   __other__: "usage.other", other: "usage.other", unknown: "usage.unknown",
   agent: "usage.agent", cleanup: "usage.cleanup", stt: "usage.stt", memory: "usage.memory",
+  image: "media.image", video: "media.video",
   web_search: "usage.web_search", web_read: "usage.web_read", computer: "usage.computer",
   routines: "usage.routines", ask_member: "usage.ask_member", files: "usage.files",
   app: "usage.app", voice: "usage.voice", routine: "usage.routine", member: "usage.memberSource",

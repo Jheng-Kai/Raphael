@@ -270,8 +270,8 @@ class ToolGate:
         return tier > Tier.T0
 
     def is_vm_tool(self, key: str) -> bool:
-        """Sandbox gestures use the lease; using a saved identity still obeys safety rules."""
-        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key)) and not key.endswith("/fill_login")
+        """Sandbox gestures use the lease; using a saved identity or working on a dataset still obeys safety rules."""
+        return bool(getattr(self._plugins, "is_computer_tool", lambda _: False)(key)) and not key.endswith(("/fill_login", "/dataset"))
 
     # --- the plugins' tools ---------------------------------------------------------------------
 

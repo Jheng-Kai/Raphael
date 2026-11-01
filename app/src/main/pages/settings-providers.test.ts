@@ -108,6 +108,35 @@ beforeEach(() => {
 });
 afterEach(() => { page?.hide(); document.body.innerHTML = ""; setLocale("zh-TW"); });
 
+test("keeps drawing and video unset until the owner chooses their separate paid models", async () => {
+  await mount();
+  for (const key of ["image-model", "video-model"]) {
+    const row = page.el.querySelector(`[data-row="${key}"]`);
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("Not set");
+    expect(row!.textContent).toContain("paid API");
+    expect(row!.querySelector('.mp-source')!.textContent).toBe("");
+  }
+  expect(api.settingsSet).not.toHaveBeenCalled();
+});
+
+test("media selection uses the image-only catalog and repairs focus the exact row without saving", async () => {
+  const image = { ...direct.llm[0], id: "test/image-only", name: "Image only", provider_id: "openrouter", provider_name: "OpenRouter", roles: {}, per_image: .04 };
+  api.modelsCatalog.mockResolvedValue({ ...empty, image: [image], video: [] });
+  api.providersList.mockResolvedValue({ providers: [{ id: "openrouter", kind: "openrouter", name: "OpenRouter", enabled: true, has_key: true }] });
+  await mount();
+  await page.show("repair:models:image"); await flush();
+  expect(document.activeElement?.getAttribute("data-k")).toBe("image-model");
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  click('[data-k="image-model"]');
+  click('[data-model="test/image-only"]'); click('[data-dlg="use"]'); await flush();
+  expect(api.settingsSet).toHaveBeenLastCalledWith("image_model", "test/image-only");
+  expect(page.el.querySelector('[data-row="image-model"]')!.textContent).toContain("$0.04 per image");
+  await page.show("repair:models:video"); await flush();
+  expect(document.activeElement?.getAttribute("data-k")).toBe("video-model");
+  expect(page.el.querySelector('[data-row="video-model"]')!.textContent).toContain("No models available");
+});
+
 test("profile notifications update idle fields and preserve the field currently being typed", async () => {
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud", owner_name: "Before", owner_about: "Before" } });
   await mount("general");
@@ -166,7 +195,7 @@ test.each(["usage", "models"] as const)("%s opens the single Models pane without
   expect(page.el.querySelectorAll('.set-list [data-pane="models"]')).toHaveLength(1);
   expect(page.el.querySelector('.set-list [data-pane="usage"]')).toBeNull();
   expect(page.el.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-models-tab")).toBe(alias);
-  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 3 : 0);
+  expect(page.el.querySelectorAll('[data-model-picker]')).toHaveLength(alias === "models" ? 5 : 0);
   expect(page.el.querySelector('[data-fallback-purpose]')).toBeNull();
   expect(page.el.textContent).not.toContain("Fallback models");
   expect(api.settingsSet).not.toHaveBeenCalled();

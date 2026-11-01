@@ -46,6 +46,8 @@ def test_the_defaults_are_the_documented_ones():
         "quick_model": "",
         "quick_effort": "low",
         "assistant_model": "",
+        "image_model": "",
+        "video_model": "",
         "action_mode": "direct",
         "router_model": "",
         "memory_model": "",

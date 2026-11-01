@@ -95,6 +95,7 @@ class PluginResult:
     blocks: list[dict] = field(default_factory=list)
     page: dict | None = None
     mcp_result: dict | None = None
+    billing: dict | None = None  # Core-owned media receipt: model and cost only, never tool content.
 
 
 class PluginHub(Protocol):

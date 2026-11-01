@@ -4,6 +4,18 @@ import { missingHTML, bindMissing, type Missing } from "./missing";
 import { setLocale } from "./i18n";
 
 const missing: Missing = { resource: "searxng", requirement: "url", state: "missing", repair: "search" };
+test.each([['image_generation', '畫圖'], ['video_generation', '影片']])("media prerequisite %s names the missing capability and opens Models", (requirement, word) => {
+  setLocale("zh-TW");
+  const root = document.createElement("div");
+  root.innerHTML = missingHTML({resource:"media",requirement,state:"missing",repair:"models"});
+  expect(root.textContent).toContain(word);
+  expect(root.textContent).toContain("供應商");
+  expect(root.textContent).toContain("尚未選擇可用");
+  expect(root.textContent).toContain("API 費用");
+  expect(root.textContent).not.toContain("成員");
+  const go = vi.fn(); bindMissing(root, go); root.querySelector("button")!.click();
+  expect(go).toHaveBeenCalledWith("settings", `repair:models:${requirement === "image_generation" ? "image" : "video"}`);
+});
 test("teaching names the independent member computer and opens its shared repair", () => {
   setLocale("zh-TW");
   const root = document.createElement("div");

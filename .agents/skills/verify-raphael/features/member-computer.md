@@ -1,5 +1,33 @@
 # Member computer (Phases A and B)
 
+## Named datasets (2026-11-01)
+
+The independent computer offers dataset import/query/list/chart. A dataset name
+selects a persistent workspace DuckDB file; table defaults to data. CSV, Excel
+(.xlsx) and Parquet paths resolve inside that workspace. Stored attachment ids can
+be imported with attachment:<id>; the existing vm_exec gate copies bounded chunks.
+Multiple sources union by column name; importing a table replaces that table in
+one transaction. Queries can save CREATE TABLE/VIEW AS SELECT results and otherwise
+return bounded rows. External file/network access and extension loading are disabled
+for queries. Charts require label/value columns and return an escaped SVG file.
+
+The first use creates a locked workspace venv and installs duckdb==1.4.1 and
+openpyxl==3.1.5. No Dockerfile or image layer changes: owners do not rebuild their
+computers for this feature. Installation requires the member computer's package
+access, and failure is returned through the ordinary tool result. A stopped task
+cancels existing vm_exec, leaving the durable database available for a later turn.
+
+Core evidence includes production API/CLI/routine calls with a fake VM returning
+its real output shape. Real DuckDB import/reopen integration is explicitly skipped
+when its offline dependencies/Linux lock module are absent. No real installation,
+Docker start, host kernel or provider call is part of this task's acceptance.
+Selected UI consumers: dataset-table and dataset-chart, both themes and all three
+standard sizes; compare with the existing rich table and stored file controls.
+
+Dataset work reaches the ordinary owner-rule screen. In bypass mode it asks no
+permission question, but explicit denial still forbids it (R-AG-35).
+Every nested exec/file call retains the member grant, target and owner-control checks.
+
 ## Teach by demonstration (2026-11-01)
 
 The member computer has one Teach a task / Stop recording button. Starting uses

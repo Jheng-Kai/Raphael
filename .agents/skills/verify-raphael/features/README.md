@@ -5,6 +5,12 @@
 See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
 13-scene matrix, shared-component comparisons, privacy/gate tests and explicit
 prohibited acceptance boundaries.
+## Member media and datasets (2026-11-01)
+
+See [Conversation](conversation.md#member-media-2026-11-01) for explicit paid model
+selection, image-only choices, work-step billing, repair and CLI/API/background consumers.
+See [Member computer](member-computer.md#named-datasets-2026-11-01) for datasets.
+The selected media matrix and its shared-component comparison scenes are listed there.
 
 ## Connected-app event routines (2026-11-01)
 

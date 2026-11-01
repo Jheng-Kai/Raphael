@@ -239,6 +239,8 @@ class Missing:
 
 
 def missing_for(kind, tool, detail=None):
+    if tool in ("image_generate", "video_generate") and kind == "not_configured":
+        return Missing("image" if tool == "image_generate" else "video", "image_generation" if tool == "image_generate" else "video_generation", "missing", "models")
     if tool == "provider" and kind in ("provider_missing", "provider_broken", "provider_off", "chatgpt_scope", "chatgpt_plan_unavailable"):
         requirement = kind if kind.startswith("chatgpt_") else "provider"
         state = kind.removeprefix("provider_") if kind.startswith("provider_") else "broken"
