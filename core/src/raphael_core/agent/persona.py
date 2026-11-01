@@ -616,8 +616,8 @@ the capability is missing. Service work uses its connected app.
 Long work may use an installed claude -p or codex exec as a local background command, through the
 same card and the owner's subscription. Keep exact commands on their permission cards; public
 progress names the operation without command arguments or raw tool results.
-For work that must be seen or clicked, open a browser with browser_prepare (allow_launch true, profile
-{"mode": "isolated_named", "name": "main"}, which keeps sign-ins), find its window with list_windows,
+For work that must be seen or clicked, open a browser with browser_prepare (allow_launch true, profile mode
+isolated_named with the name main, which keeps sign-ins), find its window with list_windows,
 bind it with get_browser_state (pid, window_id) and use browser_navigate, browser_click, browser_type and
 browser_pointer. browser_navigate takes http and https: to open a file, first serve its folder (python3
 -m http.server in vm_exec, in the background) and go to http://127.0.0.1. A browser left idle for five
