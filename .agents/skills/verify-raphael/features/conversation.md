@@ -1055,3 +1055,24 @@ Review follow-up (2026-11-02): unchanged roster loads still restore viewing and 
 ```powershell
 npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home sidebar-unread conversation-midnight --theme both --width 1120,720,1920x1080
 ```
+
+## Folded colleague exchanges (2026-11-02)
+
+R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts retains every handoff-event disclosure and its open state, including received-message lines. Existing individual request, result and artifact controls remain inside the closed-by-default group.
+
+Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion now checks the two original receipt labels inside the collapsed group and keeps the meeting after them. No native, judge, network or provider acceptance is authorized by this brief.
+
+Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
+
+
+```powershell
+npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room --theme both --width 1120,720,1920x1080
+```
+
+## Review: one group state and scroll intent (2026-11-02)
+
+The group summary chooses one state in every locale: waiting for the owner, otherwise unfinished, otherwise running; completed work has no state label. Latin names have a CSS gap before Chinese list joins; localized text remains unchanged. Menu scroll intent is handled by the shared ui.ts layer. Outside wheel, touchmove and page-scrolling keys dismiss every level; scrolling inside either menu preserves its own scrolling. Resize dismisses the frozen menus; programmatic/layout scrolling preserves them. Live text completions alone follow their caret anchor. The work-event storm, redraw and unchanged-DOM guarantees remain covered.
+
+```powershell
+npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal centred-system-events --theme both --width 1120,720,1920x1080
+```

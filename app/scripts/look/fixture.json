@@ -1,4 +1,14 @@
 {
+  "handoffGroupSample": {
+    "people": ["Ada", "Ben", "Cleo", "Dara", "Eli", "Fran"],
+    "longPeople": ["Ada with a deliberately long display name", "BenWithAnUnbrokenInternationalDisplayName", "Cleo with another long display name", "Dara"],
+    "request": "Check the sample project with the team.",
+    "consult": "Check the sample request.",
+    "result": "Sample result is ready.",
+    "answer": "The sample review is recorded.",
+    "separator": "A message separates the two exchanges.",
+    "menuGroup": "Sample international work group"
+  },
   "mcpProposalTools": [{ "kind": "write", "tools": ["save_sample"] }, { "kind": "read", "tools": ["read_sample", "list_samples"] }],
   "mcpProposalCard": {
     "id": "mcp-sample", "state": "draft", "revision": 1, "error": null, "first_local": true, "groups": [],

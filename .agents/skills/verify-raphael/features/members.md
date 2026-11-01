@@ -429,3 +429,30 @@ creates rounds, dispatched speakers, a template or an automatic conclusion. Role
 stay room-only; assigned work uses handoff and reports its actual result.
 Offline evidence: core/tests/members/test_room_listening.py, test_room_intents.py,
 test_primary.py and core/tests/evaluate/test_p02_scenarios.py. No UI changed.
+
+## Menus beside their rows (2026-11-02)
+
+R-UI-73 keeps the member Move to group menu beside its own action row using the shared ui.ts submenu behavior. openActions passes that actual row to member-actions.ts. Hover waits 120 ms, click/Right opens, Left/Escape closes only the child, the safe triangle protects diagonal travel, direct sibling travel switches immediately, and leaving both waits 250 ms. Opening rectangles survive background redraw; live caret completions retain their explicit anchorRect. No setting or toggle is added. Hide keeps its eye-off action icon without a navigation chevron.
+
+Selected scenes: menu-move-hover (real hover plus MembersChanged/WorkerChanged redraw), menu-move-picked (existing members.update call and group result), menu-move-keyboard, menu-move-flip (real right click near the compact column edge), menu-move-diagonal (real mouse motion across the neighbouring row), menu-hide-control. submenu-placement checks both menu levels, row highlight/aria-controls, first-row alignment, touching sides, viewport containment and checked choice. Representative existing consumers: context-menu-member, context-menu-conversation, room-menu, polish-effort-composer and local-command-settings. Run both themes at 1120,720,1920x1080. Tests: menu-submenu.test.ts, member-column.test.ts, member-details.test.ts, ui.test.ts and menu-keys.test.ts. The menu-key stand-in learns the shared submenu selector; its keyboard ordering assertions are unchanged. ui.test.ts now pins touching edges instead of the former 4px gap.
+
+menu-settings-redraw also emits SettingsChanged through the fake IPC boundary, waits for the keyed control to be replaced and its new checked value to arrive, and asserts the open menu keeps its coordinates in both themes at all three sizes. menu-submenu.test.ts reproduces the replaced-control case with a moved rectangle before its fix.
+
+
+```powershell
+npm run look -- menu-hide-control menu-settings-redraw menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal --theme both --width 1120,720,1920x1080
+```
+
+menu-pointer-return protects a fresh real mouse press on the more button after a right click; its menu returns under that control instead of retaining the pointer rectangle. context-menu.test.ts retains its existing trusted-click assertion.
+
+```powershell
+npm run look -- menu-pointer-return --theme both --width 1120,720,1920x1080
+```
+
+## Review: shared menu scroll intent (2026-11-02)
+
+Outside wheel/touch scrolling and page-scrolling keys close all open menu levels. Inside input retains menu scrolling and navigation. Resize closes all levels; work-event storms and programmatic/layout scrolling preserve frozen placement. Live completion anchors continue following their caret. See conversation.md for the full selected review matrix.
+
+```powershell
+npm run look -- menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal --theme both --width 1120,720,1920x1080
+```

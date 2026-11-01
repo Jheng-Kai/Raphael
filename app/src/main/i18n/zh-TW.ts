@@ -3,6 +3,11 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "handoff.group": "{p0} 則訊息，與 {p1}",
+  "handoff.groupOthers": "其他 {p0} 位",
+  "handoff.groupWaiting": "等待你回答",
+  "handoff.groupActive": "進行中",
+  "handoff.groupUnfinished": "未完成",
   "forms.today": "今天", "forms.board": "工作事項",
   "mcp.argLines": "參數（每行一個）", "mcp.secretNames": "秘密欄位名稱（以逗號分隔）",
   "mcp.enable": "確認啟用", "mcp.draft": "待測試", "mcp.approval": "測試將在你的電腦執行這個指令",

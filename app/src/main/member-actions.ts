@@ -83,7 +83,7 @@ export function createMemberActions(host: MemberActionHost) {
     openMenu(anchor, groupChoices([...list.groups].sort((a, b) => a.position - b.position)), groupValue(m.group_id), (value) => {
       const groupId = groupFromValue(value);
       if (groupId !== m.group_id) void host.update(id, { group_id: groupId });
-    });
+    }, undefined, [], { placement: "beside" });
   }
 
   async function deleteMember(id: number): Promise<void> {

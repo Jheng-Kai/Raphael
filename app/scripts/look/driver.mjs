@@ -128,6 +128,94 @@ export async function perform(page, step, evidenceDirectory) {
     });
   }, step);
   switch (step.action) {
+    case "menu-wheel": {
+      await page.evaluate(() => {
+        window.__menuWheelTrusted = false;
+        document.addEventListener('wheel', event => { window.__menuWheelTrusted = event.isTrusted; }, { capture: true, once: true });
+      });
+      const viewport = page.viewport();
+      await page.mouse.move(viewport.width - 20, viewport.height - 180);
+      await page.mouse.wheel({ deltaY: 260 });
+      await page.waitForFunction(() => window.__menuWheelTrusted && !document.querySelector('#app-popover, #app-submenu'), { timeout: 1800 });
+      break;
+    }
+    case "menu-resize": {
+      const viewport = page.viewport();
+      try {
+        await page.setViewport({ ...viewport, width: viewport.width - 40 });
+        await page.waitForFunction(() => !document.querySelector('#app-popover, #app-submenu'), { timeout: 1800 });
+      } finally { await page.setViewport(viewport); }
+      break;
+    }
+    case "menu-edge": {
+      const row = await page.$eval('.mb-col [data-member-item="1"]', el => { const box = el.getBoundingClientRect(); return { x: box.right - 6, y: box.top + box.height / 2 }; });
+      await page.mouse.click(row.x, row.y, { button: "right" });
+      await page.waitForSelector('#app-popover [data-pick="move"]', { visible: true });
+      break;
+    }
+    case "menu-work-storm": {
+      const before = await page.evaluate(() => ['app-popover', 'app-submenu'].map(id => {
+        const el = document.getElementById(id); return { x: el.offsetLeft, y: el.offsetTop };
+      }));
+      await page.evaluate(() => {
+        window.__menuParent = document.getElementById('app-popover'); window.__menuChild = document.getElementById('app-submenu');
+        window.__look.data.members.find(member => member.id === 1).preview = window.__look.data.handoffGroupSample.answer;
+        window.__look.emit({ type: "MembersChanged" });
+        for (let i = 0; i < 20; i++) window.__look.emit({ type: "WorkerChanged", task_id: 42, state: "running", running: true });
+        document.dispatchEvent(new Event('scroll'));
+      });
+      await new Promise(resolve => setTimeout(resolve, 700));
+      const stable = await page.evaluate(before => {
+        const child = document.getElementById('app-submenu');
+        return child === window.__menuChild && document.getElementById('app-popover') === window.__menuParent &&
+          ['app-popover', 'app-submenu'].every((id, index) => {
+            const el = document.getElementById(id); return el.offsetLeft === before[index].x && el.offsetTop === before[index].y;
+          });
+      }, before);
+      if (!stable) throw new Error("Work redraw moved or closed a menu");
+      break;
+    }
+    case "menu-settings-redraw": {
+      const before = await page.$eval('#app-popover', el => ({ x: el.offsetLeft, y: el.offsetTop }));
+      await page.evaluate(() => {
+        window.__menuSettingAnchor = document.querySelector('.sel[data-k="local-commands"]');
+        window.__look.data.settings.local_commands_mode = "never";
+        window.__look.emit({ type: "SettingsChanged" });
+      });
+      await page.waitForFunction(() => document.querySelector('.sel[data-k="local-commands"]') !== window.__menuSettingAnchor &&
+        document.querySelector('#app-popover [data-value="never"][aria-checked="true"]'));
+      const stable = await page.$eval('#app-popover', (el, at) => el.offsetLeft === at.x && el.offsetTop === at.y, before);
+      if (!stable) throw new Error("Settings redraw moved its open menu");
+      break;
+    }
+    case "menu-diagonal": {
+      const boxes = await page.evaluate(() => {
+        const row = document.querySelector('#app-popover [data-pick="move"]').getBoundingClientRect(), child = document.querySelector('#app-submenu').getBoundingClientRect();
+        return { row: { left: row.left, right: row.right, top: row.top, bottom: row.bottom }, child: { left: child.left, right: child.right, top: child.top, bottom: child.bottom } };
+      });
+      const start = { x: boxes.row.left + 20, y: (boxes.row.top + boxes.row.bottom) / 2 };
+      const end = { x: boxes.child.left + 20, y: boxes.child.bottom - 15 };
+      await page.mouse.move(start.x, start.y);
+      for (let i = 1; i <= 12; i++) {
+        await page.mouse.move(start.x + (end.x - start.x) * i / 12, start.y + (end.y - start.y) * i / 12);
+        await new Promise(resolve => setTimeout(resolve, 12));
+        if (!await page.$('#app-submenu')) throw new Error('A diagonal trip closed the submenu');
+      }
+      break;
+    }
+    case "handoff-arrival": {
+      await page.evaluate(() => {
+        window.__handoffGroup = document.querySelector('[data-handoff-group]');
+        window.__handoffReceipt = document.querySelector('[data-handoff="800"]');
+        window.__handoffOwner = document.querySelector('.tn[data-id="1"] .me');
+        window.__handoffAnswer = document.querySelector('.tn[data-id="1"] .ra');
+        const turn = window.__look.data.turns.find(turn => turn.id === 1);
+        turn.handoffs.push({ ...turn.handoffs[0], task_id: 850, work_turn_id: 950 });
+        for (let i = 0; i < 20; i++) window.__look.emit({ type: "WorkerChanged", task_id: 850, state: "running", running: true });
+      });
+      await page.waitForFunction(() => document.querySelector('[data-handoff="850"]'), { timeout: 5000 });
+      break;
+    }
     case "reload":
       await page.reload({waitUntil:"networkidle0",timeout:20000});
       await page.waitForSelector('.page-home:not([hidden]) .ho-hero',{visible:true,timeout:10000});
@@ -576,7 +664,7 @@ export async function perform(page, step, evidenceDirectory) {
       await element.evaluate((node, position) => node.scrollTo({ top: position === "up" ? Math.max(1, (node.scrollHeight - node.clientHeight) / 2) : node.scrollHeight, behavior: "instant" }), step.position);
       await element.dispose(); break;
     }
-    case "scroll": { const element = await visible(step.selector); await element.evaluate(element => element.scrollIntoView({ block: "end", inline: "nearest" })); await element.dispose(); break; }
+    case "scroll": { const element = await visible(step.selector); await element.evaluate((element, block) => element.scrollIntoView({ block, inline: "nearest", behavior: "instant" }), step.block ?? "end"); await element.dispose(); break; }
     case "wait-scroll-end": {
       const element = await visible(step.selector);
       try { await page.waitForFunction(element => element.scrollTop + element.clientHeight >= element.scrollHeight - 1, { timeout: 6000 }, element); }

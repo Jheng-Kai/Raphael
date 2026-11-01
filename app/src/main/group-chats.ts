@@ -27,7 +27,7 @@ import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
 import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./members";
 import { NAME, eventLineHTML } from "./event-line";
-import { handoffLineHTML } from "./handoff-line";
+import { handoffGroupHTML } from "./handoff-line";
 import type { HandoffView } from "./types";
 import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
 import { btn, closeMenu, copyText, esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
@@ -287,7 +287,14 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
-    preserveRichScroll(scroll, () => { const wanted = entries.length ? entries.map(entry => ({
+    const grouped = entries.flatMap<{ entry: typeof entries[number]; tasks: HandoffView[] }>((entry, index) => {
+      if (!("task" in entry)) return [{ entry, tasks: [] as HandoffView[] }];
+      if (index && "task" in entries[index - 1]) return [];
+      const tasks: HandoffView[] = [];
+      for (let i = index; i < entries.length && "task" in entries[i]; i++) tasks.push((entries[i] as { task: HandoffView }).task);
+      return [{ entry, tasks }];
+    });
+    preserveRichScroll(scroll, () => { const wanted = entries.length ? grouped.map(({ entry, tasks }) => ({
       key: "message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`,
       turnId: "message" in entry ? entry.message.id : undefined,
       html: (() => {
@@ -296,8 +303,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
       }
       if("task" in entry){
-        const source=messages.find(m=>m.turn_id===entry.task.source_turn_id&&m.member_id===entry.task.from_member_id&&m.kind!=="wrapup");
-        return `<li class="tn handoff-row">${handoffLineHTML(entry.task,faceOf(entry.task.member_id,entry.task.member_name),source&&{author:person(source.member_id)?.name??"",text:source.text})}</li>`;
+        return `<li class="tn handoff-row">${handoffGroupHTML(tasks.map(task => {
+          const source=messages.find(m=>m.turn_id===task.source_turn_id&&m.member_id===task.from_member_id&&m.kind!=="wrapup");
+          return { task, face: faceOf(task.member_id,task.member_name), name: person(task.member_id)?.name,
+            request: source && {author:person(source.member_id)?.name??"",text:source.text} };
+        }))}</li>`;
       }
       const m=entry.message;
       if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&!m.turn?.owner_questions?.length) {

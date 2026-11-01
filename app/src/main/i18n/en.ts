@@ -4,6 +4,11 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "handoff.group": "{p0} messages with {p1}",
+  "handoff.groupOthers": "{p0} others",
+  "handoff.groupWaiting": "Waiting for you",
+  "handoff.groupActive": "In progress",
+  "handoff.groupUnfinished": "Incomplete",
   "forms.today": "Today", "forms.board": "Tasks",
   "mcp.argLines": "Arguments (one per line)", "mcp.secretNames": "Secret names (comma separated)",
   "mcp.enable": "Confirm and enable", "mcp.draft": "Not tested", "mcp.approval": "Testing runs this command on your PC",

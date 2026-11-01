@@ -62,14 +62,14 @@ describe("submenu placement", () => {
   const viewport = { width: 720, height: 900, headerBottom: 32 };
   test("a submenu prefers the right of its row and aligns with its top", () => {
     expect(submenuPlacement({ left: 100, right: 350, top: 650 }, { width: 180, height: 120 }, viewport))
-      .toEqual({ left: 354, top: 650, maxHeight: 852 });
+      .toEqual({ left: 350, top: 650, maxHeight: 852 });
   });
   test("it flips left only when the right side has no room", () => {
-    expect(submenuPlacement({ left: 500, right: 700, top: 650 }, { width: 180, height: 120 }, viewport).left).toBe(316);
+    expect(submenuPlacement({ left: 500, right: 700, top: 650 }, { width: 180, height: 120 }, viewport).left).toBe(320);
   });
   test("the viewport and custom header bound a tall submenu", () => {
     expect(submenuPlacement({ left: 100, right: 350, top: 850 }, { width: 320, height: 1000 }, viewport))
-      .toEqual({ left: 354, top: 40, maxHeight: 852 });
+      .toEqual({ left: 350, top: 40, maxHeight: 852 });
   });
 });
 

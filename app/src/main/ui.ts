@@ -409,6 +409,7 @@ interface MenuState {
   parent: MenuState | null; placement?: "beside" | "start" | "pointer" | "above"; anchorRect?: () => DOMRect;
   /** Set when a right click asked for the menu: it stands at that point rather than under its button. */
   at?: PointerAt;
+  stopHover?: () => void;
 }
 let menu: MenuState | null = null;
 let menuListening = false;
@@ -442,6 +443,7 @@ function closeMenuLevel(): void {
   const closing = menu;
   menu = closing.parent;
   closing.stopOutside();
+  closing.stopHover?.();
   closing.anchor.setAttribute("aria-expanded", "false");
   closing.anchor.removeAttribute("aria-controls");
   closing.el.remove();
@@ -455,11 +457,24 @@ const menuItems = (el: HTMLElement): HTMLButtonElement[] =>
 
 const MENU_LEAVE_MS = 700;
 
+function insideMenus(target: EventTarget | null): boolean {
+  if (target instanceof Node) {
+    for (let current = menu; current; current = current.parent) if (current.el.contains(target)) return true;
+  }
+  return false;
+}
+
 function listenForMenuEvents(): void {
   if (menuListening) return;
   menuListening = true;
   document.addEventListener("keydown", (e) => {
     if (!menu || e.isComposing || e.keyCode === 229) return;
+    const target = e.target === document ? document.activeElement : e.target;
+    if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", " "].includes(e.key) && !insideMenus(target) &&
+      !(target instanceof Element && target.closest('input, textarea, [contenteditable="true"]'))) {
+      closeMenu();
+      return;
+    }
     if (menu.onKey?.(e)) {
       e.preventDefault();
       return;
@@ -509,17 +524,14 @@ function listenForMenuEvents(): void {
   document.addEventListener("click", (e) => {
     if (e.isTrusted && e.target instanceof Element) { const more = e.target.closest<HTMLElement>("[data-overflow]"); if (more) pointedAt.delete(more); }
   }, true);
-  // Scrolling inside the menu (a long list) leaves it alone; scrolling the page carries it along
-  // with its button, and closes it once the button is out of sight. A menu at the pointer has no
-  // button to follow: it closes.
+  // Scroll intent closes menus before the page moves; scroll events alone also come from layout and follow-bottom.
+  for (const type of ["wheel", "touchmove"]) document.addEventListener(type, e => {
+    if (menu && !insideMenus(e.target)) closeMenu();
+  }, { capture: true, passive: true });
   document.addEventListener(
     "scroll",
     (e) => {
-      if (!menu || (e.target instanceof Node && menu.el.contains(e.target))) return;
-      if (menu.at) { closeMenu(); return; }
-      const r = menu.anchor.getBoundingClientRect();
-      if (!menu.anchor.isConnected || r.bottom < 0 || r.top > innerHeight) closeMenu();
-      else placeMenu();
+      if (menu?.anchorRect && !menu.at && !insideMenus(e.target)) placeMenu();
     },
     true,
   );
@@ -583,9 +595,9 @@ export function submenuPlacement(
   viewport: { width: number; height: number; headerBottom: number },
 ): { left: number; top: number; maxHeight: number } {
   const upper = viewport.headerBottom + 8, lower = Math.max(upper, viewport.height - 8);
-  const right = anchor.right + 4;
+  const right = anchor.right;
   return {
-    left: Math.max(8, Math.min(right + size.width <= viewport.width - 8 ? right : anchor.left - size.width - 4, viewport.width - size.width - 8)),
+    left: Math.max(8, Math.min(right + size.width <= viewport.width - 8 ? right : anchor.left - size.width, viewport.width - size.width - 8)),
     top: Math.max(upper, Math.min(anchor.top, lower - Math.min(size.height, lower - upper))),
     maxHeight: lower - upper,
   };
@@ -595,7 +607,7 @@ export function submenuPlacement(
 export function placeMenu(): void {
   if (!menu) return;
   const { el, anchor } = menu;
-  const r = anchor.isConnected ? menu.anchorRect?.() ?? anchor.getBoundingClientRect() : menu.rect;
+  const r = menu.anchorRect?.() ?? menu.rect;
   const headerBottom = document.getElementById("window-chrome")?.getBoundingClientRect().bottom ?? 0;
   // A dropdown's menu is at least as wide as the dropdown itself (owner, 2026-10-24).
   if (anchor.classList?.contains("sel")) el.style.minWidth = `${Math.round(r.width)}px`;
@@ -603,9 +615,70 @@ export function placeMenu(): void {
   el.style.maxHeight = `${Math.max(0, innerHeight - headerBottom - 16)}px`;
   const size = { width: el.offsetWidth, height: el.offsetHeight }, viewport = { width: innerWidth, height: innerHeight, headerBottom };
   const placement = menu.placement === "beside" ? submenuPlacement(r, size, viewport) : menuPlacement(r, size, viewport, menu.placement === "start" || menu.placement === "pointer" || menu.placement === "above" ? menu.placement : "end");
+  if (menu.placement === "beside") {
+    const first = el.querySelector<HTMLElement>("button");
+    const inset = first ? first.getBoundingClientRect().top - el.getBoundingClientRect().top : 0;
+    placement.top = Math.max(headerBottom + 8, placement.top - inset);
+  }
   el.style.maxHeight = `${placement.maxHeight}px`;
   el.style.left = `${placement.left}px`;
   el.style.top = `${placement.top}px`;
+}
+
+interface MenuPoint { x: number; y: number }
+
+/** The corridor includes either opening direction, but never motion away from its near edge. */
+export function submenuCorridor(origin: MenuPoint, point: MenuPoint, box: Pick<DOMRect, "left" | "right" | "top" | "bottom">): boolean {
+  const edge = origin.x < box.left ? box.left : box.right;
+  const ratio = (point.x - origin.x) / (edge - origin.x);
+  return ratio > 0 && ratio <= 1 && point.y >= origin.y + (box.top - 8 - origin.y) * ratio &&
+    point.y <= origin.y + (box.bottom + 8 - origin.y) * ratio;
+}
+
+/** Every submenu row shares its hover delay, corridor and delayed departure here. */
+function listenForSubmenus(state: MenuState): void {
+  if (!state.el.querySelector('[aria-haspopup="menu"]')) return;
+  let timer: ReturnType<typeof setTimeout> | undefined, pending: HTMLElement | null = null;
+  let origin: MenuPoint | undefined;
+  const cancel = (): void => { clearTimeout(timer); timer = undefined; pending = null; };
+  const childOf = (): MenuState | null => {
+    let child = menu;
+    while (child && child.parent !== state) child = child.parent;
+    return child;
+  };
+  const closeChild = (): void => { while (menu && menu !== state && childOf()) closeMenuLevel(); };
+  const move = (event: PointerEvent): void => {
+    if (!(event.target instanceof Element) || !state.el.isConnected) return;
+    const child = childOf(), point = { x: event.clientX, y: event.clientY };
+    const inChild = child && child.el.contains(event.target);
+    const row = event.target.closest<HTMLElement>('button[role="menuitem"], button[role="menuitemradio"]');
+    if (inChild) { cancel(); return; }
+    if (row && state.el.contains(row)) {
+      if (child?.anchor === row) { cancel(); origin = point; return; }
+      if (child && origin && submenuCorridor(origin, point, child.el.getBoundingClientRect())) return;
+      if (pending === row) return;
+      cancel();
+      const switching = !!child;
+      closeChild();
+      if (row.getAttribute("aria-haspopup") !== "menu") return;
+      origin = point; pending = row;
+      const open = (): void => {
+        pending = null; timer = undefined;
+        if (!row.isConnected || !state.el.isConnected) return;
+        const focus = document.activeElement as HTMLElement | null;
+        row.click();
+        focus?.focus({ preventScroll: true });
+      };
+      if (switching) open(); else timer = setTimeout(open, 120);
+      return;
+    }
+    if (state.el.contains(event.target)) { cancel(); return; }
+    if (timer && pending === null) return;
+    cancel();
+    if (child) timer = setTimeout(() => { closeChild(); cancel(); }, 250);
+  };
+  document.addEventListener("pointermove", move);
+  state.stopHover = () => { cancel(); document.removeEventListener("pointermove", move); };
 }
 
 export interface PopoverOptions {
@@ -631,8 +704,15 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   // A panel that places itself (a caret, a submenu) keeps its own place; any other from a button that a right click pressed stands where it was.
   const pointed = o.anchorRect || o.placement === "beside" ? undefined : pointedAt.get(anchor);
   const at = pointed && pointed.until > performance.now() ? pointed : undefined;
-  const rect = at ? pointRect(at) : o.anchorRect?.() ?? anchor.getBoundingClientRect();
-  const parent = o.placement === "beside" && menu?.el.contains(anchor) ? menu : null;
+  let parent: MenuState | null = null;
+  if (o.placement === "beside") for (let current = menu; current; current = current.parent) if (current.el.contains(anchor)) { parent = current; break; }
+  const rowRect = anchor.getBoundingClientRect();
+  const parentRect = parent?.el.getBoundingClientRect();
+  const sameAnchor = menu && (menu.anchor === anchor || (!menu.anchor.isConnected && anchor.dataset.k && menu.anchor.dataset.k === anchor.dataset.k));
+  const previous = !parent && sameAnchor && !menu!.at && !o.anchorRect ? menu!.rect : undefined;
+  const rect = at ? pointRect(at) : o.anchorRect?.() ?? (parentRect ? { top: rowRect.top, bottom: rowRect.bottom, height: rowRect.height,
+    left: parentRect.left, right: parentRect.right, width: parentRect.width } as DOMRect : previous ?? rowRect);
+  if (parent) while (menu && menu !== parent) closeMenuLevel();
   if (!parent) closeMenu();
   const el = document.createElement("div");
   el.className = o.className;
@@ -644,10 +724,11 @@ export function openPopover(anchor: HTMLElement, html: string, o: PopoverOptions
   document.body.append(el);
   if (at) at.until = Infinity;
   menu = { el, anchor, rect, parent, placement: at ? "pointer" : o.placement, anchorRect: at ? () => pointRect(at) : o.anchorRect, at,
-    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); root?.focus({ preventScroll: true }); }, undefined, anchor), onKey: o.onKey, onClose: o.onClose };
+    stopOutside: registerDismissal(el, () => { const root = menuRootAnchor(); closeMenu(); root?.focus({ preventScroll: true }); }, undefined, parent?.el ?? anchor), onKey: o.onKey, onClose: o.onClose };
   anchor.setAttribute("aria-expanded", "true");
   anchor.setAttribute("aria-controls", el.id);
   placeMenu();
+  listenForSubmenus(menu);
   return el;
 }
 

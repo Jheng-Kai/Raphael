@@ -558,3 +558,11 @@ See [Conversation](conversation.md#answer-forms-2026-11-01) for R-FORM-01/02, sc
 See [Conversation](conversation.md#still-conversations-during-team-work-2026-11-01) for R-UI-71, the shared keyed line diff, synchronous cached previews, preserved face nodes, bounded event reads and the busy-team scene matrix.
 
 The still-thread review follow-up adds conversation-midnight to the conversation map: shared look clock rollover with unchanged history and retained conversation nodes. Viewing, unread-on-show, core restart and room return are covered by pages/agent-members.test.ts.
+
+## Exchanges and menus (2026-11-02)
+
+R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges-2026-11-02) and [team-and-rooms.md](team-and-rooms.md#folded-room-receipts-2026-11-02) cover folded colleague receipts. handoff-group-long adds long and unbroken names to the selected matrix.
+
+R-UI-73: [members.md](members.md#menus-beside-their-rows-2026-11-02) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080; no look --all, judge, native, cargo or provider requests are authorized.
+
+Review follow-up (2026-11-02): conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.

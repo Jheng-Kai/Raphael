@@ -195,7 +195,7 @@ describe("shared look IPC boundary", () => {
     expect(await history(4)).toEqual(quick);
   });
   it("initializes rendered owner-view helpers before checking a reply and rejects progress in final messages", () => {
-    const answer = { textContent: "需要重新登入並授予讀取權限。", getBoundingClientRect: () => ({ width: 400, height: 40 }) };
+    const answer = { textContent: "需要重新登入並授予讀取權限。", checkVisibility: () => true, getBoundingClientRect: () => ({ width: 400, height: 40 }) };
     vi.stubGlobal("document", { querySelectorAll: () => [answer] });
     vi.stubGlobal("window", { __look: { calls: [{ method: "agent.history.list", params: { member_id: 0 } }] } });
     try {

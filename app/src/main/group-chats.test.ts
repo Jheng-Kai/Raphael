@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
-import type { AppContext, Member } from "./types";
+import type { AppContext, HandoffView, Member } from "./types";
 import * as chatComposer from "./chat-composer";
 const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.fn(),roomMessages:vi.fn(),roomSend:vi.fn(),roomsDelete:vi.fn(),roomsUpdate:vi.fn(),roomStop:vi.fn(),core:vi.fn(),pagesOpen:vi.fn()}));
 vi.mock("./api",()=>api);
@@ -12,6 +12,22 @@ let event:(e:any)=>void;
 let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
+
+test("only consecutive room receipts fold, and an arriving receipt preserves the open group and intervening message", async () => {
+ const task = (id:number, created:number):HandoffView => ({task_id:id,source_turn_id:1,work_turn_id:100+id,member_id:1,member_name:"Alice",from_member_id:0,
+  stage_id:"",mode:"work",state:"done",reason:null,created_at_ms:created,ready_at_ms:created,dispatch_policy:"immediate",result:"Sample result",evidence:[]});
+ const history={messages:[{id:1,member_id:0,text:"A separating message",created:5,status:"done"}],handoffs:[task(1,1),task(2,2),task(3,7),task(4,8)]};
+ api.roomMessages.mockResolvedValue(history);
+ const view=await pane();
+ const groups=view.el.querySelectorAll<HTMLDetailsElement>('[data-handoff-group]'); expect(groups).toHaveLength(2);
+ expect([...view.el.querySelectorAll('.au-room-thread > li')].map(row=>row.classList.contains('handoff-row'))).toEqual([true,false,true]);
+ expect(groups[0].querySelector('summary')?.textContent).toContain('2 messages');
+ groups[0].open=true; const receipt=groups[0].querySelector<HTMLDetailsElement>('[data-handoff="1"]')!; receipt.open=true;
+ const message=view.el.querySelector('[data-room-message="1"]'); history.handoffs.push(task(5,3)); await view.refresh();
+ expect(view.el.querySelector('[data-handoff-group]')).toBe(groups[0]); expect(groups[0].open).toBe(true); expect(receipt.open).toBe(true);
+ expect(groups[0].querySelector('summary')?.textContent).toContain('3 messages'); expect(view.el.querySelector('[data-room-message="1"]')).toBe(message);
+ view.close();
+});
 
 test("room rows render the RPC summary and select only the visible conversation page", async () => {
  let active = true;

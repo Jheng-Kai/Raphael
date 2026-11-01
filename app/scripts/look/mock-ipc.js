@@ -8,6 +8,7 @@ export function installMock(fixture, config = {}, target = window) {
     {id:'github-failure',toolkit:'github',slug:'GITHUB_LIST_WORKFLOW_RUNS_FOR_A_REPOSITORY',input:'repository',label:'工作流程失敗',app:'composio:github',app_name:'GitHub'},
     {id:'slack-message',toolkit:'slack',slug:'SLACK_FETCH_CONVERSATION_HISTORY',input:'channel',label:'頻道新訊息',app:'composio:slack',app_name:'Slack'},
   ];
+  if (variant.menuMoveFlip) data.groups[1].name = data.handoffGroupSample.menuGroup;
   if (variant.polishData) data.history = Array.from({length:25}, (_,i)=>({...data.history[0], id:i+1, created_at_ms:data.now+i*1000, text:`Synthetic dictation ${i+1}` + (i===24 ? " Example text for checking the two-line preview. ".repeat(30) : "")})).reverse();
   if (variant.polishSearch) {
     data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member && t.conversation_id!==4)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
@@ -183,6 +184,24 @@ export function installMock(fixture, config = {}, target = window) {
     const turn = data.turns.find(turn => turn.id === 1);
     turn.handoffs = [{ ...data.roomHandoff, state: "done" }, { ...data.roomHandoff, task_id: 43, member_id: 2, member_name: "小森", mode: "consult", state: "running", result: "", evidence: [] }];
     turn.messages.push({ seq: 99, kind: "event", text: JSON.stringify(data.p02MeetingEvent), at_ms: data.now });
+  }
+  if (variant.handoffGroup) {
+    const many = variant.handoffGroup === "many", done = variant.handoffGroup === "done";
+    const sample = data.handoffGroupSample, people = variant.handoffGroup === "long" ? sample.longPeople : sample.people;
+    data.members.push(...people.slice(3).map((name, i) => ({ ...data.members[1], id: i + 4, name })));
+    data.members.forEach(member => { if (member.id > 0) member.name = people[member.id - 1]; });
+    const tasks = Array.from({ length: many ? 6 : 10 }, (_, i) => ({ ...structuredClone(data.roomHandoff),
+      task_id: 800 + i, work_turn_id: 900 + i, member_id: i % (many ? 6 : 4) + 1, member_name: people[i % (many ? 6 : 4)],
+      mode: i % 2 ? "consult" : "work", request: sample.consult, result: sample.result,
+      state: done || many ? "done" : ["done", "running", "waiting", "failed"][i % 4], waiting_owner: !done && !many && i === 2 ? 1 : 0,
+      created_at_ms: data.roomHandoff.created_at_ms + i, evidence: [{ kind: "artifact", uri: "reports/sample.html", digest: "sample", verdict: "verified" }] }));
+    const turn = data.turns.find(turn => turn.id === 1);
+    data.turns = [{ ...turn, question: sample.request, text: sample.answer, messages: [], steps: [], handoffs: tasks }];
+    if (variant.handoffGroup === "room") {
+      data.roomHandoffs = tasks;
+      const first = { ...data.messages[0], created: tasks[0].created_at_ms - 1, text: sample.request };
+      data.messages = [first, { ...data.messages[1], id: 800, created: tasks[4].created_at_ms + .5, text: sample.separator }];
+    }
   }
   // A task that waits for an app shows its connector card; `cardSignIn` "approve" finishes the sign-in the
   // way the core reports it (authorizing, then connected) and adds the turn that resumes the task.

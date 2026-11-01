@@ -124,13 +124,17 @@ describe("a right click is the ⋯ of its row", () => {
     expect(popover()!.style.left).not.toBe("300px");
   });
 
-  test("a menu at the pointer closes when the page scrolls, and one under its button follows it", () => {
+  test("programmatic scroll preserves pointer and anchored menus, but an outside wheel closes either", () => {
     rightClick(document.getElementById("open-a")!);
     document.dispatchEvent(new Event("scroll"));
+    expect(popover()).not.toBeNull();
+    document.dispatchEvent(new Event("wheel"));
     expect(popover()).toBeNull();
     personClick(document.querySelector("#a [data-conversation-more]")!);
     document.dispatchEvent(new Event("scroll"));
     expect(popover()).not.toBeNull();
+    document.dispatchEvent(new Event("wheel"));
+    expect(popover()).toBeNull();
   });
 });
 

@@ -94,6 +94,11 @@
 }
 /* System events (event-line.ts): one centred grey line with a small face or icon, never a pill or a card. */
 .event-line { flex-wrap: wrap; justify-content: center; column-gap: 6px; row-gap: 0; text-align: center; line-height: 1.6; }
+.event-people { max-width: 100%; }
+.event-person { display: inline; overflow-wrap: anywhere; }
+.event-person.is-word-gap { margin-inline-end: .25em; }
+.event-person > :first-child { display: inline-block; vertical-align: middle; margin-inline-end: 4px; }
+.handoff-group > .handoff-detail { width: 100%; }
 .event-line > .i { width: 16px; height: 16px; color: var(--text-3); }
 .event-state::before { content: "·"; margin-inline-end: 6px; }
 .conversation-event-line, .handoff-event > summary { display: flex; justify-content: center; }

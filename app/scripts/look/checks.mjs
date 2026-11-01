@@ -1,7 +1,51 @@
 // Browser assertions run against the real app after the scene's user interactions.
 export function checkRendered(name, context = {}) {
-  const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
+  const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "menu-scroll-closed") {
+    require(!document.querySelector('#app-popover, #app-submenu'), "outside scroll input or resizing closes every menu level");
+    return { check: name };
+  }
+  if (name === "menu-hide-control") {
+    const hide = document.querySelector('[data-det="hide"]');
+    require(visible(hide) && hide.querySelectorAll('svg').length === 1, "Hide has only its action icon");
+    const box = hide.getBoundingClientRect();
+    require(box.top >= 0 && box.bottom <= innerHeight, `the action under review is inside the screenshot (${box.top}, ${box.bottom}; height ${innerHeight})`);
+    return { check: name };
+  }
+  if (name === "menu-anchor-return") {
+    const menu = document.getElementById('app-popover'), anchor = document.querySelector('.mb-col [data-member-more="1"]');
+    require(visible(menu), "the real more-button press keeps its menu open");
+    const box = menu.getBoundingClientRect(), control = anchor.getBoundingClientRect();
+    require(Math.abs(box.right - control.right) <= 1 && Math.abs(box.top - control.bottom - 4) <= 1, "a fresh press returns the menu beneath its own control");
+    return { check: name };
+  }
+  if (name === "menu-settings-redraw") {
+    const anchor = document.querySelector('.sel[data-k="local-commands"]'), menu = document.getElementById('app-popover');
+    require(visible(menu) && anchor.getAttribute('aria-expanded') === 'true', "the replacement control keeps its open menu");
+    require(menu.querySelector('[data-value="never"][aria-checked="true"]'), "the refreshed choice keeps its check");
+    return { check: name };
+  }
+  if (name === "submenu-placement" || name === "submenu-flip") {
+    const parent = document.getElementById('app-popover'), child = document.getElementById('app-submenu');
+    require(visible(parent) && visible(child), "both menu levels stay open");
+    const row = parent.querySelector('[aria-haspopup="menu"][aria-expanded="true"]');
+    require(row && row.getAttribute('aria-controls') === child.id, "the parent row declares its open child");
+    const box = child.getBoundingClientRect(), main = parent.getBoundingClientRect(), anchor = row.getBoundingClientRect(), first = child.querySelector('button').getBoundingClientRect();
+    require(Math.abs(first.top - anchor.top) <= 4, "the submenu's first row aligns with its parent row");
+    require(Math.min(Math.abs(box.left - main.right), Math.abs(box.right - main.left)) <= 1, "the submenu touches a side of its parent");
+    require(box.left >= 7 && box.right <= innerWidth - 7 && box.top >= 7 && box.bottom <= innerHeight - 7, "the submenu stays inside the window");
+    require(getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)', "the parent row stays highlighted");
+    require(child.querySelector('[aria-checked="true"]'), "the current group keeps its check");
+    if (name === "submenu-flip" && innerWidth === 720) require(box.right <= main.left + 1, "the compact submenu flips left");
+    return { check: name, side: box.left >= main.right - 1 ? "right" : "left", rowTop: anchor.top, firstTop: first.top };
+  }
+  if (name === "menu-move-picked") {
+    require(!document.querySelector('#app-popover, #app-submenu'), "choosing closes both menu levels");
+    require(window.__look.data.members.find(member => member.id === 1).group_id === 2, "the selected member moves to the chosen group");
+    require(window.__look.calls.some(call => call.method === 'members.update' && call.params?.id === 1 && call.params?.group_id === 2), "the choice reaches the existing core boundary");
+    return { check: name };
+  }
   if (name.startsWith("form-")) {
     const scope = document.querySelector('.page-agent:not([hidden]) > .mb-chat:not([hidden])');
     require(scope, 'form checks target the active conversation');
@@ -1787,11 +1831,51 @@ export function checkRendered(name, context = {}) {
     return { check: name, words: plainWords() };
   }
   if (name === "centred-system-events") {
-    const lines = eventLines(3).map(line => line.textContent);
-    require(lines.join("|") === "已轉交給 小晴已完成|已詢問 小森執行中|已開啟會議 產品方向討論", `hand-off, consultation and meeting lines in order: ${lines.join("|")}`);
+    const lines = eventLines(2).map(line => line.textContent);
+    require(lines[0].includes("2 則訊息") && lines[1] === "已開啟會議 產品方向討論", `grouped exchanges precede the meeting: ${lines.join("|")}`);
+    const receipts = [...document.querySelectorAll('[data-handoff-group] [data-handoff] > summary')].map(line => line.textContent);
+    require(receipts.join("|") === "已轉交給 小晴已完成|和 小森 討論執行中", "folded receipts retain their individual words and states");
     const answer = document.querySelector('.tn[data-id="1"] .ra').getBoundingClientRect(), last = document.querySelector('.tn[data-id="1"] .conversation-event-line').getBoundingClientRect();
     require(last.bottom <= answer.top, "events stand between the owner's words and Raphael's answer");
     return { check: name, lines };
+  }
+  if (name.startsWith("handoff-group")) {
+    const groups = [...document.querySelectorAll('[data-handoff-group]')].filter(visible);
+    require(groups.length === (name === "handoff-group-room" ? 2 : 1), "only consecutive exchanges fold together");
+    for (const group of groups) {
+      const line = group.querySelector(':scope > summary .event-line'), box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
+      require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) < 2, "exchange group is centred");
+      require(box.left >= column.left - 1 && box.right <= column.right + 1, "names stay inside the conversation column");
+      require(!line.querySelector('.i'), "no new disclosure chevron");
+    }
+    const group = groups[0], summary = group.querySelector(':scope > summary'), words = summary.textContent;
+    if (name === "handoff-group-open") {
+      require(group === window.__handoffGroup && group.open, "the same open group survives arriving data");
+      require(document.querySelector('[data-handoff="800"]') === window.__handoffReceipt && window.__handoffReceipt.open, "the same individual receipt stays open");
+      require(document.querySelector('.tn[data-id="1"] .me') === window.__handoffOwner && document.querySelector('.tn[data-id="1"] .ra') === window.__handoffAnswer, "new work leaves the question and answer nodes untouched");
+      require(words.includes("11 則訊息") && visible(window.__handoffReceipt.querySelector('.message-text')), "new work updates the count without losing the result");
+      require(visible(window.__handoffReceipt.querySelector('.message-quote')) && visible(window.__handoffReceipt.querySelector('.handoff-files')), "the original request and files remain readable");
+    } else {
+      require(groups.every(group => !group.open), "groups start closed even during work");
+      require(![...group.querySelectorAll('[data-handoff] > summary')].some(visible), "individual rows are hidden until opened");
+    }
+    if (name === "handoff-group-done") require(!summary.querySelector('.event-state'), "done has no state words");
+    if (name === "handoff-group-many") require(summary.querySelectorAll('.event-person').length === 3 && words.includes("其他 3 位"), "three people and a remainder");
+    if (name === "handoff-group") {
+      require(words.includes("10 則訊息"), "the count includes repeated people");
+      require(summary.querySelector('.event-state')?.textContent === "等待你回答", "only the highest priority state is shown without counters");
+      const person = summary.querySelector('.event-person:last-of-type'), following = person.nextSibling;
+      const range = document.createRange(); range.setStart(following, 0); range.setEnd(following, 1);
+      require(range.getBoundingClientRect().left - person.getBoundingClientRect().right >= 3, "CSS separates the Latin name from its Chinese join");
+      const walker = document.createTreeWalker(summary, NodeFilter.SHOW_TEXT), tops = [];
+      while (walker.nextNode()) {
+        if (!walker.currentNode.textContent.trim()) continue;
+        const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+        for (const box of range.getClientRects()) if (!tops.some(top => Math.abs(top - box.top) < 4)) tops.push(box.top);
+      }
+      require(tops.length <= (innerWidth === 720 ? 2 : 1), `the collapsed group uses one text line, two at compact width (${tops.length})`);
+    }
+    return { check: name, groups: groups.length, words };
   }
     if (name === "member-deleted") {
       require(document.querySelector('.mb-pill-t')?.textContent === window.__look.data.members.find(item => item.id === 0)?.name, "deleting the selected member returns to Raphael");

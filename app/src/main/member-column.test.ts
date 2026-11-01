@@ -252,7 +252,7 @@ describe("the column, used", () => {
     expect(host.memberAction).toHaveBeenCalledWith(2, "hide");
     column.el.querySelector('[data-member="1"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 50 }));
     document.querySelector<HTMLElement>('#app-popover [data-pick="move"]')!.click();
-    expect(host.moveMember).toHaveBeenCalledWith(1, null, expect.any(HTMLElement));
+    expect(host.moveMember).toHaveBeenCalledWith(1, null, document.querySelector('#app-popover [data-pick="move"]'));
   });
 
   test("a group's menu gives 重新命名, 看的地方 and 刪除", () => {

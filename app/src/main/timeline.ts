@@ -4,7 +4,7 @@ import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
 import { NAME, eventLineHTML } from "./event-line";
-import { handoffLineHTML } from "./handoff-line";
+import { handoffGroupHTML } from "./handoff-line";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
@@ -849,9 +849,9 @@ function learnedSkillEvent(text: string): string | null {
 function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
   const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
   const meetings = (turn.messages ?? []).filter(m => m.kind === "event").map(m => meetingEvent(m.text)).filter(event => event !== null);
-  return (turn.handoffs ?? []).map(task => handoffLineHTML(task, look.memberFace?.(task.member_id) ?? "",
-    task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
-    look.memberName?.(task.member_id) || task.member_name)).join("") +
+  return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
+    request: task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
+    name: look.memberName?.(task.member_id) || task.member_name }))) +
     meetings.map(event => `<div class="conversation-event-line">${btn(eventLineHTML(t("rooms.meetingOpened", { p0: NAME }), ico("chat"), event.name), "event-open", ` data-meeting-room="${event.room_id}"`)}</div>`).join("");
 }
 

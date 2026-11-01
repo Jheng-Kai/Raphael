@@ -66,6 +66,12 @@ beforeEach(() => {
 });
 
 describe("a member's panel", () => {
+  test("Hide has an action icon without promising another page or submenu", () => {
+    const panel = mount();
+    const hide = panel.el.querySelector('[data-det="hide"]')!;
+    expect(hide.querySelectorAll('svg')).toHaveLength(1);
+    expect(hide.hasAttribute('aria-haspopup')).toBe(false);
+  });
   test("conversation slot loads the selected member, preserves search on redraw, navigates and collapses when empty", async () => {
     const panel = mount();
     const open = vi.fn();

@@ -128,14 +128,14 @@ export interface MemberColumn {
 }
 
 /** A menu of plain items under `anchor`; `onPick` gets the chosen item's `id`. */
-export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; sub?: boolean }[], onPick: (id: string) => void): void {
+export function openActions(anchor: HTMLElement, items: readonly { id: string; label: string; icon?: Parameters<typeof ico>[0]; submenu?: boolean }[], onPick: (id: string, row: HTMLElement) => void): void {
   const el = openPopover(
     anchor,
     items
       .map(
         (item) =>
-          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.sub ? ' aria-haspopup="menu"' : ""}>` +
-          `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.sub ? ico("right") : ""}</button>`,
+          `<button type="button" role="menuitem"${item.icon === "trash" ? ' class="danger"' : ""} tabindex="-1" data-pick="${esc(item.id)}"${item.submenu ? ' aria-haspopup="menu" aria-expanded="false"' : ""}>` +
+          `<span class="ck">${item.icon ? ico(item.icon) : ""}</span><span class="mt">${esc(item.label)}</span>${item.submenu ? ico("right") : ""}</button>`,
       )
       .join(""),
     { className: "menu mb-menu", role: "menu", label: anchor.getAttribute("aria-label") ?? undefined },
@@ -144,12 +144,11 @@ export function openActions(anchor: HTMLElement, items: readonly { id: string; l
     const pick = (e.target as Element).closest<HTMLElement>("[data-pick]");
     if (!pick) return;
     const id = pick.dataset.pick ?? "";
-    // a submenu opens in the place of this one, from the same button
     if (!pick.hasAttribute("aria-haspopup")) {
       closeMenu();
       anchor.focus({ preventScroll: true });
     }
-    onPick(id);
+    onPick(id, pick);
   });
   el.querySelector<HTMLElement>("button")?.focus();
 }
@@ -161,7 +160,7 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
   if (id === 0) return openActions(anchor, [pin], pick => host.memberAction?.(id, pick));
   openActions(anchor, [
     pin,
-    { id: "move", label: t("members.moveTo"), icon: "folder", sub: true },
+    { id: "move", label: t("members.moveTo"), icon: "folder", submenu: true },
     { id: "primary", label: t("members.sidePrimary"), icon: "up" },
     { id: "unread", label: t("members.sideUnread"), icon: "chat" },
     { id: "read-all", label: t("members.sideReadAll"), icon: "check" },
@@ -170,8 +169,8 @@ export function memberMenu(id: number, anchor: HTMLElement, host: Pick<ColumnHos
     { id: "clear", label: t("members.sideClear"), icon: "trash" },
     { id: "hide", label: t("members.sideHide"), icon: "eyeOff" },
     { id: "delete", label: t("members.sideDelete"), icon: "trash" },
-  ], pick => {
-    if (pick === "move") host.moveMember(id, null, anchor);
+  ], (pick, row) => {
+    if (pick === "move") host.moveMember(id, null, row);
     else if (pick === "delete") host.deleteMember(id);
     else host.memberAction?.(id, pick);
   });

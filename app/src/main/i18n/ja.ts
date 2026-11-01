@@ -4,6 +4,11 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "handoff.group": "{p1}との{p0}件のメッセージ",
+  "handoff.groupOthers": "ほか{p0}人",
+  "handoff.groupWaiting": "回答待ち",
+  "handoff.groupActive": "進行中",
+  "handoff.groupUnfinished": "未完了",
   "forms.today": "今日", "forms.board": "タスク",
   "mcp.argLines": "引数（1行に1つ）", "mcp.secretNames": "秘密の項目名（コンマ区切り）",
   "mcp.enable": "確認して有効にする", "mcp.draft": "未テスト", "mcp.approval": "テストでこのPCのコマンドを実行します",
