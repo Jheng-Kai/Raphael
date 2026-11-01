@@ -490,3 +490,11 @@ for ask_owner, background card completion and the selected question-card matrix.
 See [Conversation](conversation.md#owner-input-and-deliverable-audio-2026-11-01).
 Selected scenes: generated-audio-chief, generated-audio-member,
 generated-audio-room, generated-audio-missing, generated-audio-repair and owner-addition.
+
+## Group and background tool truth (2026-11-01)
+
+See [Members](members.md#group-prompt-truth-2026-11-01) for R-AG-02 roles without
+fixed rounds or automatic conclusions, and
+[Conversation](conversation.md#background-app-discovery-2026-11-01) for background
+find_app, owner sign-in and same-task resumption, plus localized routine events.
+This is a core-only contract change; no rendered scene or frontend is changed.

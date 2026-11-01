@@ -553,7 +553,7 @@ class RpcDriver:
         await self.install_fixture()
         agenda = (f'請分工處理今天的 Guardian 測試信件（議題代碼 {self.nonce}）。信件助理負責用 Guardian 讀信，回報信中的 nonce；'
                   'PM 負責用 Guardian 讀同一封信，列出要回覆的重點，並附上信中的 nonce。來源文件寫「明早截止、明天中午提交」。'
-                  'PM 主持兩輪討論分工，最後由拉斐爾整理每項工作與唯一負責人。')
+                  'PM 協助討論分工；大家閱讀全部訊息，自行決定何時發言，不用固定輪次或自動總結。')
         room_id = (await self.app.rooms.meeting({'member_ids': [0, mail, pm], 'agenda': agenda,
                                                  'roles': {str(pm): 'moderator', str(mail): 'participant'}},
                                                 'zh-TW', 2**50 - 1))['room_id']
@@ -1372,16 +1372,15 @@ class RpcDriver:
 
     async def meeting_scenario(self):
         ids = await self.seed_team()
-        selected = [0, ids[0], *ids[2:]]
+        selected = [ids[0], *ids[2:]]
         # The owner's primary contact is HiKari, who now holds the chief capability.
         primary = ids[2]
         await self.app.call('members.set_primary', {'id': primary})
         # An owner's request with a real topic: a code-only agenda left the members nothing to discuss.
         prompt = ('請開會討論「新款保溫瓶上架後兩週的行銷計畫」（議題代碼 ' + self.nonce + '）。'
                   '預算新台幣 5 萬元，目標是兩週內 300 筆預購。邀行銷、HiKari、PM、RD，不需要信件助理。'
-                  '請 PM 主持兩輪：行銷是正方，主張先投放廣告；RD 是反方，主張先做小規模測試；'
-                  'HiKari 從社群內容補充。每位回應前一位的論點，並 @ 你要交棒的同事。'
-                  '最後由 HiKari 整理決策和每項工作的負責人。')
+                  'PM 是主持人；行銷主張先投放廣告；RD 主張先做小規模測試；'
+                  'HiKari 從社群內容補充。大家閱讀全部訊息，自行決定何時發言；不用固定輪次或自動總結。')
         result = await self.ask(prompt, member=primary)
         reasons = []
         rooms = (await self.app.call('rooms.list'))['rooms']
@@ -1398,18 +1397,15 @@ class RpcDriver:
         messages = history['messages']
         if exchange['state'] != 'done' or any(i['state'] != 'done' for i in exchange['reply_intents']):
             reasons.append('meeting_pending_or_blocked_intents')
-        if exchange['hops'] < 4 or exchange['turns_taken'] < 7:
-            reasons.append('meeting_did_not_cross_admission_limits')
         authors = {m['member_id'] for m in messages if m['member_id'] is not None}
-        if authors != set(selected) or len([m for m in messages if m['kind']=='wrapup' and m['member_id']==primary]) != 1:
-            reasons.append('meeting_authors_or_chief_wrapup')
+        if not authors or not authors <= set(selected):
+            reasons.append('meeting_authors_missing_or_outside_room')
+        if any(m['kind']=='wrapup' for m in messages):
+            reasons.append('meeting_automatic_conclusion')
         if any(m['member_id'] is not None and m['reply_to'] is not None and m['member_id']==m['reply_to_member'] for m in messages):
             reasons.append('meeting_self_reply')
         if not any(role=='moderator' for role in room.get('roles',{}).values()):
             reasons.append('meeting_moderator_missing')
-        for member in (identifier for identifier in selected if identifier != primary):
-            if len([m for m in messages if m['member_id']==member and m['kind']=='message']) < 2:
-                reasons.append('meeting_member_missing_second_round')
         events = [json.loads(row[0]) for row in self.app._conn.execute(
             "SELECT m.text FROM agent_messages m JOIN agent_turns t ON t.id=m.turn_id "
             "WHERE m.kind='event' AND t.member_id=? AND t.scope='private'", (primary,)) if row[0].startswith('{')]

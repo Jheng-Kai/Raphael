@@ -724,8 +724,6 @@ class BackgroundService:
             return refused('bad_arguments')
         if member == speaker.id:
             return refused('self_handoff')
-        if source.scope == 'room' and self._in_meeting(source.id):
-            return refused('meeting_in_progress')
         target = self._speaker(member)
         if target is None:
             return refused('member_unknown_or_removed')
@@ -798,14 +796,6 @@ class BackgroundService:
             self._queue.append(task.id)
             self._changed(task.id, QUEUED)
             self._ensure_pump()
-
-    def _in_meeting(self, turn_id):
-        """Whether a room turn speaks in a live meeting. A room keeps its moderator after one, so it is the exchange
-        that says so: live, the owner's 「現在執行」 after a meeting could hand off nothing."""
-        row = self._metrics_conn.execute(
-            "SELECT m.kind FROM room_messages m JOIN room_exchanges e ON e.origin_message_id=m.origin_message_id "
-            "WHERE m.turn_id=? AND e.state IN ('queued','running') AND e.meeting=1", (turn_id,)).fetchone()
-        return bool(row) and row['kind'] == 'message'
 
     def _handoff_member_allowed(self, room_id, member):
         room = self._metrics_conn.execute('SELECT * FROM rooms WHERE id=?',(room_id,)).fetchone()
@@ -1250,11 +1240,6 @@ class BackgroundService:
                 "SELECT 1 FROM room_messages WHERE turn_id=? AND kind='wrapup'", (task.turn_id,)).fetchone():
             # A wrap-up only sums up what was delivered: live, wrap-ups re-read mail and handed work off again.
             snapshot = Snapshot({}, [])
-        elif task.scope == "room" and task.turn_id and self._in_meeting(task.turn_id):
-            # A meeting only discusses who does what, recalling the shared notes at most: live, members read the
-            # mail inside the rounds, and the chief then left their items out of the work the owner started after it.
-            snapshot = Snapshot({name: ref for name, ref in snapshot.refs.items() if name in MEMORY_READ_TOOLS},
-                                [item for item in snapshot.definitions if item["function"]["name"] in MEMORY_READ_TOOLS])
         # With more tools than fit, the task is shown the ones it needs, not the first few.
         if not room_cli:
             await refine(snapshot, self._picker, task.text, context, model=model, ledger=ledger)

@@ -18,6 +18,76 @@ async def wired(make_rig, conn, plugins):
     await background.close()
 
 
+@pytest.mark.parametrize("scope", ["private", "room"])
+@pytest.mark.parametrize("mode", ["direct", "bypass"])
+async def test_background_discovers_app_then_owner_signs_in_and_same_task_resumes(wired, tmp_path, scope, mode):
+    from test_connect_cards import Rig, GoogleFixture
+    agent, background = wired
+    agent.settings.set("action_mode", mode)
+    connector = Rig(tmp_path, agent.conn, GoogleFixture("background-discovery"))
+    await connector.configure()
+    agent.service._cards = connector.cards
+    connector.cards.resume = agent.service.resume_turn
+    from raphael_core.agent.gate import ToolGate
+    background.gate = ToolGate(connector.hub, conn=agent.conn, now_ms=background.wall)
+    agent.service._gate = background.service._gate = background.gate
+    room_id = None
+    if scope == "room":
+        with agent.conn:
+            room_id = agent.conn.execute("INSERT INTO rooms(name,created) VALUES ('Review room',0)").lastrowid
+    origin = agent.history.add(session_id="discovery", question="Read mail", route="delegate", prefix="", text="",
+        status="running", scope=scope, room_id=room_id, thread_id=room_id,
+        conversation_id=agent.service.conversations.main() if scope == "private" else None)
+    background.client.replies = [turn("", [call("find_app", {"query": "gmail"}, "discovery")]),
+                                 turn("Please sign in.", [call("connect_app", {"app": "gmail"}, "connect")])]
+    task_id = background.submit("Read mail", session="discovery")
+    background.service.attach_turn(task_id, origin)
+    try:
+        await until(lambda: background.task(task_id).state in ("waiting", "done", "failed", "limit"))
+        first = background.client.chat_calls[0]
+        offered = {item["function"]["name"]: item["function"] for item in first["tools"]}
+        assert "find_app" in offered
+        assert "Read-only" in offered["find_app"]["description"]
+        system = first["messages"][0]["content"]
+        assert "You cannot ask the user anything" not in system
+        assert "find_app" in system and "connect_app" in system
+        assert "even in full-permission mode" in system
+        assert not any(name.endswith("gmail_search") for name in offered)
+        assert '"id": "gmail"' not in str(first["messages"])
+        discovery = next(message for message in background.client.chat_calls[1]["messages"]
+                         if message.get("tool_call_id") == "discovery")
+        assert '"id": "gmail"' in discovery["content"] and '"connected": false' in discovery["content"]
+        assert background.task(task_id).state == "waiting"
+        [question] = background.service.owner_questions.for_turn(origin)
+        assert question["kind"] == "connect_app" and question["state"] == "asked"
+        card = connector.cards.store.get(question["card_id"])
+        assert card.state == "pending" and connector.fixture.opened == 0
+        [view] = agent.service._turn_views([agent.history.get(origin)])
+        assert view["connectors"][0]["id"] == card.id
+        assert view["scope"] == scope
+        def read_mail(**request):
+            tools = {item["function"]["name"] for item in request["tools"]}
+            alias = next(name for name in tools if name.endswith("gmail_search"))
+            return turn("", [call(alias, {"q": "background-discovery"}, "read-after-sign-in")])
+        background.client.replies = [read_mail, report("Mail read after sign-in.")]
+        await connector.connect(card)
+        await until(lambda: background.task(task_id).state in ("done", "failed", "limit"))
+        task = background.task(task_id)
+        assert task.state == "done" and task.turn_id == origin
+        assert task.scope == scope and task.room_id == room_id
+        assert connector.fixture.opened == 1
+        read_result = next(message for message in background.client.chat_calls[-1]["messages"]
+                           if message.get("tool_call_id") == "read-after-sign-in")
+        assert "background-discovery" in read_result["content"]
+        resumed = str(background.client.chat_calls[-1]["messages"])
+        assert "connected" in resumed and "discovery" in resumed
+        assert not any(secret in resumed for secret in connector.fixture.secrets)
+        await connector.connect(connector.cards.store.get(card.id))
+        assert len(background.client.chat_calls) == 4
+    finally:
+        await connector.cards.aclose()
+
+
 @pytest.mark.parametrize("answer", ["Tuesday", None])
 async def test_api_question_ends_turn_and_answer_continues_same_turn(wired, client, answer):
     agent, background = wired
@@ -41,17 +111,27 @@ async def test_api_question_ends_turn_and_answer_continues_same_turn(wired, clie
 @pytest.mark.parametrize("path", ["conversation", "background", "routine"])
 async def test_cli_mcp_question_releases_process_and_continues_with_answer(wired, tmp_path, path):
     from members.test_cli_brains import fake_brain
+    from test_connect_cards import Rig, GoogleFixture
     agent, background = wired
+    connector = Rig(tmp_path, agent.conn, GoogleFixture("cli-discovery"))
+    agent.service._cards = connector.cards
     agent.settings.set("agent_model", "cli:claude")
     fake_brain(agent, tmp_path, '''import json, sys, urllib.request
 from pathlib import Path
 request=json.loads(sys.stdin.readline())
 if "Previous tool conversation" in str(request):
     assert "Wednesday after lunch" in str(request) and "answered" in str(request)
+    assert "gmail" in str(request)
     assert str(request).count("tool_call_id") >= 2
     print(json.dumps({"type":"result","subtype":"success","result":"Tuesday confirmed."}),flush=True)
 else:
     config=json.loads(Path(sys.argv[sys.argv.index("--mcp-config")+1]).read_text())["mcpServers"]["raphael"]
+    listing={"jsonrpc":"2.0","id":-2,"method":"tools/list","params":{}}
+    offered=json.loads(urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(listing).encode(),headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read())
+    assert "find_app" in {tool["name"] for tool in offered["result"]["tools"]}
+    discovery={"jsonrpc":"2.0","id":-1,"method":"tools/call","params":{"name":"find_app","arguments":{"query":"gmail"}}}
+    found=json.loads(urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(discovery).encode(),headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read())
+    assert not found["result"]["isError"] and "gmail" in str(found["result"])
     prior={"jsonrpc":"2.0","id":0,"method":"tools/call","params":{"name":"local_time","arguments":{}}}
     urllib.request.urlopen(urllib.request.Request(config["url"],data=json.dumps(prior).encode(),headers={**config["headers"],"Content-Type":"application/json"}),timeout=15).read()
     packet={"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ask_owner","arguments":{"question":"Which day?","options":["Tuesday"]}}}
@@ -71,13 +151,14 @@ else:
         await until(lambda: task_id not in background.service._active)
         assert task_id not in background.service._cli_loops
 
-    [turn] = await agent.turns()
+    [turn] = [item for item in await agent.turns() if item.get("owner_questions")]
     [question] = turn["owner_questions"]
     assert not agent.service._cli_loops
     await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Wednesday after lunch"})
     await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
     assert background.task(question["task_id"]).state == "done", background.task(question["task_id"])
     assert "Tuesday confirmed" in background.task(question["task_id"]).report_text
+    await connector.cards.aclose()
 
 
 async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):

@@ -912,3 +912,19 @@ generated-audio-room, generated-audio-missing, generated-audio-repair and owner-
 1120, 720 and 1920x1080. Compare the incoming and generated audio cards in each
 audio scene and compare the repair notice with the existing missing-voice scene.
 Fake Telegram, fake CLI and fixture audio are not live or native acceptance.
+
+## Background app discovery (2026-11-01)
+
+Background API and CLI snapshots offer the same read-only find_app catalog contract
+as conversation turns. Discovery opens no owner question and exposes no account
+data. An app absent from the task snapshot can be found by exact catalog id, then
+connect_app uses the existing card in the originating private chat or room. The
+owner signs in on that card even in full-permission mode. The same task and turn
+resume once with current tools; no extra RPC, table, page or toggle is added.
+Offline evidence: core/tests/agent/test_owner_questions.py and
+core/tests/background/test_owner_cards.py. Real catalog completeness, provider
+consent and live model choice remain unverified; fixtures use fake transports.
+
+Routine event lines distinguish once, weekdays, daily, weekly and every in zh-TW,
+ja and en, including start_date, until and max_runs. Evidence:
+core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.

@@ -6,7 +6,6 @@ import sqlite3
 import pytest
 
 from raphael_core.agent.history import AgentHistory
-from raphael_core.members.exchanges import seat
 from raphael_core.members.rooms import RoomsService
 from .test_exchanges import exchange, team, send, finish, history, Decision  # noqa: F401
 
@@ -59,14 +58,15 @@ async def test_two_colleagues_addressing_one_member_get_a_single_reply(rig, exch
     assert [i['state'] for i in intents if i['recipient_id'] == carol] == ['done', 'done']
 
 
-async def test_a_member_who_just_answered_is_not_also_given_the_next_planned_turn(rig, exchange):
+async def test_a_member_who_just_answered_is_not_given_another_turn_by_its_role(rig, exchange):
     room, (alice, bob, carol) = await three(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(alice):'moderator'}})
-    await send(rig, room, 'Plan the launch')
-    await finish(rig, exchange, 'Round one: @Bob what is your view?')
+    await send(rig, room, '@Alice plan the launch')
+    await finish(rig, exchange, '@Bob what is your view?')
     assert rig.background.submitted[-1]['member_id'] == bob
     await finish(rig, exchange, 'I favour a small test first.')
-    assert rig.background.submitted[-1]['member_id'] == carol
+    assert len(rig.background.submitted) == 2
+    assert (await history(rig, room))['exchange']['state'] == 'done'
 
 
 async def test_a_trailing_pass_is_not_shown(rig, exchange):
@@ -167,7 +167,7 @@ async def test_a_failed_reply_blocks_only_its_intent_and_the_room_says_who_did_n
 async def test_a_failed_meeting_turn_is_named_and_owner_stop_still_stops_everyone(rig, exchange):
     room, ids = await team(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator', str(ids[1]):'con'}})
-    await send(rig, room, 'Discuss the evidence')
+    await send(rig, room, '@Alice @Bob discuss the evidence')
     await fail(rig, exchange)
     assert [s['member_id'] for s in rig.background.submitted] == ids
     await rig.call('rooms.stop', {'room_id':room['id']})
@@ -175,7 +175,7 @@ async def test_a_failed_meeting_turn_is_named_and_owner_stop_still_stops_everyon
     result = await history(rig, room)
     assert len(rig.background.submitted) == 2
     assert (result['exchange']['state'], result['exchange']['reason']) == ('stopped', 'owner')
-    assert [(i['recipient_id'], i['reason']) for i in result['exchange']['reply_intents']] == [(ids[0], 'cli_rate_limited')]
+    assert [(i['recipient_id'], i['reason']) for i in result['exchange']['reply_intents']] == [(ids[0], 'cli_rate_limited'), (ids[1], '')]
     [text] = wrapups(result)
     assert text.split('\n')[:2] == ['已停止本次工作，已完成的動作保留。', 'Alice：請求太頻繁而被限流']
 
@@ -294,81 +294,46 @@ async def test_a_missing_worker_turn_blocks_its_accepted_intent(rig, exchange, f
     await restored.aclose()
 
 
-async def test_room_roles_run_two_rounds_without_changing_personas(rig, exchange):
+async def test_a_named_moderator_has_no_scheduled_turns_or_conclusion(rig, exchange):
     room, ids = await team(rig)
     await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}})
+    exchange._exchanges.decision = Decision('Bob')
     await send(rig, room, 'Discuss the evidence')
-    while (await history(rig, room))['exchange']['state'] != 'done':
-        await finish(rig, exchange, 'Evidence reviewed')
-    assert [s['member_id'] for s in rig.background.submitted] == [*ids,*ids,0]
-    assert 'Open round 2' in rig.background.submitted[2]['text']
+    assert [s['member_id'] for s in rig.background.submitted] == [ids[1]]
+    await finish(rig, exchange, 'Evidence reviewed')
+    assert (await history(rig, room))['exchange']['state'] == 'done'
+    assert len(rig.background.submitted) == 1
     assert rig.service.speaker(ids[0]).role == 'PM'
 
 
-async def test_a_meeting_runs_two_rounds_then_the_moderator_closes_and_raphael_concludes_once(rig, exchange):
-    # Live, every reply handed the floor on with an @, the moderator kept asking, and two rounds ran past forty turns.
+async def test_a_meeting_answers_explicit_addresses_without_dispatching_rounds(rig, exchange):
     room, (alice, bob, carol) = await three(rig)
-    await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(alice):'moderator', str(bob):'pro', str(carol):'con'}})
-    await send(rig, room, '@Alice @Bob @Carol debate the launch')
-    prompts = []
-    for reply in ('Should we launch now? @Bob', 'Launch now. @Carol', 'Test first. @Alice', 'Speed against cost: @Carol',
-                  'Speed costs more. @Bob', 'The cost is small. @Alice', 'Both sides are heard. @Raphael please conclude'):
-        prompts.append(rig.background.submitted[-1]['text'])
-        await finish(rig, exchange, reply)
-    assert '###' not in rig.background.submitted[-1]['text'].split('TeamContextSnapshot')[0].replace('no headings', '')
-    await finish(rig, exchange, 'We test first, and Bob runs it.')
+    await exchange.meeting({'member_ids':[0,alice,bob,carol], 'agenda':'@Bob review the launch',
+                            'roles':{str(alice):'moderator',str(bob):'pro',str(carol):'con'}}, 'en', 47)
+    assert [s['member_id'] for s in rig.background.submitted] == [bob]
+    await finish(rig, exchange, 'Test first. @Carol what do you think?')
+    assert rig.background.submitted[-1]['member_id'] == carol
+    await finish(rig, exchange, 'Agreed.')
     result = await history(rig, room)
-    assert [(m['member_id'], m['kind']) for m in result['messages'] if m['member_id'] is not None] == [
-        (alice, 'message'), (bob, 'message'), (carol, 'message'), (alice, 'message'),
-        (carol, 'message'), (bob, 'message'), (alice, 'message'), (0, 'wrapup')]
     assert result['exchange']['state'] == 'done'
-    assert all(i['state'] == 'done' for i in result['exchange']['reply_intents'])
-    assert 'Open round 1' in prompts[0] and 'Still to speak in round 1: @Carol' in prompts[1]
-    assert 'hand back to the moderator @Alice' in prompts[2] and 'Open round 2' in prompts[3]
-    assert 'Still to speak in round 2: @Bob' in prompts[4] and 'hand back to the moderator @Alice' in prompts[5]
-    assert 'Both rounds are complete' in prompts[6] and '@拉斐爾' in prompts[6]
+    assert [(m['member_id'],m['kind']) for m in result['messages'] if m['member_id'] is not None] == [
+        (bob,'message'),(carol,'message')]
 
 
-async def test_an_agenda_that_names_raphael_still_opens_with_the_moderator(rig, exchange):
-    # Live, an agenda saying 「第二輪結束後 @拉斐爾 作最後結論」 had Raphael speak before the moderator opened.
+async def test_a_meeting_with_no_one_speaking_has_no_automatic_open_or_close(rig, exchange):
     room, ids = await team(rig)
-    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Debate the launch. After round two @Raphael concludes.',
-                            'roles':{str(ids[0]):'moderator', str(ids[1]):'con'}}, 'en', 47)
-    assert [s['member_id'] for s in rig.background.submitted] == [ids[0]]
-    assert 'Open round 1' in rig.background.submitted[0]['text']
-    while (await history(rig, room))['exchange']['state'] != 'done':
-        await finish(rig, exchange, 'Evidence reviewed')
-    assert [s['member_id'] for s in rig.background.submitted] == [*ids, *ids, 0]
+    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Thanks everyone',
+                            'roles':{str(ids[0]):'moderator',str(ids[1]):'con'}}, 'en', 48)
+    assert not rig.background.submitted
+    assert (await history(rig, room))['exchange']['state'] == 'done'
 
 
-async def test_after_a_meeting_the_owners_next_message_is_not_another_debate(rig, exchange):
-    # 「開始做吧」 after a meeting started a fresh two-round debate, during which no one could hand off work.
+async def test_a_reused_meeting_keeps_only_the_roles_the_owner_requested(rig, exchange):
     room, ids = await team(rig)
-    await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator', str(ids[1]):'con'}})
-    await send(rig, room, 'Discuss the evidence')
-    while (await history(rig, room))['exchange']['state'] != 'done':
-        await finish(rig, exchange, 'Evidence reviewed')
-    asked = len(rig.background.submitted)
-    await send(rig, room, '@Bob start on the plan now', 'two')
-    assert [s['member_id'] for s in rig.background.submitted[asked:]] == [ids[1]]
-    assert 'Open round' not in rig.background.submitted[-1]['text']
-    await finish(rig, exchange, 'Started.')
-    assert (await history(rig, room))['exchange']['pending'] == '[]'
-    while (await history(rig, room))['exchange']['state'] != 'done':
-        await finish(rig, exchange, 'Noted.')
-    meeting = await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Discuss the next release'}, 'en', 45)
-    assert meeting['room_id'] == room['id'] and 'Open round 1' in rig.background.submitted[-1]['text']
-
-
-@pytest.mark.parametrize('plan,member,phase', [
-    ([{'member':1, 'round':2}, {'member':2, 'round':2}], 2, 'aside'),
-    ([{'member':2, 'round':1}, {'member':1, 'round':2}, {'member':2, 'round':2}], 1, 'floor'),
-    ([{'member':3, 'round':1}, {'member':1, 'round':2}, {'member':2, 'round':2}, {'member':3, 'round':2}], 2, 'aside'),
-    ([], 2, 'after')])
-def test_a_turn_outside_its_planned_place_keeps_the_plan(plan, member, phase):
-    # Between rounds, mid-round or after them, an addressed member answers without using up a planned turn.
-    rest, meeting = seat(plan, member, 1)
-    assert (meeting['phase'], rest) == (phase, plan)
+    await rig.call('rooms.update', {'room_id':room['id'], 'roles':{str(ids[0]):'moderator'}})
+    await exchange.meeting({'member_ids':[0,*ids], 'agenda':'Next release'}, 'en', 49)
+    assert (await rig.call('rooms.list'))['rooms'][0]['roles'] == {}
+    assert not rig.background.submitted
 
 
 async def test_meeting_reuses_exact_members_and_has_one_agenda(rig, exchange):

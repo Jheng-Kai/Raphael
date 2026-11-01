@@ -176,15 +176,30 @@ def routine_event(name: str, data: dict, language: str) -> str:
         app = routine.get("app_name") or when["app"]
         condition = f"{when['filter']['field']} = {when['filter']['equals']}"
         timing = {"zh-TW": f"當 {app} 有符合 {condition} 的新項目", "en": f"When {app} has a new item matching {condition}", "ja": f"{app} に {condition} と一致する新しい項目があるとき"}[language]
+    elif kind == "once":
+        once = {"zh-TW": "一次", "ja": "一度", "en": "Once"}[language]
+        timing = f"{once} · {schedule.get('start_date', '')} {schedule.get('time', '')}"
+    elif kind == "weekdays":
+        weekdays = {"zh-TW": "平日", "ja": "平日", "en": "Weekdays at"}[language]
+        timing = f"{weekdays} {schedule.get('time', '')}"
     elif kind == "weekly":
         days = schedule.get("days", [])
-        names = {"zh-TW": "日一二三四五六", "ja": "日月火水木金土", "en": ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")}[language]
-        timing = words[4] + " " + ",".join(names[day] for day in days) + " " + str(schedule.get("time", ""))
+        names = {"zh-TW": tuple("週" + day for day in "日一二三四五六"), "ja": "日月火水木金土", "en": ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")}[language]
+        joiner = {"zh-TW": "、", "ja": "・", "en": ", "}[language]
+        prefix = "每" if language == "zh-TW" else words[4] + (" " if language == "en" else "")
+        timing = prefix + joiner.join(names[day] for day in sorted(set(days))) + " " + str(schedule.get("time", ""))
     elif kind == "every":
         hours = schedule.get("hours", 1)
-        timing = {"zh-TW": f"每 {hours} 小時", "ja": f"{hours}時間ごと", "en": f"Every {hours} hours"}[language]
+        timing = {"zh-TW": f"每 {hours} 小時", "ja": f"{hours}時間ごと", "en": "Every hour" if hours == 1 else f"Every {hours} hours"}[language]
     else:
         timing = words[3] + " " + str(schedule.get("time", ""))
+    if schedule:
+        if kind != "once" and (start := schedule.get("start_date")):
+            timing += {"zh-TW": f" · 自 {start} 起", "ja": f" · {start}から", "en": f" · from {start}"}[language]
+        if until := schedule.get("until"):
+            timing += {"zh-TW": f" · 至 {until}", "ja": f" · {until}まで", "en": f" · until {until}"}[language]
+        if (runs := schedule.get("max_runs")) is not None:
+            timing += {"zh-TW": f" · 最多 {runs} 次", "ja": f" · 最大{runs}回", "en": f" · at most {runs} {'run' if runs == 1 else 'runs'}"}[language]
     return action if not routine else f"{action} · {timing.strip()} {routine.get('title', '')}"
 
 

@@ -28,7 +28,7 @@ BASE = (
     ("Consult a colleague", "請信件助理向行銷詢問只有行銷知道的新品代號。", "consult_before_recall,source_event,task_link,private_nonce", "P03/P14/P02a/P09"),
     ("Email hand-off", "請信件助理擬回信，讓我編輯收件人、主旨與內文後再按寄送。", "editable_email,version_bound_send,cancel_zero_send,one_receipt", "P07/P08c-d/P09"),
     ("HiKari publishing", "HiKari，幫我準備新品貼文，先確認圖片與文案，等我核准再發布。", "persona_caption,media_required,approval_before_publish,one_receipt", "P08a-d/P15a/P16a/P09"),
-    ("Meeting", "開會討論上架後的行銷計畫，邀行銷、PM、RD，請拉斐爾最後整理決策與負責人。", "real_turn_taking,pending_mentions,chief_present,chief_wrapup,room3_regressions", "P01/P02a-b/P03a/P04/P09"),
+    ("Meeting", "開會討論上架後的行銷計畫，邀行銷、PM、RD，大家自行決定何時發言，不用固定輪次或自動總結。", "real_turn_taking,pending_mentions,chief_present,no_automatic_conclusion,room3_regressions", "P01/P02a-b/P03a/P04/P09"),
     ("Immediate meeting actions", "請現在執行會議每一項工作；來源文件的明天截止日期不是排程指示。", "one_task_per_owner,immediate_start,work_thread,result_to_room,no_implicit_schedule", "P03a/P04/P06/P10"),
     ("Requested schedule", "每天早上八點整理行銷數據，現在建立例行任務。", "routine_persisted,timezone,next_run,occurrence_once,result_scope", "P10/P06/P08/P09"),
     ("Parallel tasks", "請行銷、PM、RD 同時處理各自的工作，完成後分別回報。", "three_tasks,overlapping_intervals,ordered_room_results", "P03/P06/P16a"),
@@ -67,7 +67,7 @@ def cells(registry=(), catalog=(), *, servers=()):
          'primary_did_not_work','no_implicit_schedule'),
         'P15b', 'primary-dispatch'))
     result.append(ScenarioCell('S07.meeting', 'Real meeting (P02 scope)', SCENARIOS[6].prompt,
-        ('room_created', 'real_turn_taking', 'pending_mentions', 'chief_wrapup', 'no_self_reply', 'private_link_once',
+        ('room_created', 'real_turn_taking', 'pending_mentions', 'no_automatic_conclusion', 'no_self_reply', 'private_link_once',
          'primary_contact_in_every_turn', 'production_state'),
         'P01/P02a-b', 'meeting'))
     result.append(ScenarioCell('S07.short-wrapup','A short report ends with no summary nobody asked for',

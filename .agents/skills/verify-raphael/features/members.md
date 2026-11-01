@@ -94,7 +94,7 @@ The selected consumer matrix is sidebar, sidebar-many, sidebar-rail, sidebar-gro
 Raphael and every member can administer the sidebar from their own conversation: overview, member creation
 and editing, groups, any member's routines, skill imports and command templates (owner decision 2026-10-31:
 everyone's abilities are the same; Raphael is the default member and the chief role only decides who the owner brings work to
-and who concludes a room). The owner still confirms every change at the end of the turn.
+without authority over who speaks in a group). The owner still confirms every change at the end of the turn.
 Management tools, including the legacy create_member alias, are offered to every speaker, never to one that another member asked. Both creation names share the same ten-per-turn limit and member service. Creation uses distinct available
 presets, then the neutral silhouette, and the create dialog defaults.
 
@@ -170,7 +170,7 @@ The IPC double keeps `primaryId` as the core keeps the flag: the list's `team_co
 The core keeps the flag on the member's row (schema v39, a unique index) and the roster is the one place it is read from: the snapshot's `primary_id`
 (and equal `chief_id`) is in its revision, and every prompt (an API turn, a resumed CLI thread's per-turn sidebar block, a background task or
 routine, each room turn) is built from it fresh. Offline proof: core/tests/members/test_primary.py (one at a time and its persistence, hide and delete hand it
-back to Raphael, nothing else changes, each room uses the current chief and concludes once when the chief changes, a roster that kept the old one
+back to Raphael, nothing else changes, each room reads the current chief without an automatic conclusion, a roster that kept the old one
 is told apart on each path), core/tests/background/test_primary.py, and Guardian S02 (every Bot names the new primary as the chief after the
 owner changes it; a brain that keeps the old one, never says it or names a different chief fails on both brain paths), S03.primary-dispatch (the primary hands
 the work to 信件助理 itself) and S07.meeting (held with a primary that is not Raphael). Live brains and the native shell (the persisted choice
@@ -419,3 +419,13 @@ S21.skills.manage are explicitly mapped; live coverage remains unverified until 
 
 When changing the learning notice, also capture member-text and centred-system-events
 at the same themes/widths to compare the shared eventLineHTML treatment.
+
+## Group prompt truth (2026-11-01)
+
+R-AG-02 applies with or without room roles. Every participant reads every message
+and decides whether to speak. The meeting tool selects the current chief from the
+snapshot, never a mandatory Raphael (0), and posts only the owner agenda. No role
+creates rounds, dispatched speakers, a template or an automatic conclusion. Roles
+stay room-only; assigned work uses handoff and reports its actual result.
+Offline evidence: core/tests/members/test_room_listening.py, test_room_intents.py,
+test_primary.py and core/tests/evaluate/test_p02_scenarios.py. No UI changed.

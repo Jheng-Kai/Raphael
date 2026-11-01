@@ -7,7 +7,7 @@ from ..protocol import invalid_params
 
 ASK_OWNER = "ask_owner"
 OWNER_CARDS = frozenset((ASK_OWNER, "connect_app", "request_secret", "email_draft", "show_page"))
-BACKGROUND_TOOLS = OWNER_CARDS | {"update_page"}
+BACKGROUND_TOOLS = OWNER_CARDS | {"update_page", "find_app"}
 
 
 def question_input(args):

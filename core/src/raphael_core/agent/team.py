@@ -96,7 +96,6 @@ HANDOFF_REFUSALS = {
     "bad_arguments": "Give member_id as a colleague's id, request, stage_id and done_when as short non-empty text, and mode work or consult.",
     "handoff_depth_limit": "This work has been handed on too many times; do this part yourself.",
     "handoff_cycle": "That colleague is already waiting on this work; finish it with what you have and name anything missing in your result.",
-    "meeting_in_progress": "A meeting is under way here: answer in your reply and give a colleague the floor with an @mention; hand-offs wait until the meeting has concluded.",
     "worker_disabled": "Background work is switched off, so nothing can be handed off; do the work yourself or tell the owner.",
     "source_unavailable": "Work cannot be handed off from this conversation; do it yourself or reply here.",
     "blocked": "Hand-offs are not allowed here; do the work yourself or reply here.",
@@ -120,7 +119,7 @@ def _definition(name: str) -> dict[str, Any]:
                     "done_when":{"type":"string","maxLength":2000}},
                     "required":["member_id","request","stage_id","done_when"], "additionalProperties":False}}
     if name == ROOM_MEETING:
-        return {"description": "Start a real group meeting or discussion. Select colleagues by their expertise from the team snapshot, include Raphael (0), and supply an agenda. Reuse a room with exactly these members or create it. Use this for meetings, never a series of ask_member calls. Whenever the request names a moderator, a chair or sides, pass roles keyed by member id strings, for example {\"4\": \"moderator\", \"1\": \"pro\", \"5\": \"con\"}. Roles are scoped to this room; the moderator runs two rounds and Raphael concludes.",
+        return {"description": "Start a group discussion. Select colleagues by their expertise from the team snapshot, including its current chief as the room requires, and supply an agenda. Reuse a room with exactly these members or create it. Use this for meetings, never a series of ask_member calls. Everyone reads every message and decides for themselves whether to speak. There are no fixed rounds, dispatched speakers, templates or automatic conclusions. An @mention asks for a reply; handoff assigns concrete work. Whenever the owner names a moderator, a chair or sides, pass those room-only roles keyed by member id strings, for example {\"4\": \"moderator\", \"1\": \"pro\", \"5\": \"con\"}; roles do not grant control of other speakers.",
                 "parameters": {"type": "object", "properties": {
                     "member_ids": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 6},
                     "agenda": {"type": "string"}, "name": {"type": "string"},
@@ -239,15 +238,15 @@ def primary_contact_prompt(context: dict, speaker: Speaker) -> str:
     """What `speaker` is told of the owner's primary contact, from the snapshot it was just given
     (`primary_id` and `chief_id`, the one place either is read from): who it is, that new work is
     brought to it and handed on, and what that makes of this speaker. The primary contact holds
-    the chief capability: the owner brings new work to it, and it concludes the rooms. It has no
-    tool the others lack."""
+    the chief capability, without authority over who speaks in a room. It has no tool the others lack."""
     primary = next((person for person in context["members"] if person["id"] == context["primary_id"]), None)
     if primary is None:
         return ""
     # A name is what the owner wrote: quoted and escaped here as it is in the data above.
     name = json.dumps(primary["name"], ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
     text = (f"\nPrimary contact: {name} (id {primary['id']}). "
-            "This member is the chief of staff and coordinates room conclusions.")
+            "This member is the chief of staff. In groups everyone reads every message and decides whether to speak; "
+            "there are no fixed rounds and no automatic conclusion.")
     dispatch = "The owner brings new work to the primary contact first, which hands it to the colleague it belongs to."
     if speaker.id == primary["id"]:
         return text + (" That is you: the owner brings new work to you first. When the owner gives you work in your own chat "

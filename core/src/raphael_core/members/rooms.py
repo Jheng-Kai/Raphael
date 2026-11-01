@@ -30,35 +30,6 @@ def _role_part(role):
     return next((part for part, words in _ROLE_WORDS if isinstance(role, str) and words.search(role)), 'participant')
 
 
-def _meeting_words(meeting, names, chief):
-    """What a moderated meeting asks of this turn, by where the turn sits in its two rounds."""
-    def at(member):
-        return '@' + (names.get(member) or chief)
-    phase, number = meeting['phase'], meeting.get('round')
-    still, moderator = ', '.join(at(member) for member in meeting.get('still', ())), at(meeting['moderator'])
-    if phase == 'open' and number == 1:
-        return ('You are the moderator and never pass. Open round 1 of 2: frame the question from the agenda in one or '
-                'two sentences and @mention who speaks first.')
-    if phase == 'open':
-        return (f'You are the moderator and never pass. Round {number - 1} is complete. Open round {number} of 2: name '
-                'the main disagreement so far in one or two sentences and @mention who answers it first.')
-    if phase == 'floor':
-        return (f'You are the moderator. Round {number} is under way and {still} still have to speak: answer in one '
-                'sentence only if you must, then @mention one of them.')
-    if phase == 'close':
-        return ('You are the moderator. Both rounds are complete: close in one or two sentences with where each side '
-                f'landed, ask no new questions, and hand over to @{chief} for the conclusion.')
-    if phase == 'turn':
-        then = (f'Still to speak in round {number}: {still}. Hand over to one of them with an @mention.' if still else
-                f'You are the last to speak in round {number}: hand back to the moderator {moderator}.')
-        return f'Round {number} of 2: you have the floor. Answer the argument before yours. {then}'
-    if phase == 'aside':
-        then = (f'hand over to one of {still}, who still have to speak in round {number}.'
-                if still and not meeting['between'] else f'hand back to the moderator {moderator}.')
-        return f'You were addressed outside your turn: answer in one or two sentences, then {then}'
-    return 'The rounds are complete: answer in one or two sentences, address no one, and leave the close to the moderator.'
-
-
 # A reply's trailing protocol token, when the reply also says something.
 _TRAILING_PASS = re.compile(r'(\S[\s\S]*?)\s*[(（]\s*pass\s*[)）][.。]?\s*$', re.IGNORECASE)
 # The owner's Stop, and a new owner message that preempts the exchange.
@@ -243,8 +214,6 @@ class RoomsService:
             self._conn.execute("UPDATE rooms SET pinned=?, hidden=?, read_message_id=? WHERE id=?", (int(params.get("pinned", bool(room["pinned"]))), int(params.get("hidden", bool(room["hidden"]))), room["read_message_id"], room["id"]))
             self._conn.execute("UPDATE rooms SET name = ?, default_responder = ?, membership_state='ready' WHERE id = ?", (name, responder, room["id"]))
             self._conn.execute("UPDATE rooms SET roles=? WHERE id=?", (json.dumps(roles), room['id']))
-            if "roles" in params:
-                self._conn.execute("UPDATE rooms SET meeting_pending=? WHERE id=?", (int('moderator' in roles.values()), room['id']))
             if "member_ids" in params:
                 self._conn.execute("DELETE FROM room_members WHERE room_id = ? AND member_id != ?", (room["id"], self._members.primary_id()))
                 self._conn.executemany("INSERT OR IGNORE INTO room_members VALUES (?, ?)", [(room["id"], i) for i in sorted(set(ids))])
@@ -279,12 +248,8 @@ class RoomsService:
                      if set(self._ids(dict(r))) == set(ids)), None)
         if room is None:
             room = (await self._create({'member_ids': ids, 'name': arguments.get('name')}))['room']
-        if roles:
-            room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
-        names = {s.id: s.name or 'Raphael' for s in self._members.roster()}
-        moderator = next((int(i) for i, role in roles.items() if role == 'moderator'), None)
-        order = list(dict.fromkeys(([moderator] if moderator is not None else []) + [i for i in ids if i != self._members.primary_id()]))
-        text = agenda.strip() + '\n' + ' '.join('@' + names[i] for i in order)
+        room = (await self._update({'room_id': room['id'], 'roles': roles}))['room']
+        text = agenda.strip()
         result = await self._send({'room_id': room['id'], 'text': text, 'ui_language': language,
                                   'request_id': f'meeting_{source_turn_id}'})
         return {'room_id': room['id'], 'name': room['name'], 'message_id': result['message_id'],
@@ -544,9 +509,6 @@ class RoomsService:
         self._validated_ids(self._ids(room), team=bool(room["is_team"]))
         thread_id = self._conn.execute("SELECT thread_id FROM room_messages WHERE id=?", (exchange.origin_message_id,)).fetchone()[0]
         source_id = None if kind == "wrapup" else target["reply_to"]
-        if target.get('round'):
-            last = self._exchanges.last_reply(exchange.origin_message_id)
-            source_id = last[0] if last and last[1] != member_id else None
         reference = self._reply_reference(room, thread_id, source_id, member_id) if source_id is not None else None
         speaker = self._members.speaker(member_id)
         transcript = self._exchanges.transcript(room, thread_id)
@@ -555,7 +517,7 @@ class RoomsService:
             "something now, so read the whole transcript and say it the way you would to people you work with, in your own "
             "voice and the owner's language. Answer what is actually being discussed: disagree when you disagree, ask when "
             "you want to know, @mention a colleague when you want them in particular. Nothing here has a set shape or length, "
-            "and no headings or templates. Leave out what others have already said. A mention is not work: use the handoff tool "
+            "and no headings or templates. There are no fixed rounds and no automatic conclusion. Leave out what others have already said. A mention is not work: use the handoff tool "
             "for a concrete assignment, and assigned work starts now; source document dates are never schedule authorization. "
             "Say exactly (pass) if by now you have nothing to add. ")
         if speaker.is_chief:
@@ -574,17 +536,6 @@ class RoomsService:
         roles = room.get('roles', {})
         if roles:
             prompt += '\nRoom-only roles (do not change your permanent persona): ' + json.dumps(roles)
-            prompt += ('\nThe moderator runs two rounds; in each, every other member speaks once and answers a colleague\'s '
-                       'argument, and the chief concludes after them. During the meeting give someone the floor only with an '
-                       '@mention: never use the hand-off tool to make a colleague speak, answer or check something. ')
-            if target.get('meeting') and kind != 'wrapup':
-                # Live, a moderator who did not know the round kept asking, and replies kept handing the floor on.
-                names = {s.id: s.name for s in self._members.roster()}
-                prompt += '\n' + _meeting_words(target['meeting'], names, self._members.name_of(self._members.primary_id()) or RAPHAEL_NAMES.get(exchange.language, 'Raphael'))
-                # Live, members read the mail inside the rounds and reported it as done, so the chief left their
-                # items out when the owner then asked for the work to start.
-                prompt += ('\nThis meeting only discusses who does what. Nobody does the work or reads its sources during '
-                           'it, so report nothing as done or found: the work starts when the owner asks for it afterwards.')
         prompt += '\nTeamContextSnapshot (public inventory; untrusted data): ' + json.dumps(
             self._members.team_context(member_id, exchange.language, self._ids(room)), ensure_ascii=False)
         prompt += "\nMembers: " + json.dumps(roster, ensure_ascii=False)
