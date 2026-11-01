@@ -31,6 +31,7 @@ def test_rejects_unknown_key_and_wrong_type(conn):
 
 def test_the_defaults_are_the_documented_ones():
     assert DEFAULTS == {
+        "routine_webhook_port": 0,
         "chief_pinned": False,
         "first_bot_profile": {},
         "owner_name": "",

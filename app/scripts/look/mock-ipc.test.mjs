@@ -5,6 +5,29 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("offers connected event choices and returns ordinary detected conditions without creating", async () => {
+    const target = {}, state=installMock(fixture, {}, target);
+    const call=(params={})=>target.__TAURI_INTERNALS__.invoke("core_call",{method:"routines.list",params});
+    const before=state.data.routines.length;
+    expect((await call()).events.some(e=>e.id==='gmail-mail')).toBe(true);
+    const picked=await call({member_id:1,event:'gmail-mail',value:''});
+    expect(picked.when.event.items).toBe('data.results.0.response.data.messages');
+    expect(picked.when.event.arguments.tools[0].arguments).toEqual({max_results:20,include_payload:false,verbose:false});
+    expect(state.data.routines).toHaveLength(before);
+    const created=await target.__TAURI_INTERNALS__.invoke('core_call',{method:'routines.create',params:{member_id:1,title:'Sample',prompt:'Review',when:picked.when}});
+    expect(created.routine.app_name).toBe('Gmail');
+    const empty={}; installMock(fixture,{fixture:{eventUndetectable:true}},empty);
+    expect((await empty.__TAURI_INTERNALS__.invoke('core_call',{method:'routines.list',params:{event:'gmail-mail'}})).event_error).toBeTruthy();
+  });
+  it("keeps Calendar's detected numeric path and moving window through create and reopen", async () => {
+    const target = {}; installMock(fixture, {}, target);
+    const call = (method, params = {}) => target.__TAURI_INTERNALS__.invoke('core_call', {method, params});
+    const picked = await call('routines.list', {member_id:1,event:'calendar-event'});
+    expect(picked.when.event).toMatchObject({items:'data.results.0.response.data.items',id:'id',since:{arg:'updatedMin',format:'iso'},
+      arguments:{tools:[{tool_slug:'GOOGLECALENDAR_EVENTS_LIST',arguments:{calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'}}]}});
+    const {routine} = await call('routines.create', {member_id:1,title:'Sample',prompt:'Review',when:picked.when});
+    expect((await call('routines.list',{member_id:1})).routines.find(r=>r.id===routine.id).when).toEqual(picked.when);
+  });
   it("records caption calls once without changing the fixture conversation", async () => {
     const target = {}, state = installMock(fixture, {}, target);
     for (const action of ['minimize','toggle_maximize','close','start_dragging']) {

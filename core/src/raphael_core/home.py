@@ -333,7 +333,7 @@ class HomeOverview:
         remaining = CALENDAR_LIMIT if routine.schedule.max_runs is None else max(0, routine.schedule.max_runs - completed)
         due = next_run(routine.schedule, start - 1, tz=zone) if routine.schedule.max_runs is None else routine.next_run_ms
         at = []
-        for _ in range(min(42 * 24, 42 * 24 if routine.schedule.max_runs is None else remaining)):
+        for _ in range(min(42 * 24 * 12, 42 * 24 * 12 if routine.schedule.max_runs is None else remaining)):
             if due is None or due >= end:
                 break
             if due >= start:
@@ -476,8 +476,8 @@ class HomeOverview:
             # The month marks every scheduled day, independently of the bounded seven-day preview.
             schedule = routine.schedule
             minute = lambda time: int(time[:2]) * 60 + int(time[3:])
-            rhythm = schedule.kind == "every" and schedule.hours < 24 and (
-                not schedule.from_time or minute(schedule.to_time) - minute(schedule.from_time) >= schedule.hours * 60)
+            rhythm = schedule.kind == "every" and schedule.interval_minutes < 1440 and (
+                not schedule.from_time or minute(schedule.to_time) - minute(schedule.from_time) >= schedule.interval_minutes)
             marked = set()
             for at in self._due(routine, month_start, month_end, zone):
                 if not rhythm:

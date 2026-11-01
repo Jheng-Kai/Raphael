@@ -4,6 +4,20 @@ import pytest
 from raphael_core.agent.harness_tools import routine_event
 
 
+@pytest.mark.parametrize("language,expected", [("zh-TW", "當 Gmail 有新項目"), ("en", "When Gmail has a new item"), ("ja", "Gmail に新しい項目があるとき")])
+def test_catalogue_event_confirmation_has_no_empty_filter(language, expected):
+    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": None,
+        "app_name": "Gmail", "when": {"app": "composio:gmail", "filter": {"field": "", "equals": ""}}}}, language)
+    assert expected in text and " = " not in text
+
+@pytest.mark.parametrize("language,month,minutes,webhook", [("en","Monthly","30 minutes","POST"),("zh-TW","每月","30 分鐘","POST"),("ja","毎月","30分","POST")])
+def test_moving_triggers_are_named_in_tool_confirmation(language, month, minutes, webhook):
+    for fields, expected in [({"schedule":{"kind":"monthly","day":31,"time":"08:00"}},month),
+                             ({"schedule":{"kind":"every","minutes":30}},minutes),
+                             ({"when":{"webhook":True}},webhook)]:
+        assert expected in routine_event("routine_create", {"routine":{"title":"Sample", **fields}}, language)
+
+
 @pytest.mark.parametrize("language,expected", [
     ("zh-TW", ["一次 · 2099-03-04 09:30", "平日 09:30", "每天 09:30", "每週一、週五 09:30", "每 3 小時"]),
     ("ja", ["一度 · 2099-03-04 09:30", "平日 09:30", "毎日 09:30", "毎週月・金 09:30", "3時間ごと"]),

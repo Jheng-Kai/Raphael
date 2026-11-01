@@ -288,6 +288,7 @@ export interface MediaPayload {
 
 /** A turn of the conversation with Raphael (`agent.history.list`, newest first). */
 export interface AgentTurn {
+  routine?: Pick<Routine, "id" | "schedule" | "when" | "app_name">;
   handoffs?: HandoffView[];
   conversation_id?: number;
   quote?: MessageQuote | null;
@@ -980,7 +981,8 @@ export type RoutineSchedule = (
   | { kind: "daily"; time: string }
   | { kind: "weekdays"; time: string }
   | { kind: "weekly"; days: number[]; time: string }
-  | { kind: "every"; hours: number; time?: string; from?: string; to?: string }
+  | { kind: "monthly"; day: number; time: string }
+  | { kind: "every"; hours?: number; minutes?: number; time?: string; from?: string; to?: string }
 ) & { start_date?: string; max_runs?: number; until?: string };
 
 export interface RoutineRun {
@@ -1026,9 +1028,11 @@ export interface RoomExchange {
 }
 
 /** A routine of `routines.list`. Times are ms; null for never. */
-export interface RoutineWhen {
+export type RoutineWhen = RoutineEventWhen | { webhook: true; app?: never; event?: never; filter?: never };
+export interface RoutineEventWhen {
+  webhook?: never;
   app: string;
-  event: { tool: string; arguments: Record<string, unknown>; items: string; id: string };
+  event: { tool: string; arguments: Record<string, unknown>; items: string; id: string; since?: { arg: string; format: "iso" } };
   filter: { field: string; equals: string };
 }
 

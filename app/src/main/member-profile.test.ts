@@ -97,7 +97,7 @@ test("profile routines use the shared editor with every recurrence and HH:MM val
   click(dialog.el, '#mp-tab-routines'); await flush();
   click(dialog.el, '[data-dlg="routine-add"]');
   const form = document.querySelector<HTMLElement>('.au-routine-dialog')!;
-  expect(form.querySelectorAll('[data-dlg="kind"]')).toHaveLength(5);
+  expect(form.querySelectorAll('[data-dlg="kind"]')).toHaveLength(6);
   expect(form.querySelector<HTMLInputElement>('#au-time')!.type).toBe('text');
   fill(form, '#au-title', 'Review'); fill(form, '#au-prompt', 'Review updates');
   fill(form, '#au-time', '25:60'); click(form, '[data-dlg="save"]'); await flush();

@@ -23,19 +23,21 @@ class HarnessToolError(Exception):
 
 
 SCHEDULE = {
-    "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. every: every so many hours. Several times a day within part of the day is one routine with hours, from and to, never one routine per time. Example: every 3 hours, not at night = hours:3, from:08:00, to:23:00. The window restarts at from each local day and includes to when due. Supply both from and to, with from before to. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
-    "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"},
+    "type": "object", "description": "Owner's local time zone, times as HH:MM (24-hour). once: on start_date at time. daily, weekdays (Monday to Friday) or weekly (days, Sunday is 0): at time. monthly: day 1-31, clamped to the last day of shorter months. every: hours 1-24 or minutes 5, 10, 15, 30, never both. Several times a day within part of the day is one routine with hours, from and to, never one routine per time. Example: every 3 hours, not at night = hours:3, from:08:00, to:23:00. The window restarts at from each local day and includes to when due. Supply both from and to, with from before to. start_date holds it back until that day, until ends it after that day, max_runs ends it after so many runs.",
+    "properties": {"kind": {"type": "string", "enum": list(KINDS)}, "time": {"type": "string"}, "days": {"type": "array", "items": {"type": "integer"}}, "hours": {"type": "integer"}, "minutes": {"type": "integer", "enum": [5,10,15,30]}, "day": {"type": "integer", "minimum": 1, "maximum": 31},
                    "from": {"type": "string", "description": "HH:MM, optional every window start"}, "to": {"type": "string", "description": "HH:MM, optional every window end"},
                    "start_date": {"type": "string", "description": "YYYY-MM-DD"}, "until": {"type": "string", "description": "YYYY-MM-DD"}, "max_runs": {"type": "integer"}}, "required": ["kind"],
 }
 WHEN = {
-    "type": "object", "description": "Poll a connected app through its read tool, without model calls while idle. First poll only records old items. Ask the owner for a narrow sender/channel filter before creating. app is the connection id. event.tool is its exact mcp:server/tool key. For a Composio connection (composio:toolkit), use mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL with exactly one enabled read tool_slug and its arguments. items is the dot path to the result array (empty for a top-level array); id is the stable item id path. Choose these from an observed read result, never guess. Only bounded complete results (up to 1000 items) are accepted; use tool arguments to request a bounded recent window that covers every poll.",
+    "type": "object", "description": "Poll a connected app through its read tool, without model calls while idle. First poll only records old items. Use routine_list with event and optional value to detect a catalogue event from one gated read. For these events use its returned when unchanged, including the empty field/equals filter for all new items. For manual events ask for a narrow sender/channel filter before creating. app is the connection id. event.tool is its exact mcp:server/tool key. For a Composio connection (composio:toolkit), use mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL with exactly one enabled read tool_slug and its arguments. items is the dot path to the result array (empty for a top-level array); id is the stable item id path. Choose these from an observed read result, never guess. Only bounded complete results (up to 1000 items) are accepted; use tool arguments to request a bounded recent window that covers every poll.",
     "properties": {"app": {"type": "string"}, "event": {"type": "object", "properties": {
-        "tool": {"type": "string"}, "arguments": {"type": "object"}, "items": {"type": "string"}, "id": {"type": "string"}}, "required": ["tool", "arguments", "items", "id"]},
+        "tool": {"type": "string"}, "arguments": {"type": "object"}, "items": {"type": "string"}, "id": {"type": "string"},
+        "since": {"type": "object", "description": "Optional moving window: fill this read argument with the previous check time minus five minutes, in UTC; the first poll uses now. For Composio it belongs in the single tool's arguments. Preserve the catalogue's returned field unchanged.",
+            "properties": {"arg": {"type": "string"}, "format": {"type": "string", "enum": ["iso"]}}, "required": ["arg", "format"], "additionalProperties": False}}, "required": ["tool", "arguments", "items", "id"]},
         "filter": {"type": "object", "properties": {"field": {"type": "string"}, "equals": {"type": "string"}}, "required": ["field", "equals"]}},
     "required": ["app", "event", "filter"],
 }
-ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "when": WHEN, "enabled": {"type": "boolean"}}
+ROUTINE_FIELDS = {"title": {"type": "string"}, "prompt": {"type": "string", "description": "What this speaker should do when due, including the learning goal."}, "schedule": SCHEDULE, "when": {"oneOf": [WHEN, {"type":"object", "properties":{"webhook":{"type":"boolean", "const":True}}, "required":["webhook"], "additionalProperties":False}]}, "enabled": {"type": "boolean"}}
 
 
 def definition(description, properties=None, required=()):
@@ -87,7 +89,7 @@ DEFINITIONS = {
     "raphael_help": definition("Read the About Raphael reference: connections, keys, cards, brains, settings and logs. Read-only."),
     "show": definition("Show a seen URL inside this conversation as a video, PDF, image or link card. Prefer this over opening a browser.", {"url": {"type": "string"}}, ["url"]),
     "routine_create": definition("Create a routine for the current speaker from the owner's request. Supply exactly one of schedule or when. For an event, ask for a narrow filter if the owner has not named one. Translate the times they asked for into a schedule in their local time zone: next Tuesday only is once, until the end of the month is until, only five times is max_runs.", ROUTINE_FIELDS, ["title", "prompt"]),
-    "routine_list": definition("List only the current speaker's routines."),
+    "routine_list": definition("List this speaker's routines and ACTIVE connected-app events. Pass an event id from the catalogue and value for repository (owner/repo) or channel if required. One gated read detects and returns an ordinary when for routine_create. event_error means no routine can be created yet; retry later. Never guess paths.", {"event": {"type": "string"}, "value": {"type": "string"}}),
     "routine_update": definition("Update the current speaker's routine by id; give only changed fields.", {"id": {"type": "integer"}, **ROUTINE_FIELDS}, ["id"]),
     "routine_delete": definition("Delete the current speaker's routine by id.", {"id": {"type": "integer"}}, ["id"]),
     CALENDAR_LIST: definition(
@@ -185,10 +187,14 @@ def routine_event(name: str, data: dict, language: str) -> str:
     words = {"zh-TW": ("已建立例行任務", "已更新例行任務", "已刪除例行任務", "每天", "每週", "每小時"), "en": ("Routine created", "Routine updated", "Routine deleted", "Daily", "Weekly", "Every hour"), "ja": ("定期タスクを作成しました", "定期タスクを更新しました", "定期タスクを削除しました", "毎日", "毎週", "毎時")}[language]
     action = words[0 if name == "routine_create" else 1 if name == "routine_update" else 2]
     kind = schedule.get("kind")
-    if when := routine.get("when"):
+    if routine.get("when") == {"webhook": True}:
+        timing = {"zh-TW": "Webhook 收到 POST", "en": "When a webhook receives POST", "ja": "Webhook が POST を受信"}[language]
+    elif when := routine.get("when"):
         app = routine.get("app_name") or when["app"]
         condition = f"{when['filter']['field']} = {when['filter']['equals']}"
         timing = {"zh-TW": f"當 {app} 有符合 {condition} 的新項目", "en": f"When {app} has a new item matching {condition}", "ja": f"{app} に {condition} と一致する新しい項目があるとき"}[language]
+        if not when["filter"]["field"]:
+            timing = {"zh-TW": f"當 {app} 有新項目", "en": f"When {app} has a new item", "ja": f"{app} に新しい項目があるとき"}[language]
     elif kind == "once":
         once = {"zh-TW": "一次", "ja": "一度", "en": "Once"}[language]
         timing = f"{once} · {schedule.get('start_date', '')} {schedule.get('time', '')}"
@@ -201,9 +207,14 @@ def routine_event(name: str, data: dict, language: str) -> str:
         joiner = {"zh-TW": "、", "ja": "・", "en": ", "}[language]
         prefix = "每" if language == "zh-TW" else words[4] + (" " if language == "en" else "")
         timing = prefix + joiner.join(names[day] for day in sorted(set(days))) + " " + str(schedule.get("time", ""))
+    elif kind == "monthly":
+        day, time = schedule.get("day", 1), schedule.get("time", "")
+        timing = {"zh-TW": f"每月 {day} 日 {time}", "en": f"Monthly on day {day} at {time}", "ja": f"毎月 {day} 日 {time}"}[language]
     elif kind == "every":
         hours = schedule.get("hours", 1)
         timing = {"zh-TW": f"每 {hours} 小時", "ja": f"{hours}時間ごと", "en": "Every hour" if hours == 1 else f"Every {hours} hours"}[language]
+        if minutes := schedule.get("minutes"):
+            timing = {"zh-TW": f"每 {minutes} 分鐘", "en": f"Every {minutes} minutes", "ja": f"{minutes}分ごと"}[language]
         if schedule.get("from"):
             timing += f" · {schedule['from']}–{schedule['to']}"
     else:

@@ -2,6 +2,12 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  const routineEventChoices = variant.noEventApps ? [] : [
+    {id:'gmail-mail',toolkit:'gmail',slug:'GMAIL_FETCH_EMAILS',input:'',label:'新郵件',app:'composio:gmail',app_name:'Gmail'},
+    {id:'calendar-event',toolkit:'googlecalendar',slug:'GOOGLECALENDAR_EVENTS_LIST',input:'',label:'新行程',app:'composio:googlecalendar',app_name:'Google 日曆'},
+    {id:'github-failure',toolkit:'github',slug:'GITHUB_LIST_WORKFLOW_RUNS_FOR_A_REPOSITORY',input:'repository',label:'工作流程失敗',app:'composio:github',app_name:'GitHub'},
+    {id:'slack-message',toolkit:'slack',slug:'SLACK_FETCH_CONVERSATION_HISTORY',input:'channel',label:'頻道新訊息',app:'composio:slack',app_name:'Slack'},
+  ];
   if (variant.polishData) data.history = Array.from({length:25}, (_,i)=>({...data.history[0], id:i+1, created_at_ms:data.now+i*1000, text:`Synthetic dictation ${i+1}` + (i===24 ? " Example text for checking the two-line preview. ".repeat(30) : "")})).reverse();
   if (variant.polishSearch) {
     data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member && t.conversation_id!==4)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
@@ -27,6 +33,12 @@ export function installMock(fixture, config = {}, target = window) {
   let desktopSequence = 0;
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
+  if (variant.routineSentence && variant.routineSentence !== "waiting") {
+    const routine = data.routines.find(r => r.member_id === 1);
+    const template = data.turns.find(t => t.member_id === 1);
+    data.turns.push({...structuredClone(template),id:990,member_id:1,source:'routine',route:'routine',question:routine.title,
+      session_id:`routine:${routine.id}`,routine:structuredClone(routine),status:'error',text:'範例工作未完成，可開啟例行任務檢查。',messages:[],steps:[],task:null});
+  }
   if (variant.fullPermission) data.settings.action_mode = "bypass";
   if (variant.mediaModels) {
     const media = { ...data.catalog.llm[0], id: "google/gemini-image", name: "Gemini Image", provider: "Google", provider_id: "openrouter", provider_name: "OpenRouter",
@@ -207,6 +219,10 @@ export function installMock(fixture, config = {}, target = window) {
       id: question.turn_id, session_id: "owner-question", question: "請幫我整理並寄出報告。", route: "delegate", source: variant.ownerQuestion === "background" ? "routine" : "app",
       text: "報告已整理完成，需要你決定寄出的日期。", detail: null, messages: [], steps: [], owner_questions: [question], status: variant.ownerQuestion === "background" ? "running" : "done",
       task: { id: question.task_id, state: "waiting", waiting_owner: 1, started_at_ms: data.now - 20000, created_at_ms: data.now - 20000, finished_at_ms: null } };
+    if (variant.routineSentence === "waiting") {
+      const routine = data.routines.find(r => r.member_id === 1);
+      Object.assign(turn, {routine:structuredClone(routine),route:"routine",question:routine.title,session_id:`routine:${routine.id}`});
+    }
     data.turns = [turn];
     if (variant.ownerQuestion === "room") data.messages.push({ ...structuredClone(data.messages.find(message => message.member_id === 1)), id: 940, room_id: 1, text: turn.text, status: "done", turn_id: turn.id, turn });
   }
@@ -629,7 +645,7 @@ export function installMock(fixture, config = {}, target = window) {
           data.turns.push({ id: nextId(data.turns), session_id: `greeting-${member.id}`, question: "", route: "greeting", prefix: "", text: `你好，我是${member.name}。你想請我幫你做什麼？`, detail: null, status: "done", cost_usd: 0, source: "greeting", model: null, steps: [], messages: [], attachments: [], member_id: member.id, conversation_id: conversation.id, created_at_ms: data.now, created_at: new Date(data.now).toISOString() });
         }
         notify("MembersChanged", { member_id: member.id });
-        return { member, routine_offer: null };
+        return { member, routine_offer: variant.routineOffer ? {title:"範例摘要",prompt:"整理範例資料。",schedule:{kind:"daily",time:"09:00"}} : null };
       }
       case "members.delete": data.members = data.members.filter(item => item.id !== p.id); if (p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { deleted: true };
       case "members.skills.list": return { skills: byMember(data.skills, p).map(skillRow), undo: skillUndo.get(p.member_id)?.revision ?? null };
@@ -732,9 +748,20 @@ export function installMock(fixture, config = {}, target = window) {
       case "memory.clear": data.memoryFiles = { ...data.memoryFiles, [memoryFile(p)]: "" }; return { cleared: true };
       case "memory.summary_clear": data.memorySummary = null; return { cleared: true };
       case "safety.rules.list": return { rules: data.safetyRules };
-      case "routines.list": if (variant.missingRoutines) throw new Error("Synthetic routines read failure"); return { routines: p.member_id === undefined ? data.routines : byMember(data.routines, p) };
+      case "routines.list": {
+        if (variant.missingRoutines) throw new Error("Synthetic routines read failure");
+        const events=routineEventChoices;
+        const choice=events.find(e=>e.id===p.event);
+        const value=p.value ?? '', [owner,repo]=value.split('/');
+        const calendar=choice?.id==='calendar-event';
+        const args=calendar ? {calendarId:'primary',maxResults:50,singleEvents:true,orderBy:'updated'} : choice?.input==='repository' ? {owner,repo,per_page:20,status:'failure'} : choice?.input==='channel' ? {channel:value,limit:20} : {max_results:20,include_payload:false,verbose:false};
+        const path=calendar ? 'items' : choice?.input==='repository' ? 'workflow_runs' : 'messages';
+        const detected=!p.event ? {} : variant.eventUndetectable || !choice ? {event_error:'目前沒有可用的 Gmail 項目。出現新項目後，請再試一次。'} : {when:{app:choice.app,event:{tool:'mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL',arguments:{tools:[{tool_slug:choice.slug,arguments:args}]},items:`data.results.0.response.data.${path}`,id:choice.id==='gmail-mail' ? 'messageId' : choice.input==='channel' ? 'ts' : 'id',...(calendar ? {since:{arg:'updatedMin',format:'iso'}} : {})},filter:{field:'',equals:''}}};
+        return {routines:p.member_id===undefined ? data.routines : byMember(data.routines,p),events,event_apps:variant.noEventApps ? [] : ['Gmail','Google 日曆','GitHub','Slack'],...detected};
+      }
+      case "routines.webhook": return {address:`http://127.0.0.1:43210/routines/${p.id}`, address_changed:!!variant.hookAddressChanged, ...(p.reveal ? {secret:'sample-fake-secret-for-visual-checks'} : {})};
       case "routines.runs": return { runs: data.routineRuns.filter(run => run.routine_id === p.routine_id), total: data.routineRuns.filter(run => run.routine_id === p.routine_id).length };
-      case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
+      case "routines.create": { const routine = { ...p, ...(p.when ? { schedule: null, last_checked: null, last_error: "", app_name:routineEventChoices.find(e=>e.app===p.when.app)?.app_name ?? p.when.app ?? "" } : {}), id: nextId(data.routines), enabled: p.enabled ?? true, last_run: null, next_run: p.when ? data.now : data.now + 86400000 }; data.routines.push(routine); notify("RoutinesChanged", { member_id: routine.member_id }); return { routine }; }
       case "routines.update": {
         const previous = data.routines.find(item => item.id === p.id);
         const reset = p.when && JSON.stringify(previous?.when) !== JSON.stringify(p.when);

@@ -246,7 +246,10 @@ export const groupsUpdate = (id: number, patch: Partial<Pick<MemberGroup, "name"
 /** Deletes a group; its members are 未分組 from then on. */
 export const groupsDelete = (id: number): Promise<{ deleted: boolean }> => core("groups.delete", { id });
 
-export const routinesList = (memberId?: number): Promise<{ routines: Routine[] }> => core("routines.list", memberId === undefined ? {} : { member_id: memberId });
+export interface RoutineEventChoice {
+  id: string; toolkit: string; slug: string; input: "" | "repository" | "channel"; label: string; app: string; app_name: string;
+}
+export const routinesList = (memberId?: number, pick?: {event:string;value:string}): Promise<{ routines: Routine[]; events?: RoutineEventChoice[]; event_apps?: string[]; when?: Routine["when"]; event_error?: string }> => core("routines.list", { ...(memberId === undefined ? {} : {member_id:memberId}), ...pick });
 export const routinesCreate = (
   routine: Pick<Routine, "member_id" | "title" | "prompt" | "schedule" | "when"> & { enabled?: boolean },
 ): Promise<{ routine: Routine }> => core("routines.create", routine);
@@ -254,6 +257,7 @@ export const routinesUpdate = (
   id: number,
   patch: Partial<Pick<Routine, "title" | "prompt" | "schedule" | "when" | "enabled">>,
 ): Promise<{ routine: Routine }> => core("routines.update", { id, ...patch });
+export const routineWebhook = (id: number, reveal = false): Promise<{address:string;secret?:string;address_changed?:boolean}> => core("routines.webhook", {id,reveal});
 export const routinesDelete = (id: number): Promise<{ deleted: boolean }> => core("routines.delete", { id });
 /** The routine the core would offer member `memberId` now (its group's places), in `uiLanguage`; null for none. */
 export const routinesTemplate = (memberId: number, uiLanguage?: string): Promise<{ offer: RoutineOffer | null }> =>

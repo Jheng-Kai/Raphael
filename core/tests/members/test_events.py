@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -41,6 +43,18 @@ async def setup(rig):
             "filter": {"field": "sender", "equals": "client@example.com"}}
     routine = (await rig.call("routines.create", {"member_id": 0, "title": "Client mail", "prompt": "Prepare a draft", "when": when}))["routine"]
     return hub, routine
+
+
+async def test_non_composio_poll_does_not_request_catalogue(rig):
+    hub, routine = await setup(rig)
+
+    async def ensure_tools(entry):
+        pytest.fail("non-Composio reads must not request a toolkit catalogue")
+
+    hub.managed = SimpleNamespace(store=SimpleNamespace(connectors={"srv-1": SimpleNamespace(kind="google")}), ensure_tools=ensure_tools)
+    await rig.service.poll_events()
+    assert len(hub.calls) == 1
+    assert rig.service.store.routine(routine["id"]).poll_initialized
 
 
 async def test_baseline_new_once_restart_filter_and_untrusted_task(rig):
@@ -281,3 +295,87 @@ async def test_filter_reset_and_schedule_conversion_do_not_leave_pending_items(r
     updated = (await rig.call("routines.update", {"id": routine["id"], "schedule": {"kind": "every", "hours": 1}}))["routine"]
     assert updated["when"] is None and updated["schedule"]["kind"] == "every"
     assert rig.conn.execute("SELECT COUNT(*) FROM routine_receipts WHERE routine_id=?", (routine["id"],)).fetchone()[0] == 0
+
+
+async def test_since_uses_previous_check_with_overlap_and_empty_windows_succeed(rig):
+    hub, routine = await setup(rig)
+    when = routine["when"]
+    when["event"]["arguments"] = {"limit": 20}
+    when["event"]["since"] = {"arg": "updatedMin", "format": "iso"}
+    await rig.call("routines.update", {"id": routine["id"], "when": when})
+    stamp = lambda now: datetime.fromtimestamp((now - 300_000) / 1000, timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    first = rig.wall.now
+    await rig.service.poll_events()
+    assert hub.calls[-1][1] == {"limit": 20, "updatedMin": stamp(first)}
+    assert rig.background.submitted == []
+    hub.items = []
+    rig.wall.now += POLL_MS
+    await rig.service.poll_events()
+    assert hub.calls[-1][1]["updatedMin"] == stamp(first)
+    current = rig.service.store.routine(routine["id"])
+    assert current.last_checked_ms == rig.wall.now and current.poll_failures == 0 and not current.last_error
+    hub.items = [{"id": "new-after-empty", "sender": "client@example.com"}]
+    previous = rig.wall.now
+    rig.wall.now += POLL_MS
+    await rig.service.poll_events()
+    assert hub.calls[-1][1]["updatedMin"] == stamp(previous)
+    assert len(rig.background.submitted) == 1
+    assert rig.service.store.routine(routine["id"]).when == when
+
+
+async def test_without_since_arguments_and_empty_baseline_keep_existing_behavior(rig):
+    hub, routine = await setup(rig)
+    when = routine["when"]
+    when["event"]["arguments"] = {"updatedMin": "fixed", "limit": 20}
+    await rig.call("routines.update", {"id": routine["id"], "when": when})
+    hub.items = []
+    await rig.service.poll_events()
+    rig.wall.now += POLL_MS
+    await rig.service.poll_events()
+    assert all(call[1] == when["event"]["arguments"] for call in hub.calls)
+    assert rig.service.store.routine(routine["id"]).poll_initialized
+
+
+async def test_since_is_filled_before_the_existing_read_permission_check(rig, monkeypatch):
+    hub, routine = await setup(rig)
+    when = routine["when"]
+    when["event"]["since"] = {"arg": "updatedMin", "format": "iso"}
+    await rig.call("routines.update", {"id": routine["id"], "when": when})
+    seen = []
+    def refused(server, tool, arguments):
+        seen.append(arguments)
+        return False
+    monkeypatch.setattr(rig.service._events.gate, "reads_only", refused)
+    await rig.service.poll_events()
+    assert len(seen) == 1 and "updatedMin" in seen[0]
+    assert hub.calls == [] and rig.background.submitted == []
+
+
+@pytest.mark.parametrize("since", [None, {}, {"arg": "updatedMin"}, {"arg": "updatedMin", "format": "epoch"},
+    {"arg": "nested.updatedMin", "format": "iso"}, {"arg": "", "format": "iso"},
+    {"arg": "updatedMin", "format": "iso", "extra": True}])
+async def test_malformed_since_is_refused(rig, since):
+    hub, routine = await setup(rig)
+    when = routine["when"]
+    when["event"]["since"] = since
+    with pytest.raises(RpcError):
+        await rig.call("routines.update", {"id": routine["id"], "when": when})
+
+
+def test_model_schema_explains_the_optional_since_window():
+    from raphael_core.agent.harness_tools import WHEN
+    since = WHEN["properties"]["event"]["properties"]["since"]
+    assert since["properties"]["format"]["enum"] == ["iso"]
+    assert "five minutes" in since["description"] and "UTC" in since["description"]
+
+
+async def test_truncated_poll_still_refuses_items_without_recording_or_firing(rig):
+    hub, routine = await setup(rig)
+    async def truncated(*args, **kwargs):
+        return PluginResult(True, text=json.dumps(hub.items), truncated=True)
+    hub.call = truncated
+    await rig.service.poll_events()
+    current = rig.service.store.routine(routine["id"])
+    assert not current.poll_initialized and current.poll_failures == 1 and current.last_error
+    assert rig.background.submitted == []
+    assert rig.conn.execute("SELECT COUNT(*) FROM routine_receipts").fetchone()[0] == 0

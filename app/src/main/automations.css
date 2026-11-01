@@ -2,13 +2,21 @@
 .au-page { display: flex; flex-direction: column; width: 100%; max-width: var(--layout-workspace-max); margin-inline: auto; min-width: 0; height: 100%; padding-top: var(--window-controls-height); overflow: hidden; background: var(--content); container: calendar / inline-size; }
 .au-empty { padding: 48px var(--sp-4); color: var(--text-3); text-align: center; }
 .au-empty > .i { width: 20px; height: 20px; }
-.au-routine-dialog.mb-dialog { width: min(690px, calc(100vw - 40px)); }
-.au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; gap: var(--sp-5); padding: var(--sp-5) var(--sp-5); }
+.mb-scrim:has(> .au-routine-dialog) { overflow-y: auto; scrollbar-width: none; place-items: start center; }
+.au-routine-dialog.mb-dialog { width: min(690px, calc(100vw - 40px)); max-height: none; overflow: visible; }
+.au-routine-dialog .mb-dlg-body { display: flex; flex-direction: column; flex: none; overflow: visible; gap: var(--sp-5); padding: var(--sp-5) var(--sp-5); }
 .au-title.mb-fin { font-size: var(--fs-h1); font-weight: 600; border: 0; border-bottom: 1px solid var(--edge); border-radius: 0; background: transparent; padding: var(--sp-2) 0 var(--sp-3); }
 .au-field { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; margin: 0; }
 .au-field > .sel { width: 100%; max-width: 100%; justify-content: space-between; }
 .au-field h3, .au-label { font-size: var(--fs-xs); font-weight: 600; margin: 0; }
 .au-event p { margin: 0; overflow-wrap: anywhere; }
+.routine-sentence { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; }
+.routine-sentence > .i { align-self: center; flex: none; margin-right: 2px; }
+.routine-sentence strong { font-weight: 600; }
+.routine-object { color: var(--text-2); font-weight: 400; }
+.au-hook-address { overflow-wrap: anywhere; user-select: text; }
+.au-webhook p { margin: 0; }
+.routine-run-link.btn { white-space: normal; height: auto; text-align: left; }
 .au-event .note { white-space: pre-line; }
 .au-event label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .au-start { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); color: var(--text-2); font-size: var(--fs-xs); }
@@ -19,9 +27,12 @@
 .au-window { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .au-window .sel { flex: 1; min-width: 0; padding-inline: var(--sp-2); font-variant-numeric: tabular-nums; }
 .au-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.au-event .au-chips { align-items: center; }
+.au-event .au-chips label { display: flex; align-items: center; gap: var(--sp-1); white-space: nowrap; }
 .au-chips .btn { border-radius: var(--r-pill); font-size: var(--fs-xs); }
 .au-chips .btn[aria-pressed="true"], .au-members .btn[aria-pressed="true"] { background: var(--selected); border-color: var(--accent-text); }
 .au-members { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); max-height: 168px; overflow-y: auto; overflow-x: hidden; }
+.au-routine-dialog .au-members { max-height: none; overflow: visible; }
 .au-members .btn { justify-content: flex-start; min-height: 50px; height: auto; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); white-space: normal; text-align: left; }
 .au-members .btn span:not(.mb-av) { min-width: 0; overflow-wrap: anywhere; }
 .au-members .btn > .i:last-child { margin-left: auto; }

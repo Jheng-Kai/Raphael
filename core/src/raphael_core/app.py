@@ -938,6 +938,7 @@ class App(Router):
             language=lambda: self.agent.language,
             notify=self.notify,
             connections=self.integrations.connections,
+            vault=self.vault,
         )
         self.members.use_event_tools(self.gate)
         self.members.register(self)

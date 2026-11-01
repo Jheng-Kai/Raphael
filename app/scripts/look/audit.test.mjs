@@ -6,6 +6,32 @@ import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("rejects an event check button stretched to the labelled scope height", () => {
+    const browser=new Window();
+    browser.document.body.innerHTML='<section class="au-routine-dialog"><button data-dlg="trigger">Event</button><label><input id="au-event-value"></label><button data-dlg="event-check">Check event</button></section>';
+    for(const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
+    const button=browser.document.querySelector('[data-dlg="event-check"]');
+    button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:78,width:100,height:68});
+    vi.stubGlobal('document',browser.document);
+    try {
+      expect(()=>checkRendered('moving-event-input')).toThrow('ordinary small button height');
+      button.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
+      expect(()=>checkRendered('moving-event-input')).not.toThrow();
+      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:58,width:100,height:48});
+      expect(()=>checkRendered('moving-event-input')).toThrow('scope label stays on one line');
+      browser.document.querySelector('[data-dlg="trigger"]').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
+      browser.document.querySelector('#au-event-value').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
+      browser.document.querySelector('label').getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:54,width:100,height:44});
+      expect(()=>checkRendered('moving-event-input')).not.toThrow();
+    } finally {vi.unstubAllGlobals();browser.happyDOM.abort();}
+  });
+  it("accepts exact webhook signature syntax while still rejecting untranslated controls", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p>HMAC-SHA256 X-Raphael-Signature: sha256=abc</p><button>Save</button>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left:10,top:10,right:310,bottom:40,width:300,height:30});
+    expect(auditDocument(window.document,{width:1120,height:900},[],LATIN_NAMES.map(name=>name.toLowerCase())).mixedLanguage.map(item=>item.word)).toEqual(['abc','Save']);
+    window.happyDOM.abort();
+  });
   it("rejects month intervals clipped by their containing chip", () => {
     const browser = new Window();
     browser.document.body.innerHTML = '<section class="au-page"><h1>Month</h1><div class="au-month-view"><button class="cal-chip is-rhythm"><span class="cal-chip-copy"><small>Every 3 hours</small></span></button></div></section>';

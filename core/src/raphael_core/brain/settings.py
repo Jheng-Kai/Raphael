@@ -43,6 +43,8 @@ from ..device.models import LOCAL_STT_MODELS
 from ..languages import DEFAULT_LANGUAGES, checked_languages
 
 DEFAULTS: dict[str, Any] = {
+    # Internal listener state, not an owner preference.
+    "routine_webhook_port": 0,
     "chatgpt.registrations.v1": {},
     "first_bot_profile": {},
     "chief_pinned": False,
@@ -210,6 +212,8 @@ _NULLABLE = ("stt_local_model",)
 
 def _allowed(key: str, value: Any) -> Any:
     """`value`, or ValueError if the key has a list of choices and `value` is not on it."""
+    if key == "routine_webhook_port" and not 0 <= value <= 65535:
+        raise ValueError("Webhook port must be between 0 and 65535")
     choices = ("none", "minimal", "low", "medium", "high", "xhigh", "max") if key == "quick_effort" else _CHOICES.get(key)
     if choices is not None and value not in choices:
         raise ValueError(f"Setting {key!r} must be one of {', '.join(str(c) for c in choices)}")

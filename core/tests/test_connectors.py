@@ -101,7 +101,7 @@ async def test_calendar_core_read_works_with_empty_catalog_without_widening_the_
     from types import SimpleNamespace
     router, service, hub, vault = setup_service(tmp_path, conn, lambda request: pytest.fail("no HTTP"))
     entry = Connector("composio:googlecalendar", "composio")
-    entry.status, entry.enabled_tools = "ACTIVE", ["GOOGLECALENDAR_EVENTS_LIST", "GOOGLECALENDAR_EVENTS_DELETE"]
+    entry.status, entry.enabled_tools = "ACTIVE", ["GOOGLECALENDAR_EVENTS_LIST", "GOOGLECALENDAR_EVENTS_DELETE", "GOOGLECALENDAR_CALENDARS_LIST"]
     service.store.connectors[entry.id] = entry
     vault.set("connectors:composio:key", "fake")
     service.tool_available = lambda server, name: True
@@ -114,6 +114,9 @@ async def test_calendar_core_read_works_with_empty_catalog_without_widening_the_
         assert service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", received, approver)
         write = {"tools": [{"tool_slug": "GOOGLECALENDAR_EVENTS_DELETE", "arguments": {}}]}
         assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", write, "auto")
+        sibling = {"tools": [{"tool_slug": "GOOGLECALENDAR_CALENDARS_LIST", "arguments": {}}]}
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", sibling, "auto")
+        assert not service.allow_call("connectors_composio", "COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": received["tools"] + sibling["tools"]}, "auto")
         return SimpleNamespace(ok=True, mcp_result=None, text=json.dumps({"successful": True,
             "data": {"results": [{"response": {"successful": True, "data": {"items": []}}}], "error_count": 0}}))
     hub.call = call
@@ -122,6 +125,21 @@ async def test_calendar_core_read_works_with_empty_catalog_without_widening_the_
     entry.enabled = False
     with pytest.raises(ConnectorFailure):
         await service.call_calendar(args)
+
+
+async def test_ensure_tools_uses_toolkit_cache_and_ignores_other_connection_kinds(tmp_path, conn):
+    platform = Platform(["ACTIVE"])
+    _, service, _, _ = setup_service(tmp_path, conn, platform)
+    entry = Connector("composio:gmail", "composio", status="ACTIVE")
+    service.store.connectors[entry.id] = entry
+    service.vault.set("connectors:composio:key", "fake")
+    await service.ensure_tools(entry)
+    assert "GMAIL_FETCH_EMAILS" in entry.enabled_tools
+    count = len(platform.requests)
+    assert count == 2
+    await service.ensure_tools(entry)
+    await service.ensure_tools(Connector("google", "google"))
+    assert len(platform.requests) == count
 
 
 async def test_v31_patch_omits_the_rejected_expected_config_version():

@@ -63,6 +63,23 @@ MAX_GROUPS = 40
 MAX_ROUTINES = 20  # of one member
 SOURCE_KINDS = ("github", "notion")
 
+
+def run_triggers(conn, turn_ids):
+    if not turn_ids:
+        return {}
+    result = {}
+    for row in conn.execute(
+        f"SELECT runs.turn_id,runs.trigger_json,r.id,r.member_id,r.schedule,r.when_json,r.app_name FROM routine_runs runs"
+        f" LEFT JOIN routines r ON r.id=runs.routine_id WHERE runs.turn_id IN ({','.join('?' for _ in turn_ids)})", turn_ids
+    ):
+        snapshot = json.loads(row["trigger_json"])
+        if not snapshot and row["id"] is not None:
+            snapshot = {"id":row["id"], "member_id":row["member_id"], "schedule":json.loads(row["schedule"]),
+                        "when":json.loads(row["when_json"]) if row["when_json"] else None, "app_name":row["app_name"]}
+        if snapshot:
+            result[row["turn_id"]] = snapshot
+    return result
+
 _GITHUB_REPO = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}")
 _GITHUB_URL = re.compile(r"https://(?:www\.)?github\.com/([^/?#]+/[^/?#]+?)(?:\.git)?(?:[/?#].*)?")
 _NOTION_ID = re.compile(r"[0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
@@ -762,7 +779,7 @@ class MemberStore:
             changes["next_run_ms"] = next_run(plan) if plan else self._now_ms()
         if trigger != routine.when:
             changes.update(poll_initialized=0, poll_failures=0, last_checked_ms=None, last_error="")
-            changes["app_name"] = (app_name or trigger["app"]) if trigger else ""
+            changes["app_name"] = (app_name or trigger.get("app", "")) if trigger else ""
         if changes:
             assignments = ", ".join(f"{column} = ?" for column in changes)
             with self._conn:

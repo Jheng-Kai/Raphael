@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { AppContext, Member, Routine } from "./types";
-const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineRuns:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
+const api = vi.hoisted(() => ({ homeOverview:vi.fn(), membersList:vi.fn(), routinesList:vi.fn(), routineWebhook:vi.fn(), routineRuns:vi.fn(), routinesCreate:vi.fn(), routinesUpdate:vi.fn(), routinesDelete:vi.fn(), calendarAdd:vi.fn(), calendarUpdate:vi.fn(), calendarDelete:vi.fn(), keepAwakeGet:vi.fn(), keepAwakeSet:vi.fn(), roomsList:vi.fn(), settingsGet:vi.fn(), modelsCatalog:vi.fn(), brainsCli:vi.fn(), groupsCreate:vi.fn(), groupsUpdate:vi.fn(), groupsDelete:vi.fn(), membersUpdate:vi.fn(), roomsCreate:vi.fn(), roomSend:vi.fn(), roomStop:vi.fn(), roomMessages:vi.fn() }));
 vi.mock("./api",()=>api);
 import { openRoutineDialog } from "./routine-dialog";
 import { occurrences } from "./automation-calendar";
@@ -28,6 +28,137 @@ beforeEach(()=>{
   api.routinesList.mockResolvedValue({routines:[plan]});api.routineRuns.mockResolvedValue({runs:[]});
   api.routinesCreate.mockResolvedValue({routine:plan});api.routinesUpdate.mockResolvedValue({routine:plan});api.routinesDelete.mockResolvedValue({deleted:true});
   api.keepAwakeGet.mockResolvedValue(false);api.keepAwakeSet.mockResolvedValue(true);api.roomsList.mockResolvedValue({rooms:[]});api.settingsGet.mockResolvedValue({settings:{agent_model:"openai/shared-model"}});
+});
+
+test("monthly and minute choices save through the existing routine dialog", async () => {
+  openRoutineDialog({members, routine: plan});
+  click('[data-dlg="kind"][data-kind="monthly"]');
+  field('#au-month-day', '31'); click('[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'monthly',day:31})}));
+  openRoutineDialog({members, routine: plan});
+  click('[data-dlg="kind"][data-kind="every"]'); click('[data-dlg="hours"]');
+  click('#app-popover [data-value="m30"]'); click('[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenLastCalledWith(1, expect.objectContaining({schedule:expect.objectContaining({kind:'every',minutes:30})}));
+  expect(api.routinesUpdate.mock.lastCall?.[1].schedule).not.toHaveProperty('hours');
+});
+
+test("monthly dates clamp in the calendar and minutes remain one rhythm", () => {
+  const monthly = {...plan, next_run:new Date('2026-01-31T09:00').getTime(), schedule:{kind:'monthly',day:31,time:'09:00'}} as Routine;
+  const rows = occurrences(monthly, localDay('2026-02-01'), localDay('2026-04-01'));
+  expect(rows.map(row=>dateKey(new Date(row.at)))).toEqual(['2026-02-28','2026-03-31']);
+});
+
+test("webhook choice saves without exposing technical event fields", async () => {
+  openRoutineDialog({members, routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="webhook"]');
+  expect(document.querySelector('.au-routine-dialog')!.textContent).toContain('this PC');
+  click('[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(1, expect.objectContaining({when:{webhook:true}}));
+});
+
+test("webhook details share the masked secret field and reveal only on request", async () => {
+  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  expect(document.querySelector('.field.sc-field .au-hook-secret')).not.toBeNull();
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(api.routineWebhook).toHaveBeenCalledWith(1,false);
+  expect(document.body.innerHTML).not.toContain('sample-secret');
+  click('[data-dlg="hook-show"]'); await flush();
+  expect(api.routineWebhook).toHaveBeenLastCalledWith(1,true);
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.value).toBe('sample-secret');
+  click('[data-dlg="hook-show"]');
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.body.innerHTML).not.toContain('sample-secret');
+});
+
+test("copying a webhook secret keeps the unchanged form and its mask", async () => {
+  const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
+  api.routineWebhook.mockImplementation(async (_id:number,reveal:boolean)=>({address:'http://127.0.0.1:43210/routines/1',...(reveal?{secret:'sample-secret'}:{})}));
+  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  const input = document.querySelector('.au-hook-secret');
+  click('[data-dlg="hook-copy"]'); await flush();
+  expect(copied).toHaveBeenCalledWith('sample-secret');
+  expect(document.querySelector('.au-hook-secret')).toBe(input);
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  expect(document.body.innerHTML).not.toContain('sample-secret');
+  copied.mockRestore();
+});
+
+test("event choices explain the empty verified catalogue", async () => {
+  openRoutineDialog({members, routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
+  expect(document.querySelector('.au-routine-dialog')!.textContent).toContain('verified events');
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
+});
+
+const mailChoice = {id:"gmail-mail",toolkit:"gmail",slug:"GMAIL_FETCH_EMAILS",input:"",label:"New mail",app:"composio:gmail",app_name:"Gmail"};
+const detectedMail = {app:"composio:gmail",event:{tool:"mcp:connectors_composio/COMPOSIO_MULTI_EXECUTE_TOOL",arguments:{tools:[{tool_slug:"GMAIL_FETCH_EMAILS",arguments:{max_results:20,include_payload:false,verbose:false}}]},items:"data.results.0.response.data.messages",id:"messageId"},filter:{field:"",equals:""}};
+const calendarChoice = {...mailChoice,id:"calendar-event",toolkit:"googlecalendar",slug:"GOOGLECALENDAR_EVENTS_LIST",label:"New event",app:"composio:googlecalendar",app_name:"Google Calendar"};
+const detectedCalendar = {app:calendarChoice.app,event:{tool:detectedMail.event.tool,arguments:{tools:[{tool_slug:calendarChoice.slug,arguments:{calendarId:"primary",maxResults:50,singleEvents:true,orderBy:"updated"}}]},items:"data.results.0.response.data.items",id:"id",since:{arg:"updatedMin",format:"iso"}},filter:{field:"",equals:""}};
+
+test.each([{choice:mailChoice,condition:detectedMail},{choice:calendarChoice,condition:detectedCalendar}])("picking $choice.toolkit reads once and saves the detected ordinary when", async ({choice,condition}) => {
+  api.routinesList.mockImplementation(async (_member:number, pick?:unknown)=>({routines:[],events:[choice],event_apps:[choice.app_name],...(pick?{when:condition}:{})}));
+  openRoutineDialog({members,routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
+  click('[data-dlg="event"]'); click(`#app-popover [data-value="${choice.id}"]`); await flush();
+  expect(api.routinesList).toHaveBeenLastCalledWith(plan.member_id,{event:choice.id,value:""});
+  expect(document.querySelector('[data-dlg="event"]')?.textContent).toContain(choice.label);
+  expect(document.querySelector('.au-routine-dialog')!.textContent).not.toContain("data.results");
+  click('[data-dlg="save"]'); await flush();
+  expect(api.routinesUpdate).toHaveBeenCalledWith(1,expect.objectContaining({when:condition}));
+  expect(api.routinesList).toHaveBeenCalledTimes(2);
+});
+
+test("undetectable events keep their choice and retry without creating a routine", async () => {
+  api.routinesList.mockImplementation(async (_member:number,pick?:unknown)=>({routines:[],events:[mailChoice],event_apps:["Gmail"],...(pick?{event_error:"No Gmail items are available yet. Try again after an item arrives."}:{})}));
+  openRoutineDialog({members,routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
+  click('[data-dlg="event"]'); click('#app-popover [data-value="gmail-mail"]'); await flush();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("No Gmail items");
+  expect(document.querySelector('[data-dlg="event"]')?.textContent).toContain("New mail");
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
+  click('[data-dlg="event-check"]'); await flush();
+  expect(api.routinesList).toHaveBeenCalledTimes(3);
+  expect(api.routinesCreate).not.toHaveBeenCalled();
+  expect(api.routinesUpdate).not.toHaveBeenCalled();
+});
+
+test("repository is a plain field and edits invalidate the previous detection", async () => {
+  const choice={...mailChoice,id:"github-failure",toolkit:"github",app:"composio:github",app_name:"GitHub",label:"Workflow failed",input:"repository"};
+  api.routinesList.mockImplementation(async (_member:number,pick?:unknown)=>({routines:[],events:[choice],event_apps:["GitHub"],...(pick?{when:detectedMail}:{})}));
+  openRoutineDialog({members,routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
+  click('[data-dlg="event"]'); click('#app-popover [data-value="github-failure"]'); await flush();
+  expect(document.querySelector('#au-event-value')?.hasAttribute('pattern')).toBe(false);
+  field('#au-event-value','team name/repo.name'); click('[data-dlg="event-check"]'); await flush();
+  expect(api.routinesList).toHaveBeenLastCalledWith(plan.member_id,{event:"github-failure",value:"team name/repo.name"});
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(false);
+  field('#au-event-value','other/repo');
+  document.querySelector('#au-event-value')!.dispatchEvent(new Event('input',{bubbles:true}));
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
+});
+
+test("a webhook replacement address has a visible update notice", async () => {
+  api.routineWebhook.mockResolvedValue({address:'http://127.0.0.1:43211/routines/1',address_changed:true});
+  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  expect(document.querySelector('[role="status"]')?.textContent).toContain("address changed");
+  expect(document.querySelector('.au-hook-address')?.textContent).toContain('43211');
+});
+
+test("editing the scope during a read leaves a usable check button and ignores the late reply", async () => {
+  const choice={...mailChoice,id:"github-failure",input:"repository"};
+  let reply!:(value:unknown)=>void;
+  api.routinesList.mockImplementation((_member:number,pick?:unknown)=>pick ? new Promise(resolve=>{reply=resolve;}) : Promise.resolve({routines:[],events:[choice],event_apps:["Gmail"]}));
+  openRoutineDialog({members,routine:plan});
+  click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();
+  click('[data-dlg="event"]'); click('#app-popover [data-value="github-failure"]');
+  field('#au-event-value','sample/first'); click('[data-dlg="event-check"]');
+  field('#au-event-value','sample/second');
+  document.querySelector('#au-event-value')!.dispatchEvent(new Event('input',{bubbles:true}));
+  reply({when:detectedMail}); await flush();
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled).toBe(true);
+  expect(document.querySelector<HTMLButtonElement>('[data-dlg="event-check"]')!.disabled).toBe(false);
+  expect(document.querySelector('[data-dlg="event-check"]')!.textContent).toBe('Check event');
 });
 
 test("one every routine saves and reopens its daytime window through real controls", async () => {

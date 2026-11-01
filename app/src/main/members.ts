@@ -10,6 +10,7 @@
 import { slimeFaceHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { catalogs, t } from "./i18n";
+import { esc, ico } from "./ui";
 import { formatClock, formatDate } from "./format";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { Member, MemberGroup, MemberSource, MembersList, Routine, RoutineSchedule } from "./types";
@@ -181,26 +182,41 @@ export const dayName = (n: number): string => tr(DAY_KEYS[((n % 7) + 7) % 7]);
 export const isTime = (text: string): boolean => /^([01]\d|2[0-3]):[0-5]\d$/.test(text);
 
 /** How a routine's schedule is said in a row: 「每天 09:00」, 「每週日 20:00」, 「每 3 小時」. */
-export function scheduleText(schedule: RoutineSchedule | null, showWindow = true): string {
-  if (!schedule) return t("auto.onEvent");
-  if (schedule.kind === "once") return t("auto.onceAt", { p0: schedule.start_date ?? "", p1: schedule.time });
-  if (schedule.kind === "weekdays") return t("auto.weekdaysAt", { p0: schedule.time });
-  if (schedule.kind === "daily") return t("members.dailyAt", { p0: schedule.time });
-  if (schedule.kind === "weekly") {
-    const days = [...new Set(schedule.days)].sort((a, b) => a - b).map(dayName).join(t("members.daysJoin"));
-    return t("members.weeklyAt", { p0: days, p1: schedule.time });
+export type RoutineTrigger = Pick<Routine, "schedule"> & Partial<Pick<Routine, "when" | "app_name">>;
+
+/** One vocabulary for every trigger surface, without live values in its markup. */
+export function routineSentence(routine: RoutineTrigger, showWindow = true): { icon: "repeat" | "link"; verb: string; object: string } {
+  const s = routine.schedule, when = routine.when;
+  if (when?.webhook) return {icon:"link", verb:t("trigger.postVerb"), object:"POST"};
+  if (when) return {icon:"link", verb:t("trigger.eventVerb"), object:`${routine.app_name || when.app}${when.filter.equals ? ` · ${when.filter.equals}` : ""}`};
+  if (!s) return {icon:"link", verb:t("auto.onEvent"), object:""};
+  if (s.kind === "monthly") return {icon:"repeat", verb:t("trigger.monthVerb"), object:t("trigger.dateObject", {p0:s.day,p1:s.time})};
+  if (s.kind === "every") return {icon:"repeat", verb:!s.minutes && s.hours === 1 ? t("members.everyHour") : t("trigger.every"), object:(!s.minutes && s.hours === 1 ? "" : s.minutes ? t("trigger.minuteObject",{p0:s.minutes}) : t("trigger.hours",{p0:s.hours ?? 1})) + (showWindow && s.from ? ` · ${s.from}–${s.to}` : "")};
+  if (s.kind === "weekly") {
+    const days = [...new Set(s.days)].sort((a,b)=>a-b).map(dayName).join(t("members.daysJoin"));
+    return {icon:"repeat", verb:t("members.weeklyAt", {p0:days,p1:""}).trim(), object:s.time};
   }
-  const interval = schedule.hours === 1 ? t("members.everyHour") : t("members.everyHours", { p0: schedule.hours });
-  return interval + (showWindow && schedule.from ? ` · ${schedule.from}–${schedule.to}` : "");
+  if (s.kind === "once") return {icon:"repeat", verb:t("trigger.once"), object:`${s.start_date ?? ""} ${s.time}`.trim()};
+  return {icon:"repeat", verb:t(s.kind === "daily" ? "trigger.daily" : "trigger.weekdays"), object:s.time};
 }
 
-export function routineText(routine: Routine): string {
-  const when = routine.when;
-  return when ? t("auto.triggerSummary", { p0: routine.app_name || when.app, p1: when.filter.field, p2: when.filter.equals }) : scheduleText(routine.schedule);
+export function routineSentenceHTML(routine: RoutineTrigger): string {
+  const sentence = routineSentence(routine);
+  return `<span class="routine-sentence">${ico(sentence.icon)}<strong>${esc(sentence.verb)}</strong> <span class="routine-object">${esc(sentence.object)}</span></span>`;
+}
+
+export function scheduleText(schedule: RoutineSchedule | null, showWindow = true): string {
+  const sentence = routineSentence({schedule}, showWindow);
+  return `${sentence.verb} ${sentence.object}`.trim();
+}
+
+export function routineText(routine: RoutineTrigger): string {
+  const sentence = routineSentence(routine);
+  return `${sentence.verb} ${sentence.object}`.trim();
 }
 
 export function routineStatus(routine: Routine): string {
-  if (!routine.when) return "";
+  if (!routine.when || routine.when.webhook) return "";
   const date = (value: number | null | undefined): string => value ? `${formatDate(value)} ${formatClock(value)}` : t("auto.notYet");
   return t("auto.triggerStatus", { p0: date(routine.last_checked), p1: date(routine.last_run) }) + (routine.last_error ? `\n${routine.last_error}` : "");
 }

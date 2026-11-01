@@ -17,7 +17,7 @@ import {
   GROUP_NAME_MAX,
   cleanName,
   parseSource,
-  scheduleText,
+  routineSentenceHTML,
   sourceLabel,
 } from "./members";
 import type { MemberGroup, MemberSource, RoutineOffer, WireAttachment } from "./types";
@@ -169,7 +169,7 @@ export function offerRoutine(offer: RoutineOffer): Promise<boolean> {
     openDialog({
       title: t("members.offerTitle"),
       cls: "mb-confirm mb-offer",
-      body: `<div class="mb-offer-t"><b>${esc(offer.title)}</b><i>${esc(scheduleText(offer.schedule))}</i></div>`,
+      body: `<div class="mb-offer-t"><b>${esc(offer.title)}</b>${routineSentenceHTML({schedule:offer.schedule})}</div>`,
       actions: { secondary: btn(esc(t("members.offerNo")), "", ' data-dlg="no"'), primary: { label: esc(t("members.offerYes")), attrs: ' data-dlg="yes"' } },
       onAct(act, _target, dialog) {
         answer = act === "yes";

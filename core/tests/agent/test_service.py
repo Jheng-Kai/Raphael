@@ -1480,6 +1480,20 @@ async def test_the_history_lists_the_newest_turn_first_with_the_fields_the_app_r
     }  # fmt: skip
 
 
+@pytest.mark.parametrize("when", [{"webhook":True}, {"app":"sample","event":{"tool":"mcp:sample/read","arguments":{},"items":"items","id":"id"},"filter":{"field":"label","equals":"review"}}])
+async def test_routine_history_exposes_the_trigger_without_secret_or_prompt(rig, when):
+    import json
+    from raphael_core.members.store import MemberStore
+    routine = MemberStore(rig.conn).create_routine(member_id=0,title="Sample",prompt="Private instructions",schedule={"kind":"daily","time":"09:00"},next_run_ms=1)
+    turn = rig.history.add(session_id="sample-routine",question="Sample",route="routine",prefix="",text="Sample report",status="error",source="routine")
+    snapshot = {"id":routine.id,"schedule":None,"when":when,"app_name":"Sample"}
+    with rig.conn:
+        rig.conn.execute("INSERT INTO routine_runs(routine_id,started,status,turn_id,trigger_json) VALUES(?,1,'error',?,?)", (routine.id,turn,json.dumps(snapshot)))
+    views = await rig.turns()
+    assert views[0]["routine"] == snapshot
+    assert "Private instructions" not in json.dumps(views)
+
+
 async def test_the_history_pages_by_limit_and_before_id(rig):
     for n in range(7):
         rig.seed(f"q{n}", "a")

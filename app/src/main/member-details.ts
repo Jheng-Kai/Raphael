@@ -27,7 +27,7 @@ import {
   cleanName,
   faceHTML,
   isMemberNameTaken,
-  routineText, routineStatus,
+  routineSentenceHTML, routineStatus,
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
@@ -162,7 +162,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   function routineRowHTML(routine: Routine): string {
     return (
       `<div class="mb-rt${routine.when ? " is-event" : ""}" data-routine="${routine.id}">` +
-      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${esc(routineText(routine))}</span>${routine.when ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
+      `<span class="mb-rt-main"><b>${esc(routine.title)}</b><span>${routineSentenceHTML(routine)}</span>${routine.when ? `<span>${esc(routineStatus(routine))}</span>` : ""}</span>` +
       `<span class="mb-rt-ctl">` +
       iconButton("more", t("members.more", { p0: routine.title }), ` data-det="routine-menu" data-id="${routine.id}" data-k="routine-menu:${routine.id}" aria-haspopup="menu" aria-expanded="false"`, "row mb-tool") +
       tg(routine.enabled, t("members.routineSwitch", { p0: routine.title }), ` data-det="routine-switch" data-id="${routine.id}" data-k="routine-switch:${routine.id}"`) +

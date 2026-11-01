@@ -65,6 +65,7 @@ test("the routine the core offers is the owner's to take: 加入 says yes, 不�
   const yes = offerRoutine(offer);
   expect(document.querySelector(".mb-dialog h2")!.textContent).toBe("加入例行任務？");
   expect(document.querySelector(".mb-offer-t")!.textContent).toBe("每天早上的進度每天 09:00");
+  expect(document.querySelector(".mb-offer-t .routine-sentence strong")?.textContent).toBe("每天");
   expect([...document.querySelectorAll(".mb-dlg-act .btn")].map((b) => b.textContent)).toEqual(["不用", "加入"]);
   document.querySelector<HTMLElement>('[data-dlg="yes"]')!.click();
   expect(await yes).toBe(true);

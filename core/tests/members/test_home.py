@@ -47,6 +47,14 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert rig.conn.total_changes == before
 
 
+async def test_five_minute_rhythm_marks_every_day_of_the_month_grid(home, rig):
+    await rig.call("routines.create", {"member_id":0,"title":"Sample rhythm","prompt":"Review samples","schedule":{"kind":"every","minutes":5}})
+    value = await rig.call("home.overview")
+    bars = [item for item in value["calendar_items"] if item.get("rhythm")]
+    assert len(bars) == 42
+    assert len({item["at_ms"] for item in bars}) == 42
+
+
 async def test_home_draws_one_rhythm_per_day_with_timed_failure_and_waiting_exceptions(home, rig):
     from datetime import datetime
     routine = (await rig.call("routines.create", {"member_id": 0, "title": "Sample review", "prompt": "Review samples",

@@ -37,6 +37,7 @@ import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
 import { confirmDelete } from "../member-dialogs";
+import { openRoutineDialog } from "../routine-dialog";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
 import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
@@ -1862,6 +1863,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     switch (act.dataset.act) {
+      case "open-routine":
+        void Promise.all([api.routinesList(memberId()), api.membersList()]).then(([routines, team]) => {
+          const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
+          if (routine) openRoutineDialog({members:team.members, routine});
+          else toaster.info(t("members.profile.noRoutines"));
+        }).catch(error => toaster.info(describeError(error)));
+        break;
       case "local-settings":
         openRaphaelSettings(app);
         break;

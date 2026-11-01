@@ -1315,6 +1315,13 @@ def _merge_daily_windows(conn):
 
 _MIGRATIONS[54] = _merge_daily_windows
 
+_MIGRATIONS[55] = """
+BEGIN;
+ALTER TABLE routine_runs ADD COLUMN trigger_json TEXT NOT NULL DEFAULT '{}';
+PRAGMA user_version = 55;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

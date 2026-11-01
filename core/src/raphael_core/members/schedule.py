@@ -1,6 +1,6 @@
 """When a routine runs: its schedule, and the next moment it is due.
 
-A schedule is one of five, as JSON (the routine's `schedule`, and the RPC's):
+A schedule is one of six, as JSON (the routine's `schedule`, and the RPC's):
 
 - `{"kind": "daily", "time": "HH:MM"}`: every day at that local time;
 - `{"kind": "once", "start_date": "YYYY-MM-DD", "time": "HH:MM"}`: one local moment;
@@ -8,7 +8,8 @@ A schedule is one of five, as JSON (the routine's `schedule`, and the RPC's):
 - `{"kind": "weekly", "days": [0-6, ...], "time": "HH:MM"}`: on those days of the week at that local
   time. The days count as JavaScript's `Date.getDay` does, the app's own: 0 is Sunday, 1 Monday, up
   to 6, Saturday;
-- `{"kind": "every", "hours": 1-24}`: every so many hours, counted from when it was last due (from
+- `{"kind": "monthly", "day": 1-31, "time": "HH:MM"}`: that date, clamped to each month's last day;
+- `{"kind": "every", "hours": 1-24}` or `minutes` 5, 10, 15, 30: counted from when it was last due (from
   when the routine was made or switched on, for the first time).
 
 `next_run` is the first moment strictly after a given one at which the schedule is due, in
@@ -17,11 +18,12 @@ routine at 09:00 runs at nine in the morning wherever the PC is, summer time inc
 """
 
 import re
+from calendar import monthrange
 from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from typing import Any
 
-KINDS = ("once", "daily", "weekdays", "weekly", "every")
+KINDS = ("once", "daily", "weekdays", "weekly", "monthly", "every")
 _TIME = re.compile(r"([01][0-9]|2[0-3]):([0-5][0-9])")
 HOUR_MS = 3_600_000
 MAX_HOURS = 24
@@ -42,6 +44,12 @@ class Schedule:
     until: str = ""
     from_time: str = ""
     to_time: str = ""
+    day: int = 0
+    minutes: int = 0
+
+    @property
+    def interval_minutes(self) -> int:
+        return self.minutes or self.hours * 60
 
     def to_json(self) -> dict[str, Any]:
         value: dict[str, Any] = {"kind": self.kind}
@@ -50,9 +58,11 @@ class Schedule:
         if self.kind == "weekly":
             value["days"] = list(self.days)
         if self.kind == "every":
-            value["hours"] = self.hours
+            value["minutes" if self.minutes else "hours"] = self.minutes or self.hours
             if self.from_time:
                 value.update({"from": self.from_time, "to": self.to_time})
+        if self.kind == "monthly":
+            value["day"] = self.day
         if self.start_date:
             value["start_date"] = self.start_date
         if self.max_runs is not None:
@@ -93,7 +103,8 @@ def parse_schedule(value: Any) -> Schedule:
     if schedule.kind == "once" and not start:
         raise ScheduleError("once needs start_date")
     return Schedule(schedule.kind, time=time, days=schedule.days, hours=schedule.hours,
-                    start_date=start, max_runs=count, until=until, from_time=schedule.from_time, to_time=schedule.to_time)
+                    start_date=start, max_runs=count, until=until, from_time=schedule.from_time, to_time=schedule.to_time,
+                    day=schedule.day, minutes=schedule.minutes)
 
 
 def _parse_kind(value: Any) -> Schedule:
@@ -102,19 +113,28 @@ def _parse_kind(value: Any) -> Schedule:
         raise ScheduleError("a schedule is an object")
     kind = value.get("kind")
     if kind not in KINDS:
-        raise ScheduleError("kind must be once, daily, weekdays, weekly or every")
+        raise ScheduleError("kind must be once, daily, weekdays, weekly, monthly or every")
     if kind == "every":
         hours = _whole(value.get("hours"))
-        if hours is None or not 1 <= hours <= MAX_HOURS:
+        minutes = _whole(value.get("minutes"))
+        if "minutes" in value:
+            if minutes not in (5, 10, 15, 30) or "hours" in value:
+                raise ScheduleError("choose minutes 5, 10, 15 or 30, or hours, never both")
+        elif hours is None or not 1 <= hours <= MAX_HOURS:
             raise ScheduleError(f"hours must be a whole number from 1 to {MAX_HOURS}")
         first, last = value.get("from", ""), value.get("to", "")
         if "from" in value or "to" in value:
             if not all(isinstance(time, str) and _TIME.fullmatch(time) for time in (first, last)) or first >= last:
                 raise ScheduleError("from and to must be HH:MM, with from before to")
-        return Schedule("every", hours=hours, from_time=first, to_time=last)
+        return Schedule("every", hours=hours or 0, minutes=minutes or 0, from_time=first, to_time=last)
     time = value.get("time")
     if not isinstance(time, str) or not _TIME.fullmatch(time):
         raise ScheduleError("time must be HH:MM")
+    if kind == "monthly":
+        day = _whole(value.get("day"))
+        if day is None or not 1 <= day <= 31:
+            raise ScheduleError("day must be a whole number from 1 to 31")
+        return Schedule(kind, time=time, day=day)
     if kind in ("once", "daily", "weekdays"):
         return Schedule(kind, time=time)
     days = value.get("days")
@@ -160,7 +180,7 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
         first_minute, last_minute = [int(time[:2]) * 60 + int(time[3:]) for time in (schedule.from_time, schedule.to_time)]
         for offset in range(2):
             day = (start + timedelta(days=offset)).replace(hour=0, minute=0, second=0, microsecond=0)
-            for minute in range(first_minute, last_minute + 1, schedule.hours * 60):
+            for minute in range(first_minute, last_minute + 1, schedule.interval_minutes):
                 due = _ms(day + timedelta(minutes=minute))
                 if due > after_ms:
                     return due
@@ -174,7 +194,7 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
         assert anchor is not None
         return _ms(anchor) if _ms(anchor) > after_ms else None
     if schedule.kind == "every":
-        step = schedule.hours * HOUR_MS
+        step = schedule.interval_minutes * 60_000
         return after_ms + step if anchor is None else (
             _ms(anchor) + max(0, (after_ms - _ms(anchor)) // step + 1) * step
         )
@@ -182,6 +202,15 @@ def _next(schedule: Schedule, after_ms: int, *, tz: tzinfo | None = None) -> int
     start = _local(after_ms, tz)
     if anchor is not None:
         start = max(start, anchor)
+    if schedule.kind == "monthly":
+        for offset in range(2):
+            month_index = start.year * 12 + start.month - 1 + offset
+            year, month = divmod(month_index, 12)
+            day = start.replace(year=year, month=month + 1, day=1, hour=hour, minute=minute, second=0, microsecond=0)
+            day = day.replace(day=min(schedule.day, monthrange(year, month + 1)[1]))
+            if _ms(day) > after_ms and (anchor is None or day >= anchor):
+                return _ms(day)
+        raise AssertionError("a monthly schedule is due by next month")
     for offset in range(8):  # today and the seven days after it cover every weekly schedule
         day = (start + timedelta(days=offset)).replace(
             hour=hour, minute=minute, second=0, microsecond=0

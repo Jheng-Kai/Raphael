@@ -38,9 +38,9 @@ export interface CalendarEntry {
 }
 
 export function isRhythm(schedule: Routine["schedule"]): boolean {
-  if (schedule?.kind !== "every" || schedule.hours >= 24) return false;
+  if (schedule?.kind !== "every" || (schedule.minutes ?? (schedule.hours ?? 1) * 60) >= 1440) return false;
   const minutes = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
-  return !schedule.from || !schedule.to || minutes(schedule.to) - minutes(schedule.from) >= schedule.hours * 60;
+  return !schedule.from || !schedule.to || minutes(schedule.to) - minutes(schedule.from) >= (schedule.minutes ?? (schedule.hours ?? 1) * 60);
 }
 
 /** Scheduled work shares one quiet bar; only a failure or owner question interrupts the hours. */

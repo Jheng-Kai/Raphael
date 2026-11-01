@@ -4511,6 +4511,8 @@ class AgentService:
         """The turns as the app reads them: each with its steps and, for a turn that handed a task
         to the worker, the task and the steps the worker took for it."""
         ids = [turn.id for turn in turns if turn.id is not None]
+        from ..members.store import run_triggers
+        triggers = run_triggers(self._conn, ids)
         steps = self._history.steps(ids)
         messages = self._history.messages(ids)
         tasks = self._background.tasks_for_turns(ids)
@@ -4544,6 +4546,7 @@ class AgentService:
                     "session_id": turn.session_id,
                     "source": turn.source,
                     "question": turn.question,
+                    **({"routine": triggers[turn.id]} if triggers.get(turn.id) else {}),
                     "route": turn.route,
                     "prefix": turn.prefix,
                     "text": turn.text,

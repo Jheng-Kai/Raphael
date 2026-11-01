@@ -475,8 +475,12 @@ export async function perform(page, step, evidenceDirectory) {
       if (!await page.$(step.selector)) throw new Error(`Unavailable in this checkout: ${step.reason} (${step.selector})`);
       break;
     case "key":
+      if (step.ctrl) await page.keyboard.down("Control");
       if (step.shift) await page.keyboard.down("Shift");
-      try { await page.keyboard.press(step.key); } finally { if (step.shift) await page.keyboard.up("Shift"); }
+      try { await page.keyboard.press(step.key); } finally {
+        if (step.shift) await page.keyboard.up("Shift");
+        if (step.ctrl) await page.keyboard.up("Control");
+      }
       break;
     case "wheel": {
       const element = await visible(step.selector);

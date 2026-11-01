@@ -249,6 +249,7 @@ class MembersService:
         now_ms: Callable[[], int] = wall_clock_ms,
         tz: tzinfo | None = None,
         tick_s: float = TICK_S,
+        vault=None,
     ) -> None:
         self.store = MemberStore(conn, now_ms)
         self.capabilities = MemberCapabilities(conn, local_dir / "member-skills", self.store)
@@ -278,6 +279,9 @@ class MembersService:
         self._events = None
         self._event_poll_task: asyncio.Task | None = None
         self._ticking: asyncio.Task[None] | None = None
+        from .webhooks import Webhooks
+        from ..integrations.vault import MemoryVault
+        self.webhooks = Webhooks(self, vault if vault is not None else MemoryVault())
         self.sync_homes()
         if memory is not None:
             from .skill_review import SkillReview
@@ -327,6 +331,7 @@ class MembersService:
             "routines.delete": self._routine_delete,
             "routines.template": self._routine_template,
             "routines.runs": self._routine_runs,
+            "routines.webhook": self._routine_webhook,
         }
         for method, handler in methods.items():
             router.register(method, handler)
@@ -912,6 +917,7 @@ class MembersService:
         if self._viewing == member_id:
             self._viewing = None
         if deleted:
+            await self.webhooks.sync()
             self._changed()
             self._changed("routines.changed", member_id)
         logger.info("A member was deleted")
@@ -1340,7 +1346,22 @@ class MembersService:
 
     async def _routines_list(self, params: dict) -> dict:
         member_id = self._routine_member(params) if "member_id" in params else None
-        return {"routines": [routine_view(r) for r in self.store.routines(member_id)]}
+        from .event_catalog import available_events, connected_apps, pick_event
+        connections = self._connections()
+        result = {"routines": [routine_view(r) for r in self.store.routines(member_id)], "events": available_events(connections, self._language()),
+                  "event_apps": [c.get("name", c["id"]) for c in connected_apps(connections)]}
+        if "event" in params:
+            result.update(await pick_event(self, self._routine_member(params), params["event"], params.get("value", "")))
+        return result
+
+    async def _routine_webhook(self, params: dict) -> dict:
+        from .webhooks import is_webhook
+        routine = self.store.routine(self._routine_id(params))
+        if not is_webhook(routine.when):
+            raise invalid_params("This routine is not a webhook")
+        if type(params.get("reveal", False)) is not bool:
+            raise invalid_params("reveal must be a boolean")
+        return await self.webhooks.details(routine.id, reveal=params.get("reveal", False))
 
     def _finish_run(self, turn_id: int) -> None:
         run = self._conn.execute(
@@ -1401,10 +1422,12 @@ class MembersService:
         except MemberError as error:
             raise _rpc_error(error) from None
         self._changed("routines.changed", routine.member_id)
+        await self.webhooks.sync()
         return {"routine": routine_view(routine)}
 
     async def _routine_update(self, params: dict) -> dict:
         routine_id = self._routine_id(params)
+        was_webhook = self.store.routine(routine_id).when == {"webhook": True}
         try:
             routine = self.store.update_routine(
                 routine_id,
@@ -1419,6 +1442,9 @@ class MembersService:
         except MemberError as error:
             raise _rpc_error(error) from None
         self._changed("routines.changed", routine.member_id)
+        if was_webhook and routine.when != {"webhook": True}:
+            self.webhooks.vault.delete(self.webhooks.key(routine.id))
+        await self.webhooks.sync()
         return {"routine": routine_view(routine)}
 
     async def _routine_delete(self, params: dict) -> dict:
@@ -1426,6 +1452,10 @@ class MembersService:
         assert routine is not None
         deleted = self.store.delete_routine(routine.id)
         if deleted:
+            if routine.when == {"webhook": True}:
+                self.webhooks.vault.delete(self.webhooks.key(routine.id))
+            self.webhooks.last_fire.pop(routine.id, None)
+            await self.webhooks.sync()
             self._changed("routines.changed", routine.member_id)
         return {"deleted": deleted}
 
@@ -1463,6 +1493,7 @@ class MembersService:
         while True:
             try:
                 self.tick()
+                await self.webhooks.sync()
                 if self._event_poll_task is None or self._event_poll_task.done():
                     self._event_poll_task = asyncio.create_task(self.poll_events())
             except Exception as exc:  # one bad tick must not stop the routines for good
@@ -1477,7 +1508,7 @@ class MembersService:
         for routine in self.store.due(now):
             assert routine.next_run_ms is not None
             missed_ms = now - routine.next_run_ms
-            catch_up = missed_ms <= CATCH_UP_MS
+            catch_up = missed_ms <= CATCH_UP_MS and not self.routine_busy(routine.id)
             following = next_run(routine.schedule, now, tz=self._tz)
             count = self._conn.execute(
                 "SELECT COUNT(*) FROM routine_runs WHERE routine_id = ?", (routine.id,)
@@ -1501,6 +1532,9 @@ class MembersService:
             ran.append(routine.id)
         return ran
 
+    def routine_busy(self, routine_id: int) -> bool:
+        return self._conn.execute("SELECT 1 FROM worker_tasks WHERE routine_id=? AND state IN ('queued','running','waiting') LIMIT 1", (routine_id,)).fetchone() is not None
+
     def _run(self, routine: Routine, *, text: str | None = None, session: str | None = None) -> int | None:
         """A routine's run: a turn of its thread, and a background task of its member that
         completes it."""
@@ -1522,8 +1556,8 @@ class MembersService:
         model = speaker.model or self._settings.get("agent_model")
         with self._conn:
             self._conn.execute(
-                "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id) VALUES (?, ?, ?, 'running', ?)",
-                (routine.id, routine.next_run_ms, self._now_ms(), turn_id),
+                "INSERT INTO routine_runs (routine_id, scheduled, started, status, turn_id, trigger_json) VALUES (?, ?, ?, 'running', ?, ?)",
+                (routine.id, routine.next_run_ms, self._now_ms(), turn_id, json.dumps({key: value for key, value in routine_view(routine).items() if key in ("id", "member_id", "title", "schedule", "when", "app_name")})),
             )
         model = model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
         task_id = None
@@ -1561,3 +1595,4 @@ class MembersService:
         if polling is not None:
             polling.cancel()
             await asyncio.gather(polling, return_exceptions=True)
+        await self.webhooks.close()

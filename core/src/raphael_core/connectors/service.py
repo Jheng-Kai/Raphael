@@ -91,6 +91,7 @@ class ConnectorsService:
         self.poll_timeout = poll_timeout
         self._lock = asyncio.Lock()
         self._tool_catalog: dict[str, list[dict]] = {}
+        self._tool_load_locks: dict[str, asyncio.Lock] = {}
         self._store_catalog: tuple[float, dict] | None = None
         self._important: dict[str, set[str]] = {}
         self._notify = lambda: None
@@ -473,6 +474,14 @@ class ConnectorsService:
                 # Restore the prior toolkit permissions on refusal, timeout or cancellation.
                 await self._patch(before, refresh=False)
 
+    async def ensure_tools(self, entry):
+        """Load provider classification hints once per toolkit, including after restart."""
+        if entry.kind != "composio" or entry.id in self._tool_catalog:
+            return
+        async with self._tool_load_locks.setdefault(entry.id, asyncio.Lock()):
+            if entry.id not in self._tool_catalog:
+                await self._load_tools(entry)
+
     async def _load_tools(self, entry):
         slug = entry.id.split(":", 1)[1]
         if entry.id not in self._important:
@@ -816,19 +825,9 @@ class ConnectorsService:
             _CALENDAR_READ.reset(token)
         if not result.ok:
             raise ConnectorFailure("network")
-        def checked(value):
-            if (not isinstance(value, dict) or value.get("successful") is False
-                    or value.get("error") or value.get("error_count", 0) > 0):
-                raise ValueError
-            return value
+        from .response import unwrap_read
         try:
-            data = (result.mcp_result or {}).get("structuredContent")
-            if data is None:
-                data = json.loads(result.text)
-            data = checked(checked(data)["data"])
-            response = checked(data["results"][0]["response"])
-            data = checked(response["data"])
-            data = checked(data.get("response_data", data))
+            data, _ = unwrap_read(result)
             if not isinstance(data.get("items"), list):
                 raise ValueError
             return data

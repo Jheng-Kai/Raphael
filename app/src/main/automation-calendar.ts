@@ -20,14 +20,14 @@ export function occurrences(routine: Routine, from: Date, to: Date, remaining = 
       const firstMinute = Number(s.from.slice(0, 2)) * 60 + Number(s.from.slice(3));
       const lastMinute = Number(s.to.slice(0, 2)) * 60 + Number(s.to.slice(3));
       for (let day = localDay(dateKey(first)); day < to && used < remaining; day = shiftDay(day, 1)) {
-        for (let minute = firstMinute; minute <= lastMinute && used < remaining; minute += s.hours * 60) {
+        for (let minute = firstMinute; minute <= lastMinute && used < remaining; minute += (s.minutes ?? (s.hours ?? 1) * 60)) {
           const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minute).getTime();
           if (at >= routine.next_run) add(at);
         }
       }
       return result;
     }
-    const step = s.hours * 3600000, anchor = routine.next_run;
+    const step = (s.minutes ?? (s.hours ?? 1) * 60) * 60000, anchor = routine.next_run;
     const offset = Math.max(0, Math.ceil((from.getTime() - anchor) / step));
     used = offset;
     for (let at = anchor + offset * step; at < to.getTime() && used < remaining; at += step) add(at);
@@ -37,6 +37,7 @@ export function occurrences(routine: Routine, from: Date, to: Date, remaining = 
   for (let day = localDay(dateKey(first)); day < to && used < remaining; day = shiftDay(day, 1)) {
     if (s.kind === "weekdays" && [0, 6].includes(day.getDay())) continue;
     if (s.kind === "weekly" && !s.days.includes(day.getDay())) continue;
+    if (s.kind === "monthly" && day.getDate() !== Math.min(s.day, new Date(day.getFullYear(), day.getMonth()+1, 0).getDate())) continue;
     const at = new Date(`${dateKey(day)}T${s.time}`).getTime();
     if (at >= routine.next_run) add(at);
   }

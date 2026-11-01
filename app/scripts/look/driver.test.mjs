@@ -4,6 +4,20 @@ import { finiteMotionSettled, settleMotion, findVisibleElement, perform } from "
 import { requestDisposition } from "./requests.mjs";
 
 describe("look browser interaction contracts", () => {
+  it("holds and releases Control around a real shortcut, including a failed key press", async () => {
+    const calls = [];
+    const page = { keyboard: {
+      down: async key => { calls.push(`down:${key}`); },
+      press: async key => { calls.push(`press:${key}`); },
+      up: async key => { calls.push(`up:${key}`); },
+    } };
+    await perform(page, { action: "key", key: "n", ctrl: true });
+    expect(calls).toEqual(["down:Control", "press:n", "up:Control"]);
+    calls.length = 0;
+    page.keyboard.press = async () => { throw new Error("press failed"); };
+    await expect(perform(page, { action: "key", key: "n", ctrl: true })).rejects.toThrow("press failed");
+    expect(calls).toEqual(["down:Control", "up:Control"]);
+  });
   it("waits through delayed row entrances but never waits for an infinite activity indicator", () => {
     const running = { playState: "running", effect: { getTiming: () => ({ iterations: 1 }) } };
     const spin = { playState: "running", effect: { getTiming: () => ({ iterations: Infinity }) } };

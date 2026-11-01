@@ -34,6 +34,60 @@ export function checkRendered(name, context = {}) {
     else require(line === window.__look.midnightLine, "the date change retains the conversation line");
     return { check: name, label };
   }
+  if (name.startsWith('moving-')) {
+    if (name === 'moving-event-created' || name === 'moving-event-created-calendar') {
+      const reads=window.__look.calls.filter(c=>c.method==='routines.list' && c.params.event);
+      const created=window.__look.calls.filter(c=>c.method==='routines.create');
+      require(reads.length===1 && created.length===1, 'one event read precedes one create');
+      const calendar=name==='moving-event-created-calendar', event=created[0].params.when.event;
+      require(event.items===`data.results.0.response.data.${calendar ? 'items' : 'messages'}` && created[0].params.when.filter.field==='', 'the detected ordinary condition is saved');
+      const args=event.arguments.tools[0].arguments;
+      if(calendar) require(event.since?.arg==='updatedMin' && event.since.format==='iso' && args.maxResults===50 && !('updatedMin' in args), 'Calendar preserves its moving window without a frozen timestamp');
+      else require(args.max_results===20 && args.include_payload===false && args.verbose===false && event.id==='messageId', 'Gmail preserves its small read and observed identity');
+      require(!document.querySelector('.au-routine-dialog'), 'successful save closes the editor');
+      return {check:name};
+    }
+    if (name === 'moving-monthly-calendar') {
+      require(visible(document.querySelector('[data-month-day="2026-11-30"] .is-routine')), 'date 31 clamps to November 30');
+      return {check:name};
+    }
+    if (name === 'moving-minutes-calendar') {
+      require(document.querySelectorAll('.au-all-day-row .is-rhythm').length === 1 && !document.querySelector('.au-occurrence'), 'minute work is one rhythm, without a grid full of runs');
+      return {check:name};
+    }
+    if (name === 'moving-offer') {
+      require(visible(document.querySelector('.mb-offer-t .routine-sentence strong')), 'suggested work shares the weighted trigger');
+      return {check:name};
+    }
+    const form = document.querySelector('.au-routine-dialog');
+    if (name === 'moving-sentence') {
+      const line = document.querySelector('button[data-act="open-routine"]');
+      require(visible(line) && line.querySelector('.routine-sentence strong') && line.querySelector('.routine-object'), 'a real button shares the trigger sentence');
+      return {check:name};
+    }
+    require(visible(form) && visible(form.querySelector('[data-dlg="trigger"]')), 'all triggers share the existing editor');
+    if (name === 'moving-monthly') require(form.querySelector('#au-month-day')?.value === '31', 'the owner chooses a monthly date');
+    if (name === 'moving-minutes') require(form.querySelector('[data-dlg="hours"]')?.textContent.includes('30'), 'the ordinary interval menu offers minutes');
+    if (name.startsWith('moving-event')) {
+      if (name==='moving-event-none') require(form.querySelector('[data-dlg="save"]')?.disabled && visible(form.querySelector('[data-missing-repair="connections"]')), 'no connected app has a settings entry');
+      else if (name==='moving-event-undetectable') require(form.querySelector('[data-dlg="save"]')?.disabled && visible(form.querySelector('[role="alert"]')) && visible(form.querySelector('[data-dlg="event-check"]')), 'failed detection retains choice and retry');
+      else if (name==='moving-event-input') {
+        require(visible(form.querySelector('#au-event-value')) && !form.querySelector('#au-event-value').hasAttribute('pattern'), 'repository or channel uses plain input');
+        const input=form.querySelector('#au-event-value'), height=input.getBoundingClientRect().height;
+        require(form.querySelector('[data-dlg="event-check"]')?.getBoundingClientRect().height<=height+2, 'event scope retains the ordinary small button height');
+        require(input.closest('label')?.getBoundingClientRect().height<=height+2, 'event scope label stays on one line');
+      }
+      else require(!form.querySelector('[data-dlg="save"]')?.disabled, 'a detected event can be saved');
+      require(!form.textContent.includes('data.results') && !form.textContent.includes('tool_slug'), 'the owner sees no tool paths');
+    }
+    if (name.startsWith('moving-webhook')) {
+      require(form.textContent.includes('127.0.0.1') && form.textContent.includes('HMAC-SHA256'), 'the details explain signed local deliveries');
+      require(form.querySelector('.au-hook-secret')?.type === (name.endsWith('reveal') ? 'text' : 'password'), 'a secret is masked until requested');
+      require(form.querySelector('.routine-sentence strong') && form.querySelector('.routine-object')?.textContent.includes('POST'), 'webhook uses the shared sentence');
+      if (name==='moving-webhook-changed') require(visible(form.querySelector('[role="status"]')), 'a replacement address is explained');
+    }
+    return {check:name};
+  }
   const rhythmTitle = (bar, timingAllowed) => {
     const title=bar.querySelector('b'), copy=bar.querySelector('.cal-chip-copy'), timing=bar.querySelector('small');
     require(title?.textContent==='Gmail 與行程檢查','the rhythm fixture exercises a long title');
@@ -467,7 +521,7 @@ export function checkRendered(name, context = {}) {
     require(row.textContent.includes('Gmail') && row.textContent.includes('上次檢查') && row.textContent.includes('上次觸發'), 'the row names the app, filter and both times');
     require(visible(row.querySelector('[role="switch"]')), 'the event has the existing routine switch');
     require([...row.querySelectorAll('.mb-rt-main span')].every(text => text.scrollWidth <= text.clientWidth + 1 && text.scrollHeight <= text.clientHeight + 1), 'the exact filter and both times remain readable without truncation');
-    const status = row.querySelector('.mb-rt-main span:last-child');
+    const status = row.querySelector('.mb-rt-main > span:last-child');
     const timeLabels = ['上次檢查', '上次觸發'].map(label => {
       const start = status.textContent.indexOf(label), range = document.createRange();
       require(start >= 0, 'both time labels are present');

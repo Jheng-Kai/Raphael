@@ -5,7 +5,7 @@ import { googleMark, clockRange, type CalendarEntry } from "./calendar-view";
 import { describeError, formatClock } from "./format";
 import { isTopLayer, registerDismissal } from "./dismissals";
 import { getLocale, t } from "./i18n";
-import { faceHTML, scheduleText } from "./members";
+import { faceHTML, routineSentenceHTML } from "./members";
 import { ownerFaceHTML } from "./owner-avatar";
 import { dateKey, localDay, openDatePicker } from "./schedule-picker";
 import type { RoutineRun } from "./types";
@@ -214,7 +214,7 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
   const from = entry.kind === "own"
     ? `${entry.member ? faceHTML(entry.member, 20) : ownerFaceHTML(20)}<span>${esc(entry.member ? t("cal.addedBy", { p0: entry.member.name }) : t("cal.addedByOwner"))}</span>`
     : entry.kind === "routine"
-      ? `${entry.member ? faceHTML(entry.member, 20) : ""}<span>${esc(t("cal.fromRoutine", { p0: entry.member?.name ?? "" }))}${entry.routine && !entry.rhythm ? ` · ${esc(scheduleText(entry.routine.schedule))}` : ""}</span>`
+      ? `${entry.member ? faceHTML(entry.member, 20) : ""}<span>${esc(t("cal.fromRoutine", { p0: entry.member?.name ?? "" }))}${entry.routine ? ` · ${routineSentenceHTML(entry.routine)}` : ""}</span>`
       : `${googleMark()}<span>${esc(t("cal.fromGoogle"))}</span>`;
   const panel = openPanel(rect, "au-pop-detail", entry.title, { onClose: o.onClose });
   const today = dateKey(o.today ?? new Date());
@@ -229,7 +229,7 @@ export function openEventDetail(rect: Pick<DOMRect, "left" | "right" | "top">, e
     (o.onEdit ? iconButton("pencil", t("cal.edit"), ' data-pop="edit"') : "") +
     (o.onMore ? iconButton("more", t("members.more", { p0: entry.title }), ' data-pop="more" aria-haspopup="menu" aria-expanded="false"') : "") +
     iconButton("x", t("common.close"), ' data-pop="close"') + `</header>` +
-    `<h2>${esc(entry.title)}</h2><p class="au-pop-time">${esc(when)}</p>` +
+    `<h2>${esc(entry.title)}</h2>${entry.rhythm && entry.routine ? "" : `<p class="au-pop-time">${esc(when)}</p>`}` +
     (entry.notes ? `<p class="au-pop-notes">${esc(entry.notes)}</p>` : "") +
     `<p class="au-pop-from">${from}</p>` +
     runsHTML +

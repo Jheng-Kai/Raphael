@@ -199,7 +199,7 @@
 .mb-new-av .av { --av: var(--pa-new-av) !important; }
 .mb-offer-t { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .mb-offer-t b { font-size: var(--pa-dfs); font-weight: 600; overflow-wrap: anywhere; }
-.mb-offer-t i { font-style: normal; font-size: var(--pa-rt-s); color: var(--text-3); overflow-wrap: anywhere; }
+.mb-offer-t > .routine-sentence { font-size: var(--pa-rt-s); overflow-wrap: anywhere; }
 .mb-dialog.mb-confirm { width: min(480px, 100%); gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--edge); border-radius: var(--r-lg); }
 .mb-confirm .mb-dlg-head { align-items: flex-start; }
 .mb-confirm .mb-dlg-head h2 { padding-top: 4px; font-size: var(--fs-lg); }

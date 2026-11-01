@@ -20,6 +20,7 @@ import { mcpProposalsHTML } from "./mcp-proposal";
 // the core goes through `esc`.
 
 import { t } from "./i18n";
+import { routineSentenceHTML } from "./members";
 import type { MessageKey } from "./i18n/zh-TW";
 
 import { plainReplies } from "../shared/anime";
@@ -570,6 +571,7 @@ export interface TurnLook {
  */
 export function routineLineHTML(turn: AgentTurn): string {
   const title = turn.question.trim();
+  if (turn.routine) return `<div class="sys">${btn(routineSentenceHTML(turn.routine) + (title ? `<span class="routine-object"> · ${esc(title)}</span>` : ""), "sm routine-run-link", ` data-act="open-routine" data-routine="${turn.routine.id}"`)}</div>`;
   return `<div class="sys">${ico("repeat")}<span>${esc(t("members.routineLine"))}</span>${title ? `<b>${esc(title)}</b>` : ""}</div>`;
 }
 

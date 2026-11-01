@@ -57,6 +57,7 @@ test("rhythm popover shows today's status icons, next run, report, edit and off"
   expect(panel.el.querySelectorAll('[data-rhythm-time]')).toHaveLength(6);
   expect(panel.el.querySelector('[data-status="done"] .i')).not.toBeNull();
   expect(panel.el.textContent).toContain("Next run");
+  expect(panel.el.textContent?.match(/Every 3 hours/g)).toHaveLength(1);
   panel.el.querySelector<HTMLButtonElement>('[data-rhythm-time="'+at(8)+'"]')!.click();
   expect(opened).toEqual([1]);closePanel();
 });
