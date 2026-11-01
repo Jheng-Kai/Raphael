@@ -30,7 +30,8 @@ async def test_a_message_is_asked_like_a_spoken_question_and_lands_in_the_histor
     assert turns[0]["source"] == "telegram"
 
 
-async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeypatch):
+@pytest.mark.parametrize("kind", ["telegram", "slack", "discord"])
+async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeypatch, kind):
     calls = []
     real = app.call
 
@@ -45,7 +46,7 @@ async def test_a_question_that_needs_a_yes_is_refused_not_left_open(app, monkeyp
         return await real(method, params)
 
     monkeypatch.setattr(app, "call", call)
-    text = await app._ask_from_messaging("telegram:42", "open it", "en", "telegram")
+    text = await app._ask_from_messaging(f"{kind}:42", "open it", "en", kind)
     assert "confirmation" in text.lower()
     assert calls == ["agent.ask", "agent.confirm"]
 

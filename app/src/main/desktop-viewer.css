@@ -24,6 +24,16 @@
 .desktop-try { display: flex; gap: var(--sp-2); }
 .desktop-try input { min-width: 0; flex: 1; }
 .desktop-review { min-width: 0; }
+.desktop-checkpoints { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); min-width: 0; }
+.checkpoint { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; font-size: var(--fs-sm); }
+.checkpoint-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.checkpoint-heading > span:last-child { flex-shrink: 0; white-space: nowrap; }
+.checkpoint details, .checkpoint summary { min-width: 0; overflow-wrap: anywhere; }
+.checkpoint summary { cursor: pointer; }
+.checkpoint pre { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-xs); }
+.checkpoint-line.is-removed { color: var(--err); }
+.checkpoint-line.is-added { color: var(--ok); }
+.checkpoint-uncovered { margin: 0; padding-left: var(--sp-5); overflow-wrap: anywhere; }
 .desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
 .desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-4); white-space: pre-line; overflow-wrap: anywhere; text-align: center; color: var(--text-2); }

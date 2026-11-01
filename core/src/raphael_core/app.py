@@ -851,6 +851,9 @@ class App(Router):
         # The card for a key a connection declares and the vault holds none of: the value goes from the
         # window to the vault, and that task's one resume follows.
         self.secret_cards = SecretCards(self._conn, self.integrations, notify=self._agent_notice)
+        from .computer.logins import LoginVault
+        self.login_vault = LoginVault(self.vault, conn=self._conn)
+        self.secret_cards.logins = self.login_vault
         self.secret_cards.register(self)
         # The owner's safety rules (`safety.rules.*`), which the gate asks before every action that
         # changes something, with their judge (Jev).
@@ -866,7 +869,11 @@ class App(Router):
         from .computer.viewer import DesktopViewer
         self.desktop_viewer = DesktopViewer(self.vm, member_exists=lambda member: member == 0 or self._conn.execute("SELECT 1 FROM members WHERE id=?", (member,)).fetchone() is not None)
         self.desktop_viewer.register(self)
+        from .computer.checkpoint_service import Checkpoints
+        self.checkpoints = Checkpoints(self.vm, self.desktop_viewer.member_exists)
+        self.checkpoints.register(self)
         self.tool_hub = VmTools(self.integrations, self.vm, attachments=self.attachment_store, conn=self._conn)
+        self.tool_hub.logins = self.login_vault
         from .computer.local_tools import LocalTools
         self.vm_tools = self.tool_hub
         self.tool_hub = LocalTools(self.tool_hub, self._conn, enabled=not fake_llm or os.environ.get("RAPHAEL_TEST_NATIVE_LOCAL") == "1")

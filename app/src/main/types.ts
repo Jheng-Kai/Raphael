@@ -467,6 +467,7 @@ export interface ConnectorCard {
 
 /** A secret card: a key a connection needs and has none of, and where saving it stands. Never the key itself. */
 export interface SecretCard {
+  login?: boolean;
   id: string;
   /** The connection's name. */
   name: string;

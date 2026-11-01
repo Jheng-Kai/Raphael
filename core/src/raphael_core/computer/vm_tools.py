@@ -7,8 +7,10 @@ import asyncio
 import base64
 import itertools
 import json
+import logging
 import mimetypes
 import re
+import shlex
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -29,6 +31,18 @@ _SCOPE = ContextVar("computer_scope", default=None)
 _TURN = ContextVar("computer_turn", default=(0, False, None))
 # Where a call that has to wait for the desktop says so: the line for the owner, and the language of the work.
 _NOTE = ContextVar("computer_note", default=(None, "en"))
+logger = logging.getLogger(__name__)
+
+
+def plain_read(command):
+    if any(char in command for char in "$`;&|<>\n\r"):
+        return False
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    return bool(words) and (words[0] in ("pwd", "ls", "cat", "echo", "printf") or
+                           words[0] == "date" and all(word.startswith("+") for word in words[1:]))
 
 # The line a member shows while another has the desktop (one line per wait, never one per poll).
 WAITING_FOR = {
@@ -68,6 +82,10 @@ REQUEST = {"description": "Ask for a sandbox desktop when a task must be seen or
            "parameters": {"type": "object", "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 500}}, "required": ["reason"], "additionalProperties": False}}
 SCREEN = {"description": VM_CONTRACT + " Inspect screen and discover control tools.",
           "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+FILL_LOGIN = {"description": VM_CONTRACT + " Fill the username and password saved through request_secret(site) into current page references. The reference belongs to this member and exact HTTPS origin. Values never enter your messages or results. This does not submit; keep request_takeover for owner-only sign-in steps. Private fields hide screenshots while filled; page text remains redacted.",
+    "parameters": {"type": "object", "properties": {key: {"type": "string", "minLength": 1, "maxLength": 2048} for key in
+        ("reference", "site", "target_id", "username_ref", "password_ref")},
+        "required": ["reference", "site", "target_id", "username_ref", "password_ref"], "additionalProperties": False}}
 
 
 class VmTools:
@@ -100,6 +118,9 @@ class VmTools:
         self.vm.busy = lambda key: key in self.leases and self.scope_busy(self.leases[key])
         self.listed = set()
         self.connections, self.labels = {}, itertools.count(1)
+        self.logins = None
+        self.private_pages = {}
+        self.checkpointed, self.checkpoint_locks = set(), {}
 
     def __getattr__(self, name):
         return getattr(self.delegate, name)
@@ -111,6 +132,15 @@ class VmTools:
         if self.vm.desktop and not self.vm.desktop.installed():
             return
         target = self.vm.target(member_id)
+        if self.logins:
+            try:
+                for row in self.logins.references(None if target.key == "shared" else member_id):
+                    try:
+                        self.logins.load(row["member_id"], row["origin"], row["reference"])
+                    except Exception as error:
+                        logger.warning("Login vault read failed: %s", type(error).__name__)
+            except Exception as error:
+                logger.warning("Login registry read failed: %s", type(error).__name__)
         keys = self.catalogs.get(target.key, [])
         if not keys or self.routes[keys[0]] != target:
             self.listed.discard(target.key)
@@ -119,7 +149,7 @@ class VmTools:
             self._catalog(target, {"get_desktop_state": SCREEN})
 
     def _catalog(self, target, definitions):
-        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER)
+        definitions.update(vm_exec=EXEC, attach_file=ATTACH, request_takeover=TAKEOVER, fill_login=FILL_LOGIN)
         keys = []
         for name, definition in definitions.items():
             key = tool_key(f"computer-{target.key}", name)
@@ -229,6 +259,69 @@ class VmTools:
             self.delegate.record_unrun(key, outcome=outcome, task_id=task_id)
 
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
+        if not self.is_computer_tool(key):
+            return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        result = await self._call(key, arguments, approver=approver, task_id=task_id, pool=pool)
+        scope = _SCOPE.get()
+        member = scope[1] if scope and scope[0] == "turn" else 0
+        if task_id and self.conn is not None:
+            row = self.conn.execute("SELECT member_id FROM worker_tasks WHERE id=?", (task_id,)).fetchone()
+            if row:
+                member = row[0]
+        private_members = list(self.logins.values) if self.logins and self.vm.target(member).key == "shared" else [member]
+        if self.logins and any(self.logins.values.get(identifier) for identifier in private_members):
+            for identifier in private_members:
+                result.text = self.logins.redact(identifier, result.text)
+                if result.kind:
+                    result.kind = self.logins.redact(identifier, result.kind)
+            if result.blocks and await self._private_picture(self.vm.target(member), arguments):
+                result.text = (result.text + "\nPrivate login fields are hidden. Use page references or request_takeover; no screenshot was returned.").strip()
+                result.blocks = []
+        return result
+
+    async def _checkpoint(self, target, member, turn, owner, command):
+        if plain_read(command):
+            return
+        ticket = (target.key, member, turn or owner)
+        async with self.checkpoint_locks.setdefault(target.key, asyncio.Lock()):
+            if ticket in self.checkpointed:
+                return
+            self.checkpointed.add(ticket)
+            failures = getattr(self.vm, "checkpoint_failures", None)
+            if failures is None:
+                self.vm.checkpoint_failures = failures = {}
+            try:
+                await asyncio.wait_for(self.vm.checkpoint(target, "begin", member=member, turn=turn), 11)
+                failures.pop(target.key, None)
+            except Exception as error:
+                failures[target.key] = True
+                logger.warning("File checkpoint skipped: %s", type(error).__name__)
+
+    def _observe_page(self, target, page):
+        identifier = page.get("target_id")
+        url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+        key = (target.key, identifier)
+        protected = self.private_pages.get(key)
+        if protected and url and protected[0] != url:
+            self.private_pages.pop(key, None)
+
+    async def _private_picture(self, target, arguments):
+        now = self.vm.clock()
+        for key, (_, until) in list(self.private_pages.items()):
+            if now >= until:
+                self.private_pages.pop(key, None)
+        keys = [key for key in self.private_pages if key[0] == target.key and
+                (not arguments.get("target_id") or key[1] == arguments["target_id"])]
+        for key in keys:
+            try:
+                client, session = await self._connection(target)
+                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": key[1], "session": session}})
+                self._observe_page(target, state.get("structuredContent") or {})
+            except Exception:
+                pass
+        return any(key in self.private_pages for key in keys)
+
+    async def _call(self, key, arguments, *, approver, task_id=None, pool=None):
         if key in self.requests:
             member = self.requests[key]
             if task_id:
@@ -333,6 +426,7 @@ class VmTools:
                 if tool.name == "vm_exec":
                     background = arguments.get("background", False)
                     wait = arguments.get("timeout_seconds", 3600 if background else 60)
+                    await self._checkpoint(target, member, turn[0], owner, arguments["command"])
                     if background:
                         data = await self.vm.execute(target, arguments["command"], wait, background=True)
                     else:
@@ -345,6 +439,8 @@ class VmTools:
                     attachment = await asyncio.to_thread(self.attachments.save,
                         Attachment(name, mimetypes.guess_type(name)[0] or "application/octet-stream", data))
                     result = PluginResult(True, text=json.dumps({"attachment": attachment.metadata()}))
+                elif tool.name == "fill_login":
+                    result = await self._fill_login(target, member, arguments)
                 else:
                     await self._discover(target)
                     if not self.vm.grants.allowed(member):
@@ -367,6 +463,7 @@ class VmTools:
                     except (VmError, ConnectionError):
                         await self._disconnect(target.key)
                         raise
+                    self._observe_page(target, data.get("structuredContent") or {})
                     blocks, text = [], []
                     for block in data.get("content", []):
                         if block.get("type") == "text":
@@ -383,6 +480,9 @@ class VmTools:
                     if tool.name.startswith(PAGE_TOOLS) and data.get("structuredContent"):
                         text.append(json.dumps(data["structuredContent"], ensure_ascii=False))
                     combined = "\n".join(text)
+                    if self.logins:
+                        for identifier in self.logins.values if target.key == "shared" else (member,):
+                            combined = self.logins.redact(identifier, combined)
                     limit = 60_000 if tool.name.startswith(PAGE_TOOLS) else 20_000
                     result = PluginResult(not data.get("isError", False), "tool_error" if data.get("isError") else None,
                         combined[:limit], len(combined) > limit, blocks=blocks)
@@ -415,6 +515,41 @@ class VmTools:
             self._audit(key, "blocked" if result.kind in NOTICES else "ok" if result.ok else result.kind or "error", approver, task_id)
 
     # --- the driver connection -------------------------------------------------------------------
+
+    async def _fill_login(self, target, member, args):
+        from .logins import origin
+        if self.logins is None:
+            return PluginResult(False, "login_missing", "Use request_secret with the HTTPS site, or request_takeover.")
+        try:
+            await self._discover(target)
+            client, session = await self._connection(target)
+            values = self.logins.load(member, args["site"], args["reference"])
+            key = tool_key(f"computer-{target.key}", "browser_type")
+            schema = self.schemas.get(key)
+            if not schema:
+                raise ValueError()
+            calls = [{"target_id": args["target_id"], "ref": args[field + "_ref"], "text": values[field]}
+                     for field in ("username", "password")]
+            if "delivery_mode" in schema.get("properties", {}):
+                calls = [{**call, "delivery_mode": "foreground"} for call in calls]
+            if not all(Draft202012Validator(schema).is_valid(call) for call in calls):
+                raise ValueError()
+            for call in calls:
+                state = await client.request("tools/call", {"name": "get_browser_state", "arguments": {"target_id": args["target_id"], "session": session}})
+                page = state.get("structuredContent") or {}
+                url = page.get("url") or next((tab.get("url") for tab in page.get("tabs", []) if tab.get("active") is True), None)
+                if (state.get("isError") or page.get("target_id") != args["target_id"] or origin(url) != origin(args["site"])
+                        or not self.vm.grants.allowed(member) or target != self.vm.target(member) or target.key in self.vm.held):
+                    raise ValueError()
+                # Driver echoes and pictures are deliberately discarded, including errors.
+                self.private_pages[(target.key, args["target_id"])] = (url, self.vm.clock() + 120)
+                reply = await client.request("tools/call", {"name": "browser_type", "arguments": {**call, "session": session}})
+                if reply.get("isError"):
+                    return PluginResult(False, "login_not_filled", '{"filled": false}')
+            return PluginResult(True, text='{"filled": true}')
+        except Exception:
+            # Transport and vault exceptions may echo input; none of their diagnostics leave this boundary.
+            return PluginResult(False, "login_not_filled", '{"filled": false}')
 
     async def _connection(self, target):
         """A computer's one connection to its driver, and its session label. The driver ends a session with the connection

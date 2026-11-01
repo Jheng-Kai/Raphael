@@ -14,12 +14,14 @@ import { t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
 import { openActions } from "./member-column";
 import { monogram, serviceIconSVG } from "./service-icons";
+import { iconHTML } from "./service-mark";
 import { DISCONNECT_CONFIRM_MS, actionRow, btn, esc, fieldHTML, ico, iconButton, note, row, st, tg, toaster } from "./ui";
 
 /** How often a connected bot is asked who is waiting to pair. */
 const POLL_MS = 3000;
-/** The only link this section opens (commands.rs lets nothing else through). */
+/** Fixed setup links, also allowlisted by commands.rs. */
 export const BOTFATHER_URL = "https://t.me/BotFather";
+const SETUP_URLS = { telegram: BOTFATHER_URL, slack: "https://api.slack.com/apps", discord: "https://discord.com/developers/applications" };
 
 export interface TelegramStatus {
   connected: boolean;
@@ -32,7 +34,13 @@ export interface TelegramStatus {
   pending: { code: string; name: string; expires_in_s: number }[];
 }
 
+export type MessagingKind = "telegram" | "slack" | "discord";
+const title = (kind: MessagingKind): string => ({ telegram: "Telegram", slack: "Slack", discord: "Discord" })[kind];
+const words = (key: MessageKey, kind: MessagingKind): string => tr(key).split("Telegram").join(title(kind));
+
 export interface MessagingView {
+  kind?: MessagingKind;
+  channels?: Partial<Record<MessagingKind, MessagingView>>;
   status: TelegramStatus | "loading" | "failed";
   token: string;
   connecting: boolean;
@@ -55,23 +63,23 @@ const tr = t as unknown as (key: MessageKey) => string;
 export const isExpanded = (v: MessagingView, s: TelegramStatus): boolean => v.expanded ?? (s.pending.length > 0 || s.allowed.length === 0);
 
 /** The state of a connected bot: a dot that names itself, and the words only for a fault. */
-function state(s: TelegramStatus): { dot: "ok" | "warn" | "err" | "idle"; label: string; fault: boolean } {
+function state(s: TelegramStatus, kind: MessagingKind): { dot: "ok" | "warn" | "err" | "idle"; label: string; fault: boolean } {
   if (!s.enabled) return { dot: "idle", label: t("msg.tg.off"), fault: false };
-  if (s.error === "unauthorized") return { dot: "err", label: t("msg.tg.revoked"), fault: true };
+  if (s.error === "unauthorized") return { dot: "err", label: words("msg.tg.revoked", kind), fault: true };
   if (s.error === "conflict") return { dot: "warn", label: t("msg.tg.conflict"), fault: true };
   if (s.error) return { dot: "warn", label: t("msg.tg.offline"), fault: true };
   return { dot: "ok", label: t("msg.tg.on"), fault: false };
 }
 
-const MARK = `<span class="mono md logo-mono msg-mark" aria-hidden="true">${serviceIconSVG("telegram")}</span>`;
+const mark = (kind: MessagingKind): string => kind === "telegram" ? `<span class="mono md logo-mono msg-mark" aria-hidden="true">${serviceIconSVG(kind)}</span>` : iconHTML(title(kind), kind, "md");
 const dotHTML = (dot: string, label: string): string => `<span class="dot ${dot}" role="img" aria-label="${esc(label)}" title="${esc(label)}"></span>`;
 
 /** The name of the group's first row: the mark, the bot (or Telegram) and a dot for its state. */
-const headName = (name: string, dot: string): string => `<span class="msg-name">${MARK}<span class="msg-bot">${esc(name)}</span>${dot}</span>`;
+const headName = (name: string, dot: string, kind: MessagingKind): string => `<span class="msg-name">${mark(kind)}<span class="msg-bot">${esc(name)}</span>${dot}</span>`;
 
-function setupRows(v: MessagingView): string[] {
+function setupRows(v: MessagingView, kind: MessagingKind): string[] {
   const field = fieldHTML(t("msg.tg.tokenHint"), v.token, {
-    id: "msg-token",
+    id: kind === "telegram" ? "msg-token" : `msg-token-${kind}`,
     type: "password",
     label: t("msg.tg.token"),
     invalid: v.tokenError !== null,
@@ -79,11 +87,12 @@ function setupRows(v: MessagingView): string[] {
   });
   const tokenRow = actionRow({ cls: "msg-token", secondary: field, primary: { label: esc(v.connecting ? t("msg.tg.checking") : t("msg.tg.connect")), attrs: ` data-msg="connect"${v.connecting ? " disabled" : ""}` } });
   const botfather = btn(`${ico("bot")}<span>BotFather</span>${ico("link")}`, "", ` data-msg="botfather" title="${esc(t("msg.tg.step1"))}"`);
+  const setupLink = btn(`<span>${esc(t("msg.createBot"))}</span>${ico("link")}`, "", ' data-msg="setup-link"');
   return [
-    row(headName("Telegram", dotHTML("idle", t("msg.tg.notSet"))), "", botfather, { cls: "msg-head" }),
-    note(esc(t("msg.tg.step1"))),
+    row(headName(title(kind), dotHTML("idle", t("msg.tg.notSet")), kind), "", kind === "telegram" ? botfather : setupLink, { cls: "msg-head" }),
+    note(esc(kind === "telegram" ? t("msg.tg.step1") : kind === "slack" ? t("msg.slack.setup") : t("msg.discord.setup")).replace(/im:read|im:history|chat:write|files:read|files:write/g, scope => `<code>${scope}</code>`)),
     row(esc(t("msg.tg.token")), "", tokenRow, { cls: "msg-token-row" }),
-    ...(v.tokenError ? [note(st("err", tr(v.tokenError)), ' role="alert"')] : []),
+    ...(v.tokenError ? [note(st("err", words(v.tokenError, kind)), ' role="alert"')] : []),
   ];
 }
 
@@ -115,35 +124,37 @@ function detailRows(v: MessagingView, s: TelegramStatus): string[] {
 
 /** Telegram: its rows, 中斷連線 as the last of them, then under the card the one line before anyone has paired. */
 export function messagingHTML(v: MessagingView): string {
+  const kind = v.kind ?? "telegram";
+  if (v.channels) return messagingHTML({ ...v, channels: undefined }) + (["slack", "discord"] as const).map(name => messagingHTML({ ...(v.channels?.[name] ?? emptyMessagingView()), kind: name })).join("");
   const group = (rows: string[], after = ""): string =>
-    `<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist">${rows.join("")}</div>${after}</section>`;
+    `<section class="sgroup msg" data-msg-section data-msg-kind="${kind}" aria-label="${title(kind)}"><div class="slist">${rows.join("")}</div>${after}</section>`;
   if (v.status === "loading") {
-    return group([row(headName("Telegram", ""), "", `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>`, { cls: "msg-head" })]);
+    return group([row(headName(title(kind), "", kind), "", `<span class="spin" role="status" aria-label="${esc(t("conn.loading"))}"></span>`, { cls: "msg-head" })]);
   }
-  if (v.status === "failed") return group([row(headName("Telegram", ""), "", "", { cls: "msg-head" }), note(st("err", t("msg.loadFailed")), ' role="alert"')]);
-  if (!v.status.connected) return group(setupRows(v));
+  if (v.status === "failed") return group([row(headName(title(kind), "", kind), "", "", { cls: "msg-head" }), note(st("err", words("msg.loadFailed", kind)), ' role="alert"')]);
+  if (!v.status.connected) return group(setupRows(v, kind));
   const s = v.status;
-  const { dot, label, fault } = state(s);
+  const { dot, label, fault } = state(s, kind);
   const open = isExpanded(v, s);
-  const bot = s.bot?.username ? `@${s.bot.username}` : t("msg.tg.bot");
+  const bot = s.bot?.username ? `@${s.bot.username}` : words("msg.tg.bot", kind);
   const badge = s.pending.length ? `<span class="msg-badge num" title="${esc(t("msg.tg.pairing"))}">${s.pending.length}</span>` : "";
   const head = row(
-    headName(bot, dotHTML(dot, label) + badge),
+    headName(kind === "telegram" ? bot : `${title(kind)} · ${bot}`, dotHTML(dot, label) + badge, kind),
     "",
-    tg(s.enabled, t("msg.tg.switch"), ` data-msg="enable"${v.busy ? " disabled" : ""}`) +
+    tg(s.enabled, words("msg.tg.switch", kind), ` data-msg="enable"${v.busy ? " disabled" : ""}`) +
       iconButton("down", t("msg.tg.details"), ` data-msg="expand" aria-expanded="${open}"`, "msg-more"),
     { cls: "msg-head" },
   );
   // 中斷連線 is a row of the card like any other setting, never a button left under it.
   const disconnect = row(
-    esc(t("msg.tg.disconnectTitle")),
+    esc(words("msg.tg.disconnectTitle", kind)),
     esc(t("msg.tg.disconnectAbout")),
     actionRow({ destructive: { label: esc(v.confirmingDisconnect ? t("msg.tg.disconnectConfirm") : t("msg.tg.disconnect")), kind: "sm", attrs: ` data-msg="disconnect"${v.busy ? " disabled" : ""}` } }),
     {},
   );
   const rows = [head, ...(fault ? [note(st(dot === "err" ? "err" : "warn", label), ' role="alert"')] : []), ...(open ? [...detailRows(v, s), disconnect] : [])];
   // Before anyone has paired there is nothing to show but how to begin: the one line that says it.
-  const waiting = open && !s.pending.length && !s.allowed.length ? `<p class="foot">${esc(t("msg.tg.waitingLead", { p0: bot }))}</p>` : "";
+  const waiting = open && !s.pending.length && !s.allowed.length ? `<p class="foot">${esc(t("msg.tg.waitingLead", { p0: bot }).split("Telegram").join(title(kind)))}</p>` : "";
   return group(rows, waiting);
 }
 
@@ -165,6 +176,19 @@ export interface Messaging {
 }
 
 export function createMessaging(host: MessagingHost): Messaging {
+  const channels = Object.fromEntries((["telegram", "slack", "discord"] as const).map(kind => [kind, createChannelMessaging(host, kind)])) as Record<MessagingKind, Messaging>;
+  const chosen = (el: Element | null): Messaging => channels[(el?.closest?.<HTMLElement>("[data-msg-kind]")?.dataset.msgKind ?? "telegram") as MessagingKind] ?? channels.telegram;
+  return {
+    view: () => ({ ...channels.telegram.view(), channels: { slack: channels.slack.view(), discord: channels.discord.view() } }),
+    load: async () => { await Promise.all(Object.values(channels).map(channel => channel.load())); },
+    click: el => chosen(el).click(el), input: el => chosen(el).input(el), key: event => chosen(event.target as Element | null).key(event),
+    reset: () => Object.values(channels).forEach(channel => channel.reset()),
+  };
+}
+
+function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messaging {
+  const tokenId = kind === "telegram" ? "msg-token" : `msg-token-${kind}`;
+  const call = <T>(method: string, params?: object): Promise<T> => api.messagingCall<T>(kind, method, params);
   let status: MessagingView["status"] = "loading";
   let token = "";
   let connecting = false;
@@ -201,7 +225,7 @@ export function createMessaging(host: MessagingHost): Messaging {
     if (!host.visible()) return;
     const mine = ++loads;
     try {
-      const next = await api.telegramStatus();
+      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
       if (mine === loads && !busy) take(next);
     } catch {
       // a poll that fails is tried again; the state on screen stays
@@ -211,7 +235,7 @@ export function createMessaging(host: MessagingHost): Messaging {
   async function load(): Promise<void> {
     const mine = ++loads;
     try {
-      const next = await api.telegramStatus();
+      const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));
       if (mine !== loads) return;
       status = next;
       schedule();
@@ -234,12 +258,12 @@ export function createMessaging(host: MessagingHost): Messaging {
     tokenError = null;
     redraw();
     try {
-      const reply = await api.telegramConnect(token.trim());
+      const reply = await (kind === "telegram" ? api.telegramConnect(token.trim()) : call<Awaited<ReturnType<typeof api.telegramConnect>>>("connect", { token: token.trim() }));
       if (reply.ok) {
         token = ""; // it is in the vault now: nothing of it stays on this page
         status = reply.status;
         schedule();
-        toaster.info(t("msg.tg.connected", { p0: reply.status.bot?.username ? `@${reply.status.bot.username}` : "Telegram" }));
+        toaster.info(t("msg.tg.connected", { p0: reply.status.bot?.username ? `@${reply.status.bot.username}` : title(kind) }));
       } else {
         tokenError = reply.reason === "network" ? "msg.tg.networkError" : "msg.tg.badToken";
       }
@@ -270,6 +294,9 @@ export function createMessaging(host: MessagingHost): Messaging {
     const button = target.closest<HTMLElement>("[data-msg]");
     if (!button) return false;
     switch (button.dataset.msg) {
+      case "setup-link":
+        void api.openLink(SETUP_URLS[kind]).catch((err) => toaster.info(describeError(err)));
+        return true;
       case "botfather":
         void api.openLink(BOTFATHER_URL).catch((err) => toaster.info(describeError(err)));
         return true;
@@ -285,25 +312,25 @@ export function createMessaging(host: MessagingHost): Messaging {
       case "enable":
         if (typeof status === "object") {
           const on = !status.enabled;
-          void act(() => api.telegramSetEnabled(on));
+          void act(() => (kind === "telegram" ? api.telegramSetEnabled(on) : call<TelegramStatus>("set_enabled", { enabled: on })));
         }
         return true;
       case "approve": {
         const code = button.dataset.code ?? "";
         void act(async () => {
-          const reply = await api.telegramApprove(code);
+          const reply = await (kind === "telegram" ? api.telegramApprove(code) : call<Awaited<ReturnType<typeof api.telegramApprove>>>("approve", { code }));
           if (!reply.approved) toaster.info(t("msg.tg.codeGone"));
           return reply.status;
         });
         return true;
       }
       case "reject":
-        void act(() => api.telegramReject(button.dataset.code ?? ""));
+        void act(() => (kind === "telegram" ? api.telegramReject(button.dataset.code ?? "") : call<TelegramStatus>("reject", { code: button.dataset.code ?? "" })));
         return true;
       case "user-menu": {
         const user = button.dataset.user ?? "";
         const name = (typeof status === "object" ? status.allowed.find((u) => String(u.user_id) === user)?.name : "") || user;
-        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => api.telegramRemoveUser(user)));
+        openActions(button, [{ id: "remove", label: t("msg.tg.removeUser", { p0: name }), icon: "trash" }], () => void act(() => (kind === "telegram" ? api.telegramRemoveUser(user) : call<TelegramStatus>("remove_user", { user_id: user }))));
         return true;
       }
       case "disconnect":
@@ -320,8 +347,8 @@ export function createMessaging(host: MessagingHost): Messaging {
         clearTimeout(confirmTimer);
         confirming = false;
         void act(async () => {
-          const next = await api.telegramDisconnect();
-          toaster.info(t("msg.tg.disconnected"));
+          const next = await (kind === "telegram" ? api.telegramDisconnect() : call<TelegramStatus>("disconnect"));
+          toaster.info(words("msg.tg.disconnected", kind));
           return next;
         });
         return true;
@@ -330,7 +357,7 @@ export function createMessaging(host: MessagingHost): Messaging {
   }
 
   function input(el: HTMLInputElement): boolean {
-    if (el.id !== "msg-token") return false;
+    if (el.id !== tokenId) return false;
     token = el.value;
     if (tokenError) {
       // Taken off the page in place: drawing it again would drop the focus from the field.
@@ -343,7 +370,7 @@ export function createMessaging(host: MessagingHost): Messaging {
 
   function key(e: KeyboardEvent): boolean {
     const el = e.target as HTMLElement | null;
-    if (e.key !== "Enter" || el?.id !== "msg-token") return false;
+    if (e.key !== "Enter" || el?.id !== tokenId) return false;
     e.preventDefault();
     void connect();
     return true;

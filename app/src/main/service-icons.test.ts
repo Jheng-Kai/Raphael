@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { readdirSync } from "node:fs";
 import { BRAND_COLORS, LOGO_IDS, SERVICE_ICONS, brandStyle, hasLogo, monogram, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
@@ -66,6 +67,8 @@ describe("the marks of well-known programs", () => {
     [{ name: "design", command: "npx", args: ["figma-developer-mcp"] }, "figma"],
     [{ name: "Spotify" }, "spotify"],
     [{ name: "chat", command: "uvx", args: ["mcp-discord"] }, "discord"],
+    [{ name: "Slack" }, "slack"],
+    [{ name: "chat", url: "https://slack.com/api" }, "slack"],
     [{ name: "tasks", command: "npx", args: ["todoist-mcp"] }, "todoist"],
     [{ name: "vault", command: "npx", args: ["obsidian-mcp"] }, "obsidian"],
     [{ name: "x", url: "https://mcp.atlassian.com/v1/mcp" }, "atlassian"],
@@ -115,7 +118,7 @@ describe("the marks of well-known programs", () => {
     for (const name of ["close", "ramp", "jam", "gamma", "exa"]) expect(serviceIconOf({ name })).toBeNull();
   });
 
-  test("a brand colour is kept only where it reads on every surface of both themes", () => {
+  test("brand colours and their dark-theme fallback read on every surface of both themes", () => {
     const css = readFileSync("src/main/styles.css", "utf8");
     const token = (block: string, name: string): string => new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)![1];
     const light = css.slice(css.indexOf(":root {"), css.indexOf(':root[data-theme="dark"]'));
@@ -132,7 +135,10 @@ describe("the marks of well-known programs", () => {
     expect(Object.keys(BRAND_COLORS).length).toBeGreaterThan(5);
     for (const [id, colour] of Object.entries(BRAND_COLORS)) {
       expect(id in SERVICE_ICONS).toBe(true);
-      for (const surface of surfaces) expect(ratio(colour, surface), `${id} on ${surface}`).toBeGreaterThanOrEqual(3);
+      for (const [index, surface] of surfaces.entries()) {
+        const rendered = id === "slack" && index >= 2 ? token(dark, "--text") : colour;
+        expect(ratio(rendered, surface), `${id} on ${surface}`).toBeGreaterThanOrEqual(3);
+      }
     }
     // the ones that would not read are left to the colour of the text
     for (const id of ["notion", "github", "spotify", "obsidian", "atlassian", "cloudflare", "sentry", "paypal", "telegram"] as const) expect(BRAND_COLORS[id]).toBeUndefined();
@@ -141,6 +147,12 @@ describe("the marks of well-known programs", () => {
   test("the brand colour is given to the wrapper as a variable, and only for the marks that have one", () => {
     expect(brandStyle("linear")).toBe(' style="--brand:#5E6AD2"');
     expect(brandStyle("notion")).toBe("");
+  });
+
+  test("Slack uses the supplied Simple Icons path and a readable dark-theme twin", () => {
+    expect(createHash("sha256").update(SERVICE_ICONS.slack.path).digest("hex")).toBe("69c3650cc9632f4edcf00bb5fd02792d5cb46d8af58f8db5001ba64cdd40da4b");
+    expect(BRAND_COLORS).toHaveProperty("slack", "#4A154B");
+    expect(brandStyle("slack")).toBe(' style="--brand:light-dark(#4A154B,var(--text))"');
   });
 
   test("a paired person's avatar can keep an escaped initial", () => {
@@ -178,7 +190,7 @@ describe("the marks of well-known programs", () => {
     const manifest = JSON.parse(readFileSync("scripts/release-licenses/manifest.json", "utf8"));
     const icons = manifest.components.find((entry: { name: string }) => entry.name === "Simple Icons");
     const logos = manifest.components.find((entry: { name: string }) => entry.name === "Brand logos");
-    for (const name of ["OpenRouter", "Brave", "SearXNG"]) {
+    for (const name of ["OpenRouter", "Brave", "SearXNG", "Slack"]) {
       expect(notice).toContain(name);
       expect(icons.usage).toContain(name);
     }

@@ -1,5 +1,11 @@
 # Raphael feature map
 
+## Work channels, file restore and private login (2026-11-01)
+
+See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
+13-scene matrix, shared-component comparisons, privacy/gate tests and explicit
+prohibited acceptance boundaries.
+
 ## Connected-app event routines (2026-11-01)
 
 See [Automations](automations.md#connected-app-event-routines-2026-11-01).

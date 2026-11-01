@@ -2,6 +2,68 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (["work-messaging", "work-pairing", "work-connected"].includes(name)) {
+    const sections = document.querySelectorAll('[data-msg-kind]');
+    require(sections.length === 3, 'all three channels use the existing settings group');
+    const slackMark = document.querySelector('[data-msg-kind=slack] .msg-name .logo-mono');
+    const markColour = document.documentElement.dataset.theme === 'dark' ? getComputedStyle(document.documentElement).getPropertyValue('--text').trim() : '#4A154B';
+    const colourProbe = document.createElement('span');
+    colourProbe.style.color = markColour; document.body.append(colourProbe);
+    const expectedColour = getComputedStyle(colourProbe).color; colourProbe.remove();
+    require(visible(slackMark) && slackMark.querySelector('svg path')?.getAttribute('d').startsWith('M5.042 15.165') && getComputedStyle(slackMark).color === expectedColour, 'Slack uses its real mark with a readable colour in both themes');
+    if (name === 'work-messaging') {
+      require(document.querySelectorAll('[data-msg-kind] input[type=password]').length === 3, 'each token has its own masked field');
+      for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`[data-msg-kind=${kind}] [data-msg=setup-link]`)), 'each work channel has the shared setup button');
+      const links = window.__look.calls.filter(call => call.command === 'open_link').map(call => call.url);
+      require(links.includes('https://api.slack.com/apps') && links.includes('https://discord.com/developers/applications'), 'setup buttons open only their fixed platform URLs');
+    }
+    if (name === 'work-pairing') {
+      require(document.querySelector('[data-msg-kind=slack] [data-code=SL1234]') && document.querySelector('[data-msg-kind=discord] [data-code=DC1234]'), 'pairing codes stay with their own platform');
+      require(!window.__look.calls.some(call => String(call.method ?? '').endsWith('.approve')), 'viewing never approves a pairing');
+    }
+    if (name === 'work-connected') {
+      const calls = window.__look.calls.filter(call => call.method === 'messaging.slack.connect');
+      require(calls.length === 1 && !document.querySelector('#msg-token-slack'), 'one Slack connect call clears its token');
+    }
+    return {check:name};
+  }
+  if (["file-changes", "file-partial", "file-confirm", "file-restored", "file-bypass"].includes(name)) {
+    require(visible(document.querySelector('.desktop-checkpoints')), 'review stays in the existing computer panel');
+    if (name === 'file-changes') require(visible(document.querySelector('.checkpoint details[open] pre')) && document.querySelector('.checkpoint pre').textContent.includes('新版研究摘要'), 'the owner can read the file diff');
+    if (name === 'file-changes' || name === 'file-partial') {
+      const diff = document.querySelector('.checkpoint pre').textContent;
+      require(!/--- before|\+\+\+ after|@@/.test(diff) && diff.includes('− 舊版') && diff.includes('+ 新版'), 'line signs explain the changes without developer headers');
+      require(document.querySelector('.checkpoint summary').textContent === '團隊資料夾 / report.md', 'paths use relative owner words');
+    }
+    if (name === 'file-partial') require(document.querySelector('.checkpoint').textContent.includes('未備份') && document.querySelector('.checkpoint-uncovered').textContent.includes('video.mp4') && !document.querySelector('.checkpoint-uncovered').textContent.includes('/home/cua/'), 'partial coverage names files and folders in owner words');
+    const restores = window.__look.calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
+    for (const call of restores) require(call.params.review_token === 'a'.repeat(64), 'restore binds to the after-state the owner actually reviewed');
+    if (name === 'file-confirm') require(visible(document.querySelector('.mb-confirm')) && restores.length === 0 && document.querySelector('.mb-confirm').textContent.includes('你後來修改'), 'restore waits for the shared confirmation and explains preservation');
+    if (name === 'file-restored') require(restores.length === 1 && restores[0].params.confirmed === true && !document.querySelector('[data-checkpoint-restore]') && !document.querySelector('.mb-confirm'), 'the approved restore runs once and leaves no question open');
+    if (name === 'file-bypass') require(restores.length === 1 && restores[0].params.confirmed === false && !document.querySelector('[data-checkpoint-restore]') && !document.querySelector('.mb-confirm'), 'full permission restores once without inventing owner confirmation');
+    if (name === 'file-restored' || name === 'file-bypass') {
+      const status = document.querySelector('.checkpoint-heading > span:last-child');
+      const text = document.createRange();
+      text.selectNodeContents(status);
+      require(text.getClientRects().length === 1, 'the restored status stays on one readable line');
+    }
+    return {check:name};
+  }
+  if (["login-private", "login-saved"].includes(name)) {
+    const card = document.querySelector('[data-secret-card=card-login]');
+    require(visible(card), 'login uses the existing secret card');
+    for (const secret of ['private-look-owner','private-look-password']) require(!document.body.innerText.includes(secret) && !document.documentElement.outerHTML.includes(secret) && !JSON.stringify(window.__look.calls).includes(secret), 'login values stay out of markup, text and trace');
+    if (name === 'login-private') {
+      require(card.querySelector('[data-secret-input]').type === 'password' && !card.querySelector('[data-act=card-save]').disabled, 'the password is masked and the same save button works');
+      const user = card.querySelector('[data-login-user]'), password = card.querySelector('[data-secret-input]');
+      const a = user.closest('.field').getBoundingClientRect(), b = password.closest('.field').getBoundingClientRect();
+      const measure = document.createElement('canvas').getContext('2d');
+      measure.font = getComputedStyle(user).font;
+      require(b.top > a.bottom && Math.abs(a.width - b.width) < 2 && user.getBoundingClientRect().width > measure.measureText(user.value).width + 20, 'labelled account and password stack at full width without clipping the account');
+    }
+    if (name === 'login-saved') require(!card.querySelector('input') && window.__look.calls.filter(call=>call.method==='integrations.card_save').length===1, 'save clears both fields in one call');
+    return {check:name};
+  }
   if (name.startsWith('teach-')) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);

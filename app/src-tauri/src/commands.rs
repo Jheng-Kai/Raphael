@@ -476,6 +476,21 @@ const ALLOWED_METHODS: &[&str] = &[
     "messaging.telegram.reject",
     "messaging.telegram.remove_user",
     "messaging.telegram.disconnect",
+    "messaging.slack.status",
+    "messaging.slack.connect",
+    "messaging.slack.set_enabled",
+    "messaging.slack.approve",
+    "messaging.slack.reject",
+    "messaging.slack.remove_user",
+    "messaging.slack.disconnect",
+    "messaging.discord.status",
+    "messaging.discord.connect",
+    "messaging.discord.set_enabled",
+    "messaging.discord.approve",
+    "messaging.discord.reject",
+    "messaging.discord.remove_user",
+    "messaging.discord.disconnect",
+    "computer.checkpoints",
     // The conversation view stops the task it shows, by its id (`validate_core_call`). The other
     // methods of the worker stay closed (a task's question is answered by `background.answer`).
     "worker.cancel",
@@ -1588,8 +1603,10 @@ pub fn mic_access(webview: Webview) -> Result<MicAccess, String> {
 
 /// The few addresses the main window may open in the browser: the page is not trusted with a
 /// general "open this link". The last is the microphone page of the privacy settings.
-const OPENABLE_LINKS: [&str; 4] = [
+const OPENABLE_LINKS: [&str; 6] = [
     "https://t.me/BotFather",
+    "https://api.slack.com/apps",
+    "https://discord.com/developers/applications",
     "https://github.com/login/device",
     "https://github.com/settings/applications",
     "ms-settings:privacy-microphone",
@@ -2483,12 +2500,32 @@ mod tests {
     }
 
     #[test]
+    fn work_channels_and_checkpoints_have_only_named_main_window_methods() {
+        for kind in ["slack", "discord"] {
+            for action in ["status", "connect", "set_enabled", "approve", "reject", "remove_user", "disconnect"] {
+                assert!(is_allowed_method(&format!("messaging.{kind}.{action}")));
+            }
+            for action in ["send", "token", "approve_all", "statusx"] {
+                assert!(!is_allowed_method(&format!("messaging.{kind}.{action}")));
+            }
+        }
+        assert!(is_allowed_method("computer.checkpoints"));
+        assert!(!is_allowed_method("computer.checkpoints.restore"));
+        assert!(!is_allowed_method("computer.fill_login"));
+    }
+
+    #[test]
     fn only_the_fixed_links_may_be_opened() {
         assert!(is_openable_link("https://t.me/BotFather"));
+        assert!(is_openable_link("https://api.slack.com/apps"));
+        assert!(is_openable_link("https://discord.com/developers/applications"));
         assert!(is_openable_link("https://github.com/login/device"));
         assert!(is_openable_link("https://github.com/settings/applications"));
         assert!(is_openable_link("ms-settings:privacy-microphone"));
         for url in [
+            "https://api.slack.com/apps/",
+            "https://api.slack.com.evil.example/apps",
+            "https://discord.com/developers/applications?redirect=evil",
             "https://github.com/login/device/",
             "https://github.com/login/device?user_code=ABCD",
             "http://github.com/login/device",

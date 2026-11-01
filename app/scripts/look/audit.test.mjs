@@ -3,9 +3,44 @@ import { describe, expect, it, vi } from "vitest";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
-import { LATIN_NAMES } from "./runner.mjs";
+import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("measures login field rows while allowing room for the password lock", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<section data-secret-card="card-login"><span class="field"><input data-login-user value="owner"></span><span class="field"><input data-secret-input type="password"></span><button data-act="card-save">Save</button></section>';
+    const card = browser.document.querySelector('section'), user = card.querySelector('[data-login-user]'), password = card.querySelector('[data-secret-input]');
+    const rectangle = (top, width) => ({top, bottom:top + 30, width, height:30});
+    card.getBoundingClientRect = () => rectangle(0, 240);
+    user.getBoundingClientRect = () => rectangle(30, 220);
+    password.getBoundingClientRect = () => rectangle(90, 197);
+    user.parentElement.getBoundingClientRect = () => rectangle(30, 220);
+    password.parentElement.getBoundingClientRect = () => rectangle(90, 220);
+    vi.spyOn(browser.HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ({measureText:() => ({width:100})}));
+    browser.__look = {calls:[]};
+    vi.stubGlobal('document', browser.document); vi.stubGlobal('window', browser); vi.stubGlobal('getComputedStyle', () => ({font:'14px sans-serif'}));
+    try {
+      expect(checkRendered('login-private').check).toBe('login-private');
+      user.getBoundingClientRect = () => rectangle(30, 90);
+      expect(() => checkRendered('login-private')).toThrow('without clipping the account');
+    } finally { vi.unstubAllGlobals(); vi.restoreAllMocks(); browser.happyDOM.abort(); }
+  });
+  it("file scenes bind their own viewer without another selected desktop scene", () => {
+    const files = scenes.filter(scene => scene.name.startsWith('computer-file-'));
+    expect(files).toHaveLength(5);
+    for (const scene of files) expect(needsDesktopFixture([scene]), scene.name).toBe(true);
+    expect(needsDesktopFixture([{name:'home', fixture:{}}])).toBe(false);
+    expect(needsDesktopFixture([{name:'desktop-owner', fixture:{}}])).toBe(true);
+  });
+  it("treats file paths and diff contents as owner data while still checking checkpoint controls", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<section class="checkpoint"><summary>/home/cua/team/report.md</summary><pre><code><span>+ report.title</span></code></pre><ul class="checkpoint-uncovered"><li>Workspace / backup.key</li></ul><button>Save</button><p>files.missing</p></section>';
+    for (const element of window.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({left:10,top:10,right:310,bottom:40,width:300,height:30});
+    const result = auditDocument(window.document, {width:1120,height:900}, ['report','files'], []);
+    expect(result.missingI18nKeys.map(item => item.key)).toEqual(['files.missing']);
+    expect(result.mixedLanguage.map(item => item.word)).toEqual(['Save']);
+    window.happyDOM.abort();
+  });
   it("teaching scenes wait for visible results and check owner publication explicitly", () => {
     const teaching = scenes.filter(scene => scene.name.startsWith('desktop-teach-'));
     expect(teaching).toHaveLength(6);

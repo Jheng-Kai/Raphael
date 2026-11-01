@@ -1815,7 +1815,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   async function secretSave(act: HTMLElement): Promise<void> {
     const field = act.closest<HTMLElement>(".secret-card")?.querySelector<HTMLInputElement>("input[data-secret-input]");
     if (!field || !field.value.trim()) return;
-    const value = field.value;
+    const username = act.closest<HTMLElement>(".secret-card")?.querySelector<HTMLInputElement>("[data-login-user]");
+    const value = username ? JSON.stringify({ username: username.value, password: field.value }) : field.value;
+    if (username) username.value = "";
     field.value = "";
     field.disabled = true;
     (act as HTMLButtonElement).disabled = true;
@@ -1875,9 +1877,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
   thread.addEventListener("input", (e) => {
-    const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");
+    const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input], input[data-login-user]");
     const save = field?.closest(".secret-card")?.querySelector<HTMLButtonElement>('[data-act="card-save"]');
-    if (field && save) save.disabled = field.value.trim() === "";
+    const inputs = field?.closest(".secret-card")?.querySelectorAll<HTMLInputElement>("input");
+    if (inputs && save) save.disabled = [...inputs].some(input => !input.value.trim());
   });
   thread.addEventListener("keydown", (e) => {
     const field = (e.target as Element).closest<HTMLInputElement>("input[data-secret-input]");

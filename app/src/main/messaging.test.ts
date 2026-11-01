@@ -30,7 +30,7 @@ const visible = (html: string): string =>
 describe("the setup", () => {
   test("BotFather and the token have visible setup instructions", () => {
     const html = messagingHTML(view());
-    expect(html).toMatch(/^<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist">/);
+    expect(html).toMatch(/^<section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist">/);
     expect(html.match(/<div class="row /g)).toHaveLength(2);
     expect(html).toContain(t("msg.tg.step1"));
     expect(html).toContain('id="msg-token"');

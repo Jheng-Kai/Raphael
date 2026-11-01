@@ -6,6 +6,7 @@ import { esc, iconButton, btn } from "./ui";
 import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
+import { mountCheckpoints } from "./checkpoint-view";
 
 export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
@@ -61,6 +62,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let demonstration: api.TeachingDraft | undefined, skillName = "";
   let skillEditor: ReturnType<typeof mountMemberResources> | undefined;
   let teachingBusy = false, drafting = false;
+  const checkpoints = mountCheckpoints(panel, member);
   const timeline = mountDesktopTimeline(options.timeline, options.name);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
   let state: DesktopState | undefined, session: DesktopSession | undefined;
@@ -90,6 +92,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     request.hidden = !pending(); request.textContent = pending() ? desktopWorkText(pending()!) : "";
     panel.toggleAttribute("data-request", !!pending());
     const running = state?.state === "running", owner = state?.control === "owner";
+    checkpoints.update(!!running);
     const recording = demonstration && ["recording", "full"].includes(demonstration.state);
     teach.textContent = t(drafting ? "teach.drafting" : recording ? "teach.stop" : demonstration ? "teach.review" : "teach.start");
     teach.disabled = teachingBusy || changing || !demonstration && (!running || !connected || !!pending() || state?.teach_available === false);

@@ -29,6 +29,7 @@ from ..services.attachments import (
     MAX_ATTACHMENTS,
     MAX_IMAGE_BYTES,
     MAX_PDF_BYTES,
+    MAX_FILE_BYTES,
     AttachmentError,
     checked,
 )
@@ -230,7 +231,8 @@ class Switchboard:
     ) -> None:
         """A message (or an album) without text: its images and PDFs are asked about, with the
         caption as the request; one with none of them gets the reply that says what is read."""
-        files = [a for a in attachments if a.kind in FILE_KINDS]
+        files = [a for a in attachments if a.kind in FILE_KINDS or
+                 self._channel.kind in ("slack", "discord") and a.kind == "other"]
         if files:
             await self._converse(
                 chat, language, text=(caption or "")[:MAX_INCOMING_CHARS], files=files
@@ -356,7 +358,7 @@ class Switchboard:
         """The images and PDFs of a request, fetched into memory and checked. None is downloaded
         when the app says that any of them is larger than its kind may be; a file that is too
         large or not what its type says ends the request with the reply that says so."""
-        limits = [MAX_PDF_BYTES if f.kind == "pdf" else MAX_IMAGE_BYTES for f in files]
+        limits = [MAX_PDF_BYTES if f.kind == "pdf" else MAX_IMAGE_BYTES if f.kind == "image" else MAX_FILE_BYTES for f in files]
 
         def too_large(limit: int) -> _Say:
             return _Say(words(language, "file_large", mb=str(limit // _MB)))
@@ -405,7 +407,7 @@ class Switchboard:
                     note = {"zh-TW": f"「{file.name}」超過 Telegram 的檔案大小限制，請在 Raphael 的原對話中開啟附件。",
                             "ja": f"「{file.name}」は Telegram のサイズ制限を超えています。Raphael の元の会話で添付ファイルを開いてください。",
                             "en": f'"{file.name}" exceeds Telegram’s file size limit. Open the attachment in the original conversation in Raphael.'}
-                    await self._reply(chat, note.get(language, note["en"]))
+                    await self._reply(chat, note.get(language, note["en"]).replace("Telegram", self._channel.kind.title()))
         except ChannelError as error:
             logger.warning("%s: could not send a report (%s)", self._channel.kind, error.kind)
 

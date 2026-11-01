@@ -17,6 +17,7 @@ export function installMock(fixture, config = {}, target = window) {
   let desktopSequence = 0;
   let teaching;
   for (const [key, value] of Object.entries(variant)) if (key in data) data[key] = structuredClone(value);
+  if (variant.fullPermission) data.settings.action_mode = "bypass";
   if (variant.pluginsMany) {
     const base = [...data.pluginCatalog];
     for (let i = 0; i < data.pluginCatalogLoad.count; i++) {
@@ -136,6 +137,12 @@ export function installMock(fixture, config = {}, target = window) {
   // received by `integrations.card_save` and forgotten (`resumeFails`: the task does not continue; `signedIn`:
   // the page no longer asks for the sign-in when the owner presses 我完成了).
   if (variant.secretCard) data.turns.push(structuredClone(data.secretTurns[variant.secretCard]));
+  if (variant.loginCard) {
+    const turn = structuredClone(data.secretTurns.notion);
+    Object.assign(turn, {id: 132, member_id: 1, conversation_id: 11, question: "請登入研究網站。", text: "請在安全卡片儲存登入資料，完成後我會接著工作。", steps: [], messages: []});
+    turn.secrets = [{...turn.secrets[0], id: "card-login", name: "https://research.example", secret: "login", login: true}];
+    data.turns.push(turn);
+  }
   if (variant.ownerQuestion) {
     const question = structuredClone(data.ownerQuestionCard);
     const turn = { ...structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11)),
@@ -808,7 +815,7 @@ export function installMock(fixture, config = {}, target = window) {
           if (variant.resumeFails) Object.assign(card, { state: "saved", error: "resume_failed" });
           else {
             Object.assign(card, { state: "resumed", resumed: true });
-            data.turns.push(structuredClone(data.secretResume));
+            if (!card.login) data.turns.push(structuredClone(data.secretResume));
           }
           state.emit({ type: "AgentTurn", turn_id: turn.id, member_id: turn.member_id });
         }, 0);
@@ -934,6 +941,20 @@ export function installMock(fixture, config = {}, target = window) {
       case "usage.analytics": return { ...data.analytics, range: p.range ?? data.analytics.range };
       case "usage.export": return { csv: data.usageCsv };
       case "messaging.telegram.status": return data.messaging;
+      case "messaging.slack.status":
+      case "messaging.discord.status": return variant.workMessaging?.[method.split('.')[1]] ?? {connected:false,enabled:false,running:false,error:null,bot:null,allowed:[],pending:[]};
+      case "messaging.slack.connect":
+      case "messaging.discord.connect": {
+        const kind = method.split('.')[1];
+        const connected = {connected:true,enabled:true,running:true,error:null,bot:{username:kind === 'slack' ? 'Research' : 'ResearchBot'},allowed:[],pending:[]};
+        variant.workMessaging ??= {}; variant.workMessaging[kind] = connected;
+        return {ok:true,status:connected};
+      }
+      case "computer.checkpoints": {
+        const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:[{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
+        if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:[checkpoint.files[0].path],skipped:[]}; }
+        return {checkpoints:variant.checkpoints ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
+      }
       case "messaging.telegram.remove_user": data.messaging.allowed = data.messaging.allowed.filter(user => user.user_id !== p.user_id); return data.messaging;
       case "secrets.clear_openrouter_key": keyRemoved = true; return {};
       case "history.clear": return { deleted: 0 };
@@ -949,7 +970,8 @@ export function installMock(fixture, config = {}, target = window) {
     runCallback(id, value) { callbacks.get(id)?.(value); },
     convertFileSrc(path) { return path; },
     async invoke(command, args = {}) {
-      state.calls.push({ command, ...copy(command === "main_events" ? {} : args) });
+      const recorded = command === "core_call" && args.method === "integrations.card_save" && args.params?.id === "card-login" ? {...args,params:{...args.params,value:"[private login]"}} : args;
+      state.calls.push({ command, ...copy(command === "main_events" ? {} : recorded) });
       // Native Channel instances contain callbacks; do not serialize them before registration.
       if (command === "overlay_subscribe") {
         state.overlayChannel = args.channel;

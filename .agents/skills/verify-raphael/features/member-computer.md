@@ -347,3 +347,60 @@ explicit unit brief, not acceptance. See CODEX_REPORT.md for exact results.
 ```powershell
 npm run look -- desktop-host-remote desktop-host-invalid desktop-collapse desktop-panel desktop-viewer desktop-owner desktop-handback desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-stopped desktop-unavailable desktop-starting desktop-building desktop-preparing desktop-absent desktop-install --theme both --width 1120,720,1920x1080
 ```
+
+
+## Work channels, file restore and private page login (2026-11-01)
+
+Slack and Discord join Telegram in Settings > Messaging, using the same rows,
+separate Credential Manager tokens and the existing local pairing allowlist.
+Only direct messages enter a conversation. Incoming captions and bounded files
+reach the same assistant together; stored reply files return to the paired chat.
+No remote message can approve pairing or execution. Slack uses paginated polling;
+Discord uses the bounded TLS gateway and direct-message intent.
+
+Before a turn's first non-read vm_exec, the computer takes one independent bounded
+snapshot. Commands retain their original bytes and executor; gestures take none.
+The pure Python guest archive stores SHA256 objects and manifests; unchanged size
+and mtime avoid rereading a file, and identical manifests add no checkpoint.
+Failures/timeouts never fail the command. Files above 20 MiB and partial walks are
+named as uncovered in the panel. The archive retains 20 checkpoints per member
+within approximately 500 MiB of objects per computer, pruning unreferenced objects.
+Changes are compared on request against the next manifest or live folder. Restore
+checks the reviewed after-state digest/mode and names later edits it leaves alone.
+There is no pending/finish state. Full permission skips the additional confirmation;
+grants/revocation still apply. Caches, repositories and browser profiles are excluded.
+The existing panel uses relative folder words, compact time and signed added/removed
+lines without diff headers; incomplete coverage never promises a complete restore.
+
+request_secret(site) extends the existing secure card with username/password.
+Credential Manager holds the values; SQLite holds only member/origin/reference
+metadata, independently of the requesting turn. fill_login checks the exact HTTPS
+origin and current grant before each field through the computer's lasting browser
+connection. It never submits. Takeover remains available. Driver results and all
+fill exceptions yield only filled true/false. Later page text/errors redact plain
+and JSON-escaped values on computer results before model/history/events. Delegate
+results pass through untouched. Pictures are withheld only for a just-filled page
+until its URL changes or two minutes pass; saving a login alone hides nothing.
+Vault read failures log only the exception type and never fail prepare. Login fields
+are full-width labelled rows, with Save below. Explicit safety denials still win over
+full permission on the API and shared CLI/background gate. Slack uses the supplied
+Simple Icons 13.21.0 path through the shared icon renderer, with its brand purple in
+the light theme and the text colour in the dark theme. Never use a letter substitute.
+
+Selected matrix, from app/:
+
+```powershell
+npm run look -- work-messaging-setup work-messaging-pairing work-slack-connect computer-file-changes computer-file-partial computer-file-confirm computer-file-restored computer-file-bypass computer-login-card computer-login-saved chat-secret-masked delete desktop-owner --theme both --width 1120,720,1920x1080
+```
+
+Compare login with chat-secret-masked, restore confirmation with delete, and panel
+controls with desktop-owner at the same theme/width. Inspect every contact sheet
+and full-size changed controls. Extend scripts/look rather than adding a harness.
+Focused tests: messaging/test_work_channels.py, computer/test_checkpoints.py,
+computer/test_checkpoint_revision.py, computer/test_login_visibility.py,
+computer/test_login_vault.py, agent/test_private_login.py, brain/test_db.py,
+work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
+computer, messaging, agent and background in full once, then targets any fixes.
+Report explicitly if that full run preceded the last change. Frontend verify uses
+two Vitest workers. The brief prohibits cargo, native, network, real providers and
+npm run judge: these are SKIP, never fixture-derived acceptance.

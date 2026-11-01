@@ -403,7 +403,11 @@ export const integrationsAudit = (limit = 8): Promise<{ entries: AuditEntry[] }>
 /** The owner's apps and how many are connected: the one count the sidebar, the 連接 tab and every model's roster share. */
 export const integrationsInventory = (): Promise<AppsInventory> => core("integrations.inventory");
 
-// ---------- messaging apps (Telegram) ----------
+// ---------- messaging apps ----------
+export const messagingCall = <T>(kind: "telegram" | "slack" | "discord", method: string, params?: object): Promise<T> => core(`messaging.${kind}.${method}`, params);
+export interface FileCheckpoint { id: string; turn: number; created: number; state: string; partial?: boolean; uncovered?: string[]; review_token?: string; files: { path: string; diff: string }[] }
+export const computerCheckpoints = (member_id: number): Promise<{ checkpoints: FileCheckpoint[]; busy: boolean; confirmation_required?: boolean; coverage_warning?: boolean }> => core("computer.checkpoints", { member_id, action: "list" });
+export const computerRestore = (member_id: number, id: string, confirmed = true, review_token?: string): Promise<{ restored: string[]; skipped: string[] }> => core("computer.checkpoints", { member_id, action: "restore", id, confirmed, ...(review_token ? { review_token } : {}) });
 
 export const telegramStatus = (): Promise<TelegramStatus> => core("messaging.telegram.status");
 /** Checks the bot token with Telegram and, if it works, keeps it in the vault. The token never comes back. */

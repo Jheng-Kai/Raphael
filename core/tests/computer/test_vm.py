@@ -51,6 +51,8 @@ class Runtime:
             return Result(0, "cua-driver 0.37.0")
         if "health_report" in args:
             return Result(0, '{"schema_version":"1","overall":"ok","checks":[]}')
+        if any(arg.startswith('"""Guest-only file checkpoints') for arg in args):
+            return Result(0, json.dumps("0" * 32 if args[-2] == "begin" else [] if args[-2] == "list" else None))
         if "base64" in " ".join(args):
             return Result(0, base64.b64encode(b"hello").decode())
         return Result(0, "ok")
@@ -281,7 +283,7 @@ async def test_native_timezone_check_uses_vm_exec_after_home(desktop, tmp_path, 
     monkeypatch.setenv("RAPHAEL_TEST_NATIVE", "1")
     monkeypatch.setattr(vm_module, "LocalVm", lambda *args, **kwargs: vm)
     commands = []
-    async def execute(target, command, timeout):
+    async def execute(target, command, timeout, **kwargs):
         commands.append(command)
         return {"exit_code": 0, "output": "+0800\n", "truncated": False}
     monkeypatch.setattr(vm, "execute", execute)
@@ -560,9 +562,9 @@ async def test_real_driver_catalog_offers_only_the_curated_tools(desktop, tmp_pa
     assert DRIVER_CATALOG["reported_count"] == 67
     assert len(DRIVER_CATALOG["names"]) == len(set(DRIVER_CATALOG["names"])) == 68
     assert CURATED <= set(DRIVER_CATALOG["names"])
-    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover"}
+    assert {tool.name for tool in hub.offered()} == CURATED | {"request_takeover", "fill_login"}
     snapshot = take_snapshot(hub)
-    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover"}
+    assert {ref.name for ref in snapshot.refs.values() if ref.server == "computer"} == CURATED | {"request_takeover", "fill_login"}
     assert not snapshot.hidden()
     assert not snapshot.refresh_computer(hub, 0)
     assert all(tool.pinned for tool in hub.offered())
@@ -660,7 +662,7 @@ async def test_tools_share_snapshot_and_gate_and_owner_control(desktop, conn, tm
 
 
 async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop, conn, tmp_path):
-    from raphael_core.agent.safety import PASS
+    from raphael_core.agent.safety import DENY, PASS, Screening
     from raphael_core.agent.service import AgentService
     from raphael_core.background.run import TaskRun
 
@@ -668,14 +670,22 @@ async def test_sandbox_steps_do_not_reenter_per_action_safety_screening(desktop,
     hub = VmTools(EmptyHub(), vm, attachments=AttachmentStore(tmp_path), bridge=Bridge)
     await hub.prepare()
     SettingsStore(conn).set("action_mode", "ask")
-    gate = ToolGate(hub, conn=conn, safety=object())
-    caller = SimpleNamespace(_gate=gate)
+    screened = []
+    async def deny(proposed, **kwargs):
+        screened.append(proposed.tool)
+        return Screening(DENY)
+    async def guarded(result): return await result
+    gate = ToolGate(hub, conn=conn, safety=SimpleNamespace(screen=deny))
     snapshot = take_snapshot(hub)
+    caller = SimpleNamespace(_gate=gate, snapshot=snapshot, language="en", ledger=None,
+                             _check=lambda **kwargs: None, _guarded=guarded)
     for tool in hub.offered():
         call = SimpleNamespace(tool=tool, arguments={})
-        assert await AgentService._screen_call(caller, None, call, None) == PASS
+        expected = Screening(DENY) if tool.name == "fill_login" else PASS
+        assert await AgentService._screen_call(caller, SimpleNamespace(language="en"), call, None) == expected
         ref = snapshot.refs["computer__" + tool.name]
-        assert await TaskRun._screen(caller, ref, {}) == PASS
+        assert await TaskRun._screen(caller, ref, {}) == expected
+    assert screened == ["computer / fill_login", "computer / fill_login"]
     assert not gate.is_vm_tool("mcp:unrelated/click")
 
 
@@ -721,7 +731,7 @@ async def test_native_vm_journey_checks_no_approval_and_owner_control(desktop, t
             forwarded.append(params["name"])
             return {"content": [{"type": "image", "data": base64.b64encode(png).decode(), "mimeType": "image/png"}]}
 
-    async def execute(*args):
+    async def execute(*args, **kwargs):
         assert target.key not in vm.held
         forwarded.append("vm_exec")
         return {"exit_code": 0, "output": payload.decode(), "truncated": False}

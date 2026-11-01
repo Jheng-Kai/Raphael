@@ -2771,14 +2771,23 @@ class AgentService:
         if it must, the secret by the name the connection declares it with, never a place in the vault,
         and learns only that a card is shown; the key itself goes from the window to the vault."""
         connection, secret = args.get("connection"), args.get("secret")
-        if not isinstance(connection, str) or not connection.strip() or not (secret is None or isinstance(secret, str)):
+        site = args.get("site")
+        if site is None and (not isinstance(connection, str) or not connection.strip() or not (secret is None or isinstance(secret, str))):
             raise ValueError("unknown connection")
+        if site is not None and (not isinstance(site, str) or connection is not None or secret is not None):
+            raise ValueError("choose connection or site")
         if self._secret_cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
         if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
         try:
-            cards = self._secret_cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
+            if site is not None:
+                reference, cards = self._secret_cards.show_login(turn_id=ask.turn_id, member_id=ask.speaker.id,
+                    conversation_id=ask.conversation_id, site=site, language=ask.language, done=ask.made)
+                if not cards:
+                    return {"reference": reference, "saved": True}
+            else:
+                cards = self._secret_cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                                             connection=connection, secret=secret or None, language=ask.language, done=ask.made)
         except LookupError as error:
             raise HarnessToolError("unknown_" + str(error)) from None
@@ -2791,7 +2800,7 @@ class AgentService:
         ask.owner_card_ids = [card.id for card in cards]
         self._turn_changed(ask.turn_id, ask.speaker.id)
         names = ", ".join(sorted({card.secret for card in cards}))
-        return {"connection": cards[0].name, "card": "shown", "secrets": names, "note": (
+        return {"connection": cards[0].name, "card": "shown", "secrets": names, **({"reference": reference} if site is not None else {}), "note": (
             f"A card to save {names} for {cards[0].name} is shown to the owner in this chat. End this turn now with one short "
             "sentence. The key goes straight to the secure vault and you never see it; this request resumes by itself, once, "
             "after the owner saves it; never claim the connection's data now.")}

@@ -253,6 +253,10 @@
 .connector-card.has-form { row-gap: var(--sp-2); }
 .sc-form { grid-column: 2 / -1; display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .sc-field { flex: 1 1 auto; min-width: 0; }
+.sc-form.sc-login { flex-direction: column; align-items: stretch; }
+.sc-login > label { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; font-size: var(--fs-sm); }
+.sc-login .sc-field { width: 100%; }
+.sc-login > .btn { align-self: flex-end; }
 .secret-card > .cc-actions, .computer-card > .cc-actions { grid-column: 2 / -1; gap: var(--sp-2); }
 .secret-card .cc-state > span:last-child, .computer-card .cc-state > span:last-child { text-wrap: balance; }
 .computer-card > .mono { align-self: start; }

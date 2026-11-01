@@ -253,10 +253,11 @@ npm run look -- meeting-open-room meeting-chief-event member-mentions-bots-apps 
 
 ## Consulting a colleague and the shared memory (P14)
 
-Grok Bot shows a question on both sides. The owner chose otherwise (R-AG-34): a member they never spoke to would fill up
-with other members' talk. So the asker's chat alone shows 「和 X 討論」 (handoff-line.ts), which opens on the question and the
-answer; the asked member's page does not list it. Work handed over stays in the receiver's own chat, a turn like any other
-under 「訊息來自 Y」 with Y's face (exchange-line.ts), since that is where it thinks. Both are Both ways of asking leave the same record, the asked
+Grok Bot's two sides of a question: the asker's chat shows 「已詢問 X」 (handoff-line.ts), which opens on
+the question that was sent and the answer, and the asked member's own chat shows 「訊息來自 Y」 with Y's
+face where the question came (exchange-line.ts); several in a row from one colleague on one day fold into
+「N 則訊息往來：Y」, as Grok Bot words it, opening on each question and answer with each speaker named once,
+never a pasted transcript or a per-line label. Both ways of asking leave the same record, the asked
 member's exchange turn: `ask_member` answers in the asker's turn, a `handoff` in consult mode runs as the
 asked member's task with its own notes and conversation, and a private chat turn that consulted that way
 comes back once with the answer. An entry of the shared file ends with whom the owner told it to and when, in every
@@ -730,15 +731,6 @@ nothing to replace and inserted its text again.
 npm run look -- mention-ime-open mention-ime-at mention-ime-filter mention-ime-compose mention-ime-commit mention-chip-composer mention-chip-sent mention-chip-delete mention-chip-arrow mention-chip-room --theme both --width 1120,720,1920x1080
 ```
 
-A link in the composer stands as its short name, in a member's conversation and in a group: the words hold the name
-(`composer-links.ts`), the field paints it as a chip and treats it as one unit, and sending or copying gives the whole address
-back. A group's composer takes files the way a conversation's does, by `+`, a paste and a drop, one card to a file with its
-picture; a picture it sent loads near the viewport and opens large.
-
-```powershell
-npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
-```
-
 The `ime` step drives the browser's own input-method path (CDP `Input.imeSetComposition` and `Input.insertText`) with the
 events a WebView2 input method sends, and `mention-ime-at` fails on the old code with `@@`. It cannot be a Windows input
 method: the Bopomofo editor itself, its candidate window and TSF are not driven, so a real Zhuyin session stays a manual
@@ -779,7 +771,7 @@ A room's composer is unchanged: its recording is its own browser recorder, whose
 read and sent, so its button stays Stop until then (`chat-composer.test.ts`).
 
 ```powershell
-npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 ```
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,
@@ -792,7 +784,7 @@ question key down and up and no cancellation. The unit tests are `agent-stop.tes
 See the feature map. Selected acceptance:
 
 ```powershell
-npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+npm run look -- rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
 
 ## Small core regressions (2026-10-31)
@@ -953,3 +945,14 @@ consent and live model choice remain unverified; fixtures use fake transports.
 Routine event lines distinguish once, weekdays, daily, weekly and every in zh-TW,
 ja and en, including start_date, until and max_runs. Evidence:
 core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
+## Existing composer and file consumers (feature-map sync)
+
+Keep the current deployed map's composer links, fresh voice conversation and team
+file consumers visible when this shadow map is promoted. These are existing
+journeys, not additional acceptance claimed by the work-channel unit.
+
+```powershell
+npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
+npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
+```

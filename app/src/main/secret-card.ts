@@ -41,7 +41,7 @@ const typing = (card: SecretCard): boolean => card.state === "pending" || (card.
 /** What the card says of where its key stands (the secret's own name while it waits). */
 export function secretStateText(card: SecretCard): string {
   switch (card.state) {
-    case "pending": return card.secret;
+    case "pending": return card.login ? t("card.loginHint") : card.secret;
     case "failed": return plain(FAILURES[card.error ?? ""] ?? "card.keyVault");
     case "saved": return plain(card.error ? "card.keyNotResumed" : "card.keySaved");
     case "resuming": return plain("card.keyResuming");
@@ -56,8 +56,11 @@ function actionHTML(card: SecretCard): string {
   const on = (act: string): string => ` data-act="${act}" data-card="${esc(card.id)}"`;
   if (typing(card)) {
     const label = `${card.name} ${card.secret}`;
+    if (card.login) return `<div class="sc-form sc-login"><label><span>${esc(t("card.loginUser"))}</span><span class="field sc-field"><input data-login-user="${esc(card.id)}" autocomplete="off" spellcheck="false"></span></label>` +
+      `<label><span>${esc(t("card.loginPassword"))}</span><span class="field sc-field">${ico("lock")}<input type="password" data-secret-input="${esc(card.id)}" autocomplete="off" spellcheck="false" autocapitalize="off"></span></label>` +
+      btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
     return `<div class="sc-form"><label class="field sc-field">${ico("lock")}` +
-      `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(t("card.keyField"))}" aria-label="${esc(label)}" ` +
+      `<input type="password" data-secret-input="${esc(card.id)}" placeholder="${esc(card.login ? t("card.loginPassword") : t("card.keyField"))}" aria-label="${esc(label)}" ` +
       `autocomplete="off" spellcheck="false" autocapitalize="off"></label>` +
       btn(esc(t("card.keySave")), "sm pri", `${on("card-save")} disabled`) + `</div>`;
   }
@@ -100,13 +103,14 @@ export function carryTyped(before: Element, after: Element): () => void {
   const kept: { id: string; value: string; focused: boolean; start: number | null; end: number | null }[] = [];
   const focus: { field: HTMLInputElement | HTMLTextAreaElement; start: number | null; end: number | null }[] = [];
   const resized: HTMLTextAreaElement[] = [];
-  const fields = "input[data-secret-input], textarea[data-owner-answer-input]";
+  const fields = "input[data-secret-input], input[data-login-user], textarea[data-owner-answer-input]";
+  const identity = (input: HTMLInputElement | HTMLTextAreaElement): string => input.dataset.loginUser ? `login:${input.dataset.loginUser}` : input.dataset.secretInput ?? input.dataset.ownerAnswerInput ?? "";
   for (const old of before.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)) {
     if (!old.value) continue;
-    kept.push({ id: old.dataset.secretInput ?? old.dataset.ownerAnswerInput ?? "", value: old.value, focused: old === document.activeElement, start: old.selectionStart, end: old.selectionEnd });
+    kept.push({ id: identity(old), value: old.value, focused: old === document.activeElement, start: old.selectionStart, end: old.selectionEnd });
   }
   for (const item of kept) {
-    const fresh = [...after.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)].find(input => (input.dataset.secretInput ?? input.dataset.ownerAnswerInput) === item.id);
+    const fresh = [...after.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(fields)].find(input => identity(input) === item.id);
     if (!fresh) continue;
     fresh.value = item.value;
     const save = fresh.closest(".secret-card")?.querySelector<HTMLButtonElement>('[data-act="card-save"]');

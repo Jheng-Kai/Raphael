@@ -25,6 +25,8 @@ const app = resolve(import.meta.dirname, "../..");
 const requireFromApp = createRequire(join(app, "package.json"));
 export const REQUIRED_PUPPETEER = "puppeteer-core@25.13.0";
 
+export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
+
 export function browserPath() {
   const candidates = [process.env.LOOK_BROWSER,
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -59,7 +61,7 @@ export async function run(options) {
     const { createServer } = await import(pathToFileURL(requireFromApp.resolve("vite")).href);
     const fixture = JSON.parse(await readFile(join(import.meta.dirname, "fixture.json"), "utf8"));
     let desktopResponses = {};
-    if (options.selected.some(scene => scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover")) {
+    if (needsDesktopFixture(options.selected)) {
       // Render the production bridge shell/bootstrap, replacing only remote RFB.
       const python = process.env.RAPHAEL_CORE_PYTHON || join(app, "../core/.venv/Scripts/python.exe");
       const source = join(import.meta.dirname, "fixtures/desktop-upstream.html.txt");

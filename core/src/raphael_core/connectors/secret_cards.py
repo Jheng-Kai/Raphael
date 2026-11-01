@@ -79,7 +79,8 @@ class SecretCard:
     def view(self) -> dict:
         """The card as the window draws it: the connection and the secret it declares, never a value."""
         return {"id": self.id, "name": self.name, "secret": self.secret, "state": self.state,
-                "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed}
+                "error": self.error or None, "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
+                **({"login": True} if self.kind == "login" else {})}
 
 
 def _card(row: sqlite3.Row) -> SecretCard:
@@ -210,12 +211,28 @@ class SecretCards:
         self.failure = None
         self._reported_failures = set()
         self._tasks: set[asyncio.Task] = set()
+        self.logins = None
 
     def register(self, router) -> None:
         router.register("integrations.card_save", self._save)
         router.register("integrations.card_resume", self._retry)
 
     # --- what the agent asks ----------------------------------------------------------------------
+
+    def show_login(self, *, turn_id, member_id, conversation_id, site, language, done=()):
+        from ..computer.logins import origin
+        if self.logins is None:
+            raise LookupError("login")
+        site = origin(site)
+        reference = self.logins.reference(member_id, site)
+        try:
+            self.logins.load(member_id, site, reference)
+            return reference, []
+        except ValueError as error:
+            if str(error) != "login_missing":
+                raise
+        return reference, [self.store.open(turn_id=turn_id, member_id=member_id, conversation_id=conversation_id,
+            server_id=reference, kind="login", secret="login", name=site, language=language, done=done)]
 
     def show(self, *, turn_id: int, member_id: int, conversation_id: int | None, connection: str, secret: str | None,
              language: str, done: Iterable[tuple[str, str]] = ()) -> list[SecretCard]:
@@ -272,11 +289,17 @@ class SecretCards:
             error = "invalid"
         else:
             try:
-                self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
+                if card.kind == "login" and self.logins is not None:
+                    self.logins.save(card.server_id, value, member=card.member_id, site=card.name)
+                    self.logins.load(card.member_id, card.name, card.server_id)
+                else:
+                    self._integrations.fill_secret(card.server_id, card.kind, card.secret, value)
             except SecretTooLong:
                 error = "too_long"
             except NoSuchSecret:
                 error = "gone"
+            except ValueError:
+                error = "invalid"
             except Exception as exc:  # the vault: its message could hold anything
                 logger.warning("A card's secret could not be kept: %s", type(exc).__name__)
                 error = "vault"

@@ -542,6 +542,17 @@ class LocalVm:
             self.held.discard(target.key)
         self.last_activity[target.key] = self.clock()
 
+    async def checkpoint(self, target, action, **metadata):
+        from . import checkpoints
+        source = Path(checkpoints.__file__).read_text(encoding="utf-8")
+        result = await self.run_for(target, exec_args(target, ["timeout", "--signal=TERM", "--kill-after=1", "10", "/opt/venv/bin/python", "-c", source, action, json.dumps(metadata)]), timeout=12, limit=2_000_000)
+        if result.code or result.truncated:
+            raise VmError("checkpoint_unavailable")
+        try:
+            return json.loads(result.stdout)
+        except ValueError:
+            raise VmError("checkpoint_unavailable") from None
+
     async def execute(self, target, command, timeout=60, *, background=False):
         """Run `command` in the workspace. In the foreground it is waited for, at most `FOREGROUND_S`, and ended then;
         in the background it is started detached and this returns at once with a job whose log and exit code the

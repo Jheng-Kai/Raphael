@@ -257,6 +257,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Hermes Agent (MIT)
 
+The Discord admission/gateway behavior in `core/src/raphael_core/messaging/channels/discord.py`
+draws on `tools/discord_tool.py` and `plugins/platforms/discord/adapter.py`; guest file checkpoints
+in `core/src/raphael_core/computer/checkpoints.py` draw on `tools/checkpoint_manager.py` and
+`agent/tool_executor.py`, all at Hermes revision `c419cf7c` under the MIT license below.
+Private login references in `core/src/raphael_core/computer/logins.py` and the fill bridge in
+`computer/vm_tools.py` draw on OpenMausBot `server/drivers/agents-catalog.ts` and
+`server/drivers/agents-call.ts` at `f9191b5`, under the Apache-2.0 notice above.
+
 Owner input at loop boundaries in `core/src/raphael_core/worker/owner_input.py`
 and Telegram attachment delivery in `core/src/raphael_core/messaging/channels/telegram.py`
 are adapted from Hermes Agent revision `c419cf7c`, respectively

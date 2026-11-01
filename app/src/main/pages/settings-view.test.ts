@@ -596,7 +596,7 @@ describe("Models", () => {
 
 describe("訊息平台", () => {
   test("is Telegram, in rows like the others", () => {
-    expect(tab("messaging")).toMatch(/<section class="sgroup msg" data-msg-section aria-label="Telegram"><div class="slist"><div class="row msg-head">/);
+    expect(tab("messaging")).toMatch(/<section class="sgroup msg" data-msg-section data-msg-kind="telegram" aria-label="Telegram"><div class="slist"><div class="row msg-head">/);
   });
 });
 
