@@ -2,6 +2,66 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('polish-')) {
+    const ruler = root => ['.mc-depth', '.mc-depth-title', '.mc-track', '.mc-range', '.mc-dots', '.mc-dot', '.mc-stops', '.mc-stop[data-on="true"]'].map(selector => {
+      const el = document.querySelector(`${root} ${selector}`), s = getComputedStyle(el), b = el.getBoundingClientRect();
+      return [s.display, s.fontSize, s.fontWeight, s.backgroundColor, s.borderRadius, s.rowGap, b.width, b.height];
+    });
+    if (name === 'polish-effort-reference') window.__polishRuler = ruler('.cb-now');
+    if (name === 'polish-effort') require(JSON.stringify(ruler('.mc-effort')) === JSON.stringify(window.__polishRuler), 'title, track, dots, labels and sizes match the conversation ruler');
+    if (name.startsWith('polish-data') || name.startsWith('polish-conversations')) {
+      const title = document.querySelector('.modal-body h1');
+      for (const heading of document.querySelectorAll('.data-heading h2')) {
+        const style = getComputedStyle(heading);
+        require(style.fontSize === getComputedStyle(document.documentElement).getPropertyValue('--fs-sm').trim() && parseFloat(style.fontSize) < parseFloat(getComputedStyle(title).fontSize), 'Data uses the shared small Settings group heading below the page title');
+        const button = heading.parentElement.querySelector('[data-act="data-clear"]');
+        if (button) require(Math.abs(heading.getBoundingClientRect().y + heading.getBoundingClientRect().height/2 - button.getBoundingClientRect().y - button.getBoundingClientRect().height/2) < 1, 'Delete all remains on the group heading row');
+      }
+      for (const time of document.querySelectorAll('.data-record time')) {
+        const date = new Date(time.dateTime), year = date.getFullYear() === new Date().getFullYear() ? '' : `${date.getFullYear()}/`;
+        const clock = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        require(time.textContent === `${year}${date.getMonth()+1}/${date.getDate()} ${clock}`, 'Data timestamps omit seconds and include the year only outside this year');
+      }
+    }
+    if (name === 'polish-data') {
+      require(document.querySelectorAll('.data-record').length === 20, 'twenty newest records are rendered');
+      require(document.querySelector('.data-record').textContent.includes('Synthetic dictation 25'), 'records are newest first');
+      require(document.querySelectorAll('[data-act="data-clear"]').length === 2 && !document.querySelector('.modal-body [data-overflow]'), 'real heading buttons replace one-action menus');
+      require([...document.querySelectorAll('.data-record-text')].every(el => getComputedStyle(el).webkitLineClamp === '2'), 'record text is limited to two lines');
+      const preview = document.querySelector('.data-record-text');
+      require(preview.scrollHeight > preview.clientHeight && preview.clientHeight <= 2 * parseFloat(getComputedStyle(preview).lineHeight) + 1, 'a long real preview is visibly clamped to two lines');
+    }
+    if (name === 'polish-data-more') require(document.querySelectorAll('.data-record').length === 25 && !document.querySelector('[data-act="data-more"]'), 'the real load-more button reaches all records');
+    if (name === 'polish-data-confirm') require(document.querySelector('.mb-confirm').textContent.includes('25'), 'confirmation names the actual deletion count');
+    if (name === 'polish-data-empty') require(!document.querySelector('.data-record') && !document.querySelector('[data-act="data-clear"][data-what="dictation"]'), 'successful deletion redraws immediately without a clear button');
+    if (name === 'polish-data-conversations') require(document.querySelector('[data-act="data-clear"][data-what="conversation"]') && document.querySelector('.data-section:last-of-type').textContent.includes('2'), 'two saved Raphael conversations have a direct heading action');
+    if (name === 'polish-conversations-confirm') require(document.querySelector('.mb-confirm').textContent.includes('2'), 'conversation confirmation names its true count');
+    if (name === 'polish-conversations-empty') {
+      const note = document.querySelector('.data-section:last-of-type .note'), box = note.getBoundingClientRect(), viewport = document.querySelector('.modal-body').getBoundingClientRect();
+      require(!document.querySelector('[data-act="data-clear"][data-what="conversation"]') && note.textContent.includes('0') && box.top >= viewport.top && box.bottom <= viewport.bottom, 'the deleted conversation count redraws immediately and is visible');
+      require(window.__look.calls.some(call=>call.method==='agent.history.clear' && call.params.member_id===0), 'Data clears only Raphael, preserving members');
+    }
+    if (name === 'polish-scrolled') require(document.querySelector('.modal-body').scrollTop > 0, 'the reset exercise starts from a genuinely scrolled pane');
+    if (name === 'polish-scroll') require(document.querySelector('.modal-body').scrollTop === 0, 'newly opened pane starts at the top');
+    if (name === 'polish-caption') require(window.__polishCaption === true && window.__polishCaptionOutside === true, 'all caption actions and drag worked once without dismissing');
+    if (name === 'polish-search') {
+      const pane = [...document.querySelectorAll('.ra-find')].find(el => visible(el));
+      const proof = window.__polishSearch;
+      if (proof?.total === 210) require(Math.abs(document.querySelector('[data-room-search]').getBoundingClientRect().y-document.querySelector('[data-room-menu]').getBoundingClientRect().y)<1, 'group search and menu stay in the shared header tool row');
+      require(proof?.wrap && proof.stable && proof.noMatch && proof.closedInPlace, 'keyboard and icon navigation wrap, typing stays put, no-match and both close paths work');
+      require(pane.querySelector('.ra-find-count').textContent === `${proof.total}/${proof.total}`, 'the full paginated history starts at its newest exact word');
+      require(document.querySelectorAll('mark.is-current').length === 1, 'one exact word is the current target');
+      require(getComputedStyle(document.querySelector('mark.is-current')).outlineStyle !== 'none', 'current target differs by outline as well as contrast');
+      require([...document.querySelectorAll('mark[data-find-match]:not(.is-current)')].every(el=>getComputedStyle(el).textDecorationStyle==='dotted'), 'other exact matches remain visible even on owner bubbles');
+      require(pane.querySelectorAll('button').length === 3, 'real previous, next and close controls');
+    }
+    if (name === 'polish-room-recording') {
+      const composer = document.querySelector('.au-room-pane .composer');
+      require(composer.dataset.taskState === 'recording' && composer.querySelector('.cmp-voice .cmp-plane'), 'group recording shows the same send glyph');
+      require(composer.querySelector('.cmp-voice').getAttribute('aria-label') === document.querySelector('.cmp-send').getAttribute('aria-label'), 'group recording uses the shared send label');
+    }
+    return { check: name };
+  }
   if (name.startsWith("mcp-proposal-")) {
     const card = document.querySelector('[data-mcp-proposal="mcp-sample"]');
     require(visible(card) && card.classList.contains("connector-card"), "the shared connection card is visible");
@@ -1608,7 +1668,7 @@ export function checkRendered(name, context = {}) {
     const row = document.querySelector('[data-row="quick-model"]');
     const picker = row?.querySelector('.mp-trigger');
     require(visible(picker) && !!picker.querySelector('.mp-tname')?.textContent && !!picker.querySelector('.mp-source')?.textContent, "quick model uses the shared named provider card");
-    const purpose = { 'zh-TW': '快速提問', en: 'Quick questions', ja: 'クイック質問' }[document.documentElement.lang];
+    const purpose = {"zh-TW": "拉斐爾的快速提問", "en": "Raphael's quick question", "ja": "ラファエルのクイック質問"}[document.documentElement.lang];
     require(!!purpose && row.querySelector('.t')?.textContent.trim() === purpose, "quick questions' row label states their purpose in the window language");
     require(!row.querySelector('.models-purpose-note'), "quick questions need no helper paragraph (R-UI-02)");
     require(!!row.querySelector('[data-price="quick-model"]')?.textContent, "quick questions show the effective model price");
@@ -1695,7 +1755,7 @@ export function checkRendered(name, context = {}) {
     require(buttons.length > 1, "the fixture exercises several effort choices");
     const values = buttons.map(button => button.dataset.effort);
     require(values.every((value, index) => index === 0 || order.indexOf(values[index - 1]) < order.indexOf(value)), "efforts run from shallow to deep regardless of catalog order");
-    require(buttons.every(visible), "every effort choice is visible");
+    require(buttons.filter(visible).length === 1 && visible(document.querySelector(".mc-effort .mc-range")), "the shared ruler names its current stop and every offered level remains in the range");
     return { check: name, efforts: values };
   }
   if (name.startsWith("model-choice-")) {

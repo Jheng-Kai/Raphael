@@ -62,16 +62,64 @@ test("plus only attaches, and the permission mode is its own named control with 
  expect(api.core).toHaveBeenCalledWith("settings.set",{key:"action_mode",value:"bypass"});
  expect(view.el.querySelector(".cmp-mode span")!.textContent).toBe("Allow all");
 });
-test("voice records until manual Stop and learns an edited transcript only on send",async()=>{
+test("voice shows Send while recording and its next press delivers the combined draft once",async()=>{
  const stopTrack=vi.fn(),stop=vi.fn();let recorder:any;Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});
  vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;ondataavailable?:(e:any)=>void;constructor(){recorder=this;}start(){this.state="recording";}stop(){stop();this.state="inactive";this.onstop?.();}});
  vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0,0.5])});close=async()=>{};});
- api.roomTranscribe.mockResolvedValue({text:"Please use Open Mouse Bot"});const {view,send}=mount();view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();
- expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(view.input.value).toBe("Please use Open Mouse Bot");expect(send).not.toHaveBeenCalled();expect(api.roomTranscribe).toHaveBeenCalledOnce();
- api.core.mockResolvedValue({learned:["OpenMausBot"]});view.input.value="Please use OpenMausBot";view.input.dispatchEvent(new Event("input"));view.el.requestSubmit();await flush();expect(api.core).toHaveBeenCalledWith("dictionary.correct",{edits:[{before:"Please use Open Mouse Bot",after:"Please use OpenMausBot"}]});vi.unstubAllGlobals();
+ api.roomTranscribe.mockResolvedValue({text:"Please use Open Mouse Bot"});const {view,send}=mount();view.setDraft("Typed first");view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(view.el.dataset.taskState).toBe("recording");expect(view.el.querySelector(".cmp-voice .cmp-plane")).not.toBeNull();expect(recorder.state).toBe("recording");expect(stop).not.toHaveBeenCalled();
+ expect(view.el.querySelector<HTMLButtonElement>(".cmp-send")!.disabled).toBe(true);view.el.querySelector<HTMLButtonElement>(".cmp-voice")!.click();await flush();expect(stop).toHaveBeenCalledOnce();expect(stopTrack).toHaveBeenCalledOnce();expect(send).toHaveBeenCalledExactlyOnceWith("Typed first Please use Open Mouse Bot", []);expect(view.input.value).toBe("");expect(api.roomTranscribe).toHaveBeenCalledOnce();
+ vi.unstubAllGlobals();
 });
 test("WAV encoding produces mono PCM with correct sample rate and clipping",()=>{
  const bytes=wavBytes([new Float32Array([-2,0,2])],16000),view=new DataView(bytes.buffer);expect(new TextDecoder().decode(bytes.slice(0,4))).toBe("RIFF");expect(view.getUint32(24,true)).toBe(16000);expect(view.getUint16(22,true)).toBe(1);expect(view.getInt16(44,true)).toBe(-32768);expect(view.getInt16(48,true)).toBe(32767);
+});
+
+test("denied microphone permission says why and preserves the typed draft", async () => {
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockRejectedValue(new DOMException("denied","NotAllowedError"))}});
+ const {view,send}=mount();view.setDraft("Keep my words");view.el.querySelector<HTMLButtonElement>('.cmp-voice')!.click();await flush();
+ expect(document.querySelector('.toasts')?.textContent).toContain('Microphone access was denied');
+ expect(view.input.value).toBe('Keep my words');expect(send).not.toHaveBeenCalled();
+});
+
+test("a cancelled permission request cannot release a later recording", async () => {
+ let reject!:(error:Error)=>void;const stopTrack=vi.fn();
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockImplementationOnce(()=>new Promise((_resolve,no)=>{reject=no;})).mockResolvedValue({getTracks:()=>[{stop:stopTrack}]})}});
+ vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;start(){this.state="recording";}stop(){this.state="inactive";this.onstop?.();}});
+ try {
+  const {view,send}=mount(),voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;
+  voice.click();await flush();view.input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+  voice.click();await flush();reject(new Error('Late old permission failure'));await flush();
+  expect(view.el.dataset.taskState).toBe('recording');expect(stopTrack).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();
+  view.input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await flush();
+ } finally {vi.unstubAllGlobals();}
+});
+
+test.each([false,true])("unrecognized or failed speech retains the draft and names the voice failure (%s)",async failed=>{
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop(){}}]})}});
+ vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;start(){this.state="recording";}stop(){this.state="inactive";this.onstop?.();}});
+ vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0])});close=async()=>{};});
+ if(failed)api.roomTranscribe.mockRejectedValue(new Error('Synthetic transcription failure'));else api.roomTranscribe.mockResolvedValue({text:''});
+ try{
+  const {view,send}=mount();view.setDraft('Keep my words');const voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;
+  voice.click();await flush();voice.click();await flush();
+  expect(document.querySelector('.toasts')?.textContent).toContain(failed?'Voice input could not be processed':'No speech was recognized');
+  expect(view.input.value).toBe('Keep my words');expect(send).not.toHaveBeenCalled();expect(view.el.dataset.taskState).toBe('idle');
+ }finally{vi.unstubAllGlobals();}
+});
+
+test("a voice delivery failure keeps the combined draft and learns corrections only on a successful retry", async () => {
+ Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop(){}}]})}});
+ vi.stubGlobal("MediaRecorder",class {state="inactive";onstop?:()=>void;start(){this.state="recording";}stop(){this.state="inactive";this.onstop?.();}});
+ vi.stubGlobal("AudioContext",class {decodeAudioData=async()=>({numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0])});close=async()=>{};});
+ api.roomTranscribe.mockResolvedValue({text:'Open Mouse Bot'});
+ try {
+  const {view,send}=mount(vi.fn().mockRejectedValueOnce(new Error('Synthetic delivery failure')).mockResolvedValue(undefined));view.setDraft('Use');
+  const voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;voice.click();await flush();voice.click();await flush();
+  expect(send).toHaveBeenCalledExactlyOnceWith('Use Open Mouse Bot',[]);expect(view.input.value).toBe('Use Open Mouse Bot');
+  expect(document.querySelector('.toasts')?.textContent).toContain('Message could not be sent');
+  view.input.value='Use OpenMausBot';view.input.dispatchEvent(new Event('input'));view.el.requestSubmit();await flush();
+  expect(api.core).toHaveBeenCalledWith('dictionary.correct',{edits:[{before:'Open Mouse Bot',after:'OpenMausBot'}]});
+ } finally {vi.unstubAllGlobals();}
 });
 
 test("one Escape discards a room recording without sending audio for transcription",async()=>{
@@ -121,14 +169,14 @@ test("one Escape discards pending transcription and a late result cannot affect 
  try{
   const {view,send}=mount(),voice=view.el.querySelector<HTMLButtonElement>(".cmp-voice")!;
   voice.click();await flush();voice.click();await flush();
-  expect(api.roomTranscribe).toHaveBeenCalledOnce();expect(voice.disabled).toBe(false);
+  expect(api.roomTranscribe).toHaveBeenCalledOnce();expect(voice.disabled).toBe(true);
   view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));await flush();
   expect(view.el.querySelector("[data-cancel-armed]")).toBeNull();
   expect(view.el.dataset.taskState).toBe("idle");
   voice.click();await flush();expect(voice.getAttribute("aria-pressed")).toBe("true");
   finish({text:"Discard this old transcript"});await flush();
   expect(view.input.value).toBe("");expect(send).not.toHaveBeenCalled();
-  expect(voice.getAttribute("aria-pressed")).toBe("true");expect(view.el.dataset.taskState).toBe("running");
+  expect(voice.getAttribute("aria-pressed")).toBe("true");expect(view.el.dataset.taskState).toBe("recording");
   view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));await flush();
  }finally{vi.unstubAllGlobals();}
 });

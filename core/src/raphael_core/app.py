@@ -945,7 +945,7 @@ class App(Router):
         self.desktop_viewer.teaching = Teaching(self.desktop_viewer, self.members, self.memory)
         self.desktop_viewer.teaching.register(self)
         self.rooms = RoomsService(self._conn, members=self.members, background=self.background,
-                                  notify=self.notify, transcribe=self._transcribe_from_messaging,
+                                  notify=self.notify, transcribe=self._transcribe_room,
                                   attachment_store=self.attachment_store, decision=DecisionRouter(self.client))
         self.rooms.register(self)
         self.members.use_speech(self.speaker)
@@ -1376,7 +1376,10 @@ class App(Router):
         return Answer(compose(reply.get("prefix", ""), reply.get("text", ""), None),
                       list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
 
-    async def _transcribe_from_messaging(self, audio: bytes, language: str) -> str:
+    async def _transcribe_room(self, audio: bytes, language: str) -> str:
+        return await self._transcribe_from_messaging(audio, language, cleanup=True)
+
+    async def _transcribe_from_messaging(self, audio: bytes, language: str, *, cleanup: bool = False) -> str:
         """The words of a voice message, heard by the engine that dictation uses (the cloud, with
         the local one behind it if there is one, or the local one), with the user's dictionary and
         the same normalising. The audio stays in memory."""
@@ -1397,6 +1400,24 @@ class App(Router):
         heard = await asyncio.to_thread(hear)
         if not heard.strip():
             return ""
+        if cleanup:
+            import io
+            import wave
+
+            try:
+                with wave.open(io.BytesIO(audio)) as clip:
+                    seconds = clip.getnframes() / clip.getframerate()
+            except (wave.Error, EOFError):
+                seconds = 0
+            try:
+                result = await self.call("brain.finalize_dictation", {
+                    "raw_text": heard, "audio_seconds": seconds, "stt_ms": 0,
+                    "purpose": "agent", "target_app": None,
+                })
+                if isinstance(result.get("text"), str):
+                    return result["text"]
+            except Exception as exc:
+                logger.warning("Could not finalize room speech: %s", type(exc).__name__)
         try:
             text = (await self.call("brain.normalize_transcript", {"raw_text": heard}))["text"]
             return text if isinstance(text, str) else heard

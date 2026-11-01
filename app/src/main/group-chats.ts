@@ -1,4 +1,5 @@
 // Group chat entry points share the global sidebar and the conversation header.
+import { mountConversationFind } from "./conversation-find";
 import * as api from "./api";
 import { onAvatarChange } from "./avatar";
 import { ownerFaceHTML } from "./owner-avatar";
@@ -207,7 +208,7 @@ function roomActions(anchor: HTMLElement, room: Room, saved: () => void = () => 
 /** A room occupies the member conversation pane; creation and management alone use dialogs. */
 export function createRoomPane(_app: AppContext, onClose: () => void, onRender: () => void = () => {}) {
   const el=document.createElement("section");el.className="mb-chat au-room-pane";el.hidden=true;
-  el.innerHTML=`<header class="page-head mb-head"><span class="room-picker"></span><div class="au-room-heading"></div>${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</header><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
+  el.innerHTML=`<header class="page-head mb-head"><span class="room-picker"></span><div class="au-room-heading"></div><div class="ra-tools">${iconButton("search",t("agent.search"), ' data-room-search')}${iconButton("more",t("members.more",{p0:t("rooms.title")}), ' data-room-menu')}</div></header><div class="ra-find" hidden></div><div class="ra-stage"><div class="ra-scroll"><div class="ra-col"><div class="ra-older"></div><ol class="thread au-room-thread"></ol></div></div><div class="ra-dock"></div></div>`;
   const thread=el.querySelector<HTMLElement>(".thread")!,scroll=el.querySelector<HTMLElement>(".ra-scroll")!,older=el.querySelector<HTMLElement>(".ra-older")!;
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
@@ -226,6 +227,22 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread)) : null;
   messageResize?.observe(thread);
+  const finder = mountConversationFind({button:el.querySelector('[data-room-search]')!,bar:el.querySelector('.ra-find')!,thread,scroll,load:async current=>{
+    const id=roomId;if(!id)return;
+    let before:number|undefined;
+    const all:RoomMessage[]=[];
+    for(;;){
+      const result=await api.roomMessages(id,before);
+      if(!current()||!opened||roomId!==id)return;
+      all.push(...result.messages);
+      const next=result.messages[0]?.id;
+      if(result.messages.length<100||next===before)break;
+      before=next;
+    }
+    const height=scroll.scrollHeight,top=scroll.scrollTop;
+    messages=[...new Map([...all,...messages].map(message=>[message.id,message])).values()].sort((a,b)=>a.id-b.id);canOlder=false;draw();
+    scroll.scrollTop=top+scroll.scrollHeight-height;
+  }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
   const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??"";drafts.set(id,draft+(draft?" ":"")+text);}};},async send(text,files){if(!roomId)return;const id=roomId,key=JSON.stringify([text,files,replyTo?.id]);if(key!==retry)requestId=undefined;retry=key;requestId??=crypto.randomUUID();sendingRooms.add(id);try{await api.roomSend(id,text,requestId,getLocale(),files,replyTo?.id);if(pendingStops.delete(id))await api.roomStop(id);}finally{sendingRooms.delete(id);pendingStops.delete(id);}requestId=undefined;if(roomId===id){replyTo=undefined;await refresh();}changed();}});
   const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids }));
@@ -298,7 +315,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     measureMessagePreviews(thread);
     attachmentMedia.sync();
     composer.draw(); mentions.refresh(); });
-    if(follow)scroll.scrollTop=scroll.scrollHeight;onRender();
+    finder.refresh();
+    if(follow && !finder.isOpen())scroll.scrollTop=scroll.scrollHeight;onRender();
   }
   async function refresh():Promise<void>{
     const mine=++generation,id=roomId;if(!opened||!id)return;
@@ -321,7 +339,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
   }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(!opened)return;if(roomId)drafts.set(roomId,composer.input.value);drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;finder.close(false);if(roomId)drafts.set(roomId,composer.input.value);composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
@@ -347,6 +365,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   window.addEventListener("room-deleted",event=>{if(opened&&roomId===(event as CustomEvent<number>).detail)close();});
   const listener=():void=>{if(opened&&el.isConnected){void refresh();void questions.load();}};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   return {el,close,refresh,async open(id:number){
+    finder.close(false);
     if(roomId)drafts.set(roomId,composer.input.value);
     attachmentMedia.reset();questions.reset();
     opened=true;generation++;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";

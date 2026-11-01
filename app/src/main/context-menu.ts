@@ -28,7 +28,6 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: '[data-mem="section-more"]', row: ".mem-head" },
   { more: '[data-mem="summary-more"]', row: ".mem-summary" },
   { more: '[data-act="key-menu"]', row: ".row-key" },
-  { more: '[data-act="data-menu"]', row: ".data-row" },
   { more: '[data-msg="user-menu"]', row: ".msg-sub" },
   { more: '[data-act="local-menu"]', row: ".lm-row" },
   { more: '[data-rule="more"]', row: ".rules-row" },

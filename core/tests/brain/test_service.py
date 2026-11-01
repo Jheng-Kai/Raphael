@@ -1358,6 +1358,18 @@ async def test_status_reports_a_failing_key_store_as_an_auth_error(conn, fake_cl
 # --- status -------------------------------------------------------------------------------------
 
 
+async def test_data_history_reports_the_whole_count_and_pages_equal_timestamps(router, conn):
+    await finalize(router, "Synthetic first")
+    await finalize(router, "Synthetic second")
+    conn.execute("UPDATE history SET created_at_ms = 1000")
+    conn.commit()
+    first = await router.call("history.list", {"limit": 1})
+    assert first["total"] == 2
+    second = await router.call("history.list", {"limit": 1, "before_ms": 1000, "before_id": first["items"][0]["id"]})
+    assert len(second["items"]) == 1
+    assert second["items"][0]["text"] != first["items"][0]["text"]
+
+
 async def test_status_without_a_key_or_history(router):
     assert await router.call("status.get", {}) == {
         "openrouter": {

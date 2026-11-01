@@ -132,17 +132,27 @@
 .mc-item .mp-star[aria-pressed="true"] { color: var(--accent-text); }
 .mc-item .mp-star[aria-pressed="true"] .i { fill: currentColor; }
 
-/* The depth of thought: a slider to drag, with each stop named under it. */
-.mc-depth { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--sp-4); row-gap: 2px; }
-.mc-depth-title { grid-row: 1 / span 2; color: var(--text-2); font-size: var(--fs-sm); white-space: nowrap; }
-.mc-track { display: contents; }
-.mc-dots { display: none; }
-.mc-range { --at: 0%; width: 100%; height: 20px; margin: 0; background: transparent; cursor: pointer; appearance: none; }
-.mc-range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--r-pill); background: linear-gradient(to right, var(--text) var(--at), var(--line) var(--at)); }
-.mc-range::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; border: 0; border-radius: var(--r-pill); background: var(--text); appearance: none; transition: transform 120ms ease; }
-.mc-range:active::-webkit-slider-thumb { transform: scale(1.15); }
-.mc-stops { display: flex; grid-column: 2; justify-content: space-between; }
-.mc-stop { padding: 0 2px; color: var(--text-3); font-size: var(--fs-xs); }
-.mc-stop[data-on="true"] { color: var(--text); font-weight: 600; }
-.mc-stop[data-effort=""] { opacity: 0.45; }
+/* The depth as a thick track with a dot at each stop and a round thumb; only the stop it is on is named. */
+.mc-depth { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-2); }
+.mc-depth-title { display: none; }
+/* The fill is a pill of its own that ends just past the thumb, whatever the stop: 28px is the thumb with its margin on both sides. */
+.mc-track { --thumb-room: 28px; position: relative; display: block; border-radius: var(--r-pill); background: var(--hover); }
+.mc-track::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: calc((100% - var(--thumb-room)) * var(--p, 0) + var(--thumb-room)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--text) 42%, transparent); pointer-events: none; }
+.mc-range { position: relative; display: block; height: 28px; padding-inline: 2px; }
+.mc-range::-webkit-slider-runnable-track { height: 28px; border-radius: var(--r-pill); background: transparent; }
+.mc-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: 2px; background: var(--text); box-shadow: var(--pop); }
+/* Nothing to choose: the same ruler, still, with nothing on it. */
+.mc-track[data-empty]::before { display: none; }
+.mc-track[data-empty] .mc-range::-webkit-slider-thumb { visibility: hidden; }
+.mc-dots { position: absolute; inset: 0 12px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.mc-dot { display: block; width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--text-3); }
+.mc-dot[data-dot=""] { opacity: 0.35; }
+.mc-dot[data-on="true"] { visibility: hidden; }
+.mc-stops { display: flex; grid-column: 1; justify-content: center; min-height: 1lh; }
+.mc-stop { display: none; padding: 0; color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.mc-stop[data-on="true"] { display: block; }
+
+.mc-depth { width: min(292px, 100%); margin-inline: auto; font-size: var(--fs-sm); color: var(--text); text-align: center; }
+.mc-range { width: 100%; margin: 0; appearance: none; background: transparent; cursor: pointer; }
+.mc-range::-webkit-slider-thumb { border: 0; border-radius: var(--r-pill); appearance: none; }
 .mc-range:disabled { cursor: default; }

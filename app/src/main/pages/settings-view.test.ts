@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { readFileSync } from "node:fs";
+import { Window } from "happy-dom";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { emptyConnectionsView } from "../connections";
@@ -604,7 +605,7 @@ describe("資料", () => {
   test("is the dictation history (how long it is kept, and a clear), then the conversation with 拉斐爾 (a clear)", () => {
     const html = tab("data");
     expect(groups(html)).toEqual(["聽寫紀錄", "拉斐爾的對話"]);
-    expect(names(html)).toEqual(["保留聽寫紀錄", "所有聽寫紀錄", "所有對話紀錄"]);
+    expect(names(html)).toEqual(["保留聽寫紀錄"]);
     expect(described(html)).toEqual([]);
     expect(html).not.toContain('class="foot"');
   });
@@ -618,13 +619,14 @@ describe("資料", () => {
     expect(rowOf(tab("data", { brain: { ...brain, history_retention_days: 90 } }), "保留聽寫紀錄")).toContain("90 天");
   });
 
-  test("clearing waits in each row's ⋯: nothing on the page says clear (R-UI-56)", () => {
-    const html = tab("data");
-    expect(rowOf(html, "所有聽寫紀錄")).toContain('data-act="data-menu" data-what="dictation"');
-    expect(rowOf(html, "所有對話紀錄")).toContain('data-act="data-menu" data-what="conversation"');
-    expect(html).not.toContain("清除聽寫紀錄");
-    expect(html).not.toContain("清除拉斐爾的對話");
-    expect(html).not.toContain("danger");
+  test("Data shows records and counted clear buttons without a one-action menu", () => {
+    const html = tab("data", { data: { items: [{ id: 1, created_at_ms: NOW, text: "Synthetic dictation" } as never], total: 21, conversations: 3, more: true } });
+    expect(html).toContain("Synthetic dictation");
+    expect(html).toContain('data-act="data-more"');
+    expect(html).toContain('data-act="data-clear" data-what="dictation"');
+    expect(html).toContain("3 段對話");
+    expect(html).not.toContain('data-act="data-menu"');
+    expect(tab("data", { data: { items: [], total: 0, conversations: 0, more: false } })).not.toContain('data-act="data-clear"');
   });
 
   test("has no export: the app cannot save a file where the user chooses yet", () => {
@@ -730,7 +732,7 @@ describe("while the core does not answer", () => {
     for (const id of ["general", "appearance", "dictation", "agent", "usage", "data"] as const) expect(tab(id, down)).toContain("core-note");
     expect(tab("about", down)).not.toContain("core-note");
     expect(rowOf(tab("data", down), "保留聽寫紀錄")).toMatch(/data-k="retention" disabled>/);
-    expect(rowOf(tab("data", down), "所有對話紀錄")).not.toContain("disabled");
+    expect(tab("data", down)).not.toContain('data-act="data-clear"');
     const dictation = tab("dictation", down);
     expect(rowOf(dictation, "你說的語言")).toMatch(/data-k="languages" disabled>/);
     expect(rowOf(dictation, "麥克風")).not.toContain("disabled");
@@ -819,4 +821,31 @@ describe("電腦操作", () => {
     expect(searchSettings("computer use").map((hit) => hit.pane)).toEqual(["agent"]);
     expect(searchSettings("コンピューター").map((hit) => hit.pane)).toEqual(["agent"]);
   });
+});
+
+test("Data uses the shared small Settings group heading beside its delete action", () => {
+  const window = new Window({ settings: { disableCSSFileLoading: true } });
+  try {
+    const css = ["styles.css", "settings-polish.css"].map(file => readFileSync(path.resolve(import.meta.dirname, "..", file), "utf8").replace(/@import[^;]+;/g, "")).join("\n");
+    window.document.head.innerHTML = `<style>${css}</style>`;
+    window.document.body.innerHTML = `<section class="sgroup"><h2>Reference</h2></section><div class="modal-body">${tab("data", {data:{items:[],total:1,conversations:1,more:false}})}</div>`;
+    const reference = window.getComputedStyle(window.document.querySelector('.sgroup > h2')!);
+    const title = window.getComputedStyle(window.document.querySelector('.modal-body h1')!);
+    for (const heading of window.document.querySelectorAll('.data-heading h2')) {
+      const style = window.getComputedStyle(heading);
+      expect(style.fontSize).toBe(reference.fontSize);
+      expect(style.fontWeight).toBe(reference.fontWeight);
+      expect(style.color).toBe(reference.color);
+      expect(parseFloat(style.fontSize)).toBeLessThan(parseFloat(title.fontSize));
+      expect(heading.parentElement!.querySelector('button[data-act="data-clear"]')).not.toBeNull();
+    }
+  } finally { window.happyDOM.abort(); }
+});
+
+test("Data shows local month/day and minute time, adding the year only outside the current year", () => {
+  const html = tab("data", {data:{items:[
+    {id:2,created_at_ms:new Date(2026,9,24,10,0,24).getTime(),text:"Current year"} as never,
+    {id:1,created_at_ms:new Date(2025,9,24,0,5,24).getTime(),text:"Previous year"} as never,
+  ],total:2,conversations:0,more:false}});
+  expect([...html.matchAll(/<time[^>]*>(.*?)<\/time>/g)].map(match=>match[1])).toEqual(["10/24 10:00", "2025/10/24 00:05"]);
 });

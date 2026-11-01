@@ -640,3 +640,9 @@
 .owner-question-form { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .owner-question-form textarea { width: 100%; min-height: 72px; resize: vertical; overflow: hidden; }
 .owner-question-form .cc-actions { flex-wrap: wrap; gap: var(--sp-2); }
+
+.ra-find-count { flex: 0 0 max(13ch, 8em); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ra-find .btn { flex: none; }
+.thread mark[data-find-match] { padding: 0; background: var(--hover); color: var(--text); text-decoration: underline dotted; text-underline-offset: 2px; }
+.thread mark.is-current { outline: 2px solid var(--text); outline-offset: 1px; text-decoration: underline; text-decoration-thickness: 2px; background: var(--text); color: var(--content); }
+.chat-message.is-search-expanded .message-text { max-height: none; -webkit-line-clamp: unset; mask-image: none; }

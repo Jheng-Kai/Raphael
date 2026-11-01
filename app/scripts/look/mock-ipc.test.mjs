@@ -5,6 +5,15 @@ import { checkRendered } from "./checks.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("./fixture.json", import.meta.url), "utf8"));
 describe("shared look IPC boundary", () => {
+  it("records caption calls once without changing the fixture conversation", async () => {
+    const target = {}, state = installMock(fixture, {}, target);
+    for (const action of ['minimize','toggle_maximize','close','start_dragging']) {
+      await expect(target.__TAURI_INTERNALS__.invoke(`plugin:window|${action}`)).resolves.toBeUndefined();
+      expect(state.calls.filter(call=>call.command===`plugin:window|${action}`)).toHaveLength(1);
+    }
+    expect(state.errors).toEqual([]);
+    expect(state.data.turns).toEqual(fixture.turns);
+  });
   it.each(["http", "stdio", "secret", "room"])("keeps the MCP %s scene card separate from its variant selector", async variant => {
     const target = {}; installMock(fixture, { fixture: { mcpProposal: variant } }, target);
     const history = await target.__TAURI_INTERNALS__.invoke("core_call", { method: "agent.history.list", params: { member_id: 1, conversation_id: 11 } });

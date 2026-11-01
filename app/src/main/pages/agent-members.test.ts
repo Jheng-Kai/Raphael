@@ -693,7 +693,6 @@ describe("a member's thread", () => {
 
   test("the search looks through the open thread alone", async () => {
     vi.useFakeTimers();
-    api.agentHistorySearch.mockResolvedValue({ turns: [] });
     mount();
     await vi.runOnlyPendingTimersAsync();
     $(".mb-col [data-member=\"3\"]").click();
@@ -703,7 +702,14 @@ describe("a member's thread", () => {
     input.value = "單字";
     input.dispatchEvent(new Event("input"));
     await vi.advanceTimersByTimeAsync(250);
-    expect(api.agentHistorySearch).toHaveBeenCalledWith("單字", 3);
+    expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({limit:200,member_id:3}));
+    const count = document.querySelector('.ra-find-count')!.textContent;
+    expect(count).toMatch(/^\d+\/\d+$/);
+    expect(document.querySelectorAll('mark.is-current')).toHaveLength(1);
+    expect(document.querySelector('.thread')!.textContent).not.toContain('回答 2');
+    await pick(4);
+    expect(document.querySelector('mark')).toBeNull();
+    expect(document.querySelector<HTMLElement>('.ra-find')!.hidden).toBe(true);
   });
 
   test("back to Raphael: his own thread again, and his composer", async () => {

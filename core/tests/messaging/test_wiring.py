@@ -130,7 +130,8 @@ async def test_stop_from_a_chat_stops_that_chats_tasks_and_turn_only(app, monkey
     assert stopped == [("agent", "telegram:42"), ("worker", "telegram:42")]
 
 
-async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized(app, monkeypatch):
+@pytest.mark.parametrize("room", [False, True])
+async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized(app, monkeypatch, room):
     import numpy as np
 
     from raphael_core.messaging import voice
@@ -157,6 +158,17 @@ async def test_a_voice_message_is_heard_with_the_dictation_engine_and_normalized
     app._kit = __import__("concurrent.futures").futures.Future()
     app._kit.set_result(SimpleNamespace(Segmenter=Segmenter))
     await app.call("dictionary.add", {"word": "Raphael"})
-    text = await app._transcribe_from_messaging(b"opus", "en")
+    calls = []
+    original = app.call
+
+    async def call(method, params):
+        calls.append((method, params))
+        return await original(method, params)
+
+    monkeypatch.setattr(app, "call", call)
+    text = await (app._transcribe_room(b"opus", "en") if room else app._transcribe_from_messaging(b"opus", "en"))
     assert text == "你好"
     assert heard == [(1600, ["Raphael"])]
+    if room:
+        assert any(method == "brain.finalize_dictation" and params["purpose"] == "agent" for method, params in calls)
+        assert (await app.call("history.list", {}))["items"] == []

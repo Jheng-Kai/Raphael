@@ -2,6 +2,16 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.polishData) data.history = Array.from({length:25}, (_,i)=>({...data.history[0], id:i+1, created_at_ms:data.now+i*1000, text:`Synthetic dictation ${i+1}` + (i===24 ? " Example text for checking the two-line preview. ".repeat(30) : "")})).reverse();
+  if (variant.polishSearch) {
+    data.turns = [0,1].flatMap(member=>Array.from({length:205},(_,i)=>({...structuredClone(data.turns.find(t=>(t.member_id??0)===member && t.conversation_id!==4)), id:1000+member*1000+i, question:`Synthetic ${i} needle`, text:'needle and needle', messages:[], attachments:[], steps:[], session_id:`polish-${member}-${i}`, status:'done', member_id:member})));
+    data.messages = Array.from({length:105},(_,i)=>({...structuredClone(data.messages[0]), id:3000+i, room_id:1, text:`Synthetic ${i} needle and needle`, status:'done'}));
+  }
+  if (variant.polishVoice) {
+    Object.defineProperty(target.navigator, 'mediaDevices', {configurable:true,value:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})}});
+    target.MediaRecorder = class { state='inactive'; start(){this.state='recording';} stop(){this.state='inactive';this.onstop?.();} };
+    target.AudioContext = class { async decodeAudioData(){return {numberOfChannels:1,sampleRate:16000,getChannelData:()=>new Float32Array([0])};} async close(){} };
+  }
   if (variant.missingSearch) data.serviceStatus.search.options.push({id: "searxng", needs_key: false, has_key: false, key_optional: false});
   if (variant.missingVision) data.serviceStatus.vision.supports_images = false;
   if (variant.missingModelList) data.clis = data.clis.map(cli => cli.id === "codex" ? {...cli, installed: true, available: true, models: []} : cli);
@@ -532,7 +542,7 @@ export function installMock(fixture, config = {}, target = window) {
       case "status.check_openrouter": data.status.openrouter.state = "ok"; return data.status.openrouter;
       case "secrets.status": return { has_key: !variant.problem && !keyRemoved };
       case "stats.summary": return data.stats;
-      case "history.list": return { items: data.history.filter(item => (!p.query || item.text.includes(p.query)) && (!p.after_ms || item.created_at_ms >= p.after_ms) && (!p.before_ms || item.created_at_ms < p.before_ms)) };
+      case "history.list": return { total:data.history.length, items: data.history.filter(item => (!p.query || item.text.includes(p.query)) && (!p.after_ms || item.created_at_ms >= p.after_ms) && (!p.before_ms || item.created_at_ms < p.before_ms || (item.created_at_ms === p.before_ms && item.id < p.before_id))).slice(0,p.limit??50) };
       case "history.delete": data.history = data.history.filter(item => item.id !== p.id); return { deleted: true };
       case "dictionary.list": return { entries: data.dictionary };
       case "dictionary.add": { const entry = { ...p, id: nextId(data.dictionary), misheard: [], source: "manual", created_at_ms: data.now }; data.dictionary.push(entry); return { entry }; }
@@ -622,13 +632,13 @@ export function installMock(fixture, config = {}, target = window) {
       case "groups.create": { const group = { ...p, id: nextId(data.groups), position: data.groups.length, sources: [] }; data.groups.push(group); notify("MembersChanged", { member_id: 0 }); return { group }; }
       case "groups.update": { const group = update(data.groups, p.id, p); notify("MembersChanged", { member_id: 0 }); return { group }; }
       case "groups.delete": data.groups = data.groups.filter(item => item.id !== p.id); notify("MembersChanged", { member_id: 0 }); return { deleted: true };
-      case "conversations.list": mainConversation(p.member_id ?? 0); return { conversations: byMember(data.conversations, p) };
+      case "conversations.list": mainConversation(p.member_id ?? 0); return { conversations: byMember(data.conversations, p).map(c=>({...c,turn_count:data.turns.filter(t=>t.conversation_id===c.id).length})) };
       case "conversations.create": { mainConversation(p.member_id ?? 0); const conversation = { id: nextId(data.conversations), member_id: p.member_id ?? 0, title: p.title ?? "", is_default: false, kind: "standard", created_at_ms: data.now, updated_at_ms: data.now }; data.conversations.push(conversation); return { conversation }; }
       case "conversations.rename": update(data.conversations, p.id, { title: p.title }); return {};
       case "conversations.clear": { const member = data.conversations.find(item => item.id === p.id).member_id; data.turns = data.turns.filter(item => item.conversation_id !== p.id); notify("ConversationsChanged", { member_id: member }); notify("AgentTurn", { turn_id: 0, member_id: member }); return { cleared: 1 }; }
       case "conversations.delete": { const gone = data.conversations.find(item => item.id === p.id); data.turns = data.turns.filter(item => item.conversation_id !== p.id); data.conversations = data.conversations.filter(item => item.id !== p.id); if (gone) mainConversation(gone.member_id); return { deleted: 1 }; }
       case "agent.history.list": {
-        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).slice().reverse() };
+        return { turns: byMember(data.turns, p).filter(turn => p.conversation_id === undefined || turn.conversation_id === p.conversation_id).filter(turn=>!p.before_id||turn.id<p.before_id).sort((a,b)=>b.id-a.id).slice(0,p.limit??50) };
       }
       // What the owner typed, newest first (the core's rule: typed turns of the private conversations, repeats in a row once); a scene may state it.
       case "agent.history.sent": {
@@ -715,7 +725,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { ...room, preview: latest?.text.slice(0, 300) ?? "", last_at: latest?.created ?? null, waiting: !!variant.roomQuestion && room.id === 1,
           unread: messages.some(message => message.member_id != null && message.id > (room.read_message_id ?? 0)) };
       }) };
-      case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
+      case "rooms.messages": return { messages: data.messages.filter(item => item.room_id === p.room_id && (!p.before || item.id < p.before)).sort((a,b)=>a.id-b.id).slice(-100), exchange: data.roomExchanges.filter(item => item.room_id === p.room_id).at(-1) ?? null, handoffs: data.roomHandoffs };
       case "rooms.create": { const room = { ...p, member_ids: p.is_team ? data.members.map(m => m.id) : p.member_ids, id: nextId(data.rooms), created: data.now, group_id: p.group_id ?? null, is_team: Number(p.is_team ?? false), default_responder: p.default_responder ?? "auto" }; data.rooms.push(room); return { room }; }
       case "rooms.update": {
         const room = data.rooms.find(room => room.id === p.room_id), previous = room.read_message_id ?? 0;
@@ -1006,8 +1016,8 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "messaging.telegram.remove_user": data.messaging.allowed = data.messaging.allowed.filter(user => user.user_id !== p.user_id); return data.messaging;
       case "secrets.clear_openrouter_key": keyRemoved = true; return {};
-      case "history.clear": return { deleted: 0 };
-      case "agent.history.clear": return { deleted: 0 };
+      case "history.clear": { const deleted=data.history.length; data.history=[]; return {deleted}; }
+      case "agent.history.clear": { const before=data.turns.length;data.turns=data.turns.filter(t=>t.member_id!==(p.member_id??0));return {deleted:before-data.turns.length}; }
       default: return unsupported(method);
     }
   }
@@ -1165,7 +1175,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "schedule_keep_awake_set") return data.awake = args.enabled;
       if (["open_external_url", "open_link"].includes(command)) { state.urls.push(args.url); return; }
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
-      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:webview|set_webview_zoom"].includes(command)) return;
+      if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);
     },
   };

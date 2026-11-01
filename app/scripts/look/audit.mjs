@@ -43,7 +43,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
   const destroyMayStand = '[role="menu"], .menu, .cs-dialog, .mb-dialog, .lm-confirm, .composer, .draft-panel, .mp-star';
   const destroysInTheOpen = button => {
     const name = (button.getAttribute('aria-label') || button.textContent).trim();
-    return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand);
+    // R-MP-02 names these two counted, confirmed Settings actions explicitly.
+    const dataHeading = button.matches('.modal-body .data-section > .data-heading > button[data-act="data-clear"]:is([data-what="dictation"], [data-what="conversation"])');
+    return name.length <= 24 && destroyWords.test(name) && !button.closest(destroyMayStand) && !dataHeading;
   };
   const outsideViewport = [], horizontalOverflow = [], missingI18nKeys = [], nativeControls = [], invalidDurations = [], mixedLanguage = [], rawMarkdown = [], productRules = [];
   const markdownPattern = /(?:^|\r?\n)[\t ]*(?:#{1,6}(?:[\t ]|$)|-\s+\[[ xX]\])|\*\*[^*\r\n]+\*\*|`{3,}/;
@@ -182,8 +184,9 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     checkMarkdown(element);
     if (element.matches('.work-time, .work-toggle, .step-ms') && /\b(?:NaN|Infinity)\b/.test(element.textContent)) invalidDurations.push(description);
     if (element.matches('select,input[type="time"]')) nativeControls.push(description);
-    // Textarea values are user data, like input.value; their labels and placeholders remain UI copy.
-    const strings = element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li") ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
+    // Owner-authored text is data; labels, titles and placeholders remain UI copy.
+    const authored = element.matches(".modal-body .data-record > .data-record-text, .thread :is(.message-text, .message-code code, .message-table td, .message-table th) mark[data-find-match]") || element.closest("textarea, .checkpoint summary, .checkpoint pre code, .checkpoint-uncovered li");
+    const strings = authored ? [] : [...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent);
     for (const attribute of ["aria-label", "title", "placeholder"]) if (element.hasAttribute(attribute)) strings.push(element.getAttribute(attribute));
     for (const value of strings) for (const match of value.matchAll(keyPattern)) {
       if (!namespaces.includes(match[1].split(".")[0]) || seenKeys.has(match[1])) continue;

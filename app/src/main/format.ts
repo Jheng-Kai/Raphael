@@ -22,6 +22,13 @@ export function formatClock(ms: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** A short local timestamp, with the year only outside the current year. */
+export function formatShortDateTime(ms: number, nowMs = Date.now()): string {
+  const date = new Date(ms);
+  const year = date.getFullYear() === new Date(nowMs).getFullYear() ? "" : `${date.getFullYear()}/`;
+  return `${year}${date.getMonth() + 1}/${date.getDate()} ${formatClock(ms)}`;
+}
+
 /** A complete local calendar date in the UI language, independent of the OS locale. */
 export function formatDate(value: string | number): string {
   const date = new Date(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);

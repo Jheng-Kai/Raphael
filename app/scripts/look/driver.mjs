@@ -127,6 +127,75 @@ export async function perform(page, step, evidenceDirectory) {
     });
   }, step);
   switch (step.action) {
+    case 'polish-caption': {
+      const dialog = await page.$('.mb-dialog') ?? await page.$('.modal-scrim:not([hidden]) .modal');
+      const before = await page.evaluate(() => window.__look.calls.length);
+      for (const action of ['minimize', 'maximize', 'close']) {
+        const selector = `[data-window-action="${action}"]`;
+        if (!await page.$eval(selector, el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption is covered');
+        await click(selector);
+      }
+      if (!await page.$eval('[data-window-drag]', el => { const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)); })) throw new Error('caption drag area is covered');
+      await click('[data-window-drag]');
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 50)));
+      const result = await page.evaluate(before => {
+        const calls = window.__look.calls.slice(before).map(c=>c.command);
+        const once = method => calls.filter(c=>c===`plugin:window|${method}`).length===1;
+        window.__polishCaption = ['minimize','toggle_maximize','close','start_dragging'].every(once);
+        return window.__polishCaption;
+      }, before);
+      if (!result || !await dialog.evaluate(el=>el.isConnected && !el.closest('[hidden]'))) throw new Error('caption action was intercepted or dismissed the dialog');
+      await page.mouse.click(4, 100);
+      await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
+      await dialog.dispose();
+      if (step.kind === 'settings') await click('#nav [data-go="settings"]');
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="edit"]'); }
+      else await click('[data-act="data-clear"][data-what="dictation"]');
+      await page.evaluate(() => { window.__polishCaptionOutside = true; });
+      break;
+    }
+    case 'polish-search': {
+      const bar = '.ra-find:not([hidden])';
+      const value = () => page.$eval(`${bar} .ra-find-count`, el=>el.textContent);
+      const expectCount = async expected => {
+        await page.waitForFunction(expected => [...document.querySelectorAll('.ra-find:not([hidden]) .ra-find-count')].some(el=>el.textContent===expected), {timeout:6000}, expected);
+      };
+      await expectCount(`${step.total}/${step.total}`);
+      const field = await visible(`${bar} .ra-find-input`);
+      const geometry = () => page.$$eval(`${bar} button`, buttons=>buttons.map(el=>{const b=el.getBoundingClientRect();return [b.x,b.y,b.width,b.height];}));
+      const before = await geometry();
+      await field.focus(); await page.keyboard.press('Enter'); await expectCount(`1/${step.total}`);
+      await page.keyboard.down('Shift'); await page.keyboard.press('Enter'); await page.keyboard.up('Shift'); await expectCount(`${step.total}/${step.total}`);
+      await click(`${bar} [data-find="previous"]`); await expectCount(`${step.total-1}/${step.total}`);
+      await click(`${bar} [data-find="next"]`); await expectCount(`${step.total}/${step.total}`);
+      const offset = () => page.evaluate(() => {
+        const mark=document.querySelector('mark.is-current'); return mark?.closest('.ra-scroll, .au-room-scroll')?.scrollTop;
+      });
+      const top = await offset();
+      await field.focus(); await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('needl');
+      await expectCount(`${step.total}/${step.total}`);
+      if (await offset() !== top) throw new Error('typing moved the conversation');
+      await page.keyboard.down('Control'); await page.keyboard.press('a'); await page.keyboard.up('Control'); await page.keyboard.type('absent-word');
+      await page.waitForFunction(() => !document.querySelector('mark[data-find-match]') && [...document.querySelectorAll('.ra-find:not([hidden]) .ra-find-count')].some(el=>el.textContent && !el.textContent.includes('/') && !el.textContent.includes('…')), {timeout:6000});
+      if (!await page.$eval(`${bar} .ra-find-count`, el=>el.scrollWidth<=el.clientWidth+1)) throw new Error('no-match words are clipped');
+      const after = await geometry();
+      if (JSON.stringify(before)!==JSON.stringify(after)) throw new Error('search controls moved as the count changed');
+      await page.keyboard.press('Escape');
+      if (await page.evaluate(() => !!document.querySelector('.ra-find:not([hidden])') || !!document.querySelector('mark[data-find-match]'))) throw new Error('Escape left search highlights');
+      const reopen = await visible(step.total===210 ? '[data-room-search]' : '.page-agent [data-act="search"]'); await reopen.click(); await reopen.dispose();
+      await field.focus(); await page.keyboard.type('needle'); await expectCount(`${step.total}/${step.total}`);
+      const anchor = await page.evaluateHandle(() => document.querySelector('mark.is-current').closest('.chat-message'));
+      const closeTop = await anchor.evaluate(el=>el.getBoundingClientRect().top);
+      await click(`${bar} [data-find="close"]`);
+      const closedTop = await anchor.evaluate(el=>el.getBoundingClientRect().top); await anchor.dispose();
+      if (Math.abs(closeTop-closedTop)>1 || await page.$('mark[data-find-match]')) throw new Error('closing changed the location or left highlights');
+      await click(step.total===210 ? '[data-room-search]' : '.page-agent [data-act="search"]');
+      await field.focus(); await page.keyboard.type('needle'); await expectCount(`${step.total}/${step.total}`);
+      await field.dispose();
+      await page.evaluate(total=>{window.__polishSearch={total,wrap:true,stable:true,noMatch:true,closedInPlace:true};},step.total);
+      if (await value()!==`${step.total}/${step.total}`) throw new Error('newest word was not restored');
+      break;
+    }
     case "viewport": await page.setViewport({width:step.width,height:step.height,deviceScaleFactor:1}); break;
     case "window-control": {
       const selector = `[data-window-action="${step.control}"]`;

@@ -124,7 +124,7 @@ input::placeholder { color: var(--text-3); opacity: 1; }
 svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------- window: sidebar and content ---------- */
-.window-chrome { position: fixed; inset: 0 0 auto; z-index: 90; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
+.window-chrome { position: fixed; inset: 0 0 auto; z-index: 150; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
 :root[data-window-layout="main"] .window-chrome { left: var(--sidebar-width); border-top-left-radius: var(--r-lg); border-top: 0; border-left: 0; }
 :root[data-window-modal="true"] .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
@@ -142,7 +142,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .window-restore-glyph { display: none; }
 :root[data-window-maximized="true"] .window-maximize-glyph { display: none; }
 :root[data-window-maximized="true"] .window-restore-glyph { display: block; }
-.window-resize { position: fixed; z-index: 100; }
+.window-resize { position: fixed; z-index: 160; }
 .resize-n, .resize-s { left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
 .resize-n { top: 0; } .resize-s { bottom: 0; }
 .resize-e, .resize-w { top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
@@ -423,7 +423,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .modal-x { position: absolute; top: 12px; right: 12px; }
 /* A group of settings: a short name, then its rows on one card with hairlines between them. */
 .sgroup { margin-top: var(--sp-5); }
-.sgroup > h2 { margin: 0 0 var(--sp-2) var(--sp-1); font: 600 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
+.sgroup > h2 { margin: 0 0 var(--sp-2) var(--sp-1); }
+.sgroup > h2, .sgroup > .data-heading > h2 { font: 600 var(--fs-sm)/1.4 var(--ui); color: var(--text-2); }
 .slist { background: transparent; border: 0; border-radius: 0; --slist-pad: 18px; padding: 0 var(--slist-pad); }
 .slist > .row { min-height: 60px; padding: var(--sp-3) 0; flex-wrap: wrap; row-gap: var(--sp-2); }
 .slist > .row + .row::before, .slist > .note + .row::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--line); }

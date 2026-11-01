@@ -34,6 +34,7 @@ import { noticeHTML } from "../missing";
 import { conversationTitle, conversationChange, type ConversationInfo } from "../conversation-list";
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
+import { mountConversationFind } from "../conversation-find";
 import { confirmDelete } from "../member-dialogs";
 import { createAttachmentMedia } from "../attachment-media";
 import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
@@ -59,7 +60,7 @@ import { RAPHAEL_ID, faceHTML, memberPlaceholder } from "../members";
 import { createMembers } from "../members-shell";
 import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
-import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, turnMatches, visibleTurn } from "../conversation";
+import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
 import { openConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
@@ -111,10 +112,6 @@ const BOTTOM_SLACK_PX = 80;
 const TOP_SLACK_PX = 160;
 /** Events that come together (a task's step and its turn) bring the turns once. */
 const REFRESH_DELAY_MS = 150;
-/** The search waits for the typing to pause this long. */
-const SEARCH_DELAY_MS = 200;
-/** The longest words the search takes (the core's and the app's limit for `agent.history.search`). */
-const SEARCH_MAX_CHARS = 200;
 /** The most a typed question may hold (the app's own limit is the same). */
 export const TYPED_MAX_CHARS = 100_000;
 /** The composer grows with its text up to this many lines, then scrolls. */
@@ -235,11 +232,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     iconButton("monitor", t("card.pcTitle"), ' data-act="computer" hidden', "ra-tool") +
     iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
     `</div></div>` +
-    `<div class="ra-find" hidden><span class="ra-find-ic">${ico("search")}</span>` +
-    `<input type="search" class="ra-find-input" autocomplete="off" spellcheck="false" maxlength="${SEARCH_MAX_CHARS}">` +
-    `<span class="ra-find-count num" aria-live="polite"></span>` +
-    iconButton("x", t("agent.searchClose"), ' data-act="search-close"', "ra-tool") +
-    `</div>` +
+    `<div class="ra-find" hidden></div>` +
     `<div class="ra-stage">` +
     `<div class="ra-scroll"><div class="ra-col"><div class="ra-older" hidden></div><ol class="thread"></ol><p class="ra-none" hidden></p></div></div>` +
     `<div class="ra-wait" hidden></div>` +
@@ -251,8 +244,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
-  const findInput = el.querySelector<HTMLInputElement>(".ra-find-input")!;
-  const findCount = el.querySelector<HTMLElement>(".ra-find-count")!;
+
   const stage = el.querySelector<HTMLElement>(".ra-stage")!;
   const scroller = el.querySelector<HTMLElement>(".ra-scroll")!;
   const older = el.querySelector<HTMLElement>(".ra-older")!;
@@ -535,12 +527,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let askingMember: number | null = null;
   /** The thread of the question that waits (see `setQuestion`). */
   let questionOwner = RAPHAEL_ID;
-  /** The search: open or not, its words, and what the core found (null: the page looks itself). */
   let searching = false;
-  let query = "";
-  let found: AgentTurn[] | null = null;
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
-  let searches = 0;
   /** What each line of the thread was drawn from, so that a line whose HTML is the same stays as it is. */
   const drawnHTML = new WeakMap<Element, string>();
   const pagesHost = mountPages(thread, { send: text => sendFromPage(text), answer: (id, text) => answerOwnerPage(thread, id, text, () => { void load(false); }) });
@@ -561,7 +548,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const look = (): TurnLook => {
     const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), query: searching ? query : "", memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
     if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }) };
@@ -639,13 +626,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
-      [find.querySelector<HTMLElement>('[data-act="search-close"]')!, t("agent.searchClose")],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    findInput.placeholder = t("agent.search");
-    findInput.setAttribute("aria-label", t("agent.search"));
     hi.textContent = emptyLine();
     drawAskLabels();
     drawConversation();
@@ -763,20 +747,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** One line of the thread as HTML, with the key it keeps across draws. */
   function lines(): { key: string; html: string; turnId?: number }[] {
-    const base = searching && query.trim() !== "" ? (found ?? own().filter((turn) => turnMatches(turn, query))) : turns;
     const shape = look();
-    const out = threadItems(base, state.nowMs).map((item) =>
+    const out = threadItems(turns, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
         : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
     );
-    if (!(searching && query.trim() !== "")) {
-      // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
-      const today = dayLabel(state.nowMs, state.nowMs);
-      if ((outgoing.some(belongs) || hearingBelongs()) && !out.some(line => line.key === `day:${today}`)) out.push({ key: `day:${today}`, html: dayHTML(today) });
-      for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
-      if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
-    }
+    // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
+    const today = dayLabel(state.nowMs, state.nowMs);
+    if ((outgoing.some(belongs) || hearingBelongs()) && !out.some(line => line.key === `day:${today}`)) out.push({ key: `day:${today}`, html: dayHTML(today) });
+    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
+    if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     return out;
   }
 
@@ -873,24 +854,22 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const wasEmpty = scroller.hidden;
     empty.hidden = true;
     scroller.hidden = dock.hidden = false;
-    const keepUp = follow || wasEmpty || atBottom();
+    const keepUp = !searching && (follow || wasEmpty || atBottom());
     drawDock();
     state.nowMs = Date.now();
     noteTaskEnds(shown, state);
     preserveRichScroll(scroller, drawThread);
     drawDock();
     markSeen(shown, state);
-    const searchingNow = searching && query.trim() !== "";
-    none.hidden = !(searchingNow && thread.querySelector(".tn") === null);
-    none.textContent = t("agent.noMatch");
-    findCount.textContent = searchingNow ? String(thread.querySelectorAll(".tn:not(.is-pending)").length) : "";
+    none.hidden = true;
+    finder.refresh();
     older.hidden = !loadingEarlier;
     older.innerHTML = loadingEarlier ? loadingHTML() : "";
     if (keepUp) scroller.scrollTop = scroller.scrollHeight;
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
-    if (canLoadEarlier && !loadingEarlier && !searchingNow && scroller.scrollHeight <= scroller.clientHeight) void load(true);
+    if (canLoadEarlier && !loadingEarlier && !searching && scroller.scrollHeight <= scroller.clientHeight) void load(true);
   }
 
   /** The time since a task began, each second, in the lines that show it. */
@@ -1324,54 +1303,26 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (armed && onButton) void answer(true);
   }
 
-  // ---------- the search ----------
-
-  function openSearch(): void {
-    pacing.flush();
-    searching = true;
-    find.hidden = false;
-    searchButton.setAttribute("aria-expanded", "true");
-    findInput.focus();
-    render(true);
-  }
-
-  function closeSearch(draw = true): void {
-    if (!searching) return;
-    searching = false;
-    query = "";
-    found = null;
-    findInput.value = "";
-    find.hidden = true;
-    searchButton.setAttribute("aria-expanded", "false");
-    clearTimeout(searchTimer);
-    if (draw) {
-      render(true);
-      searchButton.focus();
+  const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller, changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
+    const member = memberId(), conversation = conversationId();
+    const gathered: AgentTurn[] = [];
+    let before: number | undefined;
+    for (;;) {
+      const result = await api.agentHistoryList({member_id:member, ...(conversation !== undefined ? {conversation_id:conversation} : {}), limit:200, ...(before !== undefined ? {before_id:before} : {})});
+      if (!current() || member !== memberId() || conversation !== conversationId()) return;
+      gathered.push(...result.turns);
+      const next = Math.min(...result.turns.map(turn => turn.id));
+      if (result.turns.length < 200 || next === before) break;
+      before = next;
     }
-  }
+    const height = scroller.scrollHeight, top = scroller.scrollTop;
+    turns = [...new Map([...gathered, ...turns].map(turn => [turn.id,turn])).values()].sort((a,b) => a.id-b.id);
+    canLoadEarlier = false;
+    render();
+    scroller.scrollTop = top + scroller.scrollHeight - height;
+  }});
 
-  /**
-   * Looks for the words in the whole history (`agent.history.search`): the turns found show in the
-   * thread under their days, however far behind the loaded ones they are. When the core cannot
-   * answer this time (it is starting again, say), the loaded turns are looked through instead, and
-   * the next search asks the core again.
-   */
-  async function runSearch(): Promise<void> {
-    const mine = ++searches;
-    const words = query.trim();
-    found = null;
-    if (words !== "") {
-      try {
-        const member = memberId();
-        const turnsFound = (conversationId() !== undefined ? await api.agentHistorySearch(words, member, conversationId()) : member === RAPHAEL_ID ? await api.agentHistorySearch(words) : await api.agentHistorySearch(words, member)).turns;
-        if (mine !== searches) return;
-        found = turnsFound;
-      } catch {
-        if (mine !== searches) return;
-      }
-    }
-    render(true);
-  }
+  function closeSearch(_draw = true): void { finder.close(false); searching = false; }
 
   /** The conversation is gone in the core: the page drops every turn it loaded and shows the empty page. */
   function forgetTurns(): void {
@@ -1387,6 +1338,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // Settings › 資料 emptied the conversation while the page had it loaded (under the panel, or
   // before it was left): a load already under way brings nothing back, and nothing waits to be cleared.
   app.cleared.on("conversation", () => {
+    if (memberId() !== RAPHAEL_ID) return;
     loads++;
     pending = false;
     loadingEarlier = false;
@@ -1399,8 +1351,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Opens or closes what a turn did, where it is: the box slides, nothing else is drawn again. */
   function toggleSteps(button: HTMLElement): void {
     const id = Number(button.closest<HTMLElement>(".tn")?.dataset.id);
-    // A turn the search found may be one that is not loaded.
-    const turn = turns.find((candidate) => candidate.id === id) ?? found?.find((candidate) => candidate.id === id);
+    const turn = turns.find((candidate) => candidate.id === id);
     const box = button.closest<HTMLElement>(".steps");
     const steps = box?.querySelector<HTMLElement>(".steps-body");
     if (!turn || !box || !steps) return;
@@ -1451,7 +1402,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     attachmentMedia.reset();
     resetDrop();
     turns = [];
-    found = null;
     canLoadEarlier = false;
     loadingEarlier = false;
     pending = false;
@@ -1570,7 +1520,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   function messageSource(control: HTMLElement): { turn: AgentTurn; key: string; text: string; markdown: boolean } | null {
     const id = Number(control.closest<HTMLElement>(".tn[data-id]")?.dataset.id);
-    const turn = turns.find(item => item.id === id) ?? found?.find(item => item.id === id);
+    const turn = turns.find(item => item.id === id);
     const key = control.closest<HTMLElement>("[data-message]")?.dataset.message;
     if (!turn || !key) return null;
     if (key === "question") return { turn, key, text: turn.question, markdown: false };
@@ -1759,7 +1709,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       retracted.add(session);
       outgoing = outgoing.filter(item => item.requestId !== session);
       turns = turns.filter(item => item.session_id !== session && item.id !== turn?.id);
-      if (found) found = found.filter(item => item.session_id !== session && item.id !== turn?.id);
       if (questionOwner === member && (turn?.status === "confirm" || pending)) setQuestion(null);
       if (askingMember === member) askingMember = null;
       if (memberId() === member && conversationId() === sentConversation) { render(); restoreDraft(draft); }
@@ -1909,11 +1858,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         openRaphaelSettings(app);
         break;
       case "search":
-        if (searching) closeSearch();
-        else openSearch();
-        break;
       case "search-close":
-        closeSearch();
         break;
       case "steps":
         toggleSteps(act);
@@ -2120,21 +2065,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (e.key === "Enter" || e.key === " ") holdEnd(true);
   });
 
-  findInput.addEventListener("input", () => {
-    query = findInput.value;
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void runSearch(), SEARCH_DELAY_MS);
-  });
-  findInput.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      closeSearch();
-    }
-  });
-
   scroller.addEventListener("scroll", () => {
-    if (scroller.scrollTop < TOP_SLACK_PX && canLoadEarlier && !loadingEarlier && !(searching && query.trim() !== "")) void load(true);
+    if (scroller.scrollTop < TOP_SLACK_PX && canLoadEarlier && !loadingEarlier && !searching) void load(true);
   });
 
   app.onEvent((event) => {

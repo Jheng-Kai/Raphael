@@ -3,12 +3,14 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { AppContext, MainEvent, ModelCatalog, SettingsPane } from "../types";
 import { setLocale, t } from "../i18n";
+import { Cleared } from "../cleared";
 import * as analytics from "../usage-analytics";
 import type { UsageRequest } from "../usage-analytics-types";
 
 const api = vi.hoisted(() => ({
   settingsGet: vi.fn(), settingsSet: vi.fn(), secretsStatus: vi.fn(), statusGet: vi.fn(), audioDevices: vi.fn(),
   desktopStatus: vi.fn(),
+  historyList: vi.fn(), historyClear: vi.fn(), agentHistoryClear: vi.fn(), core: vi.fn(),
   keyboardHasAltgr: vi.fn(), languagesList: vi.fn(), modelsCatalog: vi.fn(), modelsLocal: vi.fn(), hotkeysPause: vi.fn(), audioMonitor: vi.fn(),
   providersKinds: vi.fn(), providersList: vi.fn(), providersModels: vi.fn(), providersAdd: vi.fn(), servicesStatus: vi.fn(), usageAnalytics: vi.fn(),
   brainsCli: vi.fn(), brainsCliLogin: vi.fn(), brainsCliDisconnect: vi.fn(), openExternalUrl: vi.fn(),
@@ -42,12 +44,58 @@ async function mount(open: SettingsPane = "models") {
     device: () => ({ dictation_keys: ["AltRight"], agent_keys: ["AltRight+Space"], ui_language: "en", dictation_mode: "hold" }),
     onEvent: (handler: (event: MainEvent) => void) => { listeners.add(handler); return () => { listeners.delete(handler); }; },
     refreshDevice: async () => {}, undo: { begin: vi.fn() },
-    closeSettings,
+    closeSettings, cleared: new Cleared(),
   } as unknown as AppContext);
   document.body.append(page.el); page.el.hidden = false;
   await page.show(open); await flush();
 }
 const click = (selector: string) => { const button = document.querySelector<HTMLButtonElement>(selector); expect(button, selector).not.toBeNull(); button!.click(); };
+
+test("opening Settings and navigating back to Models starts at the top and a redraw preserves its position", async () => {
+  await mount();
+  const body = page.el.querySelector<HTMLElement>('.modal-body')!;
+  body.scrollTop = 210;
+  click('[data-pane="about"]'); click('[data-pane="models"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 170;
+  send({type:'SettingsChanged'}); await flush();
+  expect(body.scrollTop).toBe(170);
+  page.hide(); await page.show('models'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 190;
+  click('[data-models-tab="usage"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+  body.scrollTop = 140;
+  click('[data-models-tab="models"]'); await flush();
+  expect(body.scrollTop).toBe(0);
+});
+
+test("Data deletes the counted records immediately after a real confirmation and retains them on failure", async () => {
+  api.historyList.mockResolvedValue({items:[{id:1,created_at_ms:1000,text:'Synthetic record'}],total:1});
+  api.core.mockResolvedValue({conversations:[{turn_count:2}]});
+  const said = vi.spyOn(Cleared.prototype, 'say');
+  api.historyClear.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({deleted:1});
+  await mount('data'); await flush();
+  expect(page.el.querySelector('.data-record')?.textContent).toContain('Synthetic record');
+  click('[data-act="data-clear"][data-what="dictation"]');
+  expect(document.querySelector('.mb-confirm')?.textContent).toContain('1 dictation records');
+  click('.mb-confirm [data-dlg="delete"]'); await flush();
+  expect(page.el.querySelector('.data-record')).not.toBeNull();
+  expect(page.el.querySelector('[role="alert"]')).not.toBeNull();
+  expect(said).not.toHaveBeenCalled();
+  let emptied!: (result: {deleted:number}) => void;
+  api.historyClear.mockImplementationOnce(() => new Promise(resolve => { emptied = resolve; }));
+  click('[data-act="data-clear"][data-what="dictation"]');click('.mb-confirm [data-dlg="delete"]'); await flush();
+  expect(said).not.toHaveBeenCalled();
+  expect(page.el.querySelector('.data-record')).not.toBeNull();
+  emptied({deleted:1}); await flush();
+  expect(said).toHaveBeenCalledExactlyOnceWith('dictation');
+  expect(api.historyClear).toHaveBeenCalledTimes(2);
+  expect(page.el.querySelector('[role="alert"]')).toBeNull();
+  expect(page.el.querySelector('.data-record')).toBeNull();
+  expect(page.el.querySelector('[data-act="data-clear"][data-what="dictation"]')).toBeNull();
+  expect(page.el.querySelector('[data-act="data-clear"][data-what="conversation"]')).not.toBeNull();
+});
 
 test("快速提問 picks its effort inside the model list, as the answer model does, and saves model and effort apart", async () => {
   api.settingsGet.mockResolvedValue({ settings: { agent_model: "cli:codex", quick_model: "", quick_effort: "low" } });
@@ -82,6 +130,7 @@ test("快速提問 picks its effort inside the model list, as the answer model d
 
 beforeEach(() => {
   vi.restoreAllMocks(); vi.resetAllMocks(); listeners.clear(); setLocale("en");
+  api.core.mockImplementation(async method => method === "memory.get" ? {text:"",revision:0} : method === "safety.rules.list" ? {rules:[]} : {});
   api.settingsGet.mockResolvedValue({ settings: { stt_engine: "cloud" } });
   api.secretsStatus.mockResolvedValue({ has_key: true });
   api.statusGet.mockResolvedValue({ openrouter: null, spend: null });

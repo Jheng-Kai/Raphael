@@ -38,6 +38,12 @@ test("a recording target cancels on the first Escape without an armed hint", () 
   expect(stop.dataset.cancelArmed).toBeUndefined();
 });
 
+test("Escape still cancels immediate speech processing when its send button is disabled", () => {
+  dispose(); stop.disabled = true;
+  dispose = cancelGesture().register(() => ({ key: "transcribing", immediate: true, button: stop, hint: "", cancel }));
+  esc(); expect(cancel).toHaveBeenCalledOnce();
+});
+
 test("an Escape consumed by a menu or dialog never arms or cancels the answer", () => {
   const consume = (event: KeyboardEvent) => event.preventDefault();
   stop.addEventListener("keydown", consume);

@@ -19,7 +19,7 @@ import type { MessageKey } from "../i18n/zh-TW";
 import { brandIcon } from "../brand";
 import { type ConnectionsView, connectionsAddHTML, connectionsHTML } from "../connections";
 import { DICTATION_MODES } from "../dictation";
-import { KEEP_FOREVER_DAYS, formatClock, formatRetention, formatUsd } from "../format";
+import { KEEP_FOREVER_DAYS, formatClock, formatShortDateTime, formatRetention, formatUsd } from "../format";
 import { type LanguageGroup, languageSelectHTML, normalizeLanguages } from "../languages";
 import { bindingLabels } from "../keys";
 import { type MessagingView, messagingHTML } from "../messaging";
@@ -176,8 +176,8 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { pane: "models", label: "media.image", words: ["image", "drawing"] },
   { pane: "models", label: "media.video", words: ["video"] },
   { pane: "data", label: "data.retention", also: "settings.searchHistory" },
-  { pane: "data", label: "data.dictationAll", also: "data.clearDictation" },
-  { pane: "data", label: "data.conversationAll", also: "data.clearConversation" },
+  { pane: "data", label: "data.groupDictation", also: "data.clearDictation" },
+  { pane: "data", label: "data.groupConversation", also: "data.clearConversation" },
   { pane: "about", label: "settings.078" },
   { pane: "about", label: "nav.help" },
   { pane: "about", label: "settings.079" },
@@ -261,6 +261,7 @@ export const HOTKEY_ROWS: Record<HotkeyField, string> = { dictation_keys: "hotke
 
 /** Everything a tab is drawn from: what the panel has read, and what is being typed or done. */
 export interface SettingsView {
+  data?: { items: import("../types").HistoryItem[]; total: number; conversations: number; more: boolean; busy?: boolean; error?: string };
   /** An absent runtime is shown once in the existing computer settings area. */
   desktopRequired?: boolean;
   computerRemote?: boolean;
@@ -720,27 +721,17 @@ export function retentionChoices(v: SettingsView): Choice[] {
 /** How long the dictation history is kept, as the value of its dropdown (30 days until the core says). */
 export const retentionOf = (v: SettingsView): string => String(v.brain?.history_retention_days ?? 30);
 
-/** A row of what 資料 keeps; clearing it waits in the row's ⋯ (R-UI-56). */
-function dataRow(label: string, what: "dictation" | "conversation"): string {
-  return row(label, "", iconButton("more", t("members.more", { p0: label }), ` data-act="data-menu" data-what="${what}" aria-haspopup="menu" aria-expanded="false"`), { cls: "data-row" });
-}
-
-/**
- * 資料: what is kept on this computer and how to get rid of it, gathered from where it was. How long
- * the dictation history is kept (the row says it is the dictation history's), and a row for the
- * dictation history and one for the conversation with 拉斐爾, whose ⋯ clears it, asking twice and then
- * giving 10 seconds of 「復原」. There is no export: the app has no way to save a file where the user chooses yet.
- */
 function dataHTML(v: SettingsView): string {
-  return (
-    headingHTML(v) +
-    coreNote(v) +
-    section(t("data.groupDictation"), [
-      row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)),
-      dataRow(t("data.dictationAll"), "dictation"),
-    ]) +
-    section(t("data.groupConversation"), [dataRow(t("data.conversationAll"), "conversation")])
-  );
+  const data = v.data;
+  const clear = (what: string, count: number) => count > 0 ? btn(esc(t("data.deleteAll")), "sm", ` data-act="data-clear" data-what="${what}"${data?.busy ? " disabled" : ""}`) : "";
+  const records = data?.items.map(item => `<div class="data-record" data-record="${item.id}"><time class="num" datetime="${new Date(item.created_at_ms).toISOString()}">${esc(formatShortDateTime(item.created_at_ms, v.now))}</time><div class="data-record-text">${esc(item.text)}</div></div>`).join("");
+  return headingHTML(v) + coreNote(v) +
+    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupDictation"))}</h2>${clear("dictation", data?.total ?? 0)}</div><div class="slist">` +
+    row(t("data.retention"), "", sel(retentionChoices(v), retentionOf(v), t("data.retention"), ` data-k="retention"${v.brain === null ? " disabled" : ""}`)) +
+    (records || `<p class="note">${esc(t(data ? "data.emptyDictation" : "settings.loading"))}</p>`) +
+    (data?.more ? btn(esc(t("history.009")), "sm", ` data-act="data-more"${data.busy ? " disabled" : ""}`) : "") + `</div></section>` +
+    `<section class="sgroup data-section"><div class="data-heading"><h2>${esc(t("data.groupConversation"))}</h2>${clear("conversation", data?.conversations ?? 0)}</div><p class="note">${esc(data ? t("data.conversationCount", {p0:data.conversations}) : t("settings.loading"))}</p></section>` +
+    (data?.error ? `<p class="note" role="alert">${esc(data.error)}</p>` : "");
 }
 
 /** One page with model connections and usage in separate views. Legacy ids choose their own view. */

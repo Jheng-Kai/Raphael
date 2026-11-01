@@ -41,24 +41,5 @@
 .cb-pick-name { display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; }
 .cb-pick-name b { overflow: hidden; color: var(--text); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .cb-pick-name .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
-/* The depth as a thick track with a dot at each stop and a round thumb; only the stop it is on is named. */
-.cb-now .mc-depth { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: var(--sp-2); }
-.cb-now .mc-depth-title { display: none; }
-/* The fill is a pill of its own that ends just past the thumb, whatever the stop: 28px is the thumb with its margin on both sides. */
-.cb-now .mc-track { --thumb-room: 28px; position: relative; display: block; border-radius: var(--r-pill); background: var(--hover); }
-.cb-now .mc-track::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: calc((100% - var(--thumb-room)) * var(--p, 0) + var(--thumb-room)); border-radius: var(--r-pill); background: color-mix(in srgb, var(--text) 42%, transparent); pointer-events: none; }
-.cb-now .mc-range { position: relative; display: block; height: 28px; padding-inline: 2px; }
-.cb-now .mc-range::-webkit-slider-runnable-track { height: 28px; border-radius: var(--r-pill); background: transparent; }
-.cb-now .mc-range::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: 2px; background: var(--text); box-shadow: var(--pop); }
-/* Nothing to choose: the same ruler, still, with nothing on it. */
-.cb-now .mc-track[data-empty]::before { display: none; }
-.cb-now .mc-track[data-empty] .mc-range::-webkit-slider-thumb { visibility: hidden; }
-.cb-now .mc-dots { position: absolute; inset: 0 12px; display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
-.cb-now .mc-dot { display: block; width: 4px; height: 4px; border-radius: var(--r-pill); background: var(--text-3); }
-.cb-now .mc-dot[data-dot=""] { opacity: 0.35; }
-.cb-now .mc-dot[data-on="true"] { visibility: hidden; }
-.cb-now .mc-stops { grid-column: 1; justify-content: center; min-height: 1lh; }
-.cb-now .mc-stop { display: none; padding: 0; color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
-.cb-now .mc-stop[data-on="true"] { display: block; }
 .cmp-model .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
 .cmp-model .mp-ttext:has(.cb-depth) { display: inline-flex; align-items: baseline; gap: var(--sp-1); max-width: 200px; }

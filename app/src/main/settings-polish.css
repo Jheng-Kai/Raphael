@@ -13,3 +13,9 @@
 .lang-panel .lang-list { min-height: 0; }
 .lang-panel .lang-foot { flex: none; line-height: 1.55; }
 @keyframes settings-pulse { 50% { opacity: .45; } }
+
+.data-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.data-heading h2 { margin: 0; }
+.data-record { padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.data-record time { color: var(--text-3); font-size: var(--fs-xs); }
+.data-record-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.6; }

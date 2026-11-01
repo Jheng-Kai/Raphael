@@ -7,6 +7,7 @@
 // to the Rust side with `device_settings_set`. What is always wanted (pausing the music while
 // Raphael listens, learning from corrections) has no switch: it is simply on.
 
+import { confirmDelete } from "../member-dialogs";
 import { knownCatalog, rememberCatalog } from "../brain-lists";
 import { isUiLocale, onLocaleChange, t } from "../i18n";
 import { createOwnerControls } from "../owner-settings";
@@ -186,7 +187,6 @@ export function createSettings(app: AppContext): SettingsPage {
   const navList = el.querySelector<HTMLElement>(".set-list")!;
   let pane: SettingsPane = "general";
   let modelsTab: ModelsTab = "models";
-  const modelsScroll: Record<ModelsTab, number> = { models: 0, usage: 0 };
   const usageHost = document.createElement("div");
   usageHost.dataset.usageHost = "";
   let usage: UsageAnalyticsMount | null = null;
@@ -197,6 +197,8 @@ export function createSettings(app: AppContext): SettingsPage {
   /** A row the search chose, to be lit once its tab is drawn with its rows (not while it is being read). */
   let pendingJump: SearchHit | null = null;
 
+  let data: SettingsView["data"];
+  let dataEpoch = 0;
   let brain: BrainSettings | null = null;
   const ownerControls = createOwnerControls(settings => { brain = settings; if (visible) render(); });
   let hasKey = false;
@@ -282,7 +284,7 @@ export function createSettings(app: AppContext): SettingsPage {
 
   /** What the tabs are drawn from, as the panel knows it now. */
   const view = (): SettingsView => ({
-    pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError,
+    data, pane, modelsTab, device: app.device(), brain, hasKey, openrouter, spend, catalog: typeof catalog === "object" ? catalog : knownCatalog() ?? catalog, checkingOpenrouter, devices, altgr, version, desktopRequired, computerRemote, computerAliasDraft, computerHostError,
     replacingKey, keyBusy, keyError, limitDraft, limitError, cityDraft, cityError, languageGroups, now: Date.now(),
     connections: connections.view(), messaging: messaging.view(), memory: memory.view(), memoryShared: memoryShared.view(), rules: rules.view(), services: services.view(), providers: providers.view(), cliBrains: cliBrains.view(), localModels, localDownload,
   });
@@ -460,8 +462,8 @@ export function createSettings(app: AppContext): SettingsPage {
     body.scrollTop = scroll;
     el.querySelectorAll<HTMLElement>("[data-pane]").forEach((b) => b.setAttribute("aria-current", b.dataset.pane === pane ? "page" : "false"));
 
-    if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus();
-    else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus();
+    if (focused) el.querySelector<HTMLElement>(`[data-k="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    else if (focusedId) el.querySelector<HTMLElement>(`#${CSS.escape(focusedId)}`)?.focus({ preventScroll: true });
     if (openK) {
       const anchor = el.querySelector<HTMLElement>(`.sel[data-k="${openK}"]`);
       const menu = menuFor(openK);
@@ -496,10 +498,10 @@ export function createSettings(app: AppContext): SettingsPage {
     closeMenu();
     const hadUsage = usage !== null;
     const jumping = pendingJump !== null;
-    if (pane === "models") modelsScroll[modelsTab] = body.scrollTop;
     if (next === "usage") modelsTab = "usage";
     else if (tab) modelsTab = tab;
     pane = canonicalPane(next);
+    if (pane === "data") void loadData();
     if (pane === "general") void hiddenMembers.load();
     if (pane !== "models") destroyUsage();
     if (pane === "connections") void connections.load();
@@ -517,7 +519,7 @@ export function createSettings(app: AppContext): SettingsPage {
     syncMonitor();
     body.scrollTop = 0;
     render();
-    if (!jumping && pane === "models") body.scrollTop = modelsScroll[modelsTab];
+    if (!jumping) body.scrollTop = 0;
     if (hadUsage && pane === "models" && modelsTab === "usage") refreshUsage();
     paintNav();
     replay(body, "pane-in");
@@ -527,11 +529,10 @@ export function createSettings(app: AppContext): SettingsPage {
     if (next === modelsTab) return;
     const hadUsage = usage !== null;
     closeMenu();
-    modelsScroll[modelsTab] = body.scrollTop;
     modelsTab = next;
     if (next === "usage") providers.reset();
     render();
-    body.scrollTop = modelsScroll[next];
+    body.scrollTop = 0;
     body.querySelector<HTMLElement>(`[data-models-tab="${next}"]`)?.focus({ preventScroll: true });
     if (next === "models") void providers.load();
     else if (hadUsage) refreshUsage();
@@ -1062,22 +1063,35 @@ export function createSettings(app: AppContext): SettingsPage {
     void changeBrain("monthly_limit_usd", limit);
   }
 
-  /**
-   * A clear of 資料, confirmed in its ⋯: it empties what it names once the 10 seconds of 「復原」 have
-   * run out (`app.undo`), through the core.
-   */
-  function clear(what: "dictation" | "conversation"): void {
-    app.undo.begin({
-      message: what === "dictation" ? t("data.dictationCleared") : t("data.conversationCleared"),
-      commit: async () => {
-        if (what === "dictation") await api.historyClear();
-        else await api.agentHistoryClear();
-        // The history or the 拉斐爾 page under the panel loaded what is gone now: they drop it.
-        app.cleared.say(what);
-      },
-      restore: () => {}, // nothing was taken off the screen here
-      failure: (err) => t("undo.001", { p0: () => describeError(err) }),
-    });
+  async function loadData(more = false): Promise<void> {
+    const mine = ++dataEpoch;
+    const last = more ? data?.items.slice(-1)[0] : undefined;
+    try {
+      const [history, conversations] = await Promise.all([
+        api.historyList({limit:21, ...(last ? {before_ms:last.created_at_ms, before_id:last.id} : {})}),
+        api.core<{conversations: {turn_count?:number}[]}>("conversations.list", {member_id:0}),
+      ]);
+      if (mine !== dataEpoch) return;
+      data = { items:[...(more ? data?.items ?? [] : []), ...history.items.slice(0,20)], total:history.total ?? history.items.length, conversations:conversations.conversations.filter(c => (c.turn_count ?? 0) > 0).length, more:history.items.length>20 };
+    } catch (error) {
+      if (mine !== dataEpoch) return;
+      data = {...data ?? {items:[],total:0,conversations:0,more:false},busy:false,error:describeError(error)};
+    }
+    if (visible && pane === "data") render();
+  }
+
+  async function clear(what: "dictation" | "conversation"): Promise<void> {
+    if (!data || data.busy) return;
+    const count = what === "dictation" ? data.total : data.conversations;
+    if (!await confirmDelete(t(what === "dictation" ? "data.deleteDictations" : "data.deleteConversations", {p0:count}))) return;
+    dataEpoch++; data = {...data,busy:true,error:undefined}; render();
+    try {
+      if (what === "dictation") { await api.historyClear(); data = {...data,items:[],total:0,more:false}; }
+      else { await api.agentHistoryClear(); data = {...data,conversations:0}; }
+      app.cleared.say(what);
+    } catch (error) { data = {...data,error:describeError(error)}; }
+    data = {...data,busy:false};
+    if (visible && pane === "data") render();
   }
 
   function commitCity(input: HTMLInputElement): void {
@@ -1276,12 +1290,12 @@ export function createSettings(app: AppContext): SettingsPage {
       case "docker-download":
         void api.openExternalUrl("https://www.docker.com/products/docker-desktop/").catch(error => toaster.info(describeError(error)));
         break;
-      case "data-menu": {
-        const anchor = target.closest<HTMLElement>('[data-act]')!;
-        const what = anchor.dataset.what === "dictation" ? "dictation" : "conversation";
-        openConfirmMenu(anchor, { label: t(what === "dictation" ? "data.clearDictation" : "data.clearConversation"), ask: t("data.clearConfirm"), run: () => clear(what) });
+      case "data-clear":
+        void clear(target.closest<HTMLElement>('[data-what]')?.dataset.what === "dictation" ? "dictation" : "conversation");
         break;
-      }
+      case "data-more":
+        if (data && !data.busy) { data = {...data,busy:true}; render(); void loadData(true); }
+        break;
       case "help":
         void api.openExternalUrl("https://github.com/Jack-hehe/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
@@ -1438,6 +1452,7 @@ export function createSettings(app: AppContext): SettingsPage {
       rules.reset();
       services.reset();
       providers.reset();
+      if (pane === "data") void loadData();
       if (pane === "connections") void connections.load();
       if (pane === "messaging") void messaging.load();
       if (pane === "agent") for (const list of memories) void list.load();

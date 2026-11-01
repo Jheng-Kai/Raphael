@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## Owner polish (2026-11-01)
+
+See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
+
 ## Work channels, file restore and private login (2026-11-01)
 
 See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
@@ -526,6 +530,3 @@ explicitly prohibited by this brief; fixture acceptance does not prove OS clicks
 
 [Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths. This updated map is staged under `.fold` because `.agents` is protected.
 
-## Conversation connection management (2026-11-01)
-
-See [Connections/MCP](connections-mcp.md#connections-from-a-conversation-2026-11-01) for the editable proposal, shared secret/local consent cards, dynamic API/CLI/background offers and selected look matrix. R-MCP-CHAT-01/02 extend the existing allow-all and durable owner-card contracts.

@@ -800,8 +800,10 @@ label, because pressing it ends the recording and sends what was said (the quest
 and Escape still cancels at once); the Stop square only once something has been sent (`ack`, `running`, `waiting`, including the
 native voice processing before a turn exists), for as long as that runs, and it stops that. `.cmp-send` stays hidden in the
 non-idle states, so one control alone fills the slot, and `.cmp-voice` stays the selector the native `voice-keys` journey clicks.
-A room's composer is unchanged: its recording is its own browser recorder, whose end puts the transcript into the field to be
-read and sent, so its button stays Stop until then (`chat-composer.test.ts`).
+A room keeps its browser recorder but uses the same recording/send slot: the next press transcribes and sends the spoken
+words together with the typed draft once. Escape discards recording or pending transcription; Stop represents sent work only.
+Room speech uses the shared dictation finalizer and dictionary learning (`chat-composer.test.ts`).
+See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
 npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080

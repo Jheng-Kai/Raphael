@@ -40,7 +40,7 @@ export class CancelGesture {
     if (doc && [...doc.querySelectorAll('[role="dialog"], [role="menu"], [role="listbox"]')].some(layer => !layer.closest('[hidden], [inert]'))) return null;
     for (const get of [...this.targets].reverse()) {
       const target = get();
-      if (target && target.button.isConnected && !target.button.closest('[hidden], [inert]') && !(target.button as HTMLButtonElement).disabled) return target;
+      if (target && target.button.isConnected && !target.button.closest('[hidden], [inert]') && (!(target.button as HTMLButtonElement).disabled || target.immediate)) return target;
     }
     return null;
   }

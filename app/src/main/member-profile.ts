@@ -132,6 +132,7 @@ export function openEditMemberDialog(host: MemberProfileHost, member: Member, in
     drawPreset(); count();
   }
   function selectTab(next: ProfileTab): void {
+    if (tab !== next) dialog.el.querySelector<HTMLElement>(".mb-dlg-body")!.scrollTop = 0;
     tab = next;
     dialog.el.querySelectorAll<HTMLElement>(".member-profile-nav .tab").forEach(button => {
       const selected = button.dataset.tab === tab;

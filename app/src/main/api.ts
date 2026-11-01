@@ -129,11 +129,12 @@ export interface HistoryQuery {
   limit?: number;
   /** Only items older than this: the cursor of the next page. */
   before_ms?: number;
+  before_id?: number;
   /** Only items from this time on (with `before_ms`, one day: from its midnight to the next). */
   after_ms?: number;
 }
 
-export const historyList = (q: HistoryQuery): Promise<{ items: HistoryItem[] }> => core("history.list", q);
+export const historyList = (q: HistoryQuery): Promise<{ items: HistoryItem[]; total?: number }> => core("history.list", q);
 export const historyDelete = (id: number): Promise<{ deleted: boolean }> => core("history.delete", { id });
 /** Deletes the whole dictation history (Settings › 資料); says how many items went. */
 export const historyClear = (): Promise<{ deleted: number }> => core("history.clear");
@@ -154,8 +155,8 @@ export interface AgentHistoryQuery {
 export const agentHistoryList = (q: AgentHistoryQuery = {}): Promise<{ turns: AgentTurn[] }> => core("agent.history.list", q);
 /** What the owner typed into a composer, newest first, whichever conversation or room it went to (the arrow keys of a composer walk it). */
 export const agentSent = async (limit = 50): Promise<string[]> => (await core<{ texts: string[] }>("agent.history.sent", { limit })).texts;
-/** Forgets every turn; says how many there were. */
-export const agentHistoryClear = (): Promise<{ deleted: number }> => core("agent.history.clear");
+/** Forgets Raphael conversation turns; says how many there were. */
+export const agentHistoryClear = (): Promise<{ deleted: number }> => core("agent.history.clear", { member_id: 0 });
 /** Stops the background task `taskId` (the one that runs, or one that waits); says whether there was one to stop. */
 export const workerCancel = (taskId: number): Promise<{ cancelled: boolean }> => core("worker.cancel", { task_id: taskId });
 /** Runs a task that did not finish again, as a new task; its id. */

@@ -50,6 +50,18 @@ async def test_the_words_typed_are_listed_newest_first_across_conversations_and_
         await rig.call("agent.history.sent", {"limit": "many"})
 
 
+async def test_data_counts_only_conversations_with_records_and_clears_only_raphael(make_rig):
+    rig = make_rig()
+    rig.history.add(session_id="chief", question="Synthetic chief", route="answer", prefix="", text="Answer", status="done")
+    rig.history.add(session_id="member", member_id=1, question="Synthetic member", route="answer", prefix="", text="Answer", status="done")
+    listed = (await rig.call("conversations.list", {"member_id": 0}))["conversations"]
+    assert sum(c["turn_count"] > 0 for c in listed) == 1
+    rig.service._background.forget_member = lambda member_id: None
+    await rig.call("agent.history.clear", {"member_id": 0})
+    assert sum(c["turn_count"] for c in (await rig.call("conversations.list", {"member_id": 0}))["conversations"]) == 0
+    assert rig.history.list(member_id=1)
+
+
 async def test_rename_search_delete_and_default_entry(make_rig):
     rig = make_rig()
     default = (await rig.call("conversations.list", {"member_id": 0}))["conversations"][0]

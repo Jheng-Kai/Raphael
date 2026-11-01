@@ -183,6 +183,18 @@ describe("rendered look checks", () => {
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings"]);
   });
 
+  it("treats dictation previews as owner text while still checking their labels and actions", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="modal-body"><div class="data-record"><div class="data-record-text" aria-label="Save">Checking two sources</div><button>Copy</button></div></div><p>Settings</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Save", "Copy", "Settings"]);
+  });
+  it("treats exact conversation search highlights as owner text while still checking labels and controls", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<ol class="thread"><li class="message-text"><mark data-find-match="0" aria-label="Copy">needle</mark></li></ol><mark data-find-match="1">Settings</mark><button>Save</button>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings", "Save"]);
+  });
   it("keeps authored code intact while still checking its interface controls for translation", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="message-code"><pre><code><span class="hljs-comment"># Print a summary</span>const ready = true;</code></pre><button>Copy</button></div><p>Settings</p>';
@@ -190,10 +202,10 @@ describe("rendered look checks", () => {
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings"]);
     expect(auditDocument(window.document, { width: 1120, height: 900 }, []).rawMarkdown).toEqual([]);
   });
-  it("quick model purpose comes from its localized row label without a helper paragraph", () => {
+  it.each([["zh-TW", "拉斐爾的快速提問"], ["en", "Raphael's quick question"], ["ja", "ラファエルのクイック質問"]])("quick model purpose uses its current localized row label in %s without a helper paragraph", (locale, purpose) => {
     const win = new Window();
-    win.document.documentElement.lang = "zh-TW";
-    win.document.body.innerHTML = '<div data-row="quick-model"><div class="t">快速提問</div><button class="mp-trigger"><span class="mp-tname">GPT</span><span class="mp-source">Codex</span></button><span data-price="quick-model">Subscription</span></div>';
+    win.document.documentElement.lang = locale;
+    win.document.body.innerHTML = `<div data-row="quick-model"><div class="t">${purpose}</div><button class="mp-trigger"><span class="mp-tname">GPT</span><span class="mp-source">Codex</span></button><span data-price="quick-model">Subscription</span></div>`;
     win.document.querySelector('.mp-trigger').getBoundingClientRect = () => ({ width: 200, height: 60 });
     vi.stubGlobal('document', win.document);
     try {
@@ -483,6 +495,14 @@ describe("rendered look checks", () => {
       '<div class="row"><button class="btn">刪除舊檔案的每週例行任務，以及把整理好的結果寄給主人</button></div>',
       '<div class="row" hidden><button class="btn danger">清除</button></div>',
     ]) expect(rule(allowed), allowed).toEqual([]);
+  });
+  it("permits only the counted Settings Data heading actions requested by R-MP-02", () => {
+    const rule = html => productAudit(html).audit().productRules.filter(item => item.rule === 'R-UI-56');
+    const heading = what => `<section class="data-section"><div class="data-heading"><h2>Records</h2><button class="btn" data-act="data-clear" data-what="${what}">Delete all</button></div></section>`;
+    expect(rule(`<div class="modal-body">${heading('dictation')}${heading('conversation')}</div>`)).toEqual([]);
+    expect(rule(heading('dictation'))).toHaveLength(1);
+    expect(rule(`<div class="modal-body">${heading('other')}</div>`)).toHaveLength(1);
+    expect(rule('<div class="modal-body"><button data-act="data-clear" data-what="dictation">Delete all</button></div>')).toHaveLength(1);
   });
   it("rejects a ⋯ that a right click on its row does not reach (R-UI-44)", () => {
     const { window, audit } = productAudit('<div class="row"><button class="btn icon" data-overflow aria-label="更多"></button></div>');

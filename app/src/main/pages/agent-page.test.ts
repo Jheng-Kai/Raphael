@@ -213,22 +213,31 @@ describe("coming back to the page", () => {
 });
 
 describe("the search", () => {
-  test("shows what the core found in the whole history without raw steps", async () => {
+  test("the owner can navigate occurrences with a position and total", async () => {
     vi.useFakeTimers();
-    api.agentHistoryList.mockResolvedValueOnce({ turns: page(200, 50) }).mockResolvedValue({ turns: [] });
-    const step = { kind: "tool", tool: "search", server: "Raphael", outcome: "ok", ms: 800, reason: null, at_ms: 0 };
-    api.agentHistorySearch.mockResolvedValue({ turns: [turn(3, { question: "出差的行程", steps: [step] })] });
-    mount();
-    await flush();
+    api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { question: "needle and needle", text: "needle" })] });
+    mount(); await flush();
     document.querySelector<HTMLElement>('[data-act="search"]')!.click();
     const field = document.querySelector<HTMLInputElement>(".ra-find-input")!;
-    field.value = "出差";
-    field.dispatchEvent(new Event("input"));
+    field.value = "needle"; field.dispatchEvent(new Event("input"));
     await vi.advanceTimersByTimeAsync(250);
-    expect(api.agentHistorySearch).toHaveBeenCalledWith("出差");
-    expect(shownIds()).toEqual([3]); // far behind the loaded page
-    expect(document.querySelector('.tn[data-id="3"] [data-act="steps"]')).toBeNull();
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('3/3');
+    field.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter'}));
+    expect(document.querySelector('.ra-find-count')?.textContent).toBe('1/3');
   });
+  test("search loads older pages and keeps their words in the complete conversation", async () => {
+    vi.useFakeTimers();
+    api.agentHistoryList.mockImplementation(async (params: {limit:number;before_id?:number}) => params.limit===200 ? {turns:params.before_id ? [turn(3,{question:"needle"})] : page(250,200)} : {turns:params.before_id ? [] : page(250,50)});
+    mount(); await flush();
+    document.querySelector<HTMLElement>('[data-act="search"]')!.click();
+    const field=document.querySelector<HTMLInputElement>('.ra-find-input')!;
+    field.value='needle';field.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(250);
+    expect(api.agentHistoryList).toHaveBeenCalledWith(expect.objectContaining({before_id:51,limit:200}));
+    expect(document.querySelector('.tn[data-id="3"] mark.is-current')?.textContent).toBe('needle');
+    expect(shownIds()).toHaveLength(201);
+  });
+
 });
 
 describe("a question said aloud", () => {
