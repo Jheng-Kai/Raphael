@@ -497,3 +497,10 @@ generated-audio-room, generated-audio-missing, generated-audio-repair and owner-
 See [Conversation](conversation.md#cli-recovery-after-recorded-work-2026-11-01)
 for shared conversation/background CLI recovery, receipt context, bounded retries,
 answered-card continuity and fake-subprocess tests. Core-only; no new UI scene.
+## Group and background tool truth (2026-11-01)
+
+See [Members](members.md#group-prompt-truth-2026-11-01) for R-AG-02 roles without
+fixed rounds or automatic conclusions, and
+[Conversation](conversation.md#background-app-discovery-2026-11-01) for background
+find_app, owner sign-in and same-task resumption, plus localized routine events.
+This is a core-only contract change; no rendered scene or frontend is changed.

@@ -2852,7 +2852,7 @@ class AgentService:
         return None if found is None else found.id
 
     async def background_owner_tool(self, task, name, arguments):
-        """Use the conversation's existing card services without granting desktop presence."""
+        """Use read-only app discovery and existing card services without granting desktop presence."""
         from .owner_questions import BACKGROUND_TOOLS
         if name not in BACKGROUND_TOOLS | ROUTINE_TOOLS or not task.turn_id:
             return ToolResult(name, False, None, "blocked")

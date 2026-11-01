@@ -101,8 +101,7 @@ The owner's primary contact is Raphael until they choose another member (`member
 the roster's primary (`roster_primary_missing`, `roster_primary_stale`, `roster_primary_wrong`) and Raphael as the chief of staff (`roster_chief_missing`,
 `roster_chief_wrong`). `S03.primary-dispatch` makes 行銷 the primary and tells it, in its own chat, to have 信件助理 read the mail now: one durable task
 from the primary to 信件助理 (`dispatcher_not_primary`), the primary's centred 已轉交給 line (`handoff_line_missing`), one receipt, so the primary did not read the
-mail itself (`primary_did_the_work`), and the usual immediate-start, scope, result and no-routine checks. `S07.meeting` is held with HiKari as the primary: Raphael
-is in the room and writes its one wrap-up as before, and every room turn must carry the roster with that primary and Raphael as the chief
+mail itself (`primary_did_the_work`), and the usual immediate-start, scope, result and no-routine checks. `S07.meeting` is held with HiKari as the primary: only the requested members participate, without a mandatory Raphael (0), fixed rounds or automatic wrap-up. Every room turn must carry the roster with HiKari as both primary and chief
 (`meeting_turn_primary_unknown`). Offline honest fake brains and a lying brain for each check are in core/tests/evaluate/test_p02_scenarios.py and
 test_guardian_scenarios.py.
 

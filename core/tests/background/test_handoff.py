@@ -149,8 +149,7 @@ async def test_a_handoff_back_to_a_colleague_waiting_upstream_is_refused(make_ri
     assert (back.ok,back.error)==(False,'handoff_cycle') and back.instruction
 
 
-async def test_a_meeting_turn_gives_the_floor_with_a_mention_instead_of_a_handoff(make_rig):
-    # Live, a moderator handed the next speaker a work task and the meeting became a chain of hand-offs.
+async def test_a_room_role_or_legacy_meeting_flag_does_not_block_assigned_work(make_rig):
     rig=make_rig()
     target,source=setup(rig)
     with rig.conn:
@@ -161,11 +160,6 @@ async def test_a_meeting_turn_gives_the_floor_with_a_mention_instead_of_a_handof
             (origin,source.room_id))
         rig.conn.execute("INSERT INTO room_messages(room_id,thread_id,member_id,text,created,turn_id,origin_message_id,kind) "
             "VALUES (?,?,0,'',2,?,?,'message')",(source.room_id,source.thread_id,source.id,origin))
-    refused=rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='en')
-    assert (refused.ok,refused.error)==(False,'meeting_in_progress') and '@mention' in refused.instruction
-    # Live, the room kept its moderator after the meeting, so the owner's 「現在執行」 could hand nothing off.
-    with rig.conn:
-        rig.conn.execute("UPDATE room_exchanges SET meeting=0 WHERE origin_message_id=?",(origin,))
     assert rig.service.handoff(RAPHAEL,args(target),source_turn_id=source.id,language='en').ok
 
 

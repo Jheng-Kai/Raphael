@@ -93,6 +93,44 @@ async def test_a_member_can_set_up_a_once_a_bounded_or_a_weekdays_routine(setup,
     assert created["routine"]["schedule"] == schedule
 
 
+@pytest.mark.parametrize("language,expected", [
+    ("zh-TW", ["一次 · 2099-03-04 09:30", "平日 09:30", "每天 09:30", "每週一、週五 09:30", "每 3 小時"]),
+    ("ja", ["一度 · 2099-03-04 09:30", "平日 09:30", "毎日 09:30", "毎週月・金 09:30", "3時間ごと"]),
+    ("en", ["Once · 2099-03-04 09:30", "Weekdays at 09:30", "Daily 09:30", "Weekly Mon, Fri 09:30", "Every 3 hours"]),
+])
+@pytest.mark.parametrize("index,schedule", [
+    (0, {"kind": "once", "start_date": "2099-03-04", "time": "09:30"}),
+    (1, {"kind": "weekdays", "time": "09:30"}),
+    (2, {"kind": "daily", "time": "09:30"}),
+    (3, {"kind": "weekly", "days": [1, 5], "time": "09:30"}),
+    (4, {"kind": "every", "hours": 3}),
+])
+async def test_chat_shows_the_saved_schedule_in_its_confirmation(setup, client, language, expected, index, schedule):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [chat("", ("routine_create", {"title": "Review", "prompt": "Review", "schedule": schedule})),
+                   live_said("Scheduled.")]
+    await typed(rig, "Schedule a review", teacher.id, language=language)
+    [saved] = team.members.store.routines(teacher.id)
+    assert saved.schedule.to_json() == schedule
+    [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
+    [event] = [message for message in turn["messages"] if message["kind"] == "event"]
+    assert event["text"].endswith(f" · {expected[index]} Review")
+
+
+async def test_api_model_receives_the_free_group_discussion_contract(setup, client):
+    rig, team = setup
+    teacher = member(team)
+    client.chats = [live_said("Ready.")]
+    await typed(rig, "Discuss the review", teacher.id, language="en")
+    [request] = client.chat_calls
+    meeting = next(tool["function"] for tool in request["tools"] if tool["function"]["name"] == "room_meeting")
+    assert "Everyone reads every message" in meeting["description"]
+    assert "no fixed rounds" in meeting["description"]
+    assert "include Raphael (0)" not in meeting["description"]
+    assert "no automatic conclusion" in request["messages"][0]["content"]
+
+
 async def test_routine_tools_cannot_modify_another_speakers_routine(setup):
     rig, team = setup
     first, other = member(team), member(team, name="Other")

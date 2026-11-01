@@ -311,7 +311,12 @@ secret material. Room work projects its waiting turn into room_messages and uses
 shared room notes without private history or member memory. Draft revisions use
 the originating room and thread, and private draft lookup excludes room turns.
 Background snapshots
-explicitly add owner cards and own-member routine tools, without interactive=True.
+explicitly add read-only find_app, owner cards and own-member routine tools, without interactive=True.
+find_app uses the same catalog service and T0 gate as interactive discovery, opens no
+question and grants no connection. connect_app still waits for the owner to sign in,
+even in full-permission mode. The same task resumes with freshly offered app tools.
+Shared worker persona rules guide Raphael and named members through that discovery
+and owner-card path; they no longer prohibit all owner questions.
 The native allowlist exposes owner_questions.answer; it grants no execution approval.
 API and CLI/MCP conversation questions transfer the same turn to this worker rather
 than retaining a CLI process. All question states reuse the conversation card component.
@@ -341,3 +346,12 @@ summaries expose counts/status only; exact receipts stay out of public events.
 No RPC, Rust allowlist entry, migration, new worker, settings or frontend is added.
 Tests use generic fake CLI subprocesses and the existing authenticated MCP/gates.
 Real CLI subscription/service recovery and native UX require separate acceptance.
+## Group discussion contract (2026-11-01)
+
+Room roles are metadata, never a scheduled speaking plan. API, CLI and background
+tool definitions and roster prompts follow R-AG-02: everyone reads every message
+and decides whether to speak; explicit addresses are answered. room_meeting reuses
+the exact membership with the current chief and posts only the agenda. It adds no
+addresses, rounds or automatic conclusion. Concrete assigned work retains the
+shared handoff gate and completed-work report path. Legacy meeting columns remain
+in SQLite for compatibility and confer no tool or speaking restriction.

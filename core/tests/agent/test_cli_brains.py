@@ -541,7 +541,10 @@ async def test_cancel_kills_fake_cli_and_descendant_and_deletes_private_files(tm
     script.write_text('''import json, os, subprocess, sys, time
 from pathlib import Path
 child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(300)"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-Path(sys.argv[1]).write_text(json.dumps([os.getpid(),child.pid,sys.argv[sys.argv.index("--mcp-config")+1]]))
+marker=Path(sys.argv[1])
+pending=marker.with_suffix(".tmp")
+pending.write_text(json.dumps([os.getpid(),child.pid,sys.argv[sys.argv.index("--mcp-config")+1]]))
+pending.replace(marker)
 print(json.dumps({"type":"system","subtype":"init","session_id":"one"}),flush=True)
 time.sleep(300)
 ''', encoding="utf-8")

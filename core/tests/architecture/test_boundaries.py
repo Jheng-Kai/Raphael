@@ -27,7 +27,7 @@ def test_members_and_rooms_do_not_create_brain_loops():
 
 def test_every_speaker_is_offered_the_same_team_administration():
     """Raphael is the default member, not a holder of tools the others lack: the chief role changes who the
-    owner brings work to and who concludes a room, never what a speaker may propose (the owner confirms)."""
+    owner brings work to, never who speaks in a group or what a speaker may propose (the owner confirms)."""
     from raphael_core.agent.speaker import Speaker
     from raphael_core.agent.team import team_tools_for
 

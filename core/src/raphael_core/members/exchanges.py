@@ -31,27 +31,6 @@ def is_pass(text):
     return not text.strip() or bool(re.fullmatch(r"[(（]?\s*pass\s*[)）]?[.。]?", text.strip(), re.IGNORECASE))
 
 
-def seat(plan, member, moderator):
-    """Where a member's turn sits in a moderated meeting, and the plan once that turn has taken its seat.
-
-    A round is open once its moderator entry is gone. The moderator's turn opens the next round; a
-    speaker's turn in an open round takes their place in it, whoever addressed them; any other turn is
-    an aside. Without rounds left, the moderator closes and everyone else only answers."""
-    rounds = [entry for entry in plan if entry.get('round')]
-    if not rounds:
-        return plan, {'phase': 'close' if member == moderator else 'after', 'moderator': moderator}
-    head = rounds[0]
-    number, between = head['round'], head['member'] == moderator
-    if member == moderator:
-        taken = head if between else None
-    else:
-        taken = None if between else next((e for e in rounds if e['round'] == number and e['member'] == member), None)
-    rest = [entry for entry in plan if entry is not taken]
-    still = [e['member'] for e in rest if e.get('round') == number and e['member'] != moderator]
-    phase = ('open' if taken else 'floor') if member == moderator else ('turn' if taken else 'aside')
-    return rest, {'phase': phase, 'round': number, 'still': still, 'moderator': moderator, 'between': between}
-
-
 @dataclass(frozen=True)
 class Exchange:
     origin_message_id: int
@@ -248,27 +227,12 @@ class RoomExchanges:
                               "VALUES (?, ?, 'queued', ?, ?)",
                               (origin, room["id"], language, json.dumps([{"member":recipient,"reply_to_member":None,
                                "reply_to":origin,"handoff":False}]) if recipient is not None else None))
-        text, request = self.conn.execute("SELECT text, request_id FROM room_messages WHERE id=?", (origin,)).fetchone()
-        roles = self.rooms._view(room).get('roles', {})
-        moderator = next((int(i) for i, role in roles.items() if role == 'moderator'), None)
-        # A meeting's agenda, or the owner's first message after the parts are saved, is a meeting; later messages are not.
-        meeting = moderator is not None and bool(str(request or '').startswith('meeting_') or
-                   self.conn.execute("SELECT meeting_pending FROM rooms WHERE id=?", (room["id"],)).fetchone()[0])
-        # Its rounds give everyone a turn and Raphael the conclusion, so a meeting's addresses are no call to speak
-        # first: live, an agenda's 「第二輪結束後 @拉斐爾 作最後結論」 had Raphael talk before the moderator opened.
-        targets = [] if meeting else list(dict.fromkeys(
+        text = self.conn.execute("SELECT text FROM room_messages WHERE id=?", (origin,)).fetchone()[0]
+        targets = list(dict.fromkeys(
             ([recipient] if recipient is not None else []) + self.rooms._targets(room, text)))
         self.intents(origin, origin, targets)
         if targets:
             self.update(origin, pending="[]")
-        if meeting:
-            with self.conn:
-                self.conn.execute("UPDATE rooms SET meeting_pending=0 WHERE id=?", (room["id"],))
-                self.conn.execute("UPDATE room_exchanges SET meeting=1 WHERE origin_message_id=?", (origin,))
-            speakers = [moderator] + [i for i in self.rooms._ids(room) if i not in (self.rooms._members.primary_id(), moderator)]
-            plan = [{"member":i, "reply_to_member":None, "reply_to":origin, "handoff":False, "round":round_no}
-                    for round_no in (1, 2) for i in speakers]
-            self.update(origin, pending=json.dumps(plan))
         self.attachments[origin] = attachments
         await self.drive(room["id"])
 
@@ -374,8 +338,8 @@ class RoomExchanges:
                     continue
                 ids = self.rooms._ids(room)
                 spoken = set(json.loads(exchange.spoken))
-                moderator = next((int(i) for i, role in room.get('roles', {}).items() if role == 'moderator'), None)
-                pending = json.loads(exchange.pending) if exchange.pending is not None else None
+                # Old persisted meeting plans grant no turns; explicit reply intents remain below.
+                pending = [p for p in json.loads(exchange.pending) if not p.get('round')] if exchange.pending is not None else None
                 if pending is None:
                     owner = self.conn.execute("SELECT text FROM room_messages WHERE id = ?", (exchange.origin_message_id,)).fetchone()[0]
                     targets = self.rooms._targets(room, owner)
@@ -387,7 +351,7 @@ class RoomExchanges:
                         pending = [{"member":i,"reply_to_member":None,"reply_to":None,"handoff":False,"heard":True,
                                     **({"unanswered":True} if unanswered else {})} for i in chosen]
                 pending = [p for p in pending if p["member"] in ids and
-                           (p.get('round') or p.get('heard') or p["member"] not in spoken or p["handoff"])]
+                           (p.get('heard') or p["member"] not in spoken or p["handoff"])]
                 planned = pending
                 with self.conn:
                     for intent in self.conn.execute("SELECT * FROM room_reply_intents WHERE origin_message_id=? AND state='queued' ORDER BY id", (exchange.origin_message_id,)).fetchall():
@@ -400,7 +364,7 @@ class RoomExchanges:
                                 "reply_to":intent['source_message_id'], "handoff":source[0] is not None,
                                 "intent_id":intent['id']}]
                 exchange = self.get(exchange.origin_message_id)
-                if (not pending and not exchange.meeting and exchange.turns_taken and exchange.chime_ins < MAX_ROUNDS
+                if (not pending and exchange.turns_taken and exchange.chime_ins < MAX_ROUNDS
                         and exchange.turns_taken < MAX_TURNS and exchange.hops < MAX_HOPS):
                     # What was just said is a new message, and everyone but the one who said it reads it.
                     last = self.last_reply(exchange.origin_message_id)
@@ -421,33 +385,25 @@ class RoomExchanges:
                 work = self.conn.execute("SELECT state FROM worker_tasks WHERE room_id=? AND source_turn_id IN "
                     "(SELECT turn_id FROM room_messages WHERE origin_message_id=?) AND mode IS NOT NULL",
                     (room_id,exchange.origin_message_id)).fetchall()
-                # Raphael called on once a meeting's rounds are over gives its one conclusion, not a reply before it.
                 chief = self.rooms._members.primary_id()
-                closing = (intent is not None and intent['recipient_id'] == chief and moderator is not None and
-                           not any(entry.get('round') for entry in planned) and not self.conn.execute(
-                               "SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='queued' AND recipient_id!=?",
-                               (exchange.origin_message_id,chief)).fetchone())
-                if (not pending or closing) and any(row['state'] in ('queued','running','waiting') for row in work):
+                if not pending and any(row['state'] in ('queued','running','waiting') for row in work):
                     return
-                # A member's failed reply is named in what the chief says; any other block ends the exchange without it.
-                # Only a meeting closes and only work handed out reports back: a discussion just ends when no one has more to say.
+                # Completed assigned work reports back; conversation never creates an automatic conclusion.
                 wrapup = (exchange.turns_taken >= 1 and chief in ids and not exchange.wrapup_sent and
-                          (exchange.meeting or closing or bool(work)) and
-                          (not pending or closing) and not self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked' "
+                          bool(work) and not pending and not self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked' "
                               "AND reason!='worker' AND reason NOT LIKE 'cli!_%' ESCAPE '!'", (exchange.origin_message_id,)).fetchone())
                 if wrapup:
                     last = self.last_reply(exchange.origin_message_id)
                     pending = [{"member":chief,"reply_to_member":last[1] if last else None,
-                                "reply_to":last[0] if last else exchange.origin_message_id,"handoff":False,
-                                **({"intent_id":intent['id']} if closing else {})}]
-                if not pending or (exchange.turns_taken >= MAX_TURNS and not intent and not wrapup and not pending[0].get('round')):
+                                "reply_to":last[0] if last else exchange.origin_message_id,"handoff":False}]
+                if not pending or (exchange.turns_taken >= MAX_TURNS and not intent and not wrapup):
                     blocked = self.conn.execute("SELECT 1 FROM room_reply_intents WHERE origin_message_id=? AND state='blocked'", (exchange.origin_message_id,)).fetchone()
                     self.update(exchange.origin_message_id, state="stopped" if blocked else "done", pending="[]", reason="blocked_intents" if blocked else "turns" if pending else "")
                     self.attachments.pop(exchange.origin_message_id, None)
                     self.rooms._changed(room_id)
                     continue
                 target, remaining = pending[0], pending[1:]
-                if (intent or target.get('round')) and exchange.turns_taken and exchange.turns_taken % MAX_TURNS == 0:
+                if intent and exchange.turns_taken and exchange.turns_taken % MAX_TURNS == 0:
                     # Yield admission to another scheduled slice without losing accepted addresses.
                     self.update(exchange.origin_message_id, state='queued')
                     self.schedule(room_id)
@@ -460,11 +416,6 @@ class RoomExchanges:
                     self.attachments.pop(exchange.origin_message_id, None)
                     self.rooms._changed(room_id)
                     continue
-                if moderator is not None and not wrapup:
-                    # An addressed member speaking in an open round takes their planned place in it.
-                    rest, target['meeting'] = seat(planned, target['member'], moderator)
-                    if intent:
-                        planned = rest
                 self.update(exchange.origin_message_id, state="running", pending=json.dumps(remaining),
                             turns_taken=exchange.turns_taken + 1,
                             hops=exchange.hops + int(target["handoff"]), wrapup_sent=int(wrapup) or exchange.wrapup_sent)
