@@ -1023,3 +1023,35 @@ Inspect every contact sheet and relevant full-size form in both themes, compare
 the shared header/copy button with rich-code and the external reference view-012.
 The task forbids judge, native, cargo, network and real providers; offline evidence
 never establishes their acceptance. See CODEX_REPORT.md for exact runs and limits.
+## Still conversations during team work (2026-11-01)
+
+R-UI-71: unchanged refreshes retain DOM identity and scroll position. Private threads and rooms share the keyed line diff; private carry hooks retain typed, mail and page card state. Live labels paint synchronously through updateLiveTimes and tick independently of HTML identity. Cached previews paint before a frame. Member rows, heading faces, details, Home and Calendar patch or skip unchanged data. Loaded tasks and handoffs refresh promptly; unrelated workers poll at most once per second. Slow private reads coalesce without starving their result. MemberActivity and AgentTurn retain roster state and unread updates.
+
+Pressure scenes: busy-team-thread (quiet control reaches the bottom), busy-team-up, busy-team-steps (one changed turn and ready cached cards), busy-team-typing (real input and caret intact; nearest-rank key-to-frame P90 at most 100 ms, long tasks at most 50 ms; all samples and the slowest key remain in the report), busy-team-follow, busy-team-anchor, busy-team-hover, busy-team-room and busy-team-home. Unchanged thread/room limits: lines/cards/faces 0, all reads 24, member reads 6, long tasks 600 ms, bottom distance 80 px; scrolling-up writes 0. Room messages currently render plain links, so room card identity is vacuous; private scenes exercise actual preview cards. Home keeps faces.
+
+Regression consumers: composer-stop-background, composer-stop-navigation, composer-task-stop, polish-scroll, polish-search-chief, polish-search-room, polish-room-recording, generated-video-running, home-calendar-rhythm, search and calendar-rhythm-week. Run these and the pressure scenes with both themes at 1120, 720 and 1920x1080. Inspect contact sheets and relevant full-size images. This brief prohibits judge, native, live providers and network; browser fixture evidence does not establish those boundaries.
+
+Unit evidence: app/scripts/look/event-storm.test.mjs (nearest-rank P90, retained slowest frame and exact threshold), ui-patch.test.ts (identity, focus, listener and keyed reorder), pages/agent-stop.test.ts (same-page skip, task scope, slow reads), timeline.test.ts (clock-independent HTML), chat-work.test.ts (visible ticking labels and queued fallback), group-chats.test.ts (room identity and event scope), automations.test.ts (unchanged Calendar), link-previews.test.ts (synchronous cache paint).
+
+```powershell
+npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home --theme both --width 1120,720,1920x1080
+```
+
+Activity listener audit also covers Settings usage: unchanged analytics and allowances retain their nodes; changed values use the shared DOM patch. Evidence: usage-analytics.test.ts and run-analytics.test.ts. Representative additional consumers:
+```powershell
+npm run look -- slime-states sidebar-unread usage usage-allowances --theme both --width 1120,720,1920x1080
+```
+
+Animation clocks are not content identity: retained slimes keep their phase, delight and handover transition; new room messages retain older slime lines. ui-patch.test.ts::a changed row preserves its slime clock and active transition and group-chats.test.ts::a new room message retains older slime lines across animation clocks pin this. slime-states now updates a row preview during WorkerChanged traffic and asserts the actual CSS animation objects, start times and delays remain unchanged before checking the real member states.
+
+The prompt, empty-page hero and active voice flyer also patch their unchanged faces during roster updates. Evidence: pages/agent-members.test.ts::a changed roster preview retains the prompt and empty-page faces and voice-mode.test.ts::an unchanged voice redraw retains the listening picture. Voice consumers:
+```powershell
+npm run look -- composer-voice-recording new-conversation-recording --theme both --width 1120,720,1920x1080
+```
+
+
+Review follow-up (2026-11-02): unchanged roster loads still restore viewing and read the visible unread thread; CoreReady invalidates both roster and viewing memory. Returning from a room to the same member refreshes retained turns. The page snapshot includes the local date. Evidence: pages/agent-members.test.ts (returning, unread on show, core restart, zero storm viewing and room return) and pages/agent-stop.test.ts (local midnight).
+
+```powershell
+npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover busy-team-room busy-team-home sidebar-unread conversation-midnight --theme both --width 1120,720,1920x1080
+```

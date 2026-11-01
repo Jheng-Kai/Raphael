@@ -12,7 +12,7 @@ import { wholeLinks } from "./composer-links";
 import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
-import { esc, ico, iconButton, openMenu, sendGlyph, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, patchHTML, sendGlyph, toaster } from "./ui";
 import "./agent.css";
 
 /** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
@@ -29,7 +29,7 @@ export function drawTaskSlot(el: HTMLElement, state: ComposerTaskState, stopping
   button.classList.toggle("task-action", state !== "idle");
   button.dataset.tooltip = state === "idle" ? button.getAttribute("aria-label") ?? t("agent.voice") : t(sends ? "chat.send" : "rooms.stop");
   if (state !== "idle") {
-    button.innerHTML = sends ? sendGlyph() : ico("stop");
+    patchHTML(button, sends ? sendGlyph() : ico("stop"));
     button.setAttribute("aria-label", t(sends ? "chat.send" : stopping ? "rooms.stopping" : "rooms.stop"));
     button.removeAttribute("title");
     button.disabled = stopping && !sends;
@@ -96,7 +96,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   let revision=0, taskState: ComposerTaskState = "idle", stoppingTask = false;
   el.addEventListener("click",e=>e.stopPropagation());
   let files:WireAttachment[]=[],drawnFiles:WireAttachment[]|null=null,attachQueue:Promise<void>=Promise.resolve(),attaching=0,busy=false,recording=false,starting=false,stream:MediaStream|undefined,recorder:MediaRecorder|undefined;
-  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching>0||recording||starting||(!input.value.trim()&&!files.length);voice.innerHTML=avatarHTML({size:32,avatar:null,loop:recording});voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||transcribing||(busy&&!transcribing);drawTaskSlot(el,recording||transcribing?"recording":taskState,stoppingTask);voice.disabled ||= starting||transcribing;el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));drawFiles();};
+  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching>0||recording||starting||(!input.value.trim()&&!files.length);if(!recording&&!transcribing&&taskState==="idle")patchHTML(voice,avatarHTML({size:32,avatar:null,loop:recording}));voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||transcribing||(busy&&!transcribing);drawTaskSlot(el,recording||transcribing?"recording":taskState,stoppingTask);voice.disabled ||= starting||transcribing;el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));drawFiles();};
   // Drawn only when the files change: a picture is not decoded again at each keystroke.
   const drawFiles=():void=>{if(drawnFiles===files)return;drawnFiles=files;const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.replaceChildren(...files.map((f,i)=>{const chip=document.createElement("span");chip.className="cmp-chip";chip.innerHTML=draftFileHTML({name:f.name,mime:f.mime,size:Math.round(f.data.length*0.75)},`data-file="${i}" aria-label="${esc(t("agent.unattach"))}"`);const thumb=chip.querySelector<HTMLImageElement>(".cmp-thumb");if(thumb)thumb.src=`data:${f.mime};base64,${f.data}`;return chip;}));};
   /** 「＋」, a paste or a drop, one file after the other. One that cannot be taken says why and the rest are still taken, but for too many, which ends it. */

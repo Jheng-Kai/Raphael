@@ -31,6 +31,18 @@ describe("the voice mode's flight", () => {
 });
 
 describe("the voice button while the picture is up", () => {
+  test("an unchanged voice redraw retains the listening picture", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const stage = document.createElement("div"), composer = document.createElement("form"), button = document.createElement("button");
+    composer.append(button); stage.append(composer); document.body.append(stage);
+    button.getClientRects = () => [{}] as unknown as DOMRectList;
+    const voice = new VoiceMode({ stage, button: () => button, composer: () => composer, target: () => null, face: () => '<span class="av"><svg></svg></span>', onClick() {} });
+    try {
+      voice.up(); const face = stage.querySelector(".av");
+      expect(face).not.toBeNull(); voice.redraw(); expect(stage.querySelector(".av")).toBe(face);
+    } finally { voice.down(); stage.remove(); vi.unstubAllGlobals(); }
+  });
+
   test("only its picture is hidden: the button stays on screen, so it keeps the focus and hears the key let go", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
     const stage = document.createElement("div");

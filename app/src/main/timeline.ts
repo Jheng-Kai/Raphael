@@ -347,14 +347,14 @@ function mediaBillHTML(step: AgentStep): string {
 }
 
 /** The step a task is at now: its words with light passing over them, the time since it began. */
-function liveStepHTML(task: AgentTask, nowMs: number): string {
+function liveStepHTML(task: AgentTask): string {
   const since = task.started_at_ms;
   const words = task.state === "queued" ? t("agent.queued") : t("agent.thinking");
   return (
     `<li class="step is-live">` +
     `<span class="step-ic">${SPINNER}</span>` +
     `<span class="step-main"><span class="step-t shimmer">${esc(words)}</span></span>` +
-    `<span class="step-end">${since ? `<span class="step-ms num" data-since="${since}">${esc(formatDuration(nowMs - since))}</span>` : ""}</span>` +
+    `<span class="step-end">${since ? `<span class="step-ms num" data-since="${since}"></span>` : ""}</span>` +
     `</li>`
   );
 }
@@ -386,7 +386,7 @@ export function summaryText(turn: AgentTurn, nowMs: number): { lead: string; tim
 /** The list of steps under a summary, which slides open; with the step a task is at last. */
 function stepsBodyHTML(turn: AgentTurn, state: TimelineState, open: boolean): string {
   const live = isLive(turn.task);
-  const rows = shownSteps(turn).map((step, index) => stepHTML(step, !state.seen.has(stepKey(turn, index)))).join("") + (live ? liveStepHTML(turn.task!, state.nowMs) : "");
+  const rows = shownSteps(turn).map((step, index) => stepHTML(step, !state.seen.has(stepKey(turn, index)))).join("") + (live ? liveStepHTML(turn.task!) : "");
   return (
     `<div class="steps-body" id="steps-${esc(turn.id)}"${open ? "" : " inert"}><div class="steps-clip">` +
     `<ol class="steps-list" aria-label="${esc(t("agent.stepsList"))}">${rows}</ol>` +
@@ -421,7 +421,7 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
   const open = stepsOpen(turn, state);
   const { lead, time, failed } = summaryText(turn, state.nowMs);
   const bad = failed ? t("agent.stepsFailed", { p0: failed }) : "";
-  const words = [lead, time, bad].filter(Boolean).join(" · ");
+  const words = [lead, live ? "" : time, bad].filter(Boolean).join(" · ");
   const ended = state.ended.has(task.id);
   // A task that waits for the owner's yes is not under way, but not over either: it can be stopped.
   const waiting = task.state === "waiting";
@@ -429,10 +429,10 @@ function taskCardHTML(turn: AgentTurn, state: TimelineState): string {
     ? task.state === "queued" ? ico("clock") : SPINNER
     : waiting ? ico("clock")
     : task.state === "done" ? `<span class="task-check${ended ? " is-pop" : ""}">${ico("check")}</span>` : ico("stop");
-  const since = live && task.started_at_ms ? ` data-since="${task.started_at_ms}"` : "";
+  const since = live ? task.started_at_ms ? ` data-since="${task.started_at_ms}"` : ` data-duration="${workMs(turn, 0)}"` : "";
   const summary = btn(
     `<span class="task-mark">${mark}</span><span class="task-lead">${esc(lead)}</span>` +
-      (time ? `<span class="task-time num"${since}>${esc(time)}</span>` : "") +
+      (time ? `<span class="task-time num"${since}>${live ? "" : esc(time)}</span>` : "") +
       (bad ? `<span class="steps-bad">${esc(bad)}</span>` : "") +
       `<span class="steps-chev">${ico("down")}</span>`,
     "task-sum",
@@ -584,9 +584,9 @@ export function filesHTML(files: readonly TurnAttachment[] | undefined): string 
 }
 
 /** Pending requests and running turns share the same public work line. */
-const liveWorkHTML = (seconds: number, latest = t("agent.thinking")): string =>
+const liveWorkHTML = (latest = t("agent.thinking")): string =>
   `<span class="think" role="img" aria-label="${esc(t("agent.thinking"))}"><i></i><i></i><i></i></span>` +
-  `<span class="work-latest">${esc(latest)}</span><span class="work-time">${esc(t("chat.workingFor", { p0: seconds }))}</span>`;
+  `<span class="work-latest">${esc(latest)}</span><span class="work-time"></span>`;
 
 /** Background task controls without raw tool labels or a collapsed steps box. */
 function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
@@ -735,7 +735,7 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const seconds = Math.max(0, Math.round((end - start) / 1000));
   const open = state.thinkingOpen.get(turn.id) ?? false;
   const latest = [...messages].reverse().find(m => m.kind === "progress" || m.kind === "thinking");
-  const label = live ? liveWorkHTML(seconds, latest?.text) : `${ico("check")}<span>${esc(t("chat.workedFor", { p0: seconds }))}</span>`;
+  const label = live ? liveWorkHTML(latest?.text) : `${ico("check")}<span>${esc(t("chat.workedFor", { p0: seconds }))}</span>`;
   const body = messages.map(m => `<div class="chat-message" data-message="${m.seq}"><div class="${m.kind === "event" ? "turn-event" : "work-progress"}">${messageHTML(m.text, query)}</div></div>`).join("") +
     ((turn.steps?.length ?? 0) > 0 ? `<ol class="step-list">${shownSteps(turn).map(step => stepHTML(step, false)).join("")}</ol>` : "");
   if (!body) return `<div class="work-section think-box${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}><div class="btn work-toggle" role="status">${label}</div></div>`;
@@ -928,7 +928,23 @@ export function pendingTurnHTML(question: string | null, _source: string, look: 
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
     `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
     `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
-    `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML(Math.max(0, Math.round((nowMs - start) / 1000)))}</div></div>` +
+    `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML()}</div></div>` +
     `</div></div></li>`
   );
+}
+
+/** Paint clocks in the same task as the markup, without making time part of a line's identity. */
+export function updateLiveTimes(root: ParentNode, nowMs = Date.now()): void {
+  const write = (label: HTMLElement, text: string): void => { if (label.textContent !== text) label.textContent = text; };
+  for (const line of root.querySelectorAll<HTMLElement>(".work-section.is-live[data-work-start]")) {
+    const label = line.querySelector<HTMLElement>(".work-time");
+    if (label) write(label, t("chat.workingFor", { p0: Math.max(0, Math.round((nowMs - Number(line.dataset.workStart)) / 1000)) }));
+  }
+  for (const label of root.querySelectorAll<HTMLElement>("[data-since]")) write(label, formatDuration(nowMs - Number(label.dataset.since)));
+  for (const label of root.querySelectorAll<HTMLElement>("[data-duration]")) write(label, formatDuration(Number(label.dataset.duration)));
+}
+
+/** A loaded task or handoff belongs to this thread; unknown tasks are polled more slowly. */
+export function hasWorkerTask(turns: readonly AgentTurn[], taskId: number): boolean {
+  return turns.some(turn => turn.task?.id === taskId || turn.handoffs?.some(task => task.task_id === taskId));
 }

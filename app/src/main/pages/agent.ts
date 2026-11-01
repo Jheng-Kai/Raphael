@@ -1,3 +1,4 @@
+import { patchThread } from "../thread-diff";
 // 拉斐爾: the one conversation with Raphael (`agent.history.list`), oldest at the top and newest at
 // the bottom, under the days it was had, whether it was said to the emblem, sent from a chat app or
 // typed here. Scrolling up brings the earlier turns; the page follows the newest only while it is
@@ -76,7 +77,8 @@ import {
   dayHTML,
   emptyTimelineState,
   forgetReruns,
-  formatDuration,
+  updateLiveTimes,
+  hasWorkerTask,
   isLive,
   markSeen,
   noteTaskEnds,
@@ -91,7 +93,7 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
-import { copyText, esc, ico, iconButton, toaster } from "../ui";
+import { copyText, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
@@ -274,7 +276,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     visible: () => visible,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => desktop.sync()); },
-    onSelect: () => { app.go("agent"); switchThread(); },
+    onSelect: (_id, sameThread) => {
+      app.go("agent");
+      if (sameThread) { roomPane.close(); void load(false); focusComposer(); }
+      else switchThread();
+    },
     onUpdate: () => {
       composerBrain?.draw();
       drawComposer();
@@ -334,10 +340,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     conversationButton.setAttribute("aria-label", `${members.member().name}: ${title}`); conversationButton.title = title;
   }
 
+  const conversationsDirty = new Set<number>();
   async function readConversations(member: number): Promise<void> {
+    conversationsDirty.delete(member);
     try {
       const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
       if (!Array.isArray(result?.conversations)) return;
+      const same = JSON.stringify(conversationCache.get(member)) === JSON.stringify(result.conversations);
       conversationCache.set(member, result.conversations);
       const chosen = chosenConversations.get(member);
       if (!result.conversations.some(c => c.id === chosen)) {
@@ -345,6 +354,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (next) chosenConversations.set(member, next.id);
         else chosenConversations.delete(member);
       }
+      if (same) return;
       if (member === memberId()) drawConversation();
       window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
@@ -363,6 +373,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
     const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
     conversationCache.set(member,remaining);
+    conversationsDirty.add(member);
     if(chosenConversations.get(member)!==id)return;
     // Reload the authoritative default before history: the cached list predates its promotion.
     chosenConversations.delete(member);
@@ -411,7 +422,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const roomPane = createRoomPane(app, () => {
     el.classList.remove("is-room"); memberChat.hidden = false;
     el.querySelector(".mb-head-l")!.append(members.picker);
-    if (visible) desktop.show();
+    if (visible) { members.show(); desktop.show(); }
   }, () => { if (visible) attachmentMedia.sync(); });
   el.append(roomPane.el);
   window.addEventListener("raphael:open-room", event => {
@@ -420,6 +431,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
     roomPane.el.querySelector(".room-picker")!.append(members.picker);
+    members.show();
     void members.load();
     void roomPane.open((event as CustomEvent<{roomId:number}>).detail.roomId);
   });
@@ -593,12 +605,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawFaces(): void {
     drawComposerTask();
     if (inRaphael()) {
-      askFace.innerHTML = avatarHTML({ size: 30 });
-      hero.innerHTML = avatarHTML({ size: 132, loop: true });
+      patchHTML(askFace, avatarHTML({ size: 30 }));
+      patchHTML(hero, avatarHTML({ size: 132, loop: true }));
     } else {
       const member = members.member();
-      askFace.innerHTML = faceHTML(member, 30);
-      hero.innerHTML = faceHTML(member, 96);
+      patchHTML(askFace, faceHTML(member, 30));
+      patchHTML(hero, faceHTML(member, 96));
     }
     voice.redraw();
   }
@@ -641,6 +653,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Keep draft cards mounted while their filenames and remove labels stay current. */
   function drawFile(): void {
     const label = esc(t("agent.unattach"));
+    const beforeHeight = scroller.scrollHeight, beforeClient = scroller.clientHeight;
     const follows = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= BOTTOM_SLACK_PX;
     for (const [id, chip] of fileChips) {
       if (files.some((file) => file.id === id)) continue;
@@ -664,7 +677,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       `<button type="button" class="chip-x" data-act="drop-missing" data-index="${index}" aria-label="${label}">${ico("x")}</button></span>`);
     fileChip.hidden = files.length === 0 && missingFiles.length === 0;
     sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
-    if (follows) scroller.scrollTop = scroller.scrollHeight;
+    if (follows && (beforeHeight !== scroller.scrollHeight || beforeClient !== scroller.clientHeight)) scroller.scrollTop = scroller.scrollHeight;
   }
 
   function drawQuote(): void {
@@ -775,44 +788,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawThread(): void {
     hideSelection();
     const wanted = lines();
-    const before = new Map<string, Element>();
-    for (const child of [...thread.children]) before.set((child as HTMLElement).dataset.key ?? "", child);
-    const droppedPending = [...before.keys()].some((key) => (key.startsWith("out:") || key === "hearing") && !wanted.some((line) => line.key === key));
-    const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-act][data-focus]")?.dataset.focus;
-    const keep = new Set<Element>();
-    let at = 0;
-    for (const line of wanted) {
-      let node = before.get(line.key);
-      if (!node || drawnHTML.get(node) !== line.html) {
-        const fresh = document.createElement("template");
-        fresh.innerHTML = line.html;
-        const made = fresh.content.firstElementChild as HTMLElement;
-        made.dataset.key = line.key;
-        for (const control of made.querySelectorAll<HTMLElement>("[data-act]")) control.dataset.focus = `${control.dataset.act}:${control.dataset.task ?? line.key}:${control.closest<HTMLElement>("[data-message]")?.dataset.message ?? ""}:${control.dataset.url ?? ""}`;
-        drawnHTML.set(made, line.html);
-        // A turn that came after the newest one drawn, or a question just sent, comes in from below.
-        const arrives = drewOnce && !node && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending);
-        if (arrives) made.classList.add("is-new");
-        if (node) {
-          // A key being typed into a secret card goes to the same card in the new line.
-          const restore = carryTyped(node, made);
-          const restoreMail = carryMail(node, made);
-          const restorePages = pagesHost.carry(node, made);
-          node.before(made);
-          restorePages();
-          node.remove();
-          restore();
-          restoreMail();
-        }
-        node = made;
-      }
-      keep.add(node);
-      const here = thread.children[at];
-      if (here !== node) thread.insertBefore(node, here ?? null);
-      at++;
-    }
-    for (const child of [...thread.children]) if (!keep.has(child)) child.remove();
-    if (focusKey) thread.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+    const droppedPending = [...thread.children].some(node => {
+      const key = (node as HTMLElement).dataset.key ?? "";
+      return (key.startsWith("out:") || key === "hearing") && !wanted.some(line => line.key === key);
+    });
+    patchThread(thread, wanted, drawnHTML, {
+      arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
+      carry(node, made) {
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made);
+        return () => { node.before(made); restorePages(); node.remove(); restore(); restoreMail(); };
+      },
+    });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
     drewOnce = true;
     if (visible) attachmentMedia.sync();
@@ -821,6 +807,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     desktop.sync();
     pagesHost.sync();
     measureMessages();
+    updateLiveTimes(thread);
   }
 
   /** Re-check wrapped lines when the window or the member details panel changes width. */
@@ -828,7 +815,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     measureMessagePreviews(thread);
   }
 
+  let renderedPage = "";
+  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), pending, turns, outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
+    [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
+    renderedPage = pageStamp();
     stage.setAttribute("aria-busy", String(pending));
     if (pending && isEmpty()) {
       wait.innerHTML = loadingHTML();
@@ -854,6 +845,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const wasEmpty = scroller.hidden;
     empty.hidden = true;
     scroller.hidden = dock.hidden = false;
+    const beforeHeight = scroller.scrollHeight;
     const keepUp = !searching && (follow || wasEmpty || atBottom());
     drawDock();
     state.nowMs = Date.now();
@@ -865,7 +857,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     finder.refresh();
     older.hidden = !loadingEarlier;
     older.innerHTML = loadingEarlier ? loadingHTML() : "";
-    if (keepUp) scroller.scrollTop = scroller.scrollHeight;
+    if (keepUp && (wasEmpty || scroller.scrollHeight !== beforeHeight) && !atBottom()) scroller.scrollTop = scroller.scrollHeight;
     if (thread.querySelector(".work-section.is-live")) startTicker();
     else stopTicker();
     // A first page that does not fill the window has no scrolling to bring the earlier ones.
@@ -876,11 +868,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function tick(): void {
     const now = Date.now();
     state.nowMs = now;
-    for (const line of thread.querySelectorAll<HTMLElement>(".work-section.is-live[data-work-start]")) {
-      const label = line.querySelector<HTMLElement>(".work-time");
-      if (label) label.textContent = t("chat.workingFor", { p0: Math.max(0, Math.round((now - Number(line.dataset.workStart)) / 1000)) });
-    }
-    for (const line of thread.querySelectorAll<HTMLElement>("[data-since]")) line.textContent = formatDuration(now - Number(line.dataset.since));
+    updateLiveTimes(thread, now);
   }
   function startTicker(): void {
     if (ticker === null && visible) ticker = setInterval(tick, 1000);
@@ -896,7 +884,24 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // ---------- loading ----------
 
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
+  let activeRead: { key: string; promise: Promise<void> } | null = null;
+  let readAgain = false;
   async function load(earlier: boolean): Promise<void> {
+    if (earlier) return readPage(true);
+    const key = `${memberId()}:${conversationId()}:${loads}`;
+    if (activeRead?.key === key) { readAgain = true; return activeRead.promise; }
+    const promise = readPage(false);
+    const active = { key: `${memberId()}:${conversationId()}:${loads}`, promise };
+    activeRead = active;
+    try { await promise; }
+    finally {
+      if (activeRead === active) {
+        activeRead = null;
+        if (readAgain) { readAgain = false; scheduleRefresh(); }
+      }
+    }
+  }
+  async function readPage(earlier: boolean): Promise<void> {
     if (earlier && (loadingEarlier || !canLoadEarlier)) return;
     const mine = earlier ? loads : ++loads;
     if (earlier) loadingEarlier = true;
@@ -907,7 +912,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     try {
       const before = earlier ? oldestId(turns) : undefined;
       const member = memberId();
-      await readConversations(member);
+      if (!conversationCache.has(member) || conversationsDirty.has(member)) await readConversations(member);
       if (mine !== loads) return;
       got = (
         await api.agentHistoryList({
@@ -971,7 +976,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     forgetReruns(state, turns);
     settlePending();
     failure = null;
-    render();
+    if (earlier || renderedPage !== pageStamp()) render();
+    else { stage.setAttribute("aria-busy", "false"); updateLiveTimes(thread); }
     // The earlier turns come in above the reader, who stays where they were.
     if (earlier) scroller.scrollTop = scroller.scrollHeight - fromBottom;
     if (targetTurn !== undefined) {
@@ -1033,12 +1039,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     hearingTimer = undefined;
   }
 
-  function scheduleRefresh(): void {
-    if (!visible || refreshTimer !== null) return;
+  let refreshDue = 0;
+  function scheduleRefresh(delay = REFRESH_DELAY_MS): void {
+    if (!visible || roomPane.active) return;
+    const due = Date.now() + delay;
+    if (refreshTimer !== null && refreshDue <= due) return;
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
       void load(false);
-    }, REFRESH_DELAY_MS);
+    }, delay);
   }
 
   // ---------- asking ----------
@@ -1673,7 +1684,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   function drawComposerTask(): void {
     const task = composerTask();
-    voiceButton.innerHTML = avatarHTML({ size: 32, avatar: null });
+    if (!task) patchHTML(voiceButton, avatarHTML({ size: 32, avatar: null }));
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     voiceButton.disabled = !task && conversationId() === undefined;
     let note = composer.querySelector<HTMLElement>("[data-conversation-missing]");
@@ -2073,14 +2084,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "Hotkey" && event.kind === "cancel_key" && visible ) cancelGesture().press();
     if (event.type === "Hotkey" && event.kind === "cancel_reset") cancelGesture().clear();
     members.follow(event);
-    if (event.type === "ConversationsChanged") conversationChange(event.member_id);
-    if (event.type === "AgentTurn") conversationChange(event.member_id ?? RAPHAEL_ID);
+    if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
+    if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
     if (event.type === "MembersChanged") void slashMenu.refresh();
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
-      if (event.type !== "AgentTurn" || (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
-      members.changed();
+      if (event.type === "WorkerChanged") scheduleRefresh(hasWorkerTask(turns, event.task_id) ? REFRESH_DELAY_MS : 1000);
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
+      // Loaded running work changes history; activity and turn events own the roster's state and preview.
+      if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }
     waiting?.follow(event);
     if (event.type === "AgentQuestion") {
@@ -2179,6 +2192,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     show(arg) {
       const wasVisible = visible;
       visible = true;
+      if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
       else void roomPane.refresh();
       problemNotice.show();

@@ -9,6 +9,8 @@
 // The movement is the design page's: 520 ms out with cubic-bezier(.2,.8,.2,1), 380 ms back with
 // cubic-bezier(.4,0,.2,1). With reduced motion the flyer is simply there, and simply gone.
 
+import { patchHTML } from "./ui";
+
 /** The flyer's diameter when it has landed: the emblem of the empty page. */
 export const FLYER_PX = 132;
 /** The gap between the flyer and the top of the composer, in px. */
@@ -157,6 +159,6 @@ export class VoiceMode {
 
   /** The picture changed while it is up: the flyer shows the new one. */
   redraw(): void {
-    if (this.flyer) this.flyer.innerHTML = this.parts.face();
+    if (this.flyer) patchHTML(this.flyer, this.parts.face());
   }
 }

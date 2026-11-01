@@ -1,6 +1,7 @@
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
 import { idleCost, slimeBoard, slimePointer, slimeSharp } from "./slime-board.mjs";
+import { eventStorm } from "./event-storm.mjs";
 
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
@@ -311,6 +312,7 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
+    case "event-storm": return await eventStorm(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);

@@ -553,3 +553,8 @@ See [Connections/MCP](connections-mcp.md#connections-from-a-conversation-2026-11
 ## Answer forms (2026-11-01)
 
 See [Conversation](conversation.md#answer-forms-2026-11-01) for R-FORM-01/02, schemas, scene coverage and external-text boundaries.
+## Still conversations during team work (2026-11-01)
+
+See [Conversation](conversation.md#still-conversations-during-team-work-2026-11-01) for R-UI-71, the shared keyed line diff, synchronous cached previews, preserved face nodes, bounded event reads and the busy-team scene matrix.
+
+The still-thread review follow-up adds conversation-midnight to the conversation map: shared look clock rollover with unchanged history and retained conversation nodes. Viewing, unread-on-show, core restart and room return are covered by pages/agent-members.test.ts.

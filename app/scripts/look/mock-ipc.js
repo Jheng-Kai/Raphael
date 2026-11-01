@@ -115,6 +115,23 @@ export function installMock(fixture, config = {}, target = window) {
       runningTurn.status = "done";
       runningTurn.task = { id: 71, state: "running", started_at_ms: data.now - 5000, finished_at_ms: null };
     }
+    if (variant.linkedThread) {
+      // A long conversation the way a team leaves it: earlier replies hold links, and the newest turn's work is still running.
+      const link = variant.linkedThreadURL;
+      const reply = (id, at) => ({ ...structuredClone(runningTurn), id, status: "done", task: null, steps: [], session_id: `linked-${id}`, created_at_ms: at, question: `第 ${id} 個問題`,
+        text: `已依[新參考規格](${link})整理好第 ${id} 項。\n\n${link}`, detail: null, messages: [{ seq: 1, kind: "reply", text: `已依[新參考規格](${link})整理好第 ${id} 項。\n\n${link}`, at_ms: at }] });
+      for (let index = 0; index < variant.linkedThread; index++) data.turns.push(reply(100000 + index, data.now - (variant.linkedThread - index) * 60_000));
+      runningTurn.id = 200000;
+      runningTurn.created_at_ms = data.now - 30_000;
+      runningTurn.text = `已派發[新參考規格](${link})給團隊。`;
+      runningTurn.messages = [{ seq: 1, kind: "reply", text: runningTurn.text, at_ms: data.now - 29_000 }];
+    }
+  }
+  if (variant.linkedRoom) {
+    const source = data.messages.find(message => message.room_id === 1 && message.member_id !== null);
+    data.messages = Array.from({ length: variant.linkedRoom }, (_, index) => ({ ...structuredClone(source), id: 100000 + index,
+      created: data.now - (variant.linkedRoom - index) * 60000, status: "done", turn: null,
+      text: `${variant.linkedRoomText} ${variant.linkedRoomURL}` }));
   }
   // Turns the core writes later and then announces (agent.turn), such as an Alt+Space answer.
   const arrivals = new Map((variant.arrivals ?? []).map(turn => [turn.id, structuredClone(turn)]));

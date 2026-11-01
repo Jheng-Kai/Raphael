@@ -2,7 +2,7 @@
 import * as api from "./api";
 import { t } from "./i18n";
 import { conversationTitle, relativeTime } from "./conversation-list";
-import { esc } from "./ui";
+import { esc, patchHTML } from "./ui";
 import { describeError } from "./format";
 
 interface Hit {
@@ -22,7 +22,7 @@ export function createMessageSearch(host: HTMLElement, options: { face(member: n
   let query = "", members = "", hits: Hit[] = [], error = "", epoch = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   function render(): void {
-    if (!query) { host.innerHTML = members; return; }
+    if (!query) { patchHTML(host, members); return; }
     host.innerHTML = `<div class="search-group-label">${esc(t("chat.members"))}</div>${members}` +
       `<div class="search-group-label">${esc(t("chat.messages"))}</div>` +
       (error ? `<p class="mb-none">${esc(error)}</p>` : hits.length ? hits.map(hit =>

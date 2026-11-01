@@ -338,3 +338,33 @@ test("a member's question waits in the room above its composer, and its row says
  expect(section.querySelector('[data-room="1"] .mb-dot.is-wait')).not.toBeNull();
  expect(section.querySelector('[data-room="1"] .mb-row-p')!.textContent).toBe('等你處理');
 });
+
+
+test("unchanged room reads retain heading faces and lines; unrelated workers read nothing", async () => {
+  api.roomMessages.mockResolvedValue({ messages: [{ id: 71, room_id: 1, member_id: 1, text: "A settled reply", created: 1, status: "done" }] });
+  const view = await pane(), line = view.el.querySelector(".tn"), face = view.el.querySelector(".au-room-faces .av");
+  const input = draft("Unsent draft"); input.focus(); input.setSelectionRange(3, 3);
+  await view.refresh();
+  expect(view.el.querySelector(".tn")).toBe(line); expect(view.el.querySelector(".au-room-faces .av")).toBe(face);
+  expect(document.activeElement).toBe(input); expect(input.selectionStart).toBe(3);
+  api.roomMessages.mockClear();
+  event({ type: "WorkerChanged", task_id: 999, state: "running", running: true }); await flush();
+  event({ type: "RoomsChanged", room_id: 2 }); await flush();
+  expect(api.roomMessages).not.toHaveBeenCalled(); view.close();
+});
+
+test("a new room message retains older slime lines across animation clocks", async () => {
+  const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  let view: Awaited<ReturnType<typeof pane>> | undefined;
+  try {
+    const message = { id: 71, room_id: 1, member_id: 1, text: "A settled reply", created: 1, status: "done" };
+    api.roomMessages.mockResolvedValue({ messages: [message] }); view = await pane();
+    const line = view.el.querySelector('[data-room-message="71"]'), face = line!.querySelector("svg.slime");
+    clock.mockReturnValue(3000);
+    api.roomMessages.mockResolvedValue({ messages: [message, { ...message, id: 72, text: "A new reply", created: 2 }] });
+    await view.refresh();
+    expect(view.el.querySelector('[data-room-message="71"]')).toBe(line);
+    expect(line!.querySelector("svg.slime")).toBe(face);
+    expect(view.el.querySelector('[data-room-message="72"]')?.textContent).toContain("A new reply");
+  } finally { clock.mockRestore(); view?.close(); }
+});

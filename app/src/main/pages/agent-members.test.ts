@@ -41,6 +41,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { openGroupChat } from "../group-chats";
 
 const member = (id: number, more: Partial<Member> = {}): Member => ({
   id, name: `成員${id}`, role: "", instructions: "", avatar: "", group_id: null, model: "", tools: null, position: id, created: 0, unread: false, waiting: false, preview: "", last_at: null, ...more,
@@ -90,6 +91,90 @@ const pick = async (id: number) => {
   $(`.mb-col [data-member="${id}"]`).click();
   await flush();
 };
+
+test("returning to an unchanged thread restores viewing once", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  api.membersViewing.mockClear();
+  agent.hide(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(null);
+  api.membersViewing.mockClear();
+  agent.show(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
+  agent.show(); await flush();
+  expect(api.membersViewing).toHaveBeenCalledTimes(1);
+  agent.hide();
+});
+
+test("show reads an unread thread already loaded while hidden", async () => {
+  const agent = mount(); await flush(); await pick(3); agent.hide(); await flush();
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(m => m.id === 3 ? { ...m, unread: true } : m) });
+  await agent.loadSidebar(); await flush();
+  expect(document.querySelector('[data-member="3"] .is-unread')).not.toBeNull();
+  api.membersRead.mockClear();
+  agent.show(); await flush();
+  expect(api.membersRead).toHaveBeenCalledExactlyOnceWith(3);
+  expect(document.querySelector('[data-member="3"] .is-unread')).toBeNull();
+  agent.hide();
+});
+
+test("a restarted core receives the current viewing even with an unchanged roster", async () => {
+  const agent = mount(); await flush(); await pick(3);
+  api.membersViewing.mockClear(); api.membersList.mockClear();
+  api.core.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
+  expect(api.membersList).toHaveBeenCalledTimes(1);
+  expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
+  expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true);
+  agent.hide();
+});
+
+test("an unchanged worker storm sends no additional viewing calls", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  api.membersViewing.mockClear();
+  for (let i = 0; i < 20; i++) {
+    send({ type: "WorkerChanged", task_id: 999, state: "running", running: true });
+    await vi.advanceTimersByTimeAsync(200); await flush();
+  }
+  expect(api.membersViewing).not.toHaveBeenCalled();
+  agent.hide();
+});
+
+test("returning from a room refreshes the same member without clearing retained turns", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const old = $('.mb-chat .tn[data-id="30"]');
+  await openGroupChat(1); await flush();
+  send({ type: "AgentTurn", turn_id: 32, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  let finish!: (result: { turns: AgentTurn[] }) => void;
+  api.agentHistoryList.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  $('[data-member="3"]').click(); await flush();
+  expect($('.mb-chat').hidden).toBe(false);
+  expect(document.querySelector('.mb-chat .tn[data-id="30"]')).toBe(old);
+  finish({ turns: [turn(32, { member_id: 3, text: "Arrived while the room was open" }), ...THREADS[3]] });
+  await flush();
+  expect($('.mb-chat .thread').textContent).toContain("Arrived while the room was open");
+  expect($('.mb-chat .tn[data-id="30"]')).toBe(old);
+  agent.hide();
+});
+
+test("showing unchanged members restores the current destination without replacing faces", async () => {
+  const agent = mount(); await flush();
+  const row = $('.mb-chief'), face = row.querySelector('.av');
+  agent.hide(); await agent.loadSidebar();
+  expect(row.getAttribute('aria-current')).toBe('false');
+  agent.show(); await flush();
+  expect($('.mb-chief').getAttribute('aria-current')).toBe('true');
+  expect($('.mb-chief .av')).toBe(face);
+  expect(document.querySelector('[data-member="4"] .is-unread')).not.toBeNull();
+  await openGroupChat(1); await flush();
+  expect($('.mb-chief').getAttribute('aria-current')).toBe('false');
+  await pick(3);
+  expect($('[data-member="3"]').getAttribute('aria-current')).toBe('true');
+  expect($('.mb-chief .av')).toBe(face);
+  agent.hide();
+});
 
 test("sidebar pin and hide update only their target and hiding the open member returns to Raphael", async () => {
   const agent = mount(); await flush(); await pick(3);
@@ -1029,6 +1114,15 @@ test("a core without the members: Raphael alone, and the page works as before", 
   expect(document.querySelectorAll(".mb-col .mb-list .mb-row")).toHaveLength(1);
   expect($(".mb-col .mb-chief b").textContent).toBe("拉斐爾");
   expect($(".thread").textContent).toContain("回答 2");
+});
+
+test("a changed roster preview retains the prompt and empty-page faces", async () => {
+  mount(); await flush();
+  const prompt = $(".ask-face .av"), hero = $(".ra-hero .av");
+  api.membersList.mockResolvedValue({ ...LIST, members: LIST.members.map(member => member.id === 3 ? { ...member, preview: "A new preview" } : member) });
+  send({ type: "MembersChanged" }); await flush();
+  expect($(".ask-face .av")).toBe(prompt); expect($(".ra-hero .av")).toBe(hero);
+  expect(document.querySelector('[data-member="3"] .mb-row-p')?.textContent).toContain("A new preview");
 });
 
 

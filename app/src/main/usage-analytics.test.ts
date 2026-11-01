@@ -38,6 +38,16 @@ async function setup(answer: (p: UsageRequest) => Promise<UsageAnalytics> = asyn
 
 const charts = (host: Element) => [...host.querySelectorAll("svg:not(.i):not(.slime)")].filter((svg) => !svg.closest(".slime-cels"));
 
+test("unchanged activity refresh retains usage faces and chart hover", async () => {
+  const { host, mounted } = await setup();
+  const face = host.querySelector(".av"), chart = charts(host)[0];
+  const records: MutationRecord[] = [], observer = new MutationObserver(batch => records.push(...batch));
+  observer.observe(host, { childList: true, subtree: true });
+  await mounted.refresh(); await Promise.resolve();
+  expect(host.querySelector(".av")).toBe(face); expect(charts(host)[0]).toBe(chart);
+  expect(records).toHaveLength(0); observer.disconnect();
+});
+
 test("renders all five analytics sections, exact values and estimated dictation notice", async () => {
   const { host, api } = await setup();
   expect(api.usageAnalytics).toHaveBeenCalledWith({ range: "7d", tz: "Asia/Taipei" });

@@ -68,16 +68,20 @@ export function createAutomationsPage(app: AppContext): Page {
     openRoutineDialog({ members, routine, memberId, date: day, time, onSaved: () => void load(), onDeleted: () => void load() });
   };
 
+  let readStamp = "";
   async function load(): Promise<void> {
     const mine = ++loads, month = dateKey(date).slice(0, 7);
     try {
       const [people, plans, home] = await Promise.all([api.membersList(getLocale()), api.routinesList(), api.homeOverview(false, month)]);
       const histories = await Promise.all(plans.routines.map(async r => [r.id, await api.routineRuns(r.id)] as const));
       if (mine !== loads || !visible) return;
+      const stamp = JSON.stringify([people, plans, histories, home.calendar_events ?? home.calendar, home.calendar_google]);
+      const same = stamp === readStamp && !pending;
+      readStamp = stamp;
       members = primaryFirst(people.members, primaryIdOf(people)); routines = plans.routines;
       items = (home.calendar_events ?? home.calendar).filter(item => item.kind === "event" || item.kind === "own");
       google = home.calendar_google;
-      logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; draw();
+      logs = new Map(histories.map(([id, h]) => [id, h.runs])); runCounts = new Map(histories.map(([id, h]) => [id, h.total ?? h.runs.length])); pending = false; if (!same) draw();
       if (focusedHomeItem) {
         const target = [...el.querySelectorAll<HTMLElement>("[data-calendar-item]")].find(item => item.dataset.calendarItem === focusedHomeItem ||
           (focusedHomeItem.startsWith("rhythm:") && item.dataset.calendarItem?.startsWith(focusedHomeItem.split(":").slice(0,2).join(":")+":")));

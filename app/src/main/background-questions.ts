@@ -130,7 +130,7 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
       return card;
     });
     const changed = cards.length !== before.size || cards.some((card, n) => element.children[n] !== card);
-    element.replaceChildren(...cards);
+    if (changed) element.replaceChildren(...cards);
     element.hidden = shown.length === 0;
     if (changed) host.changed?.();
   }
@@ -190,7 +190,7 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
   });
 
   function follow(event: MainEvent): void {
-    if (event.type !== "WorkerChanged") return;
+    if (event.type !== "WorkerChanged" || (event.state === "running" && !shown.some(question => question.task_id === event.task_id))) return;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;

@@ -268,3 +268,50 @@ test("a pending request returns only to its original conversation and stops befo
   expect(api.agentStop).toHaveBeenCalledExactlyOnceWith(api.agentAskText.mock.lastCall![3].requestId, 0);
   expect(api.workerCancel).not.toHaveBeenCalled();
 });
+
+
+test("unchanged history refresh touches no live line, face, composer or scroll", async () => {
+  turns = [live({ task: { id: 71, state: "running", started_at_ms: Date.now() - 5000 } as AgentTurn["task"] })];
+  mount(); await flush();
+  const line = $(".tn"), face = $(".mb-chief .av"), input = $<HTMLTextAreaElement>(".cmp-input");
+  input.value = "Draft stays"; input.focus(); input.setSelectionRange(3, 3);
+  const dock = $(".ra-dock"), dockChanges = vi.fn();
+  const observer = new MutationObserver(dockChanges); observer.observe(dock, { childList: true, subtree: true });
+  api.membersViewing.mockClear(); api.routinesList.mockClear();
+  await refresh({ type: "WorkerChanged", task_id: 71, state: "running", running: true });
+  expect($(".tn")).toBe(line); expect($(".mb-chief .av")).toBe(face);
+  expect(input.value).toBe("Draft stays"); expect(input.selectionStart).toBe(3); expect(document.activeElement).toBe(input);
+  expect(api.membersViewing).not.toHaveBeenCalled(); expect(api.routinesList).not.toHaveBeenCalled();
+  expect(dockChanges).not.toHaveBeenCalled(); observer.disconnect();
+});
+
+test("an unchanged history refresh updates the day heading across local midnight", async () => {
+  vi.setSystemTime(new Date(2026, 9, 20, 23, 59));
+  turns = [live({ status: "done", text: "A settled reply" })];
+  mount(); await flush();
+  const line = $('.tn[data-id="11"]');
+  expect($('.thread .day').textContent).toBe("今天");
+  vi.setSystemTime(new Date(2026, 9, 21, 0, 1));
+  emit({ type: "WorkerChanged", task_id: 999, state: "running", running: true });
+  await vi.advanceTimersByTimeAsync(1100); await flush();
+  expect($('.thread .day').textContent).toBe("昨天");
+  expect($('.tn[data-id="11"]')).toBe(line);
+});
+
+test("unrelated worker refresh is bounded but a loaded handoff stays prompt", async () => {
+  turns = [live({ handoffs: [{ task_id: 72, member_id: 3, member_name: "Colleague", state: "running", mode: "work", evidence: [], source_turn_id: 11, work_turn_id: 12, from_member_id: 0, stage_id: "work", reason: null, created_at_ms: 0, ready_at_ms: 0, dispatch_policy: "immediate", result: "" }] as AgentTurn["handoffs"] })]; mount(); await flush();
+  api.agentHistoryList.mockClear(); api.membersList.mockClear();
+  for (let i = 0; i < 20; i++) { emit({ type: "WorkerChanged", task_id: 999, state: "running", running: true }); await vi.advanceTimersByTimeAsync(200); }
+  expect(api.agentHistoryList.mock.calls.length).toBeLessThanOrEqual(4);
+  expect(api.membersList.mock.calls.length).toBeLessThanOrEqual(4);
+  api.agentHistoryList.mockClear();
+  emit({ type: "WorkerChanged", task_id: 72, state: "running", running: true }); await vi.advanceTimersByTimeAsync(160);
+  expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+});
+
+test("slow history reads still publish while worker events outrun them", async () => {
+  turns = [live()]; mount(); await flush();
+  api.agentHistoryList.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ turns: [live({ text: "Progress arrived" })] }), 450)));
+  for (let i = 0; i < 12; i++) { emit({ type: "WorkerChanged", task_id: 71, state: "running", running: true }); await vi.advanceTimersByTimeAsync(200); }
+  expect(document.body.textContent).toContain("Progress arrived");
+});

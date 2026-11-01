@@ -1,7 +1,16 @@
 // @vitest-environment happy-dom
 import { expect, test } from "vitest";
-import { turnHTML, emptyTimelineState } from "./timeline";
+import { turnHTML, stepsHTML, emptyTimelineState, updateLiveTimes } from "./timeline";
 import { setLocale } from "./i18n";
+import type { AgentTurn } from "./types";
+
+test("a queued task without a start time paints its existing duration before the first frame", () => {
+  setLocale("en");
+  const turn = { id: 3, created_at_ms: 1000, question: "Question", prefix: "", text: "Done", detail: null, route: "answer", status: "done", steps: [], task: { id: 3, state: "queued", started_at_ms: null, finished_at_ms: null } } as AgentTurn;
+  const host = document.createElement("div"); host.innerHTML = stepsHTML(turn, emptyTimelineState());
+  updateLiveTimes(host, 5000);
+  expect(host.querySelector(".task-time")?.textContent).toBe("<0.1s");
+});
 
 test("completed work is one closed section above the answer; opening retains public progress and events", () => {
   setLocale("en");
@@ -33,7 +42,13 @@ test("running work keeps the latest public update, ticking time and dots in one 
   ] };
   const host = document.createElement("div"); host.innerHTML = turnHTML(turn, state, false, { face: () => "" });
   expect(host.querySelector(".work-latest")?.textContent).toBe("Comparing findings");
+  updateLiveTimes(host, state.nowMs);
   expect(host.querySelector(".work-time")?.textContent).toContain("4");
+  const line = host.firstElementChild, label = host.querySelector(".work-time");
+  updateLiveTimes(host, 8000);
+  expect(label?.textContent).toContain("7");
+  expect(host.firstElementChild).toBe(line);
+  expect(host.querySelector(".work-time")).toBe(label);
   expect(host.querySelectorAll(".think")).toHaveLength(1);
   expect(host.querySelectorAll(".work-toggle .think i")).toHaveLength(3);
   expect(host.querySelector(".work-body")?.hasAttribute("hidden")).toBe(true);

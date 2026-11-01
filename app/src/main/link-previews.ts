@@ -66,7 +66,11 @@ export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Pr
     sync(): void {
       active = true;
       observer?.disconnect();
-      for (const card of root.querySelectorAll<HTMLElement>("[data-preview-url]:not([data-preview-loaded])")) observer?.observe(card);
+      for (const card of root.querySelectorAll<HTMLElement>("[data-preview-url]:not([data-preview-loaded])")) {
+        const entry = cache.get(card.dataset.previewUrl ?? "");
+        if (entry && entry.until > Date.now() && entry.result !== undefined) load(card);
+        else observer?.observe(card);
+      }
       fallback();
     },
     pause(): void { active = false; observer?.disconnect(); },

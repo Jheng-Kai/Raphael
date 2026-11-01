@@ -26,6 +26,10 @@ it("separates the ledger bill from retained work and only shows applicable exclu
   expect(host.querySelector(".run-exclusions")).toBeNull();
   expect(host.querySelector('[data-bill-purpose="stt"]')?.textContent).toContain("40%");
   expect(host.querySelector('[data-bill-purpose="future-purpose"]')?.textContent).toContain("其他");
+  const face = host.querySelector(".run-tiles"), records: MutationRecord[] = [];
+  const observer = new MutationObserver(batch => records.push(...batch)); observer.observe(host, { childList: true, subtree: true });
+  await view.refresh(); await Promise.resolve();
+  expect(host.querySelector(".run-tiles")).toBe(face); expect(records).toHaveLength(0); observer.disconnect();
   vi.mocked(api.usageRuns).mockResolvedValue({...report,fish_voice:true});
   vi.mocked(api.usageAllowances).mockResolvedValue({brains:[{id:"codex",name:"Codex",windows:[]}]});
   await view.refresh();

@@ -38,6 +38,7 @@ export function mountQuestionReminder(app: AppContext): void {
   };
   app.onEvent(event => {
     if (event.type !== "WorkerChanged" && event.type !== "AgentTurn") return;
+    if (event.type === "WorkerChanged" && event.state === "running") return;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => { timer = null; void check(); }, SETTLE_MS);
   });

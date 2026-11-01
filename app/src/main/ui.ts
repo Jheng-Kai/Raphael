@@ -14,6 +14,53 @@ const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 /** Text as it can go into HTML, in an attribute too. */
 export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => ESCAPES[c]);
 
+/** Update generated markup without discarding its live controls. */
+export function patchHTML(root: Element, html: string): void {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const key = (node: Node): string | null => node instanceof Element
+    ? ["data-k", "data-member-item", "data-group", "data-room"].map(name => node.hasAttribute(name) ? `${name}:${node.getAttribute(name)}` : "").find(Boolean) ?? null : null;
+  const face = (element: Element): Element | null => element.matches("svg.slime") ? element : element.matches(".slime-surface") ? element.querySelector("svg.slime") : null;
+  const walk = (live: Node, next: Node, motion = false): void => {
+    const keyed = new Map([...live.childNodes].flatMap(node => key(node) ? [[key(node)!, node] as const] : []));
+    let at = live.firstChild;
+    for (const fresh of [...next.childNodes]) {
+      const id = key(fresh);
+      let node: Node | null = id ? keyed.get(id) ?? null : at && !key(at) ? at : null;
+      if (!node || node.nodeType !== fresh.nodeType || (node instanceof Element && fresh instanceof Element && (node.tagName !== fresh.tagName || node.namespaceURI !== fresh.namespaceURI))) {
+        node = fresh.cloneNode(true);
+        live.insertBefore(node, at);
+      } else {
+        if (node !== at) live.insertBefore(node, at);
+        if (node instanceof Element && fresh instanceof Element) {
+          const oldFace = face(node), nextFace = face(fresh);
+          const keepMotion = oldFace && nextFace ? oldFace.getAttribute("data-slime-member") === nextFace.getAttribute("data-slime-member") && oldFace.getAttribute("data-state") === nextFace.getAttribute("data-state") : motion;
+          if (keepMotion) {
+            // Generated faces sample a phase for new nodes; retained nodes already have a clock and transition.
+            if (oldFace && nextFace) {
+              const before = (node as HTMLElement | SVGElement).style, after = (fresh as HTMLElement | SVGElement).style;
+              for (const name of ["--slime-delay", "--slime-since"]) {
+                const value = before.getPropertyValue(name);
+                if (value) after.setProperty(name, value); else after.removeProperty(name);
+              }
+              if (before.cssText === after.cssText && node.hasAttribute("style")) fresh.setAttribute("style", node.getAttribute("style")!);
+            }
+            for (const name of ["is-delighted", "slime-in-between"]) if (node.classList.contains(name)) fresh.classList.add(name);
+            if (node.hasAttribute("data-moved")) fresh.setAttribute("data-moved", node.getAttribute("data-moved")!);
+            if (node.getAttribute("style") === "" && !fresh.hasAttribute("style")) fresh.setAttribute("style", "");
+          }
+          for (const attr of [...node.attributes]) if (!fresh.hasAttribute(attr.name)) node.removeAttribute(attr.name);
+          for (const attr of [...fresh.attributes]) if (node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value);
+          walk(node, fresh, !!keepMotion);
+        } else if (node.nodeValue !== fresh.nodeValue) node.nodeValue = fresh.nodeValue;
+      }
+      at = node.nextSibling;
+    }
+    while (at) { const next = at.nextSibling; live.removeChild(at); at = next; }
+  };
+  walk(root, template.content);
+}
+
 // The app's line icons, one 16 x 16 drawing each: drawn to show at 16 CSS px (20 where a larger one
 // is meant), with a 1.5 stroke, round caps and joins and no fill (styles.css `svg.i`). Straight
 // lines sit on .25 / .75 so that one edge of each falls on a whole pixel; an icon shown at 14 or

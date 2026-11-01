@@ -31,7 +31,7 @@ import {
   sourceLabel,
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
-import { esc, ico, iconButton, openMenu, sel, tg, toaster } from "./ui";
+import { esc, ico, iconButton, openMenu, patchHTML, sel, tg, toaster } from "./ui";
 
 export type DetailsTab = "details" | "memory" | "routines" | "skills" | "commands" | "voice";
 
@@ -238,15 +238,15 @@ export function createDetails(host: DetailsHost): DetailsPanel {
       if (!sameMember && (typingIn === "mb-det-name" || typingIn === "mb-det-role")) {
         void saveField(focused as HTMLInputElement, true);
       }
-      who.innerHTML = whoHTML(member);
+      patchHTML(who, whoHTML(member));
     } else {
       const av = who.querySelector<HTMLElement>(".mb-avbtn");
-      if (av) av.innerHTML = faceHTML(member, 64);
-      // A focused field keeps its draft; the other field can still change remotely.
-      for (const [id, value] of [["mb-det-name", member.name], ["mb-det-role", member.role]]) {
-        const input = who.querySelector<HTMLInputElement>(`#${id}`);
-        if (input && id !== typingIn) input.value = value;
-      }
+      if (av) patchHTML(av, faceHTML(member, 64));
+    }
+    // A focused field keeps its draft; the other field can still change remotely.
+    for (const [id, value] of [["mb-det-name", member.name], ["mb-det-role", member.role]]) {
+      const input = who.querySelector<HTMLInputElement>(`#${id}`);
+      if (input && (!sameMember || id !== typingIn) && input.value !== value) input.value = value;
     }
     drawnFor = member.id;
     who.hidden = tab !== "details";

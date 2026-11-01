@@ -25,6 +25,8 @@ test("cards load on intersection, share cached requests on redraw, reserve space
   expect(first.querySelector("script,[onerror]")).toBeNull();
   root.innerHTML = html; previews.sync();
   const replacement = root.firstElementChild!;
+  expect(replacement.getAttribute("data-preview-state")).toBe("ready");
+  expect(replacement.textContent).toContain("A story");
   observe([{ target: replacement, isIntersecting: true } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(replacement.textContent).toContain("A story");

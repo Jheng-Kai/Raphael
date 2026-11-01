@@ -26,6 +26,14 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, cards: cards.length };
   }
+  if (name === "conversation-day-today" || name === "conversation-day-yesterday") {
+    const days = [...document.querySelectorAll('.mb-chat .thread .day')], line = document.querySelector('.mb-chat .thread .tn');
+    const label = name === "conversation-day-today" ? "今天" : "昨天";
+    require(days.at(-1)?.textContent === label, `the last day heading says ${label} with the shared look clock`);
+    if (name === "conversation-day-today") window.__look.midnightLine = line;
+    else require(line === window.__look.midnightLine, "the date change retains the conversation line");
+    return { check: name, label };
+  }
   const rhythmTitle = (bar, timingAllowed) => {
     const title=bar.querySelector('b'), copy=bar.querySelector('.cal-chip-copy'), timing=bar.querySelector('small');
     require(title?.textContent==='Gmail 與行程檢查','the rhythm fixture exercises a long title');

@@ -9,7 +9,7 @@ import { modelsFor } from "./model-picker";
 import type { CatalogModel } from "./types";
 import { formatUsd, describeError } from "./format";
 import { faceHTML } from "./members";
-import { btn as uiBtn, esc, iconButton, openMenu, sel, tabs, toaster } from "./ui";
+import { btn as uiBtn, esc, iconButton, openMenu, patchHTML, sel, tabs, toaster } from "./ui";
 import type { MessageKey } from "./i18n/zh-TW";
 import type { CliAllowances, RunAnalyticsApi, RunGrouping, RunPeriod, RunReport, RunSummary } from "./run-analytics-types";
 
@@ -104,24 +104,27 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     if (error) html += `<p role="alert">${esc(error)}</p>${btn(t("usage.retry"), ' data-run-act="retry"')}`;
     html += `<section class="run-allowance"><header><h3 tabindex="-1">${t("runs.allowance")}</h3>${btn(t("runs.refresh"), ` data-run-act="allowance"${allowanceBusy ? " disabled" : ""}`)}</header>` +
       allowanceHTML() + chatgptHTML() + `</section>`;
-    root.innerHTML = html;
+    patchHTML(root, html);
     if (focus) root.querySelector<HTMLElement>(`[data-run-act="${focus}"]`)?.focus({ preventScroll: true });
   }
   async function refresh(): Promise<void> {
-    const current = ++revision; busy = true; error = ""; render();
+    const current = ++revision, quiet = report !== null && !error, before = JSON.stringify(report);
+    busy = !quiet; error = ""; if (!quiet) render();
     try {
       const result = await api.usageRuns(params());
       if (disposed || current !== revision) return;
       report = result;
     } catch (e) { if (current === revision) error = describeError(e); }
-    if (current === revision) { busy = false; render(); }
+    if (current === revision) { busy = false; if (!quiet || error || JSON.stringify(report) !== before) render(); }
   }
-  async function allowances(): Promise<void> {
-    allowanceBusy = true; render();
+  async function allowances(background = false): Promise<void> {
+    const before = JSON.stringify([allowance, allowanceFailed, chatgpt]);
+    const quiet = background && report !== null;
+    allowanceBusy = !quiet; if (!quiet) render();
     try { allowance = await api.usageAllowances(); allowanceFailed = false; } catch { allowanceFailed = true; }
     const account = await api.chatgptStatus?.().catch(() => null);
     chatgpt = !!account?.signed_in && account.plan_scope_granted !== false;
-    allowanceBusy = false; render();
+    allowanceBusy = false; if (!quiet || JSON.stringify([allowance, allowanceFailed, chatgpt]) !== before) render();
   }
   async function click(event: Event): Promise<void> {
     const button = (event.target as Element).closest<HTMLButtonElement>("button"); if (!button || button.disabled) return;
@@ -162,5 +165,5 @@ export function mountRunAnalytics(host: HTMLElement, api: RunAnalyticsApi, onMod
     if (!disposed) { onModels(models); render(); }
   });
   const ready = Promise.all([refresh(), allowances(), metadata]).then(() => {});
-  return { ready, refresh: async () => { await Promise.all([refresh(), allowances()]); }, destroy() { disposed = true; ++revision; stopLocale(); root.removeEventListener("click", click); root.removeEventListener("keydown",key); root.remove(); } };
+  return { ready, refresh: async () => { await Promise.all([refresh(), allowances(true)]); }, destroy() { disposed = true; ++revision; stopLocale(); root.removeEventListener("click", click); root.removeEventListener("keydown",key); root.remove(); } };
 }

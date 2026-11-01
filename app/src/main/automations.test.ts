@@ -483,3 +483,11 @@ test("routine destination uses an app dropdown",()=>{
  openRoutineDialog({members});click('[data-dlg="more"]');click('[data-dlg="destination"]');
  expect(document.querySelector('#app-popover')!.textContent).toContain("Member's main thread");
 });
+
+
+test("unchanged calendar reads preserve every visible event and face", async () => {
+  const page = createAutomationsPage(app()); document.body.append(page.el); page.show("2026-10-24"); await flush();
+  const calendar = page.el.querySelector(".au-calendar-main");
+  events.forEach(emit => emit({ type: "AgentTurn", turn_id: 999, member_id: 2 })); await flush();
+  expect(page.el.querySelector(".au-calendar-main")).toBe(calendar); page.hide();
+});

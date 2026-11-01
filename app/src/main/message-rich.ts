@@ -7,6 +7,7 @@ import "./message-rich.css";
 
 /** Preserve the visible reading anchor across asynchronous SVG/image size changes. */
 export function preserveRichScroll(root: HTMLElement, change: () => void): void {
+  const height = root.scrollHeight;
   const top = root.getBoundingClientRect().top, follow = root.scrollHeight - root.scrollTop - root.clientHeight < 80;
   const anchor = [...root.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions")].find(node => node.getBoundingClientRect().bottom > top + 2);
   const before = anchor?.getBoundingClientRect().top;
@@ -14,13 +15,16 @@ export function preserveRichScroll(root: HTMLElement, change: () => void): void 
   const turnId = turn?.dataset.id, roomId = turn?.dataset.roomMessage;
   const content = anchor?.dataset.source ?? anchor?.textContent;
   change();
-  if (follow) root.scrollTop = root.scrollHeight;
+  if (follow) { if (root.scrollHeight !== height) root.scrollTop = root.scrollHeight; }
   else if (anchor && before !== undefined) {
     const replacementTurn = turnId ? root.querySelector<HTMLElement>(`.tn[data-id="${CSS.escape(turnId)}"]`)
       : roomId ? root.querySelector<HTMLElement>(`.tn[data-room-message="${CSS.escape(roomId)}"]`) : null;
     const replacement = anchor.isConnected ? anchor : [...replacementTurn?.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions") ?? []]
       .find(node => (node.dataset.source ?? node.textContent) === content);
-    if (replacement) root.scrollTop += replacement.getBoundingClientRect().top - before;
+    if (replacement) {
+      const delta = replacement.getBoundingClientRect().top - before;
+      if (Math.abs(delta) >= 1) root.scrollTop += delta;
+    }
   }
 }
 

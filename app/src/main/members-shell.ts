@@ -33,7 +33,7 @@ import { openMemberCreator } from "./member-creator";
 import { RAPHAEL_ID, faceHTML, memberOf, orderedMembers, memberRole, raphaelOf } from "./members";
 import { followSlimeRoster, setSlimeState } from "./slime";
 import type { AppContext, MainEvent, Member, MemberGroup, MemberPatch, MembersList } from "./types";
-import { type Choice, closeMenu, esc, ico, leave, openMenu, toaster } from "./ui";
+import { type Choice, closeMenu, esc, ico, leave, openMenu, patchHTML, toaster } from "./ui";
 
 /** Below this width details start closed to leave a readable conversation column. */
 export const DETAILS_COLUMN_MIN_PX = 1440;
@@ -46,7 +46,7 @@ export interface MembersHost {
   conversationOf?(member: number): number | undefined;
   app: AppContext;
   /** The owner chose another member's thread. */
-  onSelect(id: number): void;
+  onSelect(id: number, sameThread?: boolean): void;
   /** The list of members changed (a name or picture was updated). */
   onUpdate?(): void;
   /** Whether the page is on screen now (a thread read only then). */
@@ -82,8 +82,10 @@ export interface MembersShell {
   select(id: number): void;
   /** Reads the list (and what the column and the panel need with it) again. */
   load(): Promise<void>;
+  /** Local navigation changed which destination is selected. */
+  show(): void;
   /** A turn was written or a task moved: the list is read again a moment later. */
-  changed(): void;
+  changed(delay?: number): void;
   follow(event: MainEvent): void;
   refreshRoutines(memberId: number): void;
   /** Whether the details panel is open. */
@@ -101,6 +103,9 @@ export function createMembers(host: MembersHost): MembersShell {
   let known: Set<number> | null = null;
   let fresh = new Set<number>();
   let loads = 0;
+  let listJSON = "";
+  let viewing: number | null | undefined;
+  let refreshDue = 0;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let open = typeof innerWidth === "number" ? innerWidth >= DETAILS_COLUMN_MIN_PX : true;
   let stopLeaving: (() => void) | null = null;
@@ -168,9 +173,9 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The pill and the narrow dropdown, for the open member. */
   function drawHead(): void {
     const m = member();
-    pill.innerHTML = faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`;
+    patchHTML(pill, faceHTML(m, 22, { cls: "mb-pill-face" }) + `<span class="mb-pill-t">${esc(m.name)}</span>`);
     const waiting = list?.members.some((other) => other.id !== current && (other.waiting || other.unread)) ?? false;
-    picker.innerHTML = `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`;
+    patchHTML(picker, `<span>${esc(m.name)}</span>${waiting ? `<i class="mb-dot is-wait" aria-hidden="true"></i>` : ""}${ico("down")}`);
     picker.setAttribute("aria-label", `${t("members.pick")}: ${m.name}`);
   }
 
@@ -184,7 +189,6 @@ export function createMembers(host: MembersHost): MembersShell {
 
   async function load(): Promise<void> {
     const mine = ++loads;
-    column.draw();
     // the panel reads Raphael's routines the first time the page is on screen, not when the app starts
     if (!panelRead) {
       panelRead = true;
@@ -204,12 +208,21 @@ export function createMembers(host: MembersHost): MembersShell {
       return;
     }
     if (mine !== loads) return;
+    const json = JSON.stringify(read);
+    if (json === listJSON) {
+      void readThread();
+      if (host.visible()) tellViewing(current);
+      return;
+    }
+    listJSON = json;
     const ids = new Set(read.members.map((m) => m.id));
     fresh = known === null ? new Set() : new Set([...ids].filter((id) => !known!.has(id)));
     followSlimeRoster(read.members);
     for (const id of fresh) setSlimeState(id, "arriving");
     known = ids;
     list = read;
+    previews.clear();
+    for (const m of read.members) previews.set(m.id, m.preview ?? "");
     for (const field of fields) field.refresh();
     if (current !== RAPHAEL_ID && !ids.has(current)) {
       current = RAPHAEL_ID;
@@ -222,9 +235,6 @@ export function createMembers(host: MembersHost): MembersShell {
     host.onUpdate?.();
     void readThread();
     if (host.visible()) tellViewing(current);
-    previews.clear();
-    for (const m of read.members) previews.set(m.id, m.preview ?? "");
-    column.draw();
   }
 
   /** The open thread is read: the core forgets that it was unread. */
@@ -242,17 +252,22 @@ export function createMembers(host: MembersHost): MembersShell {
 
   /** Tells the core which thread is on screen (null: none), so that what arrives there is no news. */
   function tellViewing(id: number | null): void {
+    if (viewing === id) return;
+    viewing = id;
     void Promise.resolve()
       .then(() => api.membersViewing(id))
       .catch(() => {});
   }
 
-  function changed(): void {
-    if (refreshTimer !== null) return;
+  function changed(delay = REFRESH_DELAY_MS): void {
+    const due = Date.now() + delay;
+    if (refreshTimer !== null && refreshDue <= due) return;
+    if (refreshTimer !== null) clearTimeout(refreshTimer);
+    refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
       void load();
-    }, REFRESH_DELAY_MS);
+    }, delay);
   }
 
   // ---------- choosing ----------
@@ -260,7 +275,7 @@ export function createMembers(host: MembersHost): MembersShell {
   function select(id: number): void {
     if (!host.visible()) host.app.go("agent");
     if (id === current) {
-      if (currentRoomId() !== null) { host.onSelect(id); drawAll(); }
+      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); }
       // Reopening the same conversation preserves its details state.
       return;
     }
@@ -437,6 +452,7 @@ export function createMembers(host: MembersHost): MembersShell {
     member,
     select,
     load,
+    show: () => column.draw(),
     changed,
     detailsOpen: () => open,
     setDetails,
@@ -444,7 +460,9 @@ export function createMembers(host: MembersHost): MembersShell {
       if (host.visible() && memberId === current) details.refreshRoutines();
     },
     follow(event) {
-      if (event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
+      const restarted = ["CoreReady"].includes(event.type);
+      if (restarted) { listJSON = ""; viewing = undefined; }
+      if (restarted || event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
         void load();

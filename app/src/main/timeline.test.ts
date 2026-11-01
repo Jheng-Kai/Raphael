@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "./i18n";
 import type { MentionTarget } from "./mention-text";
@@ -27,6 +28,7 @@ import {
   wantsRefresh,
   workMs,
   emptyTimelineState,
+  updateLiveTimes,
 } from "./timeline";
 import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
@@ -367,12 +369,14 @@ describe("what a turn did", () => {
     const state = { ...emptyTimelineState(), nowMs: T0 + 42_000 };
     const html = stepsHTML(turn(3, { task: running(), steps: [step()] }), state);
     expect(html).toContain('<div class="steps task is-live" data-open="true">');
-    expect(html).toContain('aria-label="進行中 · 42 秒"');
+    expect(html).toContain('aria-label="進行中"');
     expect(html).toContain(`data-since="${T0}"`);
     expect(html).toContain('<span class="step-t shimmer">思考中…</span>'); // the live step, with light passing over it
     expect(html).toContain('class="spin"');
     expect(html).toContain('<button type="button" class="btn sm stop" data-act="stop" data-task="41">停止</button>');
-    expect(visible(html)).toBe("進行中 42 秒 停止 查天氣 0.4 秒 思考中… 42 秒");
+    const host = document.createElement("div"); host.innerHTML = html;
+    updateLiveTimes(host, state.nowMs);
+    expect(visible(host.innerHTML)).toBe("進行中 42 秒 停止 查天氣 0.4 秒 思考中… 42 秒");
   });
 
   test("a task that waits is queued, and one that was stopped says so with what it did", () => {
@@ -760,4 +764,13 @@ test("only owner messages have an expand action, placed inside their bubble", ()
   expect(reply).not.toContain("data-expandable");
   expect(reply).not.toContain('data-act="expand-message"');
   expect(visible(reply)).toContain(text.trim());
+});
+
+
+test("live HTML is independent of the clock for turns, task details and pending lines", () => {
+  const live = turn(71, { task: running(), messages: [{ seq: 1, kind: "reply", text: "Already replied", at_ms: T0 }] });
+  const state = emptyTimelineState(); state.nowMs = T0 + 5000;
+  const before = [turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)];
+  state.nowMs += 10000;
+  expect([turnHTML(live, state, false, LOOK), stepsHTML(live, state), pendingTurnHTML("Draft", "app", LOOK, [], { id: "pending", time: T0 }, state.nowMs)]).toEqual(before);
 });

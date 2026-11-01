@@ -13,7 +13,7 @@ import { onOwnerProfile } from "../owner-avatar";
 import { openMemberThread } from "../team-navigation";
 import type { AppContext, CalendarCreate, CalendarDate, CalendarEventFocus, Page } from "../types";
 import { faceHTML as memberFaceHTML } from "../members";
-import { btn, esc, ico, iconButton } from "../ui";
+import { btn, esc, ico, iconButton, patchHTML } from "../ui";
 import "../home.css";
 
 const money = (value: number): string => value.toFixed(2);
@@ -145,18 +145,13 @@ export function createHome(app: AppContext): Page {
   let timer: ReturnType<typeof setInterval> | undefined;
   let slide: { direction: number; started: number } | undefined;
   // Drawn again on every refresh, but the emblem stays the node it is while its picture is the same: a new <img> would start its turn over.
+  let paintedHTML = "";
   const paint = (): void => {
     if (!data) return;
-    const html = homeHTML(data, month, selected), emblem = el.querySelector<HTMLElement>(".ho-hero > .av");
-    if (!emblem) { el.innerHTML = html; return; }
-    const next = document.createElement("div");
-    next.innerHTML = html;
-    const fresh = next.querySelector<HTMLElement>(".ho-hero")!;
-    if (fresh.querySelector(".av")?.outerHTML !== emblem.outerHTML) { el.innerHTML = html; return; }
-    for (const child of [...emblem.parentElement!.children]) if (child !== emblem) child.remove();
-    emblem.parentElement!.append(...[...fresh.children].filter(child => !child.matches(".av")));
-    el.querySelector(".ho-board")!.replaceWith(next.querySelector(".ho-board")!);
-    el.querySelector(".ho-calendar-frame")!.replaceWith(next.querySelector(".ho-calendar-frame")!);
+    const html = homeHTML(data, month, selected);
+    if (html === paintedHTML) return;
+    paintedHTML = html;
+    patchHTML(el, html);
     const elapsed = slide ? performance.now() - slide.started : 160;
     if (slide && elapsed < 160 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const animation = el.querySelector('.ho-month')?.animate?.(
@@ -164,6 +159,7 @@ export function createHome(app: AppContext): Page {
       if (animation) animation.currentTime = elapsed;
     }
   };
+  const sameData = (next: HomeOverview): boolean => data !== null && JSON.stringify(data) === JSON.stringify(next);
   async function load(): Promise<void> {
     const mine = ++generation;
     if (!data) el.innerHTML = loadingHTML();
@@ -171,8 +167,7 @@ export function createHome(app: AppContext): Page {
       const requestedMonth = month ? dateKey(month).slice(0, 7) : undefined;
       const next = await api.homeOverview(false, requestedMonth);
       if (!visible || mine !== generation) return;
-      data = next;
-      paint();
+      if (!sameData(next)) { data = next; paint(); }
       // Local records paint first. One live read fills the same page without emitting changes.
       if (!live) {
         const pending = api.homeOverview(true, requestedMonth);
@@ -182,8 +177,7 @@ export function createHome(app: AppContext): Page {
       }
       const fresh = await live;
       if (!visible || mine !== generation) return;
-      data = fresh;
-      paint();
+      if (!sameData(fresh)) { data = fresh; paint(); }
     } catch {
       if (!visible || mine !== generation) return;
       if (!data) el.innerHTML = `<p class="ho-empty" role="status">${esc(t("overview.error"))}</p><button type="button" class="btn" data-home-go="reload">${esc(t("overview.retry"))}</button>`;

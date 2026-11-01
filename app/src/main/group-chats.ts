@@ -1,3 +1,4 @@
+import { patchThread } from "./thread-diff";
 // Group chat entry points share the global sidebar and the conversation header.
 import { mountConversationFind } from "./conversation-find";
 import * as api from "./api";
@@ -18,7 +19,7 @@ import { createAttachmentMedia } from "./attachment-media";
 import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
 import { createBackgroundQuestions } from "./background-questions";
-import { conversationCardsHTML, filesHTML, messageActionsHTML } from "./timeline";
+import { conversationCardsHTML, filesHTML, messageActionsHTML, updateLiveTimes } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
 import { mountPages } from "./page-card";
@@ -28,8 +29,8 @@ import { plainLine, primaryFirst, primaryIdOf, memberRole, faceHTML } from "./me
 import { NAME, eventLineHTML } from "./event-line";
 import { handoffLineHTML } from "./handoff-line";
 import type { HandoffView } from "./types";
-import type { AppContext, MembersList, Room, RoomMessage, RoomExchange } from "./types";
-import { btn, closeMenu, copyText, esc, ico, iconButton, openMenu, sel, toaster } from "./ui";
+import type { AppContext, MembersList, Room, RoomMessage, RoomExchange, MainEvent } from "./types";
+import { btn, closeMenu, copyText, esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
 import "./automations.css";
 
 /** Why a member's room reply never came, by the core's reason for its blocked intent. */
@@ -41,14 +42,14 @@ const BLOCKED = {
 } as const;
 
 let context: AppContext | undefined;
-const listeners = new Set<() => void>();
+const listeners = new Set<(event?: MainEvent) => void>();
 export function configureRooms(app: AppContext): void {
   context = app;
   document.addEventListener("click", event => {
     const link = (event.target as Element).closest<HTMLElement>("[data-meeting-room]");
     if (link) void openGroupChat(Number(link.dataset.meetingRoom));
   });
-  app.onEvent(event => { if (["RoomsChanged", "MembersChanged", "ConnectionsChanged", "WorkerChanged", "AgentTurn", "CoreReady"].includes(event.type)) for (const listener of listeners) listener(); });
+  app.onEvent(event => { if (["RoomsChanged", "MembersChanged", "ConnectionsChanged", "WorkerChanged", "AgentTurn", "CoreReady"].includes(event.type)) for (const listener of listeners) listener(event); });
 }
 let selectedRoom: number | null = null;
 export const currentRoomId = (): number | null => selectedRoom;
@@ -216,6 +217,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let requestId:string|undefined,retry="";
   let exchange:RoomExchange|null|undefined,replyTo:RoomMessage|undefined,stopping=false;
   let handoffs: HandoffView[] = [];
+  const drawn = new WeakMap<Element, string>();
+  let newestMessage = 0, drewOnce = false, refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let rosterDirty = true;
+  let snapshot = "";
   const drafts=new Map<number,string>();
   const expandedMessages = new Set<number>();
   mountConversationScroll(scroll);
@@ -259,17 +264,19 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   });
   const questionSlot = document.createElement("div"); questionSlot.className = "ra-bgq"; questionSlot.append(questions.element); status.after(questionSlot);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
+  const roomStamp = (): string => JSON.stringify([list, room, exchange, messages, handoffs, replyTo, sendingRooms.has(roomId!), stopping, loadingOlder]);
   function draw():void {
     if(!room)return;
-    el.querySelector('.au-room-heading')!.innerHTML=`${roomAvatarHTML(room,list)}<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}">${ico("crown")}</span>`:""}</span>`:"";}).join("")}</div>`;
+    snapshot = roomStamp();
+    patchHTML(el.querySelector('.au-room-heading')!,`${roomAvatarHTML(room,list)}<b>${esc(room.is_team ? t("rooms.team") : room.name)}</b><div class="au-room-faces">${primaryFirst(room.member_ids.map(id => ({ id })), primaryIdOf(list)).map(({ id })=>{const m=person(id);return m?`<span class="au-room-participant" data-tooltip="${esc(memberRole(m)?`${m.name} · ${memberRole(m)}`:m.name)}">${faceHTML(m,24)}${id===primaryIdOf(list)?`<span class="au-room-crown" role="img" aria-label="${esc(t("rooms.chief"))}">${ico("crown")}</span>`:""}</span>`:"";}).join("")}</div>`);
     const active=exchange&&["queued","running"].includes(exchange.state);
     composer.setTaskState(active || handoffs.some(task=>["queued","running","waiting"].includes(task.state)) ? "running" : sendingRooms.has(room.id) ? "ack" : "idle");
-    status.innerHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";
+    let statusHTML=room.membership_state==="needs_adjustment"?btn(esc(t("rooms.adjustMembers")),"sm",' data-room-act="members"'):"";
     const quote=composer.el.querySelector<HTMLElement>('.cmp-quote')!;quote.hidden=!replyTo;
-    quote.innerHTML=replyTo?`<span>${esc(t("rooms.replyTo",{p0:person(replyTo.member_id)?.name??t("members.title")}))}</span>${iconButton("x",t("common.cancel"),' data-room-act="cancel-reply"')}`:"";
-    if (exchange?.routing?.fallback) status.innerHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
-    older.innerHTML=canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"";
-    const follow=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<80;
+    patchHTML(quote, replyTo?`<span>${esc(t("rooms.replyTo",{p0:person(replyTo.member_id)?.name??t("members.title")}))}</span>${iconButton("x",t("common.cancel"),' data-room-act="cancel-reply"')}`:"");
+    if (exchange?.routing?.fallback) statusHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
+    patchHTML(status, statusHTML);
+    patchHTML(older, canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"");
     const thinking=messages.find(m=>m.member_id!==null&&m.status==="running");
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
@@ -280,7 +287,10 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     const entries=[...messages.map(message=>({created:message.created,order:0,message})),...handoffs.map(task=>({created:task.created_at_ms,order:0,task})),...blocked]
       .sort((a,b)=>a.created-b.created||a.order-b.order);
     const addressable=mentionTargets(list);
-    preserveRichScroll(scroll, () => { const nextThread = document.createElement("ol"); nextThread.innerHTML=entries.length?entries.map(entry=>{
+    preserveRichScroll(scroll, () => { const wanted = entries.length ? entries.map(entry => ({
+      key: "message" in entry ? `message:${entry.message.id}` : "task" in entry ? `task:${entry.task.task_id ?? entry.task.work_turn_id}` : `intent:${entry.intent.id}`,
+      turnId: "message" in entry ? entry.message.id : undefined,
+      html: (() => {
       if("intent" in entry){
         const intent=entry.intent,name=person(intent.recipient_id)?.name??intent.recipient_name;
         return `<li class="tn room-intent-blocked" role="status">${eventLineHTML(t("rooms.intentBlocked",{p0:NAME,p1:t(BLOCKED[intent.reason as keyof typeof BLOCKED]??"rooms.blockedWorker")}),faceOf(intent.recipient_id,name),name)}</li>`;
@@ -301,36 +311,38 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
       return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn) : ""}</div></div>`}</li>`;
-    }).join(""):`<li class="au-empty">${esc(t("rooms.empty"))}</li>`;
-    const restorePages = pagesHost.carry(thread, nextThread);
-    const restoreTyped = carryTyped(thread, nextThread);
-    const restoreMail = carryMail(thread, nextThread);
-    const previousNodes = [...thread.childNodes];
-    thread.append(...nextThread.childNodes);
-    restorePages();
-    previousNodes.forEach(node => node.remove());
-    restoreTyped();
-    restoreMail();
+    })(), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
+    patchThread(thread, wanted, drawn, {
+      arrives: line => drewOnce && line.turnId !== undefined && line.turnId > newestMessage,
+      carry(node, made) {
+        const restorePages = pagesHost.carry(node, made), restoreTyped = carryTyped(node, made), restoreMail = carryMail(node, made);
+        return () => { node.before(made); restorePages(); node.remove(); restoreTyped(); restoreMail(); };
+      },
+    });
+    newestMessage = Math.max(newestMessage, ...messages.map(message => message.id)); drewOnce = true;
+    updateLiveTimes(thread);
     pagesHost.sync();
     measureMessagePreviews(thread);
     attachmentMedia.sync();
     composer.draw(); mentions.refresh(); });
     finder.refresh();
-    if(follow && !finder.isOpen())scroll.scrollTop=scroll.scrollHeight;onRender();
+    onRender();
   }
   async function refresh():Promise<void>{
     const mine=++generation,id=roomId;if(!opened||!id)return;
     const missing=():void=>{close();toaster.info(t("rooms.deleted"));};
     try{
-      const [people,rooms]=await Promise.all([api.membersList(getLocale()),api.roomsList()]);
+      const [people,rooms]=await Promise.all([rosterDirty ? api.membersList(getLocale()) : Promise.resolve(list),api.roomsList()]);
       if(mine!==generation||!opened)return;
       const found=rooms.rooms.find(r=>r.id===id);if(!found){missing();return;}
       const history=await api.roomMessages(id);if(mine!==generation||!opened)return;
-      list=people;room=found;exchange=history.exchange;
+      list=people;rosterDirty=false;room=found;exchange=history.exchange;
       if (found.unread && !el.closest("[hidden]")) await api.roomsUpdate(id, { read: true, read_through: history.messages[history.messages.length - 1]?.id ?? 0 });
       if (mine!==generation||!opened) return;
       handoffs=history.handoffs??[];
-      const first=history.messages[0]?.id??Infinity;messages=[...messages.filter(m=>m.id<first),...history.messages];draw();
+      const first=history.messages[0]?.id??Infinity;messages=[...messages.filter(m=>m.id<first),...history.messages];
+      const next = roomStamp();
+      if (next !== snapshot) { snapshot = next; draw(); }
     }catch(error){
       if(!opened||mine!==generation)return;
       // Deletion may race the history request after the first roster read.
@@ -339,7 +351,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
   }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(!opened)return;finder.close(false);if(roomId)drafts.set(roomId,composer.input.value);composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;finder.close(false);if(roomId)drafts.set(roomId,composer.input.value);composer.stopVoice();drop.reset();attachmentMedia.reset();questions.reset();opened=false;roomId=undefined;generation++;clearTimeout(refreshTimer);refreshTimer=undefined;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
   el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
@@ -363,12 +375,21 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}
   });
   window.addEventListener("room-deleted",event=>{if(opened&&roomId===(event as CustomEvent<number>).detail)close();});
-  const listener=():void=>{if(opened&&el.isConnected){void refresh();void questions.load();}};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
+  const listener=(event?: MainEvent):void=>{
+    if (!opened || !el.isConnected) return;
+    if (!event || event.type === "MembersChanged" || ["CoreReady"].includes(event.type)) rosterDirty = true;
+    if (event?.type === "RoomsChanged" && event.room_id !== undefined && event.room_id !== roomId) return;
+    if (event?.type === "WorkerChanged" && !handoffs.some(task => task.task_id === event.task_id) && !messages.some(message => message.turn?.task?.id === event.task_id)) return;
+    if (event?.type === "AgentTurn" && !messages.some(message => message.turn_id === event.turn_id) && !room?.member_ids.includes(event.member_id ?? 0)) return;
+    if (event?.type !== "WorkerChanged") { void refresh(); void questions.load(); return; }
+    if (refreshTimer !== undefined) return;
+    refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(); if (!event || event.type !== "WorkerChanged" || event.state === "waiting") void questions.load(); }, 150);
+  };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   return {el,close,refresh,async open(id:number){
     finder.close(false);
     if(roomId)drafts.set(roomId,composer.input.value);
     attachmentMedia.reset();questions.reset();
-    opened=true;generation++;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";
+    opened=true;generation++;rosterDirty=true;snapshot="";newestMessage=0;drewOnce=false;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
     composer.setTaskState("idle");composer.setDraft(drafts.get(id)??"");el.hidden=false;
     await refresh();void questions.load();
@@ -379,21 +400,28 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
 export function createRoomsSection(active: () => boolean = () => true): HTMLElement {
   const el = document.createElement("section"); el.className = "au-rooms-section";
   let rooms: Room[] = [], list: MembersList = { members: [], groups: [] }, generation = 0, query = "";
+  let rosterDirty = true, timer: ReturnType<typeof setTimeout> | undefined;
   const draw = (): void => {
     // Groups are the owner's own; a former team room stays only for the conversation it already holds.
-    el.innerHTML = rooms
+    patchHTML(el, rooms
       .filter(room => (!room.is_team || room.last_at) && (!room.hidden || query) && (!query || `${room.is_team ? t("rooms.team") : room.name} ${room.preview ?? ""}`.toLocaleLowerCase().includes(query)))
       .map(room => {
         const date = new Date(room.last_at ?? NaN), name = room.is_team ? t("rooms.team") : room.name;
         return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : plainLine(replyBody(room.preview ?? "")))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
-      }).join("");
+      }).join(""));
   };
   const load = async (): Promise<void> => {
     const mine = ++generation;
-    try { const [result, people] = await Promise.all([api.roomsList(), api.membersList(getLocale())]); if (mine !== generation) return; rooms = result.rooms; list = people; draw(); }
+    try { const [result, people] = await Promise.all([api.roomsList(), rosterDirty ? api.membersList(getLocale()) : Promise.resolve(list)]); if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; draw(); }
     catch { /* A core starting up can temporarily have no rooms. */ }
   };
-  listeners.add(() => void load()); onLocaleChange(() => { draw(); void load(); });
+  listeners.add(event => {
+    if (!event || event.type === "MembersChanged" || ["CoreReady"].includes(event.type)) rosterDirty = true;
+    if (event?.type === "WorkerChanged") {
+      if (event.state === "running" && !rooms.some(room => room.waiting)) return;
+      if (timer === undefined) timer = setTimeout(() => { timer = undefined; void load(); }, 1000);
+    } else { clearTimeout(timer); timer = undefined; void load(); }
+  }); onLocaleChange(() => { draw(); void load(); });
   el.addEventListener("sidebar-search", event => { query = (event as CustomEvent<string>).detail.trim().toLocaleLowerCase(); draw(); });
   el.addEventListener("click", e => {
     const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
