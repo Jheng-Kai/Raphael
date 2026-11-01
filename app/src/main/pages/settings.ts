@@ -437,7 +437,7 @@ export function createSettings(app: AppContext): SettingsPage {
     const slot = body.querySelector<HTMLElement>("[data-usage-host]");
     if (slot) {
       slot.replaceWith(usageHost);
-      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli });
+      usage ??= mountUsageAnalytics(usageHost, { usageAnalytics: api.usageAnalytics, usageRuns: api.usageRuns, usageExport: api.usageExport, usageAllowances: api.usageAllowances, saveUsageCsv: api.saveUsageCsv, modelsCatalog: api.modelsCatalog, brainsCli: api.brainsCli, chatgptStatus: api.chatgptStatus, openExternalUrl: api.openExternalUrl });
       if (usageFocus?.isConnected) usageFocus.focus({ preventScroll: true });
     }
     // Before the focus goes back by `data-k`, which the pickers' buttons have too.

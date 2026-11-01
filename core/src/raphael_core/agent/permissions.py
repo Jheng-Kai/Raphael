@@ -29,7 +29,7 @@ There are two kinds of cards by who delivers the answer:
   more answers nothing, a replay finds the card answered, and a core that started again has no run:
   the card is expired.
 
-Only a private chat typed at this computer is shown a card. A room, an exchange between members, a quick
+Only a private chat the owner is at, typed or spoken into, is shown a card. A room, an exchange between members, a quick
 question, a spoken request and a message from a phone never get one, and never carry its payload.
 Nothing here logs an action, its arguments or the words of a rule.
 """
@@ -159,10 +159,14 @@ class PermissionCardStore:
         return [card for card in (self.get(card_id) for card_id in ids) if card is not None]
 
 
+# The owner is at the chat: they typed in it, spoke into it, or it carries on from one of those.
+AT_A_CHAT = ("app", "connector", "voice")
+
+
 def qualifies(*, source: str, quick: bool, nested: bool, scope: str) -> bool:
-    """Whether a request is one whose chat is shown a card: typed in the app at this computer, in a
-    private chat, not a quick question and not a request one member handed another."""
-    return source in ("app", "connector") and not quick and not nested and scope == "private"
+    """Whether a request is one whose chat is shown a card: in a private chat the owner is at, not a
+    quick question and not a request one member handed another."""
+    return source in AT_A_CHAT and not quick and not nested and scope == "private"
 
 
 class PermissionCards:

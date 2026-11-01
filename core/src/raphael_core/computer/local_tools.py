@@ -11,6 +11,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from ..agent.plugins import PluginResult, PluginTool, tool_key
+from ..agent.permissions import qualifies
 from ..agent.policy import Tier
 from ..brain.settings import SettingsStore
 from ..integrations.audit import AuditLog
@@ -47,7 +48,7 @@ def ask_context(ask, results=()):
     external = bool(ask.memory_untrusted or ask.attachments or ask.nested or any(getattr(r, "untrusted", False) for r in results)
                     or any(s.tool in ("web_search", "web_read", "read_attachment") or s.server not in (None, "Raphael", "local") for s in ask.steps))
     return (("chat", ask.speaker.id, ask.conversation_id), external,
-            ask.source in ("app", "connector") and not ask.quick and not ask.nested and ask.scope == "private", ask.session_id)
+            qualifies(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope), ask.session_id)
 
 
 def run_context(run):
@@ -128,7 +129,7 @@ class LocalTools:
             if key not in (tool_key("local", "local_exec"), tool_key("local", "local_job")) or not Draft202012Validator(schema).is_valid(arguments):
                 return PluginResult(False, "bad_arguments")
             if not present or owner is None:
-                return PluginResult(False, "presence_required", "Local commands need approval in the desktop app; phone and Telegram cannot approve.")
+                return PluginResult(False, "presence_required", "Local commands need a card in a private conversation in the desktop app. A quick question, a group, a phone or Telegram cannot show one, so tell the owner to ask in a conversation.")
             if key.endswith("/local_job"):
                 job = self.jobs.get(arguments["job_id"])
                 if job is None or job["owner"] != owner:

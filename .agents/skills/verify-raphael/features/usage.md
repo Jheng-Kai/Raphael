@@ -22,7 +22,7 @@ CSV. The subscription exclusion button scrolls and moves focus to allowances bel
 ## Driving it with look
 
 ```powershell
-npm run look -- usage usage-bill-breakdown usage-members usage-period usage-group-day usage-group-provider usage-group-routine usage-empty usage-allowances --theme both --width 1120,720,1920x1080
+npm run look -- usage usage-bill-breakdown usage-members usage-period usage-group-day usage-group-provider usage-group-routine usage-empty usage-allowances usage-allowances-chatgpt --theme both --width 1120,720,1920x1080
 ```
 
 Keep all summary/group/allowance PNGs and the report. Inspect both themes at all

@@ -60,6 +60,35 @@ async def test_cpu_question_calls_local_command_without_a_desktop(make_rig, clie
         assert "Settings" in str(client.chat_calls[-1]["messages"])
 
 
+async def test_a_question_said_into_a_conversation_gets_the_card_a_typed_one_gets(make_rig, client, conn):
+    # Live, the owner said it at this computer and was told a phone cannot approve: only typing counted as being here.
+    hub, host = local_hub(conn)
+    SettingsStore(conn).set("local_commands_seen", True)
+    rig = make_rig(plugins=hub, gate=ToolGate(hub, conn=conn), permissions=PermissionCards(conn))
+    client.chats = [chat("Checking CPU usage.", ("local__local_exec", {"command": "Get-Process"})), chat('{"text":"Checked."}')]
+    result = await rig.call("agent.ask", {"session_id": "live", "text": "CPU?", "ui_language": "en", "source": "voice", "member_id": 0,
+                                          "conversation_id": rig.service.conversations.main()})
+    assert result["status"] == "confirm"
+    host.execute.assert_not_awaited()
+    assert rig.service._permissions.get(result["confirm"]["id"]).view()["kind"] == "local_command"
+    await rig.confirm(result["confirm"]["id"])
+    assert host.execute.await_count == 1
+
+
+@pytest.mark.parametrize("source,quick,nested,scope,shown", [
+    ("app", False, False, "private", True),
+    ("connector", False, False, "private", True),
+    ("voice", False, False, "private", True),
+    ("voice", True, False, "private", False),
+    ("voice", False, True, "private", False),
+    ("voice", False, False, "room", False),
+    ("telegram", False, False, "private", False),
+])
+def test_a_card_goes_to_a_chat_the_owner_is_at(source, quick, nested, scope, shown):
+    from raphael_core.agent.permissions import qualifies
+    assert qualifies(source=source, quick=quick, nested=nested, scope=scope) is shown
+
+
 async def test_cli_mcp_calls_the_same_command_gate(make_rig, conn, tmp_path, monkeypatch):
     from members.test_cli_brains import fake_mcp
     hub, host = local_hub(conn)

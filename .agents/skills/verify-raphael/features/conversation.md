@@ -771,7 +771,7 @@ A room's composer is unchanged: its recording is its own browser recorder, whose
 read and sent, so its button stays Stop until then (`chat-composer.test.ts`).
 
 ```powershell
-npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 ```
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,

@@ -67,7 +67,7 @@ import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { permissionFor } from "../permission-card";
-import { describeError } from "../format";
+import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -810,6 +810,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
           : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
     );
     if (!(searching && query.trim() !== "")) {
+      // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
+      const today = dayLabel(state.nowMs, state.nowMs);
+      if ((outgoing.some(belongs) || hearingBelongs()) && !out.some(line => line.key === `day:${today}`)) out.push({ key: `day:${today}`, html: dayHTML(today) });
       for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
       if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     }

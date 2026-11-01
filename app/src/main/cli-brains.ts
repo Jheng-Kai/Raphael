@@ -134,8 +134,7 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
   }
   async function chatgptClick(button: HTMLButtonElement): Promise<void> {
     if (button.dataset.chatgptMenu !== undefined) {
-      openActions(button, [{ id: "usage", label: t("brains.manageUsage") }, { id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], (id) => {
-        if (id === "usage") { void api.openExternalUrl(CHATGPT_USAGE_URL).catch(() => undefined); return; }
+      openActions(button, [{ id: "sign-out", label: t("brains.disconnect"), icon: "plug" }], () => {
         void api.chatgptSignOut().catch(() => undefined).then(load);
       });
     } else if (button.dataset.chatgpt === "cancel") {

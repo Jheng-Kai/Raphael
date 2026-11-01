@@ -233,7 +233,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -1465,10 +1465,10 @@ class AgentService:
             background=self._before_run(ask.speaker, ask.conversation_id),
             clock=self._clock,
             now_ms=self._now_ms,
-            # A sign-in is the owner's to do: in a typed request in a private chat the run waits for them
+            # A sign-in is the owner's to do: in a private chat they are at the run waits for them
             # (a card), anywhere else it ends with the hand-off line.
             handback=(narration is not None and self._handbacks is not None and bool(ask.turn_id)
-                      and ask.source in (TYPED, RESUMED) and not ask.quick and not ask.nested and ask.scope == "private"),
+                      and ask.source in AT_A_CHAT and not ask.quick and not ask.nested and ask.scope == "private"),
         )
         run.context = ask
         run.narration = narration
@@ -1560,7 +1560,7 @@ class AgentService:
             confirm.update(yes=labels["once"], no=labels["deny"], always=labels["always"])
         if (self._permissions is not None and run.turn_id
                 and permission_cards_for(source=ask.source, quick=ask.quick, nested=ask.nested, scope=ask.scope)):
-            # In a private chat typed at this computer the question is also a card in the thread: the app's
+            # In a private chat the owner is at the question is also a card in the thread: the app's
             # (the first use of an app: once, always, or not) or the step's that sends, deletes or buys.
             self._permissions.show(
                 card_id=question.id, turn_id=run.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
@@ -2733,7 +2733,7 @@ class AgentService:
         the request already did. The turn then waits for it; its connection resumes the request."""
         if self._cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
         app = await self._cards.resolve(args.get("app"))
         if app is None:
@@ -2764,7 +2764,7 @@ class AgentService:
             raise ValueError("unknown connection")
         if self._secret_cards is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
         try:
             cards = self._secret_cards.show(turn_id=ask.turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
@@ -2789,10 +2789,10 @@ class AgentService:
         """`email_draft`: the mail a member wrote for the owner, as an editable card in this private chat. The
         member cannot send it: the owner edits it and presses 傳送, and only that sends it (`agent.drafts`). A
         draft offered to a colleague (`hand_to`) also asks the owner whether that colleague may send it. Never in
-        a room, an exchange between members, a quick question or a spoken or phone request."""
+        a room, an exchange between members, a quick question or a phone request."""
         if self._drafts is None or not ask.turn_id:
             raise HarnessToolError("unavailable")
-        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in (TYPED, RESUMED)):
+        if not ask.background_owner and (ask.nested or ask.quick or ask.scope != "private" or ask.source not in AT_A_CHAT):
             raise HarnessToolError("private_chat_only")
         try:
             fields = {name: clean_field(name, args.get(name) or "") for name in ("to", "cc", "subject", "body")}

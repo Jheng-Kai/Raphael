@@ -148,6 +148,7 @@ export default [
   scene("usage-period", "Usage period menu", [...usage, click('[data-run-act="period"]')]),
   ...["day", "provider", "routine"].map(group => scene(`usage-group-${group}`, `Usage grouped by ${group}`, [...usage, click(`[data-run-group="${group}"]`), scroll(".run-groups")])),
   scene("usage-allowances", "Subscription exclusion opens Claude, Codex and Gemini allowances", [...usage, click('[data-run-act="show-allowance"]'), check("usage-allowance-link")]),
+  scene("usage-allowances-chatgpt", "ChatGPT sits with the other subscriptions, with the button to its own usage page", [...usage, click('[data-run-act="show-allowance"]'), wait('[data-allowance="chatgpt"]'), scroll('[data-allowance="chatgpt"]')], { chatgptSignedIn: true }),
   scene("usage-empty", "Usage without runs", usage, { usageEmpty: true }),
   ...["overview", "history", "dictionary"].map(tab => scene(`dictation-${tab}`, `Dictation ${tab}`, [...dictation(tab), ...(tab === "dictionary" ? [wait(".wrow"), click('[data-act="word-menu"]'), wait('#app-popover [data-pick="delete"]'), key("Escape")] : [])], tab === "dictionary" ? {
     dictionary: ["Raphael", "Methelia", "GitHub", "Composio", "OpenRouter", "Notion", "Slack", "Telegram", "Calendar", "Claude", "Codex", "Gemini"].map((word, index) => ({ id: index + 1, word, misheard: index === 0 ? ["Rafael"] : [], source: index % 2 ? "learned" : "manual", created_at_ms: 1792720800000 })),

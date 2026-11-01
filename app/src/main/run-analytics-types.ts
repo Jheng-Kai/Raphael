@@ -21,4 +21,6 @@ export interface RunAnalyticsApi {
   usageExport(params: RunRequest): Promise<{ csv: string }>;
   usageAllowances(): Promise<CliAllowances>;
   saveUsageCsv(csv: string): Promise<boolean>;
+  chatgptStatus?(): Promise<import("./types").ChatGptStatus>;
+  openExternalUrl?(url: string): Promise<void>;
 }

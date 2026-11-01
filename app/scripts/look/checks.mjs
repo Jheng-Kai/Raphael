@@ -1104,6 +1104,13 @@ export function checkRendered(name, context = {}) {
     else require(visible(document.querySelector('.tn[data-id="301"]')) && !document.querySelector('[data-key="hearing"]'), "the answer replaces the pending line in this thread");
     return { check: name, member: args.memberId, conversation: expected };
   }
+  if (name === "thread-clear-of-fade") {
+    const scroller = [...document.querySelectorAll(".ra-scroll")].find(visible), top = scroller.getBoundingClientRect().top + 40;
+    const first = scroller.querySelector(".thread > :first-child"), bubble = document.querySelector('[data-key="hearing"] .owner-message');
+    require(first.classList.contains("day"), "what is on its way stands under its day");
+    require(first.getBoundingClientRect().top >= top - 1 && bubble.getBoundingClientRect().top >= top - 1, "at rest the first lines stand clear of the fade");
+    return { check: name, day: first.getBoundingClientRect().top, bubble: bubble.getBoundingClientRect().top };
+  }
   // R-UI-42: system events are one centred grey line that never shows an internal number.
   const eventLines = expected => {
     const lines = [...document.querySelectorAll('.event-line')].filter(visible);

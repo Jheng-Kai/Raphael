@@ -37,6 +37,27 @@ it("separates the ledger bill from retained work and only shows applicable exclu
   expect(document.activeElement).toBe(heading);
   view.destroy();
 });
+it("ChatGPT sits with the other subscriptions once signed in, and its button opens its usage page", async () => {
+  const report: RunReport = { range: "month", start_day: null, end_day: "2026-10-24", summary: { duration_ms: 0, cost_usd: 0, tokens: 0, ai_steps: 0, tools: 0, errors: 0 }, bill: { cost_usd: 0, purposes: [] }, fish_voice: false, total: 0, groups: { member: [], model: [], day: [], provider: [], routine: [] } };
+  const chatgptStatus = vi.fn().mockResolvedValue({ signed_in: true, plan_scope_granted: true }), openExternalUrl = vi.fn().mockResolvedValue(undefined);
+  const api: RunAnalyticsApi = { usageRuns: vi.fn().mockResolvedValue(report), usageExport: vi.fn(), saveUsageCsv: vi.fn(), usageAllowances: vi.fn().mockResolvedValue({ brains: [{ id: "codex", name: "Codex", windows: [] }] }), chatgptStatus, openExternalUrl };
+  const host = document.createElement("div"); document.body.append(host);
+  const view = mountRunAnalytics(host, api); await view.ready;
+  const card = host.querySelector(".run-allowance [data-allowance=\"chatgpt\"]")!;
+  expect(card.classList.contains("run-subscription")).toBe(true);
+  expect(card.querySelector("h4")!.textContent).toContain("ChatGPT");
+  card.querySelector<HTMLButtonElement>('[data-run-act="chatgpt-usage"]')!.click();
+  expect(openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/settings/usage");
+  for (const answer of [{ signed_in: false }, { signed_in: true, plan_scope_granted: false }]) {
+    chatgptStatus.mockResolvedValueOnce(answer);
+    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).toBeNull());
+    chatgptStatus.mockResolvedValue({ signed_in: true, plan_scope_granted: true });
+    host.querySelector<HTMLButtonElement>('[data-run-act="allowance"]')!.click();
+    await vi.waitFor(() => expect(host.querySelector('[data-allowance="chatgpt"]')).not.toBeNull());
+  }
+  view.destroy();
+});
 it("shows catalog model names, localized members and durations, and expands the member top five", async () => {
   const summary = { duration_ms: 185200, cost_usd: .01, tokens: 120, ai_steps: 1, tools: 0, errors: 0 };
   const report: RunReport = { range: "month", start_day: null, end_day: "2026-10-24", summary, bill: {cost_usd:1.24,purposes:[{purpose:"agent",cost_usd:1.24,share:1}]}, fish_voice:false, total: 1, groups: { member: Array.from({length:7}, (_, i) => ({label: i ? `Member ${i}` : "Raphael", member_id: i, tokens: 7-i, cost_usd: 0, runs: 1})), model: [{label:"cli:codex:gpt-6.1",tokens:120,cost_usd:.01,runs:1}], day: [], provider: [], routine: [] } };
