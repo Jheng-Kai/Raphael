@@ -56,6 +56,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from ..protocol import invalid_params
+from ..answer_forms import forms_plain_text
 from ..router import Notifier, Router
 from .common import ServiceError
 from .hub import ServiceHub
@@ -97,7 +98,7 @@ def speakable(text: str) -> str:
     """`text` as it is read aloud: addresses and markdown marks taken out, whitespace collapsed,
     and cut after the last sentence end within MAX_SPOKEN_CHARS (or at the limit if there is
     none). Empty if nothing is left to say."""
-    plain = _URL.sub(" ", text)
+    plain = _URL.sub(" ", forms_plain_text(text))
     plain = _BULLET.sub("", plain)
     plain = _MARKDOWN.sub(" ", plain)
     plain = " ".join(plain.split())

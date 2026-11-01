@@ -1374,7 +1374,8 @@ class App(Router):
             return f"{asked}\n{words(language, 'confirm')}"
         from .messaging.core import Answer
         from .services.artifacts import turn_files
-        return Answer(compose(reply.get("prefix", ""), reply.get("text", ""), None),
+        from .answer_forms import forms_plain_text
+        return Answer(forms_plain_text(compose(reply.get("prefix", ""), reply.get("text", ""), None)),
                       list(turn_files(self.agent._history, reply.get("turn_id", 0), self.attachment_store)))
 
     async def _transcribe_room(self, audio: bytes, language: str) -> str:
@@ -1465,7 +1466,8 @@ class App(Router):
             return
         if task.report_text is None:
             return
-        text = compose(task.report_prefix or "", task.report_text, None)
+        from .answer_forms import forms_plain_text
+        text = forms_plain_text(compose(task.report_prefix or "", task.report_text, None))
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:

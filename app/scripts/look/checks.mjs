@@ -2,6 +2,30 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("form-")) {
+    const scope = document.querySelector('.page-agent:not([hidden]) > .mb-chat:not([hidden])');
+    require(scope, 'form checks target the active conversation');
+    const cards = [...scope.querySelectorAll('.message-forecast,.message-board,.message-chart')];
+    if (name === "form-invalid" || name === "form-streaming") {
+      require(!cards.length && scope.querySelector('.message-code pre')?.textContent.includes('{'), 'invalid and provisional JSON stays readable code');
+    } else {
+      require(cards.length === (name === "form-room" ? 3 : 1), 'each valid form renders once in the reply');
+      for (const card of cards) {
+        require(!card.closest('.ans,.bubble'), 'forms are sibling timeline blocks');
+        require(card.querySelector('button[data-rich-act="copy-source"]'), 'the shared copy button is present');
+        require(!card.querySelector('script,img,iframe,[onerror],[src]'), 'form data cannot load or execute content');
+        for (const node of card.querySelectorAll('.board-card,.forecast-day,.chart-legend')) require(node.scrollWidth <= node.clientWidth + 1, 'content wraps within its card');
+        if (card.matches('.message-chart')) require(card.querySelectorAll('circle title,rect title').length >= 6, 'every plotted value has readable hover text');
+      }
+      if (name === "form-forecast") {
+        require(cards[0].querySelectorAll('.forecast-day').length === 7, 'seven known days fit without a panel scrollbar');
+        require(cards[0].querySelector('[aria-current="date"]'), 'today is marked in the forecast');
+        require([...cards[0].querySelectorAll('.forecast-day > strong')].every(day => !/^\d{4}-/.test(day.textContent)), 'forecast column dates stay short, with the full date in a title');
+      }
+      if (name === "form-board") require(cards[0].querySelectorAll('.board-column').length === 5, 'five board columns wrap without dragging');
+    }
+    return { check: name, cards: cards.length };
+  }
   const rhythmTitle = (bar, timingAllowed) => {
     const title=bar.querySelector('b'), copy=bar.querySelector('.cal-chip-copy'), timing=bar.querySelector('small');
     require(title?.textContent==='Gmail 與行程檢查','the rhythm fixture exercises a long title');

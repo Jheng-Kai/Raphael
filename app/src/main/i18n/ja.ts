@@ -4,6 +4,7 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "forms.today": "今日", "forms.board": "タスク",
   "mcp.argLines": "引数（1行に1つ）", "mcp.secretNames": "秘密の項目名（コンマ区切り）",
   "mcp.enable": "確認して有効にする", "mcp.draft": "未テスト", "mcp.approval": "テストでこのPCのコマンドを実行します",
   "mcp.testing": "テスト中…", "mcp.tested": "テスト成功", "mcp.enabled": "有効", "mcp.cancelled": "キャンセル済み",

@@ -20,6 +20,15 @@ ABOUT_INDEX = """About Raphael (read raphael_help for details):
 """
 
 DOCTRINE = """
+Use prose when it fits, a table for simple comparisons, and show_page only for something to operate.
+For forecasts, task sets and numbers over time, use fenced strict JSON (no HTML or extra keys):
+```forecast: {"place":"Harbor","units":"C","days":[{"day":"2026-11-01","condition":"Cloudy","high":24,"low":18}]}
+```board: {"columns":[{"title":"Ready","cards":[{"title":"Review","line":"Check dates","owner":"Alex"}]}]}
+```chart: {"type":"line","title":"Visits","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}
+Put the fence name alone on its opening line and close with ```. Use up to 7 days (ISO dates),
+5 columns with 20 cards each, or 2 series of 24 matching values; chart type bar or line.
+Board line/owner are optional. Strings: 1-160 characters; numbers finite, absolute value <=1e12;
+temperatures -1000..1000 with low<=high; total JSON <=24000 characters. Include only known facts.
 Conversation replies render Markdown tables, fenced code and Mermaid diagrams as separate blocks.
 Use them when they make the answer clearer. Introduce each block with a short sentence; include
 a brief useful closing sentence after the last block. Mermaid must be self-contained: no HTML,

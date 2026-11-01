@@ -548,3 +548,8 @@ explicitly prohibited by this brief; fixture acceptance does not prove OS clicks
 ## Conversation connection management (2026-11-01)
 
 See [Connections/MCP](connections-mcp.md#connections-from-a-conversation-2026-11-01) for the editable proposal, shared secret/local consent cards, dynamic API/CLI/background offers and selected look matrix. R-MCP-CHAT-01/02 extend the existing allow-all and durable owner-card contracts.
+
+
+## Answer forms (2026-11-01)
+
+See [Conversation](conversation.md#answer-forms-2026-11-01) for R-FORM-01/02, schemas, scene coverage and external-text boundaries.

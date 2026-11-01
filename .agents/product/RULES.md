@@ -276,3 +276,11 @@ R-MCP-CHAT-01: a custom MCP server is an editable conversation card. Public conf
 R-MCP-CHAT-02: connections_list and manage_connection use the existing connection and connector services. App/tool enable, disable, disconnect and reconnect apply to API, authenticated CLI MCP and background offers and to the check immediately before execution. A stale alias receives a refusal explaining the new state. Disconnect follows the shared mutation approval. No extra Settings page or preference is added.
 
 Offline evidence: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py and app/src/main/mcp-proposal.test.ts. Selected real-entry scenes and limitations are mapped in features/connections-mcp.md. These rules extend R-AG-35 and R-OWNER-02.
+
+
+## Answer forms (2026-11-01)
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-FORM-01 | 2026-11-01 | Closed forecast, board and chart fences render bounded strict JSON through the shared rich reply path in private and group conversations. Invalid, oversized or incomplete blocks retain escaped source and the existing copy control. Every text field is escaped; no data can execute HTML, scripts or remote images. | vitest, look | hard | app/src/main/message-forms.test.ts::forecast marks today and retains the exact source for the shared copy control; app/src/main/message-forms.test.ts::all schema counts and numeric geometry are bounded; features/conversation.md |
+| R-FORM-02 | 2026-11-01 | API, CLI and background prompts share one short answer-form doctrine and schemas. Speech, captions and external messages convert valid forms to readable words without changing stored rich replies. | pytest, vitest | hard | core/tests/agent/test_answer_forms.py::test_forms_schema_reaches_api_cli_and_background_prompts; core/tests/messaging/test_wiring.py::test_telegram_receives_readable_forms_from_conversation_and_background; app/src/overlay/caption-forms.test.ts::dictated form captions contain readable values instead of JSON fields |

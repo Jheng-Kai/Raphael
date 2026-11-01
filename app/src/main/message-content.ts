@@ -3,6 +3,8 @@ import { highlightHTML } from "./conversation";
 import { t } from "./i18n";
 import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, ico, iconBtn } from "./ui";
+import { answerFormHTML } from "./message-forms";
+import { answerFormText, parseAnswerForm } from "../shared/answer-forms";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
@@ -207,6 +209,10 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>): strin
   }
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
   const diagram = block.type === "diagram";
+  if (!diagram && block.complete) {
+    const form = parseAnswerForm(block.language, block.source);
+    if (form) return answerFormHTML(form, block.source);
+  }
   const showSource = diagram && !!query && block.source.toLocaleLowerCase().includes(query.toLocaleLowerCase());
   return `<section class="rich-block message-code${diagram ? " message-diagram" : ""}" data-source="${esc(block.source)}" data-language="${esc(block.language)}" data-complete="${block.complete}" data-query="${esc(query)}"><header class="rich-head"><span class="rich-language">${esc(diagram ? t("chat.diagram") : block.language || t("chat.code"))}</span><div>${iconBtn("copy", t(diagram ? "chat.copySource" : "chat.copyCode"), ' data-rich-act="copy-source" data-act="copy-code"')}${diagram ? iconBtn("steps", t("chat.viewSource"), ` data-rich-act="view-source" aria-expanded="${showSource}"`) + iconBtn("external", t("chat.expandBlock"), ' data-rich-act="expand" hidden') : ""}</div></header><div class="diagram-view"${diagram ? "" : " hidden"}></div><pre><code>${highlightHTML(block.source, query)}</code></pre>${diagram ? `<p class="rich-note">${esc(t(block.complete ? "chat.diagramFallback" : "chat.diagramStreaming"))}</p>` : ""}</section>`;
 }
@@ -227,7 +233,14 @@ export function messageUrls(text: string): string[] {
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
 export function messagePlainText(text: string, markdown = false): string {
   if (!markdown) return text;
-  return parseMessageBlocks(text).map(block => block.type === "text" ? plainTextBlock(block.source) : block.source).join("\n");
+  return parseMessageBlocks(text).map(block => {
+    if (block.type === "text") return plainTextBlock(block.source);
+    if (block.type === "code" && block.complete) {
+      const form = parseAnswerForm(block.language, block.source);
+      if (form) return answerFormText(form);
+    }
+    return block.source;
+  }).join("\n");
 }
 
 function plainTextBlock(source: string): string {

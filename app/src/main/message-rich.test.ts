@@ -58,3 +58,12 @@ test("card copy actions copy TSV and exact code source without invoking a tool",
   root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
   expect(copyText).toHaveBeenLastCalledWith('echo "hello"');
 });
+
+test("answer forms use the same source copy action as existing code cards", () => {
+  const root = document.createElement("div"); document.body.append(root);
+  const source = '{"columns":[{"title":"Ready","cards":[{"title":"Review"}]}]}';
+  root.innerHTML = replyContentHTML("```board\n" + source + "\n```");
+  mountRichContent(root);
+  root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
+  expect(copyText).toHaveBeenLastCalledWith(source);
+});

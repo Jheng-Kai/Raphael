@@ -991,3 +991,35 @@ npm run look -- composer-long-link composer-long-link-sent room-long-link room-c
 npm run look -- new-conversation-recording new-conversation-hearing composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
 npm run look -- team-file-reply rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table reply-split-bubbles conversation-chief-up conversation-member-up conversation-room-up long-owner long-owner-expanded long-room-messages chat --theme both --width 1120,720,1920x1080
 ```
+
+
+## Answer forms (2026-11-01)
+
+Closed forecast, board and chart fences carry strict JSON. The shared rich reply
+path draws them for Raphael, members and rooms with its existing copy-source button.
+Invalid, oversized and provisional blocks retain escaped code. Schemas and readable
+conversion live in shared/answer-forms.ts; SVG/theme rendering in main/message-forms.ts.
+Forecast: place, units, 1-7 days (day/condition/high/low). Board: 1-5 columns
+(title/cards), 0-20 cards each (title, optional line/owner). Chart: type bar/line,
+title/units, 1-24 labels, 1-2 series (name/values with matching lengths).
+Strings are 1-160 characters, JSON at most 24000 characters; finite numbers at
+most 1e12 absolute, temperatures -1000..1000 and low <= high. Unknown keys fail.
+Boards wrap, never drag; forecast wraps at narrow widths; charts use token-derived
+monochrome SVG, distinguish series by dashes and expose each value in hover titles.
+No clock, permission, setting, RPC, migration or chart dependency is added.
+
+The one DOCTRINE reaches API, CLI and worker prompts. Weather descriptions nudge
+towards forecast; no absent weather facts are invented. Telegram conversation and
+background reports, spoken text and dictated captions get readable values; history
+keeps the original fences. Existing tables retain their conversion behavior.
+
+```powershell
+npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
+```
+
+There are no message-* scenes in this branch: message-content/message-rich tests,
+reply-split-bubbles and bot-message-from-centred cover those existing consumers.
+Inspect every contact sheet and relevant full-size form in both themes, compare
+the shared header/copy button with rich-code and the external reference view-012.
+The task forbids judge, native, cargo, network and real providers; offline evidence
+never establishes their acceptance. See CODEX_REPORT.md for exact runs and limits.

@@ -304,7 +304,9 @@ def test_the_system_prompt_names_the_language_the_prefixes_and_the_limit(languag
     for prefix in PREFIXES[language]:
         assert f'"{prefix}"' in prompt
     assert persona._LIMIT_WORDS[language] in prompt
-    assert "{" not in prompt and "}" not in prompt  # every placeholder was filled
+    from raphael_core.agent.self_check import DOCTRINE
+    without_schema = prompt.replace(DOCTRINE, "")
+    assert "{" not in without_schema and "}" not in without_schema  # every placeholder was filled
     assert persona.system_prompt(language, route) == prompt  # the same every time
 
 

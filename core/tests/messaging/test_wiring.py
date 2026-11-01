@@ -21,6 +21,31 @@ async def test_the_telegram_methods_are_registered(app):
     assert (await app.call("messaging.telegram.status", {}))["connected"] is False
 
 
+@pytest.mark.parametrize("background", [False, True])
+async def test_telegram_receives_readable_forms_from_conversation_and_background(app, monkeypatch, background):
+    source = '```chart\n{"type":"line","title":"Visitors","units":"people","labels":["Mon"],"series":[{"name":"Visits","values":[3]}]}\n```'
+    if background:
+        sent = []
+
+        async def report(session, text):
+            sent.append(text)
+
+        monkeypatch.setattr(app.messaging, "report", report)
+        task_id = app.background._store.create(session_id="telegram:42", language="en", text="report")
+        app.background._store.finish(task_id, "done", prefix="", text=source, detail=None, reason=None)
+        app._worker_notice("worker.report", {"task_id": task_id})
+        await asyncio.sleep(0)
+        [text] = sent
+    else:
+        async def call(method, params=None):
+            return {"status": "done", "prefix": "", "text": source}
+
+        monkeypatch.setattr(app, "call", call)
+        result = await app._ask_from_messaging("telegram:42", "report", "en", "telegram")
+        text = result.text
+    assert text == "Visitors\nMon: Visits 3 people"
+
+
 async def test_a_message_is_asked_like_a_spoken_question_and_lands_in_the_history(app):
     text = await app._ask_from_messaging("telegram:42", "你好", "zh-TW", "telegram")
     assert text.strip()

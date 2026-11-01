@@ -4,6 +4,7 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "forms.today": "Today", "forms.board": "Tasks",
   "mcp.argLines": "Arguments (one per line)", "mcp.secretNames": "Secret names (comma separated)",
   "mcp.enable": "Confirm and enable", "mcp.draft": "Not tested", "mcp.approval": "Testing runs this command on your PC",
   "mcp.testing": "Testing…", "mcp.tested": "Test passed", "mcp.enabled": "Enabled", "mcp.cancelled": "Cancelled",

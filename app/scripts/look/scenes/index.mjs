@@ -9,6 +9,7 @@ import mcpProposals from "./mcp-proposals.mjs";
 import slime from "./slime.mjs";
 import pages from "./pages.mjs";
 import richContent from "./rich-content.mjs";
+import answerForms from "./answer-forms.mjs";
 import chat from "./chat.mjs";
 import desktop from "./desktop.mjs";
 import automations from "./automations.mjs";
@@ -28,4 +29,5 @@ import { withOwnerRound4, noNaming } from "./owner-round4.mjs";
 
 export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch, ...batch, ...missing, ...ownerQuestions, ...richContent, ...sidebar, ...slime, ...pages, ...home, ...chat, ...desktop, ...automations, ...mentions, ...history, ...composerVoice, ...settings, ...apps, ...contextMenu, ...overlay, ...ownerRound, ...ownerRound3, ...ownerRound9, ...ownerRound10, noNaming]);
 scenes.push(...mediaData);
+scenes.push(...answerForms);
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");
