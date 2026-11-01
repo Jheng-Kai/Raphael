@@ -302,8 +302,9 @@ npm run look -- details raphael-details details-memory details-skills raphael-sk
 npm run native -- bot-homes
 ```
 
-`member-brain-saved` saves the CLI model, reopens details and the shared chooser,
-then checks the stored selection, selected row and one boundary write. The offline
+`member-brain-saved` saves the CLI model on that member and never on Raphael (R-MODEL-01), reopens the chooser,
+then checks the stored selection, selected row and one boundary write. `model-sync-member` walks to another member
+and to Settings to see that neither moved. The offline
 native `bot-homes` journey migrates
 three copied notes plus a skill, checks hashes, then answers through a fake Codex
 child using the production CLI loop/MCP boundary. It borrows no owner login and makes

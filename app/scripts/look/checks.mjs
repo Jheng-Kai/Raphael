@@ -745,12 +745,76 @@ export function checkRendered(name, context = {}) {
     return { check: name, toasts: toasts.length, targets: targets.length };
   }
   if (name === "member-brain-saved") {
-    const saved = window.__look.calls.filter(call => call.method === "settings.set" && call.params.key === "agent_model");
-    require(saved.length === 1 && saved[0].params.value.startsWith("cli:codex"), "a member's composer chooses the one model everyone answers on");
-    require(!window.__look.calls.some(call => call.method === "members.update" && call.params.model), "no member keeps a model of its own");
+    const saved = window.__look.calls.filter(call => call.method === "members.update" && call.params.model);
+    require(saved.length === 1 && saved[0].params.id === 1 && saved[0].params.model.startsWith("cli:codex"), "a member's composer saves that member's model");
+    require(!window.__look.calls.some(call => call.method === "settings.set" && call.params.key === "agent_model"), "Raphael's model is not touched");
+    require(window.__look.data.members.filter(member => member.id !== 1).every(member => !member.model?.startsWith("cli:codex")), "no other member moves");
     require(document.querySelector('.cb-menu [aria-checked="true"]') || document.querySelector('.cb-menu .cb-pick b')?.textContent.includes("GPT-6.1"), "the menu shows the choice");
     require(document.querySelector('.composer .cmp-model .mp-trigger').textContent.includes("Codex"), "reopened details show the selected CLI source");
-    return { check: name, model: saved[0].params.value };
+    return { check: name, model: saved[0].params.model };
+  }
+  if (name.startsWith("member-model-")) {
+    const raphael = window.__look.data.settings.agent_model, composer = document.querySelector(".composer .cmp-model .mp-trigger .mp-tname").textContent;
+    const chosen = window.__look.data.members.find(member => member.id === 1).model;
+    require(chosen.startsWith("cli:codex:gpt-6.1"), `the member holds its choice: ${chosen}`);
+    require(!raphael.startsWith("cli:codex"), `Raphael's model did not move: ${raphael}`);
+    require(!window.__look.calls.some(call => call.method === "settings.set" && call.params.key === "agent_model"), "nothing wrote Raphael's model");
+    const codex = window.__look.data.clis.flatMap(cli => cli.models).find(model => chosen.startsWith(model.id))?.name;
+    if (name === "member-model-own" || name === "member-model-kept") require(composer === codex, `this member's composer shows its model: ${composer} / ${codex}`);
+    if (name === "member-model-others") require(composer !== codex, `another member's composer does not: ${composer}`);
+    if (name === "member-model-settings") require(document.querySelector('.modal-scrim [data-model-picker="answer"] .mp-tname').textContent !== codex, "Settings keep Raphael's model");
+    return { check: name, chosen, raphael };
+  }
+  if (name === "composer-url-chip") {
+    const field = [...document.querySelectorAll(".composer .cmp-field")].find(visible), input = field.querySelector(".cmp-input"), mirror = field.querySelector(".cmp-mirror"), chip = mirror.querySelector(".url-chip");
+    require(chip && visible(chip) && chip.textContent.startsWith("x.com/someone/") && chip.textContent.endsWith("…"), `the link stands as its short name: ${chip?.textContent}`);
+    require(!input.value.includes("https://") && input.value.includes("這個是我當時看到的"), "the field holds the short name and the words");
+    require(getComputedStyle(input).color !== getComputedStyle(mirror).color, "only the copy is painted");
+    require(Math.abs(input.scrollHeight - mirror.scrollHeight) <= 1, `the field and its copy wrap alike: ${input.scrollHeight} / ${mirror.scrollHeight}`);
+    require(input.scrollHeight <= parseFloat(getComputedStyle(input).lineHeight) * 2 + 40, `the link takes no extra lines: ${input.scrollHeight}`);
+    return { check: name, name: chip.textContent, height: input.scrollHeight };
+  }
+  if (name === "composer-link-sent") {
+    const sent = window.__look.calls.filter(call => call.command === "agent_ask_text").at(-1);
+    require(sent?.text?.includes("ref_src=twsrc") && sent.text.startsWith("https://x.com/someone/status/"), `the whole address goes out: ${sent?.text}`);
+    require(document.querySelector(".composer .cmp-mirror .url-chip") === null, "the field is empty again");
+    return { check: name };
+  }
+  if (name === "room-link-sent") {
+    const sent = window.__look.calls.filter(call => call.method === "rooms.send").at(-1);
+    require(sent?.params.text.includes("ref_src=twsrc") && sent.params.text.startsWith("https://x.com/someone/status/"), `the whole address goes out: ${sent?.params.text}`);
+    return { check: name };
+  }
+  if (name === "room-composer-files") {
+    const chips = [...document.querySelectorAll(".au-room-pane .composer .cmp-chip")];
+    require(chips.length === 2, `both files are on the composer: ${chips.length}`);
+    for (const chip of chips) {
+      const thumb = chip.querySelector("img.cmp-thumb");
+      require(thumb?.complete && thumb.naturalWidth > 0, "each shows its picture");
+      require(chip.querySelector(".chip-x")?.getAttribute("aria-label"), "each can be taken off");
+    }
+    require(document.querySelector(".au-room-pane .attachment-drop").hidden, "the drop sign is gone after the drop");
+    require(!document.querySelector(".au-room-pane .cmp-send").disabled, "they can be sent");
+    return { check: name, files: chips.length };
+  }
+  if (name === "room-drop-sign") {
+    const sign = document.querySelector(".au-room-pane .attachment-drop"), composer = document.querySelector(".au-room-pane .composer");
+    require(sign.textContent.trim().length > 0, "the sign says what to do");
+    require(sign.getBoundingClientRect().bottom <= composer.getBoundingClientRect().top, "the sign stops above the composer");
+    return { check: name };
+  }
+  if (name === "room-files-sent") {
+    const sent = window.__look.calls.filter(call => call.method === "rooms.send").at(-1);
+    require(sent?.params.attachments.length === 2, `both files went out: ${sent?.params.attachments.length}`);
+    const pictures = [...document.querySelectorAll(".au-room-message .attachment-picture img")];
+    require(pictures.length === 2 && pictures.every(image => image.complete && image.naturalWidth > 0), "the sent pictures show in the message");
+    require(!document.querySelector(".au-room-pane .composer .cmp-chip"), "the composer is clear again");
+    return { check: name };
+  }
+  if (name === "room-picture-opened") {
+    const large = document.querySelector(".media-lightbox .lb-img");
+    require(large?.complete && large.naturalWidth > 0, "the picture opens large");
+    return { check: name };
   }
   if (name === "details-sheet") {
     const panel = document.querySelector('.mb-det:not([hidden])');
@@ -2442,8 +2506,8 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-model-depth") {
       const last = [...menu.querySelectorAll(".mc-stop")].filter(stop => stop.dataset.effort).at(-1);
       require(Number(range.value) === range.dataset.levels.split(",").findLastIndex(Boolean), "the slider stands at the chosen stop");
-      const saved = window.__look.calls.filter(call => call.method === "settings.set" && call.params.key === "agent_model").at(-1);
-      require(saved.params.value.includes(last.dataset.effort), "the depth is saved with the model");
+      const saved = window.__look.calls.filter(call => call.method === "members.update" && call.params.model).at(-1);
+      require(saved.params.model.includes(last.dataset.effort), "the depth is saved with the member's model");
       require(document.querySelector(".composer .cmp-model .cb-depth")?.textContent === last.textContent, "the button says the depth");
     }
     return { check: name };

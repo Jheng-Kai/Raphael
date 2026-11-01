@@ -28,9 +28,9 @@ export default [
     ...settings("models"), check("model-sync-settings"),
     click('.modal-scrim [data-model-picker="answer"] .mp-trigger'), wait('.model-chooser .mc-row'), click('.model-chooser [data-source="openrouter"]'), click('.model-chooser .mc-row[aria-checked="false"]:not(:disabled)'), click('.model-chooser [data-dlg="use"]'), waitGone('.model-chooser'), check("model-sync-both"),
   ]),
-  scene("model-sync-member", "A model chosen in a member's conversation is the one Settings show", [
-    member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("model-sync-composer"),
-    click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), ...settings("models"), check("model-sync-settings")]),
+  scene("model-sync-member", "A model chosen in a member's conversation stays that member's: Raphael, Settings and the others keep theirs", [
+  member(1), click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), click('.cb-menu [data-model="cli:codex:gpt-6.1"]'), wait('.cb-now:not([hidden]) .cb-pick'), check("member-model-own"),
+  click('.composer .cmp-model .mp-trigger'), waitGone('.cb-menu'), member(2), check("member-model-others"), member(1), check("member-model-kept"), ...settings("models"), check("member-model-settings")]),
   scene("settings-chatgpt-row", "A model on the ChatGPT plan has its maker's mark and says it is on the plan", [...settings("models"), wait('.modal-scrim [data-model-picker="answer"] .mp-trigger .logo, .modal-scrim [data-model-picker="answer"] .mp-trigger .mono svg'), check("settings-chatgpt-row")], { chatgptSignedIn: true }),
   scene("composer-model-arrives", "A CLI's models arrive while its menu is open, with no dead end", [click('.composer .cmp-model .mp-trigger'), wait('.cb-menu'), click('.cb-pick'), click('.cb-menu [data-cb-source="cli:codex"]'), check("composer-model-reading"), wait('.cb-menu [data-model="cli:codex:gpt-6.1"]'), check("composer-model-arrived")], { codexLate: 1500 }),
   scene("quick-model-menu", "Quick questions shared model picker in existing model settings", [...settings("models"), click('[data-k="quick-model"]'), wait('.model-chooser'), click('[data-source="openrouter"]'), wait('.model-chooser [data-model="openai/gpt-6-luna"]')]),

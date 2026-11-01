@@ -1405,7 +1405,6 @@ export const en = {
   "rooms.namePlaceholder": "Group chat name",
   "rooms.stopVoice": "Stop recording",
   "rooms.voiceFailed": "Microphone access failed. Allow Raphael and desktop apps in Windows microphone privacy settings.",
-  "rooms.fileLimit": "Up to 4 files, 50 MB each and 100 MB total",
   "auto.skipped": "Skipped",
   "auto.month": "Month",
   "auto.view": "View",

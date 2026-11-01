@@ -3,6 +3,26 @@ import { t } from "./i18n";
 import type { TurnAttachment } from "./types";
 import { esc, ico, iconButton } from "./ui";
 
+/** Shared with the core: four files, 50 MB each and 100 MB in total. */
+export const ATTACH_MAX = 4;
+export const FILE_MAX_BYTES = 50 * 1024 * 1024;
+export const TOTAL_MAX_BYTES = 100 * 1024 * 1024;
+export function attachRefusal(count: number, _mime: string, size: number, total = 0): "count" | "size" | "total" | "empty" | null {
+  if (count >= ATTACH_MAX) return "count";
+  if (size <= 0) return "empty";
+  if (size > FILE_MAX_BYTES) return "size";
+  if (size + total > TOTAL_MAX_BYTES) return "total";
+  return null;
+}
+
+/** `bytes` in base64, a slice at a time (a whole PDF at once is too long an argument list). */
+export function base64Of(bytes: Uint8Array): string {
+  let binary = "";
+  const SLICE = 0x8000;
+  for (let at = 0; at < bytes.length; at += SLICE) binary += String.fromCharCode(...bytes.subarray(at, at + SLICE));
+  return btoa(binary);
+}
+
 const EXTENSIONS: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", avif: "image/avif", bmp: "image/bmp",
   pdf: "application/pdf", txt: "text/plain", md: "text/markdown", html: "text/html", htm: "text/html", csv: "text/csv", json: "application/json",
@@ -30,6 +50,12 @@ export function fileIcon(file: Pick<TurnAttachment, "name" | "mime">): string {
   if (kind !== "file") return ico(kind === "audio" ? "mic" : kind === "video" ? "play" : "image");
   const ext = file.name.split(".").pop()?.toUpperCase().slice(0, 6) ?? "";
   return `<span class="attachment-icon">${ico(/^(DOCX|XLSX|PPTX|PDF)$/.test(ext) ? "book" : "file")}<small>${esc(ext)}</small></span>`;
+}
+/** A draft card's inside: thumbnail or type icon, name, size and a remove button. The caller fills in the thumbnail from the draft's own bytes. */
+export function draftFileHTML(file: { name: string; mime: string; size?: number }, removeAttrs: string): string {
+  return `<span class="cmp-tile">${fileKind(file.mime) === "image" ? `<img class="cmp-thumb" alt="" width="40" height="40">` : fileIcon(file)}</span>` +
+    `<span class="attachment-name"><span class="cmp-chip-t">${esc(file.name)}</span><small>${esc(fileSize(file.size))}</small></span>` +
+    `<button type="button" class="chip-x" ${removeAttrs}>${ico("x")}</button>`;
 }
 export function sentFileHTML(file: TurnAttachment): string {
   const kind = fileKind(file.mime);
@@ -83,4 +109,36 @@ export function mountFileDrop(target: HTMLElement, overlay: HTMLElement, add: (f
   window.addEventListener("drop", reset);
   window.addEventListener("blur", reset);
   return reset;
+}
+
+/** Files dragged onto a whole conversation go to its composer, under a sign that stops above `control`. */
+export function mountStageDrop(stage: HTMLElement, control: () => HTMLElement, add: (files: File[]) => void): { measure(): void; reset(): void } {
+  const overlay = document.createElement("div");
+  overlay.className = "attachment-drop";
+  overlay.hidden = true;
+  overlay.setAttribute("role", "status");
+  overlay.innerHTML = `${ico("file")}<span></span>`;
+  stage.append(overlay);
+  const measure = (): void => {
+    overlay.querySelector("span")!.textContent = t("agent.dropFiles");
+    overlay.style.bottom = `${Math.max(12, stage.getBoundingClientRect().bottom - control().getBoundingClientRect().top + 12)}px`;
+  };
+  stage.addEventListener("dragenter", measure, true);
+  stage.addEventListener("dragover", measure, true);
+  return { measure, reset: mountFileDrop(stage, overlay, add) };
+}
+
+/** Clipboard files are attached; any accompanying plain text stays in the composer. */
+export function bindFilePaste(input: HTMLTextAreaElement, add: (files: File[]) => void, fit: () => void): void {
+  input.addEventListener("paste", e => {
+    const pasted = Array.from(e.clipboardData?.files ?? []);
+    if (pasted.length === 0) return;
+    const words = e.clipboardData?.getData("text/plain") ?? "";
+    e.preventDefault();
+    if (words) {
+      input.setRangeText(words, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
+      fit();
+    }
+    add(pasted);
+  });
 }

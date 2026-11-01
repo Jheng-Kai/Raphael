@@ -4,7 +4,8 @@
  * pressing the model, the sources on the left with the models of the one pressed on the right. Choosing a model saves
  * it and turns back, where its depth is right there.
  *
- * One model answers everywhere, so this writes what Settings writes, and in a quick conversation what 快速提問 writes.
+ * Each member answers on its own model, so a member's conversation writes that member's and moves no one else. Raphael's is
+ * what Settings writes, and a quick conversation's what 快速提問 writes.
  * The core holds the choice and every list. This reads them again whenever the core says one changed, which is how a
  * choice made in Settings reaches the button, and how a CLI's models reach it: the core asks the CLI only after the
  * first read, in the background.
@@ -77,10 +78,10 @@ export function mountComposerBrain(slot: HTMLElement, member: () => Member, host
       if (split.effort) { await api.settingsSet("quick_effort", split.effort); quickEffort = split.effort; }
       return;
     }
-    const who = member(), result = await api.settingsSet("agent_model", model);
+    const who = member();
+    if (who.id !== RAPHAEL_ID) { await api.membersUpdate(who.id, { model }); who.model = model; return; }
+    const result = await api.settingsSet("agent_model", model);
     answerModel = result.settings.agent_model ?? model;
-    // A member that still holds a model of its own would go on answering on it.
-    if (who.id !== RAPHAEL_ID && who.model) { await api.membersUpdate(who.id, { model: "" }); who.model = ""; }
   }
 
   function save(model: string, then?: () => void): void {

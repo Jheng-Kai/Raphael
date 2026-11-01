@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, expect, test, vi } from "vitest";
+import { wholeLinks } from "./composer-links";
 import { bindMentionField } from "./mention-field";
 import type { MentionTarget } from "./mention-text";
 
@@ -118,3 +119,67 @@ test("an input method composing next to a chip is left alone and its words are d
   input.dispatchEvent(new Event("compositionend"));
   expect(mirror.querySelector(".cmp-composing")).toBeNull();
 });
+
+const LINK = "https://x.com/someone/status/2115177376921293212?ref_src=twsrc%5Etfw";
+const NAME = "x.com/someone/status/2115177376…";
+const clipboardEvent = (type: string, text = "", files: File[] = []): Event & { clipboardData: { setData: ReturnType<typeof vi.fn> } } => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  return Object.assign(event, { clipboardData: { files, getData: () => text, setData: vi.fn() } });
+};
+
+test("a pasted link stands as a chip with its short name, and the words go out with the whole address", () => {
+  input.value = "看 "; input.setSelectionRange(2, 2);
+  const event = clipboardEvent("paste", LINK);
+  input.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
+  expect(input.value).toBe(`看 ${NAME}`);
+  expect(chips()).toEqual([NAME]);
+  expect(field.classList.contains("has-mentions")).toBe(true);
+  expect(wholeLinks(input.value)).toBe(`看 ${LINK}`);
+});
+
+test("a paste with no link, and a paste of files, are not the field's to change", () => {
+  const words = clipboardEvent("paste", "plain words"), withFile = clipboardEvent("paste", LINK, [new File(["x"], "a.png")]);
+  input.dispatchEvent(words); input.dispatchEvent(withFile);
+  expect(words.defaultPrevented).toBe(false);
+  expect(withFile.defaultPrevented).toBe(false);
+});
+
+test("words put back from elsewhere show their links as chips too", () => {
+  input.value = `${LINK} 這個`;
+  expect(input.value).toBe(`${NAME} 這個`);
+  expect(chips()).toEqual([NAME]);
+  input.setRangeText(LINK, 0, input.value.length, "end");
+  expect(input.value).toBe(NAME);
+});
+
+test("a link chip is one unit: backspace takes all of it, and the caret never rests inside", () => {
+  typeText(`${LINK} 這個`, NAME.length);
+  press("Backspace");
+  expect(input.value).toBe(" 這個");
+  typeText(`a ${LINK}`);
+  input.setSelectionRange(5, 5);
+  document.dispatchEvent(new Event("selectionchange"));
+  expect(caret()).toEqual([2, 2]);
+});
+
+test("copying or cutting a link gives the whole address", () => {
+  typeText(`看 ${LINK}`);
+  input.setSelectionRange(0, input.value.length);
+  const copied = clipboardEvent("copy");
+  input.dispatchEvent(copied);
+  expect(copied.clipboardData.setData).toHaveBeenCalledWith("text/plain", `看 ${LINK}`);
+  expect(input.value).toBe(`看 ${NAME}`);
+  const cut = clipboardEvent("cut");
+  input.dispatchEvent(cut);
+  expect(cut.clipboardData.setData).toHaveBeenCalledWith("text/plain", `看 ${LINK}`);
+  expect(input.value).toBe("");
+});
+
+test("a mention inside a link's name stays part of the link", () => {
+  typeText("https://medium.com/@小森/post");
+  expect(input.value).toBe("medium.com/@小森/post");
+  expect(mirror.querySelectorAll(".url-chip")).toHaveLength(1);
+  expect(chips()).toEqual(["medium.com/@小森/post"]);
+});
+

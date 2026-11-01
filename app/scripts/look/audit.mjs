@@ -190,7 +190,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       seenKeys.add(match[1]); missingI18nKeys.push({ ...description, key: match[1] });
     }
     // The literal command-template token is syntax in every locale, not English copy.
-    if (allowed && !element.closest('.message-code pre code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
+    if (allowed && !element.closest('.message-link, .url-chip, .message-code pre code, .mb-row-p, .rich-language, .message-diagram .diagram-view svg, .rich-view-dialog .diagram-view svg')) for (const value of strings) {
       const copy = productPattern ? value.replace(productPattern, "") : value;
       for (const [word] of copy.replace(/\{input\}/g, "").replace(keyPattern, "").replace(/https?:\/\/\S+|\S+\.(?:pdf|png|jpe?g|txt|md|csv|exe|com|dev|io)\b/gi, "").matchAll(/[A-Za-z]{2,}/g)) {
         if (allowed.has(word.toLowerCase()) || seenWords.has(word)) continue;

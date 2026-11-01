@@ -7,7 +7,7 @@
   of Raphael's), a role (ROLE_MAX), its character and speaking style (PERSONALITY_MAX), the owner's
   instructions for its work (INSTRUCTIONS_MAX), a picture
   (`avatar`: "", "preset:<file stem>", "file:<stored file name>" or "slime:<mascot>"), a group or none (未分組), a model
-  ("" for the answer model), a place, when it was made, and the tools and connections it may use
+  ("" answers on Raphael's; `members.create` gives each its own), a place, when it was made, and the tools and connections it may use
   (`tools`: a list of ids, or None for every one that is on).
 - `routines`: what a member does on a schedule (`schedule`, see `schedule.py`), with a title
   (TITLE_MAX) and the prompt it runs with (PROMPT_MAX), whether it is on, and when it last ran and

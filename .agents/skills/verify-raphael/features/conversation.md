@@ -731,6 +731,15 @@ nothing to replace and inserted its text again.
 npm run look -- mention-ime-open mention-ime-at mention-ime-filter mention-ime-compose mention-ime-commit mention-chip-composer mention-chip-sent mention-chip-delete mention-chip-arrow mention-chip-room --theme both --width 1120,720,1920x1080
 ```
 
+A link in the composer stands as its short name, in a member's conversation and in a group: the words hold the name
+(`composer-links.ts`), the field paints it as a chip and treats it as one unit, and sending or copying gives the whole address
+back. A group's composer takes files the way a conversation's does, by `+`, a paste and a drop, one card to a file with its
+picture; a picture it sent loads near the viewport and opens large.
+
+```powershell
+npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
+```
+
 The `ime` step drives the browser's own input-method path (CDP `Input.imeSetComposition` and `Input.insertText`) with the
 events a WebView2 input method sends, and `mention-ime-at` fails on the old code with `@@`. It cannot be a Windows input
 method: the Bopomofo editor itself, its candidate window and TSF are not driven, so a real Zhuyin session stays a manual

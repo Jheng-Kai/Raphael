@@ -14,6 +14,9 @@ import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { roomWrapupHTML } from "./room-wrapup";
+import { createAttachmentMedia } from "./attachment-media";
+import { mountStageDrop } from "./attachments";
+import { openMediaLightbox } from "./media-lightbox";
 import { conversationCardsHTML, filesHTML, messageActionsHTML } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
@@ -227,6 +230,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??"";drafts.set(id,draft+(draft?" ":"")+text);}};},async send(text,files){if(!roomId)return;const id=roomId,key=JSON.stringify([text,files,replyTo?.id]);if(key!==retry)requestId=undefined;retry=key;requestId??=crypto.randomUUID();sendingRooms.add(id);try{await api.roomSend(id,text,requestId,getLocale(),files,replyTo?.id);if(pendingStops.delete(id))await api.roomStop(id);}finally{sendingRooms.delete(id);pendingStops.delete(id);}requestId=undefined;if(roomId===id){replyTo=undefined;await refresh();}changed();}});
   const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids }));
   composer.input.id="room-message";el.querySelector('.ra-dock')!.append(composer.el);
+  const drop = mountStageDrop(el.querySelector<HTMLElement>('.ra-stage')!, () => composer.el, list => composer.addFiles(list));
+  const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   composer.el.querySelector('.cmp-quote')!.addEventListener('click',e=>{if((e.target as Element).closest('[data-room-act="cancel-reply"]')){replyTo=undefined;draw();composer.input.focus();}});
   const status=document.createElement('div');status.className="au-room-controls";el.querySelector('.ra-dock')!.prepend(status);
   const person=(id:number|null)=>list.members.find(m=>m.id===id);
@@ -284,6 +289,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     restoreMail();
     pagesHost.sync();
     measureMessagePreviews(thread);
+    attachmentMedia.sync();
     composer.draw(); mentions.refresh(); });
     if(follow)scroll.scrollTop=scroll.scrollHeight;onRender();
   }
@@ -308,9 +314,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     }
   }
   async function stopRoom():Promise<void>{if(!room||stopping)return;stopping=true;const id=room.id;if(sendingRooms.has(id))pendingStops.add(id);try{await api.roomStop(id);await refresh();}finally{stopping=false;}}
-  function close():void{if(!opened)return;if(roomId)drafts.set(roomId,composer.input.value);opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
+  function close():void{if(!opened)return;if(roomId)drafts.set(roomId,composer.input.value);drop.reset();attachmentMedia.reset();opened=false;roomId=undefined;generation++;el.hidden=true;composer.setTaskState("idle");clearRoomSelection();onClose();}
   el.querySelector('[data-room-menu]')!.addEventListener('click',e=>{if(room)roomActions(e.currentTarget as HTMLElement,room,()=>void refresh(),close);});
-  el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","older"].includes(act??""))e.stopPropagation();
+  el.addEventListener('click',e=>{const target=(e.target as Element).closest<HTMLElement>('[data-room-act],[data-act]');if(!target)return;const act=target.dataset.roomAct??target.dataset.act;if(["turn","copy-message","copy-code","attachment-open","attachment-image","older"].includes(act??""))e.stopPropagation();
     if(act==="members"&&room)void editRoomMembers(room,()=>void refresh());
     else if(act==="expand-message") {
       e.stopPropagation();
@@ -326,6 +332,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     else if(act==="cancel-reply"){replyTo=undefined;draw();composer.input.focus();}
     else if(act==="copy-message"){const m=messages.find(m=>m.id===Number(target.closest<HTMLElement>('[data-room-message]')?.dataset.roomMessage));if(m)void copyText(messagePlainText(m.member_id===null?m.text:plainReplies(replyMessages(m.text)).join("\n\n"),m.member_id!==null)).catch(error=>toaster.info(describeError(error)));}
     else if(act==="copy-code")void copyText(target.closest('.message-code')?.querySelector('code')?.textContent??"").catch(error=>toaster.info(describeError(error)));
+    else if(act==="attachment-image"){const src=attachmentMedia.source(target);if(src)openMediaLightbox(target,src);}
     else if(act==="attachment-open")void api.openAttachment(target.dataset.id??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="team-file-open")void api.openTeamFile(target.dataset.path??"").catch(()=>toaster.info(t("agent.fileUnavailable")));
     else if(act==="older"&&!loadingOlder&&room&&messages.length){loadingOlder=true;draw();const id=room.id,mine=generation;void api.roomMessages(id,messages[0].id).then(result=>{if(mine!==generation||!opened)return;canOlder=result.messages.length===100;messages=[...new Map([...result.messages,...messages].map(m=>[m.id,m])).values()].sort((a,b)=>a.id-b.id);}).catch(error=>toaster.info(describeError(error))).finally(()=>{loadingOlder=false;if(opened)draw();});}
@@ -334,6 +341,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const listener=():void=>{if(opened&&el.isConnected)void refresh();};listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
   return {el,close,refresh,async open(id:number){
     if(roomId)drafts.set(roomId,composer.input.value);
+    attachmentMedia.reset();
     opened=true;generation++;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
     composer.setTaskState("idle");composer.setDraft(drafts.get(id)??"");el.hidden=false;

@@ -6,7 +6,9 @@ import "../shared/cancel-gesture.css";
 import "../shared/task-action.css";
 import { bindComposerHistory } from "./composer-history";
 import { bindComposerLearning, learnComposerCorrections } from "./composer-learning";
+import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime } from "./attachments";
 import { avatarHTML } from "./avatar";
+import { wholeLinks } from "./composer-links";
 import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
@@ -84,7 +86,6 @@ export function wavBytes(channels: readonly Float32Array[], rate: number): Uint8
   for(let i=0;i<length;i++){const sample=Math.max(-1,Math.min(1,channels.reduce((sum,c)=>sum+c[i],0)/channels.length));view.setInt16(44+i*2,sample*(sample<0?32768:32767),true);}
   return bytes;
 }
-const base64 = (bytes: Uint8Array): string => { let value="";for(let i=0;i<bytes.length;i+=8192)value+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(value); };
 
 export function createChatComposer(options: { placeholder(): string; transcriptTarget?(): (text: string) => void; send(text: string, files: WireAttachment[]): Promise<void>; stopTask?(): Promise<void> }) {
   const el=document.createElement("form");el.className="composer";el.noValidate=true;el.innerHTML=composerHTML();
@@ -93,14 +94,18 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   let taskRun=0, discardVoice=false, transcribing=false;
   let revision=0, taskState: ComposerTaskState = "idle", stoppingTask = false;
   el.addEventListener("click",e=>e.stopPropagation());
-  let files:WireAttachment[]=[],busy=false,attaching=false,recording=false,starting=false,stream:MediaStream|undefined,recorder:MediaRecorder|undefined;
-  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching||recording||starting||(!input.value.trim()&&!files.length);voice.innerHTML=avatarHTML({size:32,avatar:null,loop:recording});voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||(busy&&!transcribing);drawTaskSlot(el,recording||transcribing?"running":taskState,stoppingTask);el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.innerHTML=files.map((f,i)=>`<span class="cmp-chip"><span>${esc(f.name)}</span>${iconButton("x",t("common.cancel"),` data-file="${i}"`)}</span>`).join("");};
+  let files:WireAttachment[]=[],drawnFiles:WireAttachment[]|null=null,attachQueue:Promise<void>=Promise.resolve(),attaching=0,busy=false,recording=false,starting=false,stream:MediaStream|undefined,recorder:MediaRecorder|undefined;
+  const draw=():void=>{input.placeholder=options.placeholder();input.setAttribute("aria-label",input.placeholder);send.disabled=busy||attaching>0||recording||starting||(!input.value.trim()&&!files.length);voice.innerHTML=avatarHTML({size:32,avatar:null,loop:recording});voice.setAttribute("aria-label",t(recording?"rooms.stopVoice":"agent.voice"));voice.setAttribute("aria-pressed",String(recording));voice.disabled=starting||(busy&&!transcribing);drawTaskSlot(el,recording||transcribing?"running":taskState,stoppingTask);el.querySelector(".cmp-attach")!.setAttribute("aria-label",t("agent.attach"));drawFiles();};
+  // Drawn only when the files change: a picture is not decoded again at each keystroke.
+  const drawFiles=():void=>{if(drawnFiles===files)return;drawnFiles=files;const chips=el.querySelector<HTMLElement>(".cmp-file")!;chips.hidden=!files.length;chips.replaceChildren(...files.map((f,i)=>{const chip=document.createElement("span");chip.className="cmp-chip";chip.innerHTML=draftFileHTML({name:f.name,mime:f.mime,size:Math.round(f.data.length*0.75)},`data-file="${i}" aria-label="${esc(t("agent.unattach"))}"`);const thumb=chip.querySelector<HTMLImageElement>(".cmp-thumb");if(thumb)thumb.src=`data:${f.mime};base64,${f.data}`;return chip;}));};
+  /** 「＋」, a paste or a drop, one file after the other. One that cannot be taken says why and the rest are still taken, but for too many, which ends it. */
+  const addFiles=(list:readonly File[]):void=>{const mine=revision;attaching++;draw();attachQueue=attachQueue.then(async()=>{for(const file of list){if(mine!==revision)break;const mime=fileMime(file),name=file.name.trim()||`image.${mime.slice(mime.indexOf("/")+1)}`,refusal=attachRefusal(files.length,mime,file.size,files.reduce((n,f)=>n+f.data.length*0.75,0));if(refusal==="count"){toaster.info(t("agent.attachTooMany",{p0:ATTACH_MAX}));break;}if(refusal==="size"){toaster.info(t("agent.attachTooBig",{p0:name,p1:FILE_MAX_BYTES/1024/1024}));continue;}if(refusal==="total"){toaster.info(t("agent.attachTotal",{p0:TOTAL_MAX_BYTES/1024/1024}));continue;}try{if(refusal==="empty")throw new Error("empty");const data=base64Of(new Uint8Array(await file.arrayBuffer()));if(mine===revision){files=[...files,{name,mime,data}];draw();}}catch{toaster.info(t("agent.attachUnreadable",{p0:name}));}}}).finally(()=>{attaching--;draw();});};
   const fit=():void=>{input.style.height="auto";input.style.height=`${Math.min(180,input.scrollHeight)}px`;draw();};
-  el.addEventListener("submit",e=>{e.preventDefault();if(send.disabled)return;const text=input.value,snapshot=files,submitted=revision,dictation=learning.snapshot(),corrections=learning.take(text);busy=true;if(options.stopTask)taskState="ack";draw();void options.send(text.trim(),snapshot).then(()=>{void learnComposerCorrections(corrections);if(submitted===revision){if(input.value===text)input.value="";if(files===snapshot)files=[];}}).catch(error=>{if(submitted===revision&&!learning.snapshot())learning.restore(dictation);taskState="idle";toaster.info(describeError(error));}).finally(()=>{busy=false;fit();input.focus();});});
+  el.addEventListener("submit",e=>{e.preventDefault();if(send.disabled)return;const text=input.value,snapshot=files,submitted=revision,dictation=learning.snapshot(),corrections=learning.take(text);busy=true;if(options.stopTask)taskState="ack";draw();void options.send(wholeLinks(text).trim(),snapshot).then(()=>{void learnComposerCorrections(corrections);if(submitted===revision){if(input.value===text)input.value="";if(files===snapshot)files=[];}}).catch(error=>{if(submitted===revision&&!learning.snapshot())learning.restore(dictation);taskState="idle";toaster.info(describeError(error));}).finally(()=>{busy=false;fit();input.focus();});});
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
   el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});
-  picker.addEventListener("change",()=>{attaching=true;draw();void(async()=>{const picked=[...picker.files??[]];if(files.length+picked.length>4||picked.some(f=>f.size>50*1024*1024)||picked.reduce((n,f)=>n+f.size,files.reduce((n,f)=>n+f.data.length*0.75,0))>100*1024*1024)throw new Error(t("rooms.fileLimit"));const added=await Promise.all(picked.map(async f=>({name:f.name,mime:f.type||"application/octet-stream",data:base64(new Uint8Array(await f.arrayBuffer()))})));files=[...files,...added];})().catch(error=>toaster.info(describeError(error))).finally(()=>{attaching=false;draw();});});
+  picker.addEventListener("change",()=>addFiles([...picker.files??[]]));bindFilePaste(input,addFiles,fit);
   const release=():void=>{stream?.getTracks().forEach(track=>track.stop());stream=undefined;recording=false;draw();};
   const stop=():void=>{if(recorder?.state==="recording")recorder.stop();};
   const cancelTranscription=():void=>{taskRun++;transcribing=false;busy=false;draw();};
@@ -124,7 +129,7 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
             const decoded=await audio.decodeAudioData(await new Blob(chunks).arrayBuffer());
             if(run!==taskRun)return;
             const data=wavBytes(Array.from({length:decoded.numberOfChannels},(_,i)=>decoded.getChannelData(i)),decoded.sampleRate);
-            const result=await api.roomTranscribe(base64(data),getLocale());
+            const result=await api.roomTranscribe(base64Of(data),getLocale());
             if(run!==taskRun)return;
             transcript(result.text);fit();
           }finally{await audio.close();}
@@ -134,6 +139,6 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
     })().catch(error=>{release();toaster.info(describeError(error));}).finally(()=>{starting=false;draw();});
   });
   cancelGesture().register(() => (recording || transcribing || taskState !== "idle") ? { key: `composer:${revision}:${taskRun}:${recording}:${transcribing}`, immediate: recording || transcribing, button: voice, hint: t("common.cancelAgain"), cancel: () => { if(recording){discardVoice=true;stop();}else voice.click(); } } : null);
-  onLocaleChange(draw);draw();
-  return {el,input,draw,setTaskState(state:ComposerTaskState){if(taskState==="idle"&&state!=="idle")taskRun++;taskState=state;draw();},stopVoice:stop,seedDictation(text:string){learning.seed(input.value,text);},setDraft(text:string){learning.clear();revision++;input.value=text;files=[];fit();}};
+  onLocaleChange(()=>{drawnFiles=null;draw();});draw();
+  return {el,input,draw,addFiles,setTaskState(state:ComposerTaskState){if(taskState==="idle"&&state!=="idle")taskRun++;taskState=state;draw();},stopVoice:stop,seedDictation(text:string){learning.seed(input.value,text);},setDraft(text:string){learning.clear();revision++;input.value=text;files=[];fit();}};
 }

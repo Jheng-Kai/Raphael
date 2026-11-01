@@ -187,7 +187,7 @@ def test_migration_49_preserves_clock_routines_and_cleans_receipts(tmp_path, mon
     conn.execute("INSERT INTO routines(member_id,title,prompt,schedule,enabled,created_at_ms) VALUES(0,'Clock','Read',?,1,1)", (json.dumps({"kind": "daily", "time": "09:00"}),))
     conn.commit()
     db.migrate(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 50
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
     assert MemberStore(conn).routines()[0].schedule.kind == "daily"
     conn.execute("INSERT INTO routine_receipts(routine_id,item_id,state) VALUES(1,'seen','seen')")
     MemberStore(conn).delete_routine(1)

@@ -1405,7 +1405,6 @@ export const ja = {
   "rooms.namePlaceholder": "グループチャット名を入力",
   "rooms.stopVoice": "録音を停止",
   "rooms.voiceFailed": "マイクを利用できません。Windows のプライバシー設定でラファエルとデスクトップアプリのアクセスを許可してください。",
-  "rooms.fileLimit": "最大4ファイル、各50 MB、合計100 MB",
   "auto.skipped": "スキップ",
   "auto.month": "月",
   "auto.view": "表示",

@@ -368,6 +368,19 @@ export async function perform(page, step, evidenceDirectory) {
       try { await input.uploadFile(step.path); } finally { await input.dispose(); }
       break;
     }
+    case "clipboard-paste": case "file-drop": {
+      if (step.action === "clipboard-paste") await page.focus(step.selector);
+      await page.$eval(step.selector, (element, { action, name, image, text, hold }) => {
+        // One opaque pixel, a real picture for the composer to show and the look to load.
+        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), c => c.charCodeAt(0));
+        const transfer = new DataTransfer(), file = image ?? name;
+        if (file) transfer.items.add(new File([bytes], file, { type: "image/png" }));
+        if (text) transfer.setData("text/plain", text);
+        if (action === "clipboard-paste") { element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer })); return; }
+        for (const type of hold ? ["dragenter", "dragover"] : ["dragenter", "dragover", "drop"]) element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      }, step);
+      break;
+    }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
     case "wait": { const element = await visible(step.selector); await element.dispose(); break; }

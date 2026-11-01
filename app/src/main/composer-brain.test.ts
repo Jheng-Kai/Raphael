@@ -271,29 +271,28 @@ test("Raphael's choice is the global setting", async () => {
   expect(q(".cb-pick b")!.textContent).toBe("Mine");
 });
 
-test("a member's choice is the global model too, never one of its own", async () => {
+test("a member's choice is its own: Raphael's model and Settings stay as they were", async () => {
+  const { name, member } = await opened({ id: 3, name: "Ada", model: "@p:wide" } as Member);
+  expect(name()).toBe("Wide");
+  toModels();
+  choose("@p:mine");
+  await flush();
+  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(3, { model: "@p:mine" });
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  expect(member.model).toBe("@p:mine");
+  expect(name()).toBe("Mine");
+});
+
+test("a member with no model yet shows what it answers on, and choosing gives it one", async () => {
   const { name, member } = await opened({ id: 3, name: "Ada", model: "" } as Member);
   expect(name()).toBe("Global");
   expect(q(".cb-menu")!.textContent).not.toContain("跟隨");
   toModels();
   choose("@p:mine");
   await flush();
-  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
-  expect(api.membersUpdate).not.toHaveBeenCalled();
-  expect(member.model).toBe("");
-  expect(name()).toBe("Mine");
-});
-
-test("a member that still holds a model of its own gives it up once the global one is written", async () => {
-  const { name, member } = await opened({ id: 3, name: "Ada", model: "@p:wide" } as Member);
-  expect(name()).toBe("Wide");
-  toModels();
-  choose("@p:mine");
-  await flush();
-  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:mine");
-  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(3, { model: "" });
-  expect(api.settingsSet.mock.invocationCallOrder[0]).toBeLessThan(api.membersUpdate.mock.invocationCallOrder[0]);
-  expect(member.model).toBe("");
+  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(3, { model: "@p:mine" });
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  expect(member.model).toBe("@p:mine");
   expect(name()).toBe("Mine");
 });
 
@@ -345,9 +344,9 @@ test("a depth chosen in a member's conversation is written the way a model is", 
   const { member, slot } = await opened({ id: 3, name: "Ada", model: "@p:wide" } as Member);
   slideTo("xhigh");
   await flush();
-  expect(api.settingsSet).toHaveBeenCalledExactlyOnceWith("agent_model", "@p:wide?effort=xhigh");
-  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(3, { model: "" });
-  expect(member.model).toBe("");
+  expect(api.membersUpdate).toHaveBeenCalledExactlyOnceWith(3, { model: "@p:wide?effort=xhigh" });
+  expect(api.settingsSet).not.toHaveBeenCalled();
+  expect(member.model).toBe("@p:wide?effort=xhigh");
   expect(slot.querySelector(".cb-depth")!.textContent).toBe("極高");
 });
 

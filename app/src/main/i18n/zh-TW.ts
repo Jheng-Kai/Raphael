@@ -1404,7 +1404,6 @@ export const zhTW = {
   "rooms.namePlaceholder": "輸入群組對話名稱",
   "rooms.stopVoice": "停止錄音",
   "rooms.voiceFailed": "無法取得麥克風，請允許拉斐爾的麥克風存取並確認 Windows 已開放桌面應用程式使用。",
-  "rooms.fileLimit": "最多 4 個檔案，每個 50 MB、合計 100 MB",
   "auto.skipped": "已略過",
   "auto.month": "月",
   "auto.view": "檢視",

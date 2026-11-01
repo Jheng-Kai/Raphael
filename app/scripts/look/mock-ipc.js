@@ -467,6 +467,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "settings.get": return { settings: data.settings };
       case "attachments.get": {
+        if (data.keptFiles?.[p.id]) return data.keptFiles[p.id];
         if (!variant.audioFile || p.id !== variant.audioFile.id) return unsupported(method);
         const bytes = new Uint8Array(16044), view = new DataView(bytes.buffer);
         const word = (offset, text) => [...text].forEach((letter, index) => { bytes[offset + index] = letter.charCodeAt(0); });
@@ -678,7 +679,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "rooms.delete": data.rooms = data.rooms.filter(item => item.id !== p.room_id); return { deleted: true };
       case "rooms.stop": { for (const exchange of data.roomExchanges.filter(item => item.room_id === p.room_id && ["running", "queued"].includes(item.state))) exchange.stop_requested = 1; for(const exchange of data.roomExchanges.filter(item=>item.room_id===p.room_id)){exchange.state="stopped";exchange.active_turn=null;}for(const message of data.messages.filter(item=>item.room_id===p.room_id&&item.status==="running")){message.status="error";message.text="已停止工作。";}for(const task of data.roomHandoffs.filter(item=>["queued","running","waiting"].includes(item.state)))task.state="cancelled";data.messages.push({...data.roomWrapupMessage,id:nextId(data.messages),reply_to:null,reply_to_member:null,text:"### 結論\n已停止本次工作，已完成的動作保留。\n\n### 待決定\n尚未完成的工作已取消。\n\n### 下一步\n等待你的新指示。"});notify("RoomsChanged", { room_id: p.room_id }); return { stopped: true }; }
-      case "rooms.send": { const message = { id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message" }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
+      case "rooms.send": { const message = { id: nextId(data.messages), room_id: p.room_id, member_id: null, text: p.text, request_id: p.request_id, status: "done", created: data.now, reply_to: p.reply_to ?? null, turn_id: null, reply_to_member: data.messages.find(item => item.id === p.reply_to)?.member_id ?? null, origin_message_id: nextId(data.messages), kind: "message", attachments: (p.attachments ?? []).map((file, index) => { const id = `${"f".repeat(30)}${String(index).padStart(2, "0")}.png`; (data.keptFiles ??= {})[id] = { mime: file.mime, data: file.data }; return { id, name: file.name, mime: file.mime }; }) }; data.messages.push(message); return { message_id: message.id, duplicate: false }; }
       case "computer.revoke": if (data.desktop) data.desktop.granted = false; return { granted: false };
       case "brains.cli":
         // As the core does: a CLI's models come after the first read, in the background.

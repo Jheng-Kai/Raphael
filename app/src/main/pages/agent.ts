@@ -36,10 +36,11 @@ import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { confirmDelete } from "../member-dialogs";
 import { createAttachmentMedia } from "../attachment-media";
-import { fileMime, fileKind, fileSize, fileIcon, mountFileDrop } from "../attachments";
+import { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of, bindFilePaste, draftFileHTML, fileMime, fileKind, mountStageDrop } from "../attachments";
+import { closeMediaLightbox, openMediaLightbox } from "../media-lightbox";
+import { wholeLinks } from "../composer-links";
 import { mountSlashMenu } from "../slash-menu";
 import { getLocale, onLocaleChange, t } from "../i18n";
-import { isTopLayer, registerDismissal } from "../dismissals";
 
 import { plainReplies } from "../../shared/anime";
 import * as api from "../api";
@@ -169,10 +170,7 @@ export function typedQuestion(words: string, withFiles = false): string | null {
 }
 
 // ---------- attachments ----------
-/** Shared with the core: four files, 50 MB each and 100 MB in total. */
-export const ATTACH_MAX = 4;
-export const FILE_MAX_BYTES = 50 * 1024 * 1024;
-export const TOTAL_MAX_BYTES = 100 * 1024 * 1024;
+export { ATTACH_MAX, FILE_MAX_BYTES, TOTAL_MAX_BYTES, attachRefusal, base64Of };
 export const IMAGE_MAX_BYTES = FILE_MAX_BYTES;
 export const PDF_MAX_BYTES = FILE_MAX_BYTES;
 export const PDF_TYPE = "application/pdf";
@@ -180,22 +178,6 @@ export const PDF_TYPE = "application/pdf";
 export const PICKER_ACCEPT = "";
 export const attachmentType = fileMime;
 export const attachLimit = (_mime: string): number => FILE_MAX_BYTES;
-export function attachRefusal(count: number, _mime: string, size: number, total = 0): "count" | "size" | "total" | "empty" | null {
-  if (count >= ATTACH_MAX) return "count";
-  if (size <= 0) return "empty";
-  if (size > FILE_MAX_BYTES) return "size";
-  if (size + total > TOTAL_MAX_BYTES) return "total";
-  return null;
-}
-
-/** `bytes` in base64, a slice at a time (a whole PDF at once is too long an argument list). */
-export function base64Of(bytes: Uint8Array): string {
-  let binary = "";
-  const SLICE = 0x8000;
-  for (let at = 0; at < bytes.length; at += SLICE) binary += String.fromCharCode(...bytes.subarray(at, at + SLICE));
-  return btoa(binary);
-}
-
 /** A file attached to the next question, with its tray identity and byte count. */
 export interface ComposerFile extends WireAttachment {
   id: number;
@@ -541,22 +523,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   let attachmentEpoch = 0;
   let attaching = 0;
   let attachQueue: Promise<void> = Promise.resolve();
-  const dropOverlay = document.createElement("div");
-  dropOverlay.className = "attachment-drop";
-  dropOverlay.hidden = true;
-  dropOverlay.setAttribute("role", "status");
-  dropOverlay.innerHTML = `${ico("file")}<span></span>`;
-  stage.append(dropOverlay);
-  function measureDrop(): void {
-    const bounds = stage.getBoundingClientRect();
-    const control = composer.hidden ? (draftPanel.el.hidden ? askCard : draftPanel.el) : composer;
-    const top = control.getBoundingClientRect().top;
-    dropOverlay.style.bottom = `${Math.max(12, bounds.bottom - top + 12)}px`;
-  }
+  const { measure: measureDrop, reset: resetDrop } = mountStageDrop(stage, () => composer.hidden ? (draftPanel.el.hidden ? askCard : draftPanel.el) : composer, list => { void attachAll(list); });
   const dropResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureDrop) : null;
-  stage.addEventListener("dragenter", measureDrop, true);
-  stage.addEventListener("dragover", measureDrop, true);
-  const resetDrop = mountFileDrop(stage, dropOverlay, list => { void attachAll(list); });
   /** The chip of each of them, made once (an image's picture is not loaded again at each drawing). */
   const fileChips = new Map<number, HTMLElement>();
   /** The YES/NO question that waits for an answer, and whether an answer is on its way. */
@@ -663,7 +631,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** The words of the composer, the card and the search, in the language of the window. */
   function drawWords(): void {
-    dropOverlay.querySelector("span")!.textContent = t("agent.dropFiles");
     heading.textContent = t("agent.title");
     sendButton.setAttribute("aria-label", t("chat.send"));
     sendButton.dataset.tooltip = t("chat.send");
@@ -728,10 +695,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const chip = document.createElement("span");
     chip.className = "cmp-chip";
     chip.dataset.file = String(file.id);
-    chip.innerHTML =
-      `<span class="cmp-tile">${fileKind(file.mime) === "image" ? `<img class="cmp-thumb" alt="" width="40" height="40">` : fileIcon(file)}</span>` +
-      `<span class="attachment-name"><span class="cmp-chip-t">${esc(file.name)}</span><small>${esc(fileSize(file.size))}</small></span>` +
-      `<button type="button" class="chip-x" data-act="unattach-file" data-file="${file.id}">${ico("x")}</button>`;
+    chip.innerHTML = draftFileHTML(file, `data-act="unattach-file" data-file="${file.id}"`);
     const thumb = chip.querySelector<HTMLImageElement>(".cmp-thumb");
     // A raster thumbnail from the draft's own bytes.
     if (thumb) thumb.src = `data:${file.mime};base64,${file.data}`;
@@ -1111,7 +1075,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (epoch !== attachmentEpoch) return;
     }
     if (missingFiles.length > 0) { toaster.info(t("chat.reattach")); return; }
-    const text = typedQuestion(input.value, files.length > 0);
+    const text = typedQuestion(wholeLinks(input.value), files.length > 0);
     if (text === null) {
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
@@ -1579,46 +1543,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     rememberLine(button);
   }
 
-  let closeLightbox: (() => void) | null = null;
   function openLightbox(button: HTMLElement, localSrc?: string): void {
     const src = localSrc ?? safeMediaSrc(button.dataset.src, true);
-    if (!src) return;
-    const title = button.dataset.title ?? "";
-    closeLightbox?.();
-    const scrim = document.createElement("div");
-    scrim.className = "mb-scrim media-lightbox";
-    scrim.setAttribute("role", "dialog");
-    scrim.setAttribute("aria-modal", "true");
-    scrim.setAttribute("aria-label", title || t("agent.viewImage"));
-    scrim.innerHTML =
-      `<div class="lb-card">` +
-      `<div class="lb-head"><span class="lb-title">${esc(title)}</span>${iconButton("x", t("common.close"), ' data-lb="close"')}</div>` +
-      `<img class="lb-img" src="${esc(src)}" alt="${esc(title)}">` +
-      `</div>`;
-    let stopOutside = (): void => {};
-    const close = (): void => {
-      stopOutside();
-      closeLightbox = null;
-      scrim.remove();
-      document.removeEventListener("keydown", onKey, true);
-      button.focus({ preventScroll: true });
-    };
-    const onKey = (ev: KeyboardEvent): void => {
-      if (!isTopLayer(scrim.querySelector(".lb-card"))) return;
-      if (ev.key === "Escape") {
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        close();
-      }
-    };
-    scrim.addEventListener("click", (ev) => {
-      if ((ev.target as Element).closest('[data-lb="close"]')) close();
-    });
-    document.addEventListener("keydown", onKey, true);
-    document.body.append(scrim);
-    closeLightbox = close;
-    stopOutside = registerDismissal(scrim.querySelector<HTMLElement>(".lb-card")!, close);
-    scrim.querySelector<HTMLElement>('[data-lb="close"]')?.focus();
+    if (src) openMediaLightbox(button, src);
   }
 
   /** A line changed in place by the reader is drawn from new data next time, so it is not kept as it was. */
@@ -2139,18 +2066,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const chosen = Array.from(picker.files ?? []);
     if (chosen.length > 0) void attachAll(chosen);
   });
-  // Clipboard files are attached; any accompanying plain text stays in the composer.
-  input.addEventListener("paste", (e) => {
-    const pasted = Array.from(e.clipboardData?.files ?? []);
-    if (pasted.length === 0) return;
-    const words = e.clipboardData?.getData("text/plain") ?? "";
-    e.preventDefault();
-    if (words) {
-      input.setRangeText(words, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
-      fit();
-    }
-    void attachAll(pasted);
-  });
+  bindFilePaste(input, pasted => { void attachAll(pasted); }, fit);
 
   // The voice button is the question key: down when it is pressed, up when it is let go.
   voiceButton.addEventListener("pointerdown", (e) => {
@@ -2285,7 +2201,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   onLocaleChange(() => {
-    closeLightbox?.();
+    closeMediaLightbox();
     void slashMenu.refresh();
     drawWords();
     draftPanel.redraw();
@@ -2374,7 +2290,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       visible = false;
       cancelGesture().sync();
       problemNotice.hide();
-      closeLightbox?.();
+      closeMediaLightbox();
       resetDrop();
       attachmentMedia.reset();
       previews.pause();

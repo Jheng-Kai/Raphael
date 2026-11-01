@@ -2,16 +2,21 @@
 // chip cannot live inside it. While the words hold an address, the textarea stops painting its text and a copy of it is drawn over
 // it with each address as a chip (`.cmp-mirror`, aria-hidden, never taking a click); the caret, selection and input method are the
 // textarea's own. A chip is derived from the words, not stored: change a letter of it and it is plain text again, which is the
-// rule the core applies. Deleting, moving over and selecting treat it as one unit.
+// rule the core applies. Deleting, moving over and selecting treat it as one unit. A link is the same kind of chip: the words hold
+// its short name (composer-links.ts), and copying or sending gives the whole address back.
 import { esc } from "./ui";
-import { mentionChipHTML, mentionRanges, type MentionRange, type MentionTarget } from "./mention-text";
+import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
+import { mentionChipHTML, mentionRanges, type MentionTarget } from "./mention-text";
+
+/** A stretch of the words drawn as a chip: an address when it has a target, otherwise a link. */
+interface ChipRange { start: number; end: number; target?: MentionTarget }
 
 export interface MentionField { refresh(): void }
 
 export function bindMentionField(input: HTMLTextAreaElement, targets: () => readonly MentionTarget[]): MentionField {
   const field = input.closest<HTMLElement>(".cmp-field"), mirror = field?.querySelector<HTMLElement>(".cmp-mirror");
   if (!field || !mirror) return { refresh() {} };
-  let ranges: MentionRange[] = [];
+  let ranges: ChipRange[] = [];
   /** The words an input method has not committed yet, drawn underlined as the field would draw them. */
   let composing: { start: number; end: number } | null = null, composed = "";
 
@@ -26,12 +31,14 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   };
   const draw = (): void => {
     const text = input.value;
-    ranges = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
+    const links = linkRanges(text), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
+    ranges = [...links, ...mentions.filter(item => !links.some(link => link.start < item.end && item.start < link.end))].sort((a, b) => a.start - b.start);
     field.classList.toggle("has-mentions", ranges.length > 0);
     if (!ranges.length) { mirror.textContent = ""; return; }
     let html = "", at = 0;
     for (const range of ranges) {
-      html += words(text, at, range.start) + mentionChipHTML(text.slice(range.start, range.end), range.target);
+      const chip = text.slice(range.start, range.end);
+      html += words(text, at, range.start) + (range.target ? mentionChipHTML(chip, range.target) : `<span class="mention-chip url-chip">${esc(chip)}</span>`);
       at = range.end;
     }
     // A last empty line needs something in it, as the textarea's has its caret.
@@ -41,19 +48,44 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
 
   // Every write of the words redraws them, wherever it comes from: a draft put back, a send that empties the field, a paste.
   const descriptor = Object.getOwnPropertyDescriptor(input, "value") ?? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!;
-  Object.defineProperty(input, "value", { configurable: true, get: () => descriptor.get!.call(input), set: (value: string) => { descriptor.set!.call(input, value); draw(); } });
+  Object.defineProperty(input, "value", { configurable: true, get: () => descriptor.get!.call(input), set: (value: string) => { descriptor.set!.call(input, shortenLinks(value)); draw(); } });
   const setRangeText = input.setRangeText as (...args: unknown[]) => void;
-  input.setRangeText = (...args: unknown[]): void => { setRangeText.apply(input, args); draw(); };
+  input.setRangeText = (words: string, ...rest: unknown[]): void => { setRangeText.call(input, shortenLinks(words), ...rest); draw(); };
+  const replaceSelection = (words: string): void => {
+    // The browser's own edit keeps the undo history and says `input` to everyone listening.
+    if (words ? document.execCommand?.("insertText", false, words) : document.execCommand?.("delete")) return;
+    input.setRangeText(words, input.selectionStart, input.selectionEnd, "end");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  input.addEventListener("paste", event => {
+    // Files are the page's own to take: it puts their words in through setRangeText.
+    if (event.clipboardData?.files.length) return;
+    const pasted = event.clipboardData?.getData("text/plain") ?? "", short = shortenLinks(pasted);
+    if (short === pasted) return;
+    event.preventDefault();
+    replaceSelection(short);
+  });
+  const carry = (event: ClipboardEvent, cut: boolean): void => {
+    const picked = input.value.slice(input.selectionStart, input.selectionEnd), whole = wholeLinks(picked);
+    if (whole === picked) return;
+    event.preventDefault();
+    event.clipboardData?.setData("text/plain", whole);
+    if (cut) replaceSelection("");
+  };
+  input.addEventListener("copy", event => carry(event, false));
+  input.addEventListener("cut", event => carry(event, true));
 
   input.addEventListener("compositionupdate", event => { composed = (event as CompositionEvent).data; });
   input.addEventListener("compositionend", () => { composing = null; composed = ""; draw(); });
   input.addEventListener("input", event => {
     composing = (event as InputEvent).isComposing && composed ? { start: Math.max(0, input.selectionEnd - composed.length), end: input.selectionEnd } : null;
+    if ((event as InputEvent).inputType === "insertFromDrop") { const words = input.value, at = shortenLinks(words.slice(0, input.selectionEnd)).length; input.value = words; input.setSelectionRange(at, at); return; }
     draw();
   });
   input.addEventListener("scroll", place);
 
-  const inside = (at: number): MentionRange | undefined => ranges.find(range => range.start < at && at < range.end);
+  const inside = (at: number): ChipRange | undefined => ranges.find(range => range.start < at && at < range.end);
   /** A caret or selection edge never rests inside a chip: it goes to the nearer edge, a selection takes the whole chip. */
   const snap = (): void => {
     if (composing || !ranges.length || document.activeElement !== input) return;

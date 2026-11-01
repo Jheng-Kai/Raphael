@@ -21,11 +21,14 @@ export function messageUrl(raw: unknown): string | null {
 
 export function shortUrl(url: string): string {
   const parsed = new URL(url);
-  const label = parsed.host + (parsed.pathname === "/" ? "" : parsed.pathname);
+  // A path in another script reads as the words it is, not as its percent codes.
+  let path = parsed.pathname;
+  try { path = decodeURI(path); } catch { /* A broken code stays as it came. */ }
+  const label = parsed.host + (path === "/" ? "" : path);
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
 }
 
-function bareUrl(text: string): string {
+export function bareUrl(text: string): string {
   let raw = /^https?:\/\/[^\s<>"'`《》「」『』【】（）。，、！？；：…]+/i.exec(text)?.[0] ?? "";
   raw = raw.replace(/[.,;:!?*_]+$/, "");
   for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {

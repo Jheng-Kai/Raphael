@@ -1192,6 +1192,16 @@ PRAGMA user_version = 50;
 COMMIT;
 """
 
+# Each member answers on its own model again. Those migration 47 cleared keep what they answer on today, so that Raphael's
+# next change moves none of them. The literal is the default of this version, for an owner who has never chosen one.
+_MIGRATIONS[51] = """
+BEGIN;
+UPDATE members SET model = COALESCE((SELECT json_extract(value, '$') FROM settings WHERE key = 'agent_model'), 'openai/gpt-6-luna')
+WHERE model = '';
+PRAGMA user_version = 51;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

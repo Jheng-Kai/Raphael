@@ -772,17 +772,29 @@ export async function drive(name, context) {
     await click(page, `[data-conversation-open="${quickConversation.id}"]`);
     await assertTurn(quick.id, "high", "quick", quickConversation.id);
     const created = await context.rpc("members.create", { name: "NativeModel", role: "Model routing audit" });
-    await perform(page, { action: "member", id: created.member.id }); await details(page);
-    await choose('[data-member-brain] .mp-trigger', memberModel, "", "member");
+    await perform(page, { action: "member", id: created.member.id });
+    const other = await context.rpc("members.create", { name: "NativeOther", role: "Keeps its own model" });
+    await click(page, ".composer .cmp-model .mp-trigger"); await click(page, ".cb-pick");
+    await click(page, '.cb-menu [data-cb-source="openrouter"]');
+    if (await page.$('.cb-menu [data-cb-act="all"]')) await click(page, '.cb-menu [data-cb-act="all"]');
+    if (await page.$(".cb-menu .cb-search")) await type(page, ".cb-menu .cb-search", memberModel.id);
+    await click(page, `.cb-menu [data-model="${memberModel.id}"]`);
+    await wait(page, ".cb-now:not([hidden]) .cb-pick");
+    await capture("member-choice");
+    await click(page, ".composer .cmp-model .mp-trigger");
     for (let i = 0; i < 60; i++) {
       if ((await snapshot()).members.find(row => row.id === created.member.id)?.model === memberModel.id) break;
       if (i === 59) throw new Error("Member model did not persist");
       await pause(100);
     }
+    const after = await snapshot();
+    if (after.members.find(row => row.id === other.member.id)?.model !== `${answer.id}?effort=high`) throw new Error("Another member moved with this one");
+    await saved("agent_model", `${answer.id}?effort=high`, "answer");
     await capture("member-saved");
-    await shown('[data-member-brain] .mp-trigger', memberModel, "", "member");
+    await page.waitForFunction(name => document.querySelector(".composer .cmp-model .mp-tname")?.textContent.includes(name), {}, memberModel.name);
     const memberConversation = await newConversation(context);
     await assertTurn(memberModel.id, "none", "member", memberConversation);
+    await assertTurn(answer.id, "high", "answer-after-member", main.id);
     result.paid_requests = 0;
     result.transport = "Fake provider; real picker, RPC, catalog cache, settings, member and agent routing";
     return;

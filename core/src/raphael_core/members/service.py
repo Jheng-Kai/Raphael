@@ -402,10 +402,15 @@ class MembersService:
             group_id = found.id
         member = self.store.create_member(
             name=name, role=role or "", instructions=instructions or "", group_id=group_id,
-            personality=personality,
+            personality=personality, model=self._starting_model(),
         )
         self._changed()
         return member.speaker()
+
+    def _starting_model(self) -> str:
+        """A new member starts on Raphael's model and holds it as its own, so that his next change moves no one else."""
+        model = self._settings.get("agent_model")
+        return model.strip() if isinstance(model, str) and model.strip() else DEFAULTS["agent_model"]
 
     def _changed(self, method: str = "members.changed", member_id: int | None = None) -> None:
         """Announce committed data changes using identifiers only."""
@@ -767,7 +772,7 @@ class MembersService:
             if self.store.by_name(name) is None:
                 break
         fields = {field: getattr(original, field) for field in
-                  ("role", "personality", "instructions", "group_id", "avatar", *PROFILE_FIELDS)}
+                  ("role", "personality", "instructions", "group_id", "avatar", "model", *PROFILE_FIELDS)}
         copy = None
         try:
             copy = self.store.create_member(name=name, **fields)
@@ -831,7 +836,7 @@ class MembersService:
                 group_id=params.get("group_id"),
                 avatar=avatar if avatar is not None else "",
                 tools=params.get("tools"),
-                model=params.get("model", "") or "",
+                model=params.get("model", "") or self._starting_model(),
                 **{field: params[field] for field in PROFILE_FIELDS if field in params},
             )
         except MemberError as error:

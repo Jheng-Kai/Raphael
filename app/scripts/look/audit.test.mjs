@@ -114,6 +114,13 @@ describe("rendered look checks", () => {
     for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
     expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Load", "image"]);
   });
+  it("does not read a link's address as words of the page", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<p><a class="message-link">x.com/someone/status/1</a></p><div><span class="mention-chip url-chip">x.com/someone/status/2</span></div><button>Copy</button><p>Settings</p>';
+    for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 100, bottom: 40, width: 90, height: 30 });
+    expect(auditDocument(window.document, { width: 1120, height: 900 }, [], []).mixedLanguage.map(item => item.word)).toEqual(["Copy", "Settings"]);
+  });
+
   it("keeps authored code intact while still checking its interface controls for translation", () => {
     const window = new Window();
     window.document.body.innerHTML = '<div class="message-code"><pre><code><span class="hljs-comment"># Print a summary</span>const ready = true;</code></pre><button>Copy</button></div><p>Settings</p>';

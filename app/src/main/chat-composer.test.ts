@@ -127,3 +127,30 @@ test("one Escape discards pending transcription and a late result cannot affect 
   view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));await flush();
  }finally{vi.unstubAllGlobals();}
 });
+
+const png=(name="shot.png",size=4)=>new File([new Uint8Array(size)],name,{type:"image/png"});
+const paste=(input:HTMLTextAreaElement,files:File[],text="")=>{const event=Object.assign(new Event("paste",{bubbles:true,cancelable:true}),{clipboardData:{files,getData:()=>text}});input.dispatchEvent(event);return event;};
+test("an image pasted into the composer is attached with its picture, and its words stay in the field",async()=>{
+ const {view,send}=mount();const event=paste(view.input,[png()],"caption");expect(event.defaultPrevented).toBe(true);await flush();await new Promise(resolve=>setTimeout(resolve));await flush();
+ expect(view.input.value).toBe("caption");
+ expect(view.el.querySelector<HTMLImageElement>(".cmp-chip img.cmp-thumb")!.src).toContain("data:image/png;base64,");
+ expect(view.el.querySelector(".cmp-chip .cmp-chip-t")!.textContent).toBe("shot.png");
+ view.el.requestSubmit();await flush();
+ expect(send).toHaveBeenCalledWith("caption",[{name:"shot.png",mime:"image/png",data:"AAAAAA=="}]);
+});
+test("too many files says so and the first ones stay",async()=>{
+ const {view}=mount();view.addFiles([png("1.png"),png("2.png"),png("3.png"),png("4.png"),png("5.png")]);await new Promise(resolve=>setTimeout(resolve,10));await flush();
+ expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(4);
+ expect(document.querySelector(".toasts")?.textContent??"").toContain("4");
+});
+test("a file still being read does not reach the next room's draft",async()=>{
+ const {view}=mount();view.addFiles([png()]);view.setDraft("Other room");await new Promise(resolve=>setTimeout(resolve,10));await flush();
+ expect(view.el.querySelectorAll(".cmp-chip")).toHaveLength(0);
+ expect(view.el.querySelector<HTMLElement>(".cmp-file")!.hidden).toBe(true);
+});
+test("typing does not draw the picture again",async()=>{
+ const {view}=mount();view.addFiles([png()]);await new Promise(resolve=>setTimeout(resolve,10));await flush();
+ const chip=view.el.querySelector(".cmp-chip");view.input.value="words";view.input.dispatchEvent(new Event("input"));
+ expect(view.el.querySelector(".cmp-chip")).toBe(chip);
+});
+
