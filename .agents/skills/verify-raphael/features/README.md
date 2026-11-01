@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## Owner polish (2026-11-01)
+
+See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.
+
 ## Calendar navigation review (2026-11-01)
 
 See [Automations](automations.md#calendar-navigation-review-2026-11-01). Scenes: calendar-remember, calendar-view-reload, calendar-week-fit, calendar-today-controls, both themes at 1120,900,720,1920x1080,480. The date lives only in the page instance; view choice survives reload. Seven columns use the actual calendar width, with a dated fallback only below 520px.

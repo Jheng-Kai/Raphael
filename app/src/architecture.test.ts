@@ -33,6 +33,18 @@ it("mechanical rules link existing named tests", () => {
   }
 });
 
+it("a rule named in the code is in the ledger", () => {
+  const ledger = read(join(root, ".agents/product/RULES.md"));
+  const known = new Set([...ledger.matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
+  const unknownOnPurpose = "R-UI-99"; // test_design_judge.py proves an unknown rule id is refused
+  const code = ["app/src", "app/scripts", "core/src", "core/tests"].flatMap(dir => walk(join(root, dir)))
+    .filter(path => /\.(?:ts|mjs|py|css)$/.test(path));
+  const dangling = code.flatMap(path => [...read(path).matchAll(/\bR-[A-Z]+(?:-[A-Z]+)*-\d+\b/g)]
+    .filter(match => !known.has(match[0]) && match[0] !== unknownOnPurpose)
+    .map(match => `${path.slice(root.length + 1)}: ${match[0]}`));
+  expect(dangling).toEqual([]);
+});
+
 it("core IPC has one frontend boundary", () => {
   const violations: string[] = [];
   for (const path of sources) {
