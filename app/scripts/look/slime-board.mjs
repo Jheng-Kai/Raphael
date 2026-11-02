@@ -43,7 +43,7 @@ export async function slimeBoard(rows, columns = 1) {
   board.className = "look-slime-board";
   board.style.cssText = `position:fixed;inset:0;z-index:100000;overflow:hidden;display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));align-content:start;gap:6px;padding:8px;background:var(--content);color:var(--text-3);font-size:11px;line-height:12px`;
   board.innerHTML = rows.map(({ label, cells, paddingTop = 0 }) => `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px;padding-top:${paddingTop}px"><span style="flex:none;width:44px;color:var(--text-2)">${label ?? ""}</span>${cells.map(cell =>
-    `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
+    `<span style="display:grid;justify-items:center;gap:2px;flex:none">${cell.icon ? ico("search").replace('<svg ', `<svg style="width:${cell.size}px;height:${cell.size}px" `) : `<span class="av mb-av mb-av-slime" style="--av:${cell.size}px${cell.height ? `;height:${cell.height}px` : ""}">${slimeSVG(cell.slime, { now: cell.hat ? hats : offSeason, state: cell.state })}</span>`}${cell.caption === undefined ? "" : `<small style="height:12px;font-size:10px">${cell.caption}</small>`}</span>`).join("")}</div>`).join("");
   document.body.append(board);
   const svgs = [...board.querySelectorAll("svg.slime")], cells = rows.flatMap(row => row.cells.filter(cell => !cell.icon));
   for (const [index, svg] of svgs.entries()) {
@@ -61,6 +61,68 @@ export async function slimeBoard(rows, columns = 1) {
   return { check: "slime-board", slimes: svgs.length };
 }
 
+/** Sample each loop and its keyframe boundaries, including the group's non-square grid cell. */
+export function slimeParts() {
+  const failures = [];
+  let samples = 0;
+  for (const svg of document.querySelectorAll('.look-slime-board svg.slime')) {
+    const surface = svg.closest('.slime-surface'), host = surface.parentElement;
+    const animations = surface.getAnimations({subtree: true});
+    const saved = animations.map(animation => [animation, animation.currentTime]);
+    animations.forEach(animation => animation.pause());
+    const times = new Set([0]);
+    for (const animation of animations) {
+      const {duration, delay} = animation.effect.getTiming();
+      for (let frame = 0; frame <= 128; frame++) times.add(Math.max(0, delay + duration * frame / 128));
+      for (const frame of animation.effect.getKeyframes()) for (const delta of [-1, 0, 1]) times.add(Math.max(0, delay + duration * frame.computedOffset + delta));
+    }
+    const cel = selector => {
+      const center = host.getBoundingClientRect();
+      return [...surface.querySelectorAll(selector)].sort((a, b) => Math.abs(a.getBoundingClientRect().x + a.getBoundingClientRect().width / 2 - center.x - center.width / 2) - Math.abs(b.getBoundingClientRect().x + b.getBoundingClientRect().width / 2 - center.x - center.width / 2))[0];
+    };
+    for (const at of times) {
+      animations.forEach(animation => { animation.currentTime = at; });
+      const idle = svg.dataset.state === 'idle';
+      const body = idle ? cel('.slime-idle-body path') : svg.querySelector('.slime-body');
+      const eyes = idle ? cel('.slime-cel-eye') : svg.querySelector('.slime-eyes');
+      const b = body.getBoundingClientRect(), e = eyes.getBoundingClientRect();
+      const state = svg.dataset.state, size = host.getBoundingClientRect().width;
+      const fail = (part, box) => failures.push({state, size, at, part, body: b.toJSON(), box: box.toJSON()});
+      if (getComputedStyle(eyes).visibility !== 'hidden' && (e.left < b.left - b.width * .08 || e.right > b.right + b.width * .08 || e.top < b.top - b.height * .08 || e.bottom > b.bottom + b.height * .08)) fail('eyes', e);
+      for (const mark of svg.querySelectorAll('.slime-mark')) {
+        const h = mark.getBoundingClientRect();
+        if (getComputedStyle(mark).visibility !== 'hidden' && (h.left < b.left - b.width * .18 || h.right > b.right + b.width * .18 || h.top < b.top - b.height * .8 || h.bottom < b.top - b.height * .1 || h.bottom > b.top + b.height * .55)) fail('hat', h);
+      }
+      samples++;
+      if (failures.length >= 8) break;
+    }
+    saved.forEach(([animation, at]) => { animation.currentTime = at; });
+    if (failures.length >= 8) break;
+  }
+  if (failures.length) throw Object.assign(new Error(`Slime parts separate: ${JSON.stringify(failures)}`), {assertion: {check: 'slime-parts', samples, failures}});
+  return {check: 'slime-parts', samples};
+}
+
+export function holdStaticPose(scope) {
+  const poses = new Map();
+  for (const svg of document.querySelectorAll(`${scope} svg.slime`)) {
+    for (const animation of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) {
+      const part = animation.effect.target, style = getComputedStyle(part);
+      const names = [...new Set(animation.effect.getKeyframes().flatMap(frame => Object.keys(frame)))].filter(name => !["offset", "computedOffset", "easing", "composite"].includes(name));
+      const properties = poses.get(part) ?? [];
+      for (const name of names) properties.push([name, style.getPropertyValue(name)]);
+      // Registered animation variables may be absent from getKeyframes; retain their resolved SVG paint.
+      properties.push(["fill-opacity", style.fillOpacity], ["stroke-opacity", style.strokeOpacity]);
+      poses.set(part, properties);
+    }
+  }
+  for (const [part, properties] of poses) {
+    part.style.setProperty("animation", "none", "important");
+    part.style.setProperty("transition", "none", "important");
+    for (const [name, value] of properties) if (value) part.style.setProperty(name, value, "important");
+  }
+}
+
 /** Compare against a genuinely static pose: pausing alone can retain a resampled animation raster. */
 export async function slimeSharp(page, scope = ".look-slime-board", evidence, revision) {
   if (revision) await baseline(page, revision);
@@ -76,23 +138,7 @@ export async function slimeSharp(page, scope = ".look-slime-board", evidence, re
     strip: svg.closest(".slime-surface") && getComputedStyle(svg.closest(".slime-surface").querySelector(".slime-idle-body")).display,
     animations: (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true }).map(a => [a.animationName, a.effect.target.className.baseVal ?? a.effect.target.className]),
   })), scope);
-  await page.evaluate(scope => {
-    const poses = new Map();
-    for (const svg of document.querySelectorAll(`${scope} svg.slime`)) {
-      for (const animation of (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true })) {
-        const part = animation.effect.target, style = getComputedStyle(part);
-        const names = [...new Set(animation.effect.getKeyframes().flatMap(frame => Object.keys(frame)))].filter(name => !["offset", "computedOffset", "easing", "composite"].includes(name));
-        const properties = poses.get(part) ?? [];
-        for (const name of names) properties.push([name, style.getPropertyValue(name)]);
-        poses.set(part, properties);
-      }
-    }
-    for (const [part, properties] of poses) {
-      part.style.setProperty("animation", "none", "important");
-      part.style.setProperty("transition", "none", "important");
-      for (const [name, value] of properties) if (value) part.style.setProperty(name, value, "important");
-    }
-  }, scope);
+  await page.evaluate(holdStaticPose, scope);
   await new Promise(resolve => setTimeout(resolve, 300));
   const still = await shot();
   const regions = await page.evaluate(scope => {

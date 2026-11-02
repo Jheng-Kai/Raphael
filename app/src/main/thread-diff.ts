@@ -1,9 +1,9 @@
 export interface ThreadLine { key: string; html: string; turnId?: number }
 
-const eventKey = (node: HTMLElement): string => node.dataset.handoffGroup !== undefined ? `group:${node.dataset.handoffGroup}` :
+const eventKey = (node: HTMLElement): string => node.dataset.eventGroup !== undefined ? `events:${node.dataset.eventGroup}` : node.dataset.timelineEvent !== undefined ? `event:${node.dataset.timelineEvent}` : node.dataset.handoffGroup !== undefined ? `group:${node.dataset.handoffGroup}` :
   node.dataset.handoff !== undefined ? `task:${node.dataset.handoff}` : `exchange:${node.dataset.exchange}`;
-const outerEvents = (node: ParentNode): HTMLDetailsElement[] => [...node.querySelectorAll<HTMLDetailsElement>(".handoff-event")]
-  .filter(event => !event.parentElement?.closest(".handoff-event"));
+const outerEvents = (node: ParentNode): HTMLDetailsElement[] => [...node.querySelectorAll<HTMLDetailsElement>(".handoff-event, .timeline-event")]
+  .filter(event => !event.parentElement?.closest(".handoff-event, .timeline-event"));
 
 function handoffSkeleton(html: string): string {
   const template = document.createElement("template"); template.innerHTML = html;
@@ -14,10 +14,14 @@ function handoffSkeleton(html: string): string {
 function updateEvent(node: HTMLDetailsElement, made: HTMLDetailsElement): void {
   for (const attr of [...made.attributes]) if (attr.name !== "open" && node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value);
   const summary = node.querySelector(":scope > summary")!, nextSummary = made.querySelector(":scope > summary")!;
+  if (!summary || !nextSummary) {
+    if (node.innerHTML !== made.innerHTML) node.innerHTML = made.innerHTML;
+    return;
+  }
   if (summary.innerHTML !== nextSummary.innerHTML) summary.innerHTML = nextSummary.innerHTML;
   const body = node.querySelector(":scope > .handoff-detail"), nextBody = made.querySelector(":scope > .handoff-detail");
   if (!body || !nextBody) return;
-  if (!made.hasAttribute("data-handoff-group")) {
+  if (!made.hasAttribute("data-handoff-group") && !made.hasAttribute("data-event-group")) {
     if (body.innerHTML !== nextBody.innerHTML) body.innerHTML = nextBody.innerHTML;
     return;
   }
@@ -33,9 +37,9 @@ function updateEvent(node: HTMLDetailsElement, made: HTMLDetailsElement): void {
 }
 
 function carryHandoffs(before: Element, after: HTMLElement): void {
-  const old = new Map([...before.querySelectorAll<HTMLDetailsElement>(".handoff-event")].map(node => [eventKey(node), node]));
+  const old = new Map([...before.querySelectorAll<HTMLDetailsElement>(".handoff-event, .timeline-event")].map(node => [eventKey(node), node]));
   // Children first: the group then carries those same children, including their open state.
-  for (const made of [...after.querySelectorAll<HTMLDetailsElement>(".handoff-event")].reverse()) {
+  for (const made of [...after.querySelectorAll<HTMLDetailsElement>(".handoff-event, .timeline-event")].reverse()) {
     const node = old.get(eventKey(made));
     if (!node) continue;
     updateEvent(node, made);
@@ -65,7 +69,7 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
       if (!node && options.arrives?.(line)) made.classList.add("is-new");
       if (node) {
         const previous = drawn.get(node);
-        if (previous?.includes('class="handoff-event') && handoffSkeleton(previous) === handoffSkeleton(identity)) {
+        if (previous && /class="(?:handoff-event|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
           const old = new Map(outerEvents(node).map(event => [eventKey(event), event]));
           for (const event of outerEvents(made)) updateEvent(old.get(eventKey(event))!, event);
           drawn.set(node, identity);

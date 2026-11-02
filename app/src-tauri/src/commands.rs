@@ -167,6 +167,7 @@ pub enum MainEvent {
     MemberActivity {
         member_id: u64,
         state: String,
+        label: String,
     },
     /// A successful dictation delivered to our own process, for in-memory composer learning.
     /// Never logged or replayed to a later subscriber.
@@ -1065,13 +1066,14 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             let state = params.get("state")?.as_str()?;
             if !matches!(
                 state,
-                "thinking" | "working" | "searching" | "computer" | "done" | "error" | "idle"
+                "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "idle"
             ) {
                 return None;
             }
             Some(MainEvent::MemberActivity {
                 member_id: params.get("member_id")?.as_u64()?,
                 state: state.to_owned(),
+                label: params.get("label").and_then(Value::as_str).unwrap_or("").to_owned(),
             })
         }
         "agent.turn" => Some(MainEvent::AgentTurn {
@@ -3037,23 +3039,24 @@ mod tests {
     #[test]
     fn member_activity_forwards_only_valid_states_and_member_ids() {
         for state in [
-            "thinking", "working", "searching", "computer", "done", "error", "idle",
+            "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "idle",
         ] {
             for member_id in [0, 7] {
                 let event = main_event_from(
-                    &notification("member.activity", json!({"member_id": member_id, "state": state})),
+                    &notification("member.activity", json!({"member_id": member_id, "state": state, "label": "Sample public action"})),
                     false,
                 );
                 assert_eq!(
                     event,
                     Some(MainEvent::MemberActivity {
                         member_id,
-                        state: state.to_owned()
+                        state: state.to_owned(),
+                        label: "Sample public action".to_owned()
                     })
                 );
                 assert_eq!(
                     serde_json::to_value(event.unwrap()).unwrap(),
-                    json!({"type": "MemberActivity", "member_id": member_id, "state": state})
+                    json!({"type": "MemberActivity", "member_id": member_id, "state": state, "label": "Sample public action"})
                 );
             }
         }
@@ -3065,7 +3068,6 @@ mod tests {
             json!({"member_id": "1", "state": "idle"}),
             json!({"member_id": true, "state": "idle"}),
             json!({"member_id": 1.5, "state": "idle"}),
-            json!({"member_id": 1, "state": "waiting"}),
             json!({"member_id": 1, "state": null}),
             json!({"member_id": 1, "state": "unknown"}),
         ] {

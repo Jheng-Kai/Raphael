@@ -4,6 +4,16 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "event.routine.created": "Created routine {p0}",
+  "event.routine.updated": "Updated routine {p0}",
+  "event.routine.deleted": "Deleted routine {p0}",
+  "event.calendar.created": "Added event {p0}",
+  "event.calendar.updated": "Updated event {p0}",
+  "event.calendar.deleted": "Deleted event {p0}",
+  "event.changed": "Updated",
+  "event.group": "{p0} records: {p1}",
+  "event.groupOthers": "{p0} others",
+
   "handoff.group": "{p0} messages with {p1}",
   "handoff.groupOthers": "{p0} others",
   "handoff.groupWaiting": "Waiting for you",

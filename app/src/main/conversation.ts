@@ -5,8 +5,9 @@
 // the person through `esc` first.
 
 import { esc } from "./ui";
-import { dayLabel } from "./format";
+import { dayLabel, formatClock } from "./format";
 import type { AgentTurn } from "./types";
+import { publicEventText } from "./public-event";
 
 /** A question said to the emblem (the key and the overlay): the core's default source. */
 export const VOICE = "voice";
@@ -44,15 +45,15 @@ export function visibleTurn(turn: AgentTurn): boolean {
 export function threadItems(turns: readonly AgentTurn[], nowMs: number): ThreadItem[] {
   const oldestFirst = [...turns].sort((a, b) => a.created_at_ms - b.created_at_ms || a.id - b.id);
   const items: ThreadItem[] = [];
-  let day: string | null = null;
+  let previous: number | null = null;
   for (const turn of oldestFirst) {
     if (!visibleTurn(turn)) continue;
-    const label = dayLabel(turn.created_at_ms, nowMs);
-    if (label !== day) {
-      day = label;
-      items.push({ kind: "day", key: `day:${label}`, label });
+    if (previous === null || turn.created_at_ms - previous >= 30 * 60 * 1000 || new Date(previous).toDateString() !== new Date(turn.created_at_ms).toDateString()) {
+      const label = `${dayLabel(turn.created_at_ms, nowMs)} ${formatClock(turn.created_at_ms)}`;
+      items.push({ kind: "day", key: `time:${turn.id}`, label });
     }
     items.push({ kind: "turn", key: `turn:${turn.id}`, turn });
+    previous = turn.created_at_ms;
   }
   return items;
 }
@@ -64,7 +65,7 @@ const fold = (text: string): string => text.normalize("NFKC").toLocaleLowerCase(
 export function turnMatches(turn: AgentTurn, query: string): boolean {
   const q = fold(query.trim());
   if (q === "") return true;
-  return [turn.question, turn.text, turn.detail ?? "", ...(turn.messages ?? []).map((message) => message.text)].some((text) => fold(text).includes(q));
+  return [turn.question, turn.text, turn.detail ?? "", ...(turn.messages ?? []).map((message) => message.kind === "event" ? publicEventText(message.text) : message.text)].some((text) => fold(text).includes(q));
 }
 
 /**
@@ -74,6 +75,7 @@ export function turnMatches(turn: AgentTurn, query: string): boolean {
  * app is used in); otherwise nothing is marked.
  */
 export function highlightHTML(text: string, query: string): string {
+  text = publicEventText(text);
   const q = fold(query.trim());
   if (q === "") return esc(text);
   const folded = fold(text);

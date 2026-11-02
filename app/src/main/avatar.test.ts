@@ -36,6 +36,16 @@ describe("Raphael's face", () => {
     expect(avatarHTML({ size: 26, loop: true })).toContain('src="/brand/app-emblem-dark-loop.webp"');
   });
 
+  test("theme alternatives defer loading until visible instead of fetching a discarded hidden emblem", () => {
+    for (const size of [26, 132]) for (const loop of [false, true]) {
+      const face = document.createElement("div");
+      face.innerHTML = avatarHTML({ size, loop, avatar: null });
+      const pictures = [...face.querySelectorAll("img")];
+      expect(pictures).toHaveLength(2);
+      expect(pictures.map(image => image.loading)).toEqual(["lazy", "lazy"]);
+    }
+  });
+
   test("the person's picture, in a circle, cut as they chose; the same still or moving", () => {
     setAvatar({ url: PNG, crop: { x: 0.25, y: 0.5, zoom: 2 } });
     const html = avatarHTML({ size: 34, loop: true, cls: "x" });

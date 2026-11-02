@@ -1,4 +1,5 @@
 {
+  "presenceSample": {"question": "Check the sample report.", "answer": "The sample report is ready.", "secondAnswer": "The sample comparison is complete.", "progress": "Checking sample sources", "nextAction": "Comparing sample sources", "routine": "Sample briefing", "calendar": "Sample review", "source": "https://example.test/sample"},
   "handoffGroupSample": {
     "people": ["Ada", "Ben", "Cleo", "Dara", "Eli", "Fran"],
     "longPeople": ["Ada with a deliberately long display name", "BenWithAnUnbrokenInternationalDisplayName", "Cleo with another long display name", "Dara"],

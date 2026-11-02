@@ -136,6 +136,7 @@ class RoomsService:
                 if visible["member_id"] is not None and (visible["status"] != "done" or is_pass(visible["text"])):
                     continue
                 room["preview"] = visible["text"][:300]
+                room["preview_member_id"] = visible["member_id"]
                 room["last_at"] = visible["created"]
                 break
             room["unread"] = any(

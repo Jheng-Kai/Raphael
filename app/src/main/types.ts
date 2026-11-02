@@ -778,7 +778,7 @@ export type MainEvent =
   /** A turn of the conversations was written or completed, in the thread of `member_id` (0: Raphael's; none from an older shell). */
   | { type: "AgentTurn"; turn_id: number; member_id?: number }
   /** What a member is doing now, whichever conversation is open (`member.activity`). */
-  | { type: "MemberActivity"; member_id: number; state: "idle" | "thinking" | "working" | "searching" | "computer" | "done" | "error" }
+  | { type: "MemberActivity"; member_id: number; state: "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error"; label?: string }
   | { type: "RoomsChanged"; room_id: number }
   | { type: "RoutinesChanged"; member_id: number }
   | { type: "CalendarChanged" }
@@ -898,6 +898,7 @@ export interface Member {
   unread: boolean;
   waiting: boolean;
   activity?: string;
+  activity_label?: string;
   preview: string;
   last_at: number | null;
 }
@@ -992,7 +993,7 @@ export interface RoutineRun {
   status: string; turn_id: number | null; summary: string; cost: number;
 }
 export interface Room {
-  preview?: string; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
+  preview?: string; preview_member_id?: number | null; last_at?: number | null; unread?: boolean; waiting?: boolean; pinned?: boolean; hidden?: boolean;
   id: number; name: string; group_id: number | null; created: number;
   is_team: number; member_ids: number[]; default_responder?: string;
   membership_state?: "ready" | "needs_adjustment";

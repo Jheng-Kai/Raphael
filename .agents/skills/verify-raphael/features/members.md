@@ -456,3 +456,49 @@ Outside wheel/touch scrolling and page-scrolling keys close all open menu levels
 ```powershell
 npm run look -- menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal --theme both --width 1120,720,1920x1080
 ```
+
+## Shared presence and sidebar previews (2026-11-02)
+
+R-UI-74/77: slime-states, slime-gallery, slime-motion-idle/busy/moments/change,
+slime-sharp and slime-cost accompany presence-states-sidebar, presence-hover-action,
+presence-blocked-stays and presence-waiting-colleague. The same SVG parts serve the
+sidebar, header and 28px live thread. Reduced motion keeps the thinking dots,
+attention mark, lidded waiting eyes and static working ribbons recognizable.
+
+sidebar-row-time checks the reserved time/overflow slot and absence of role pills;
+sidebar-group-author checks the latest public author prefix, while owner waiting
+keeps its existing preview. Names stay on pinned tiles and roles remain in the
+header/details panel. Run both themes at 1120,720,1920x1080. See conversation.md's
+presence section for the associated transcript, event-line and core contracts.
+
+```powershell
+npm run look -- presence-states-sidebar --theme both --width 1120,720,1920x1080
+```
+
+Hidden theme emblem alternatives defer loading until visible (avatar.test.ts).
+Presence effects avoid composited opacity animation so the animated SVG keeps
+the static pose's edge (slime.test.ts; slime-sharp). Re-run slime-cost after paint changes.
+Compact drawer controls start below window controls (sidebar.test.ts); the actual
+room-group-menu, room-required-chief and room-generated-name journeys click the
+plus button and open group creation at all three mapped widths.
+
+```powershell
+npm run look -- room-group-menu room-required-chief room-generated-name home-empty home-720 home-motion --theme both --width 1120,720,1920x1080
+```
+
+slime-board.test.mjs guards the static sharpness comparison: freezing animations
+retains resolved SVG fill/stroke opacity when registered animation variables are
+absent from keyframes. The existing pixel and soft-edge limits remain unchanged.
+
+
+Review regression coverage (R-UI-78, R-UI-80): slime-parts samples eyes and hats
+against body bounds throughout each state loop at 19, 22, 26, 28, 30, 40, 48 and
+72px and in the group's 20x19px cell. Run it with slime-sizes, slime-gallery,
+slime-motion-idle, slime-motion-busy, slime-motion-moments, slime-motion-change,
+slime-sharp, slime-cost and sidebar-group-author, both themes and mapped widths.
+core/tests/members/test_presence.py checks viewed/unviewed failures and counts
+waiting/task queries through members.list, including queued labels.
+
+```powershell
+npm run look -- slime-parts --theme both --width 1120,720,1920x1080
+```

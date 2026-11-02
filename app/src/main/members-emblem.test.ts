@@ -72,7 +72,7 @@ describe("Raphael's emblem stands bare", () => {
     const raphael = raphaelOf(null);
     for (const size of [22, 26, 30, 34, 64, 96]) {
       const html = faceHTML(raphael, size, { cls: "mb-pill-face" });
-      expect(html).toMatch(/^<span class="av mb-pill-face" style="--av:\d+px" aria-hidden="true"><img class="em-l"/);
+      expect(html).toMatch(/^<span data-presence-member="0" class="av mb-pill-face" style="--av:\d+px" aria-hidden="true"><img class="em-l"/);
       expect(html).not.toMatch(/mb-av|border|background|radius/);
     }
     const column = document.createElement("div");

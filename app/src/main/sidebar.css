@@ -16,9 +16,11 @@
 .side .mb-row-p { min-height: 19px; }
 .side .nav.mb-row { grid-template-columns: 40px minmax(0, 1fr) auto; min-height: 60px; border-radius: var(--r-lg); }
 .side .mb-row > .av, .side .mb-row > .room-avatar { --av: 40px !important; }
-.side .mb-row-time { position: absolute; right: 36px; top: 8px; opacity: 0; pointer-events: none; }
-.side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-time { opacity: 1; }
-.side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-t:has(time) { padding-right: 40px; }
+.side .mb-row-time { position: absolute; right: 8px; top: 8px; opacity: 1; pointer-events: none; }
+.side :is(.mb-item, .au-room-row):is(:hover, :focus-within) .mb-row-time { opacity: 0; }
+.side .mb-row-t:has(time) { padding-right: 64px; }
+.side :is(.mb-item, .au-room-row) .btn:is(.mb-more, .au-room-more) { top: 4px; margin-top: 0; }
+.side .mb-item:hover .nav.mb-row, .side .mb-item:has(.mb-more[aria-expanded="true"]) .nav.mb-row { padding-right: var(--sp-2); }
 /* Only a pinned member leaves the rows: a larger face centered above its name, side by side when there are several. */
 .side .mb-pinned { display: grid; grid-template-columns: minmax(0, 136px); justify-content: center; gap: var(--sp-1); padding: 0 0 var(--sp-2); }
 .side .mb-pinned[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 120px)); }
@@ -82,7 +84,7 @@
 .sidebar-scrim { display: none; }
 @media (max-width: 859px) {
   :root { --sidebar-width: 0px; }
-  .side { position: fixed; inset: 0 auto 0 0; width: min(320px, calc(100vw - 48px)); z-index: 95; background: var(--side); box-shadow: var(--pop); visibility: hidden; transform: translateX(-100%); }
+  .side { position: fixed; inset: var(--window-controls-height) auto 0 0; width: min(320px, calc(100vw - 48px)); z-index: 95; background: var(--side); box-shadow: var(--pop); visibility: hidden; transform: translateX(-100%); }
   :root[data-sidebar-open] .side { visibility: visible; transform: none; }
   .btn.sidebar-close { display: inline-flex; }
   .btn.sidebar-toggle { display: inline-flex; width: 40px; min-height: 32px; }

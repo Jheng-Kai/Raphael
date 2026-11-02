@@ -5,6 +5,7 @@ import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, ico, iconBtn } from "./ui";
 import { answerFormHTML } from "./message-forms";
 import { answerFormText, parseAnswerForm } from "../shared/answer-forms";
+import { publicEventText } from "./public-event";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
 const TEAM_FILE = /^\/home\/cua\/team\/[^\s<>"'`]+$/;
@@ -232,6 +233,7 @@ export function messageUrls(text: string): string[] {
 
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
 export function messagePlainText(text: string, markdown = false): string {
+  text = publicEventText(text);
   if (!markdown) return text;
   return parseMessageBlocks(text).map(block => {
     if (block.type === "text") return plainTextBlock(block.source);

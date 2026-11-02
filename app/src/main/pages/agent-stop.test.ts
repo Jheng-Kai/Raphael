@@ -110,36 +110,34 @@ test("a typed request remains stoppable before the CLI's first turn and through 
   expect(api.agentVoice).not.toHaveBeenCalled();
 });
 
-test("a pending request uses the live work line and keeps its seconds through the running announcement", async () => {
+test("a pending request keeps one live avatar through the running announcement without clock writes", async () => {
   api.agentAskText.mockReturnValue(new Promise(() => {})); mount(); await flush();
   $<HTMLTextAreaElement>(".cmp-input").value = "Please prepare the report";
   $(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  const pending = $(".is-pending .work-section.is-live");
+  const pending = $(".is-pending .live-presence");
   expect(pending).not.toBeNull();
-  expect(pending.textContent).toBe("思考中…· 0 秒");
-  expect(pending.querySelectorAll(".think i")).toHaveLength(3);
-  expect(pending.querySelector("button, [data-act], .work-chevron, .work-body")).toBeNull();
-  expect(document.querySelector(".ans.thinking")).toBeNull();
+  expect(pending.querySelector("button, [data-act], .work-time, .think")).toBeNull();
   await vi.advanceTimersByTimeAsync(3000);
-  expect($(".is-pending .work-time").textContent).toBe("· 3 秒");
+  expect($(".is-pending .live-presence")).toBe(pending);
   turns = [live({ session_id: api.agentAskText.mock.lastCall![3].requestId })];
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
   expect(document.querySelector(".is-pending")).toBeNull();
-  expect($('[data-thinking-turn="11"] .work-time').textContent).toBe("· 3 秒");
+  const running = $('[data-id="11"] .live-presence');
   await vi.advanceTimersByTimeAsync(1000);
-  expect($('[data-thinking-turn="11"] .work-time').textContent).toBe("· 4 秒");
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
-  expect($('[data-thinking-turn="11"] .work-time').textContent).toBe("· 5 秒");
+  expect($('[data-id="11"] .live-presence')).toBe(running);
+  expect(document.querySelector(".work-time")).toBeNull();
 });
 
-test("a spoken pending request keeps its clock when its running turn arrives", async () => {
+test("a spoken pending request becomes one live avatar when its running turn arrives", async () => {
   mount(); await flush(); await choose(0, 4);
   emit({ type: "Dictation", phase: "processing", agent: true, member_id: 0 });
   await vi.advanceTimersByTimeAsync(3000);
-  expect($(".is-pending .work-time")?.textContent).toBe("· 3 秒");
+  expect($(".is-pending .live-presence")).not.toBeNull();
   turns = [live({ conversation_id: 4, source: "voice" })];
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
-  expect($('[data-thinking-turn="11"] .work-time').textContent).toBe("· 3 秒");
+  expect($('[data-id="11"] .live-presence')).not.toBeNull();
+  expect(document.querySelector(".work-time")).toBeNull();
 });
 
 test("a finished paced reply keeps its settled work chip without a second waiting style", async () => {
@@ -151,7 +149,7 @@ test("a finished paced reply keeps its settled work chip without a second waitin
   await refresh({ type: "AgentTurn", turn_id: 11, member_id: 0 });
   expect(document.body.textContent).not.toContain("The next answer");
   expect(document.querySelector(".ans.thinking, .work-section.is-live")).toBeNull();
-  expect($(".work-toggle")?.textContent).toContain("已處理 0 秒");
+  expect($(".work-toggle")).toBeNull();
 });
 
 test.each([[0, 4], [3, 31]])("voice processing for member %s is stoppable before any turn is announced", async (member, conversation) => {
@@ -290,11 +288,11 @@ test("an unchanged history refresh updates the day heading across local midnight
   turns = [live({ status: "done", text: "A settled reply" })];
   mount(); await flush();
   const line = $('.tn[data-id="11"]');
-  expect($('.thread .day').textContent).toBe("今天");
+  expect($('.thread .day').textContent).toBe("今天 23:59");
   vi.setSystemTime(new Date(2026, 9, 21, 0, 1));
   emit({ type: "WorkerChanged", task_id: 999, state: "running", running: true });
   await vi.advanceTimersByTimeAsync(1100); await flush();
-  expect($('.thread .day').textContent).toBe("昨天");
+  expect($('.thread .day').textContent).toBe("昨天 23:59");
   expect($('.tn[data-id="11"]')).toBe(line);
 });
 

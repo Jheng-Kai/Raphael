@@ -79,3 +79,14 @@ test("owner profile updates the existing outgoing face as well as the footer ide
   expect(document.querySelector(".me .owner-face svg")).not.toBeNull();
   document.body.replaceChildren();
 });
+
+test("the compact drawer header starts below the window controls", () => {
+  const css = readFileSync("src/main/sidebar.css", "utf8");
+  const compact = css.slice(css.indexOf("@media (max-width: 859px)"));
+  expect(compact).toMatch(/\.side\s*\{[^}]*inset:\s*var\(--window-controls-height\) auto 0 0;/);
+});
+
+test("private timeline events use the full conversation column", () => {
+  const css = readFileSync("src/main/conversations.css", "utf8");
+  expect(css).toMatch(/\.page-agent \.tn > \.ra \{[^}]*max-width: 100%;/);
+});

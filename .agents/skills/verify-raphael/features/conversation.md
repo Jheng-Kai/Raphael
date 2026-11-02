@@ -1155,3 +1155,68 @@ After fixes, rerun the affected question states, both desktop-card paths and the
 ```powershell
 npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-computer-done card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-sheet chat-computer-takeover chat-human-control chat-handback --theme both --width 1120,720,1920x1080
 ```
+
+## Presence and quiet private transcripts (2026-11-02)
+
+R-UI-74/75/76/77 use the existing real entry, shared tooltip, timeline renderer,
+event-line.ts and thread-diff. New scenes: presence-states-sidebar,
+presence-hover-action, presence-blocked-stays, presence-waiting-colleague,
+transcript-clean, transcript-working, transcript-hover-detail, transcript-time-gap,
+event-routine-line, event-routine-opens, event-lines-collapse, sidebar-row-time,
+sidebar-group-author. Capture both themes at 1120,720,1920x1080.
+
+Affected consumers: busy-team-thread/up/steps/typing/follow/anchor/hover/room/home,
+composer-stop scenes, reply, conversation-running/midnight, handoff-group scenes,
+centred-system-events, representative room and Home scenes, search and polish-search
+scenes. Generated-image-bill opens work through .message-work, while work-dots and
+pending-work now assert one live avatar without a second waiting style or clock.
+Quick-question-result checks the same model receipt in message hover actions.
+
+Core contracts: tests/members/test_presence.py distinguishes queued, colleague and
+owner waits, checks priority, safe localized labels and seen failures;
+tests/members/test_harness.py checks persisted routine targets and readable schedule
+receipts. MainEvent::MemberActivity forwards waiting/blocked and the public label;
+no RPC or migration is added. Historical plain-text events remain readable without
+invented inspection IDs. Cargo, native, provider and judge checks are prohibited by
+this task's .fold/rules.md and remain separate maintainer acceptance.
+
+Additional calendar target journeys: event-calendar-line and event-calendar-opens
+verify the named event opens directly in its existing calendar detail.
+
+```powershell
+npm run look -- presence-hover-action presence-sidebar-hover presence-rail-hover presence-blocked-stays presence-waiting-colleague transcript-clean transcript-working transcript-hover-detail transcript-time-gap event-routine-line event-routine-opens event-calendar-line event-calendar-opens event-lines-collapse sidebar-row-time sidebar-group-author --theme both --width 1120,720,1920x1080
+```
+
+The notes-1 review measures 32px on both sides of event lines next to bubbles, cards and other lines; shared header hovers open below the face, stay clear of window controls, and show no pointer focus ring. Expanded sidebar hovers show the action, collapsed rails show the name then action.
+
+```powershell
+npm run look -- event-routine-spacing --theme both --width 1120,720,1920x1080
+```
+
+The multi-reply transcript-hover-detail fixture checks that all reply work controls
+share aria-expanded. agent-page.test.ts pins opening and closing from either reply.
+centred-system-events includes the historical receipt and the later meeting in
+message order, retaining the shared centered geometry and handoff receipt states.
+Private ordered event containers occupy the full transcript column (sidebar.test.ts)
+while reply bubbles retain their reading-width limit.
+
+
+Review regression coverage (R-UI-79): test_event_readers.py exercises both search
+RPCs, repaired historical indexes, model context, voice and Telegram delivery;
+test_home.py covers Home and sidebar readers. presence-transcript.test.ts covers
+find, highlight, copy and rendered thread selection for all four receipt kinds;
+message-search.test.ts covers event-only result snippets. event-lines-collapse
+checks the expanded group's 32px gap to the next bubble. Run it with
+event-routine-line, event-routine-spacing, event-calendar-line,
+centred-system-events, transcript-clean and the existing search scenes.
+
+```powershell
+npm run look -- event-routine-find --theme both --width 1120,720,1920x1080
+```
+
+Finding a receipt inside a closed group reveals its disclosure before scrolling
+to the selected match, retaining that open group through an unchanged refresh.
+
+```powershell
+npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
+```

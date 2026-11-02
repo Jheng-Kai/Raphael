@@ -20,7 +20,7 @@ TOOL_STATES = (
                        "history_search", "search_query", "webSearch", "WebSearch",
                        "WebFetch", "Read", "read_file", "read_document")),
 )
-PRIORITY = ("computer", "searching", "working", "thinking")
+PRIORITY = ("blocked", "computer", "searching", "working", "thinking", "waiting")
 _CURRENT = ContextVar("member_activity", default=None)
 
 
@@ -46,19 +46,65 @@ class Activity:
         self.running = {}
         self.last_finish = {}
         self.published = {}
+        self.task_states = {}
+        self.task_source = None
+        self.owner_waiting = lambda: set()
+        self.viewing = lambda: None
+        self.language = lambda: "zh-TW"
 
-    def state(self, member_id):
+    def tasks(self, member_id, tasks):
+        self.task_states[member_id] = tasks
+        self._publish(member_id)
+
+    def seen(self, member_id):
+        self.last_finish.pop(member_id, None)
+        self._publish(member_id)
+
+    def task_list(self, member_id):
+        return self.task_source(member_id) if self.task_source else self.task_states.get(member_id, ())
+
+    def describe(self, member_id, waiting=None):
+        tasks = self.task_list(member_id)
+        state = self.state(member_id, tasks=tasks, waiting=waiting)
+        return state, self.label(member_id, state, tasks=tasks)
+
+    def label(self, member_id, state=None, *, tasks=None):
+        from ..agent.persona import ACTIVITY_LABELS
+        state = state or self.state(member_id)
+        words = ACTIVITY_LABELS.get(self.language(), ACTIVITY_LABELS["zh-TW"])
+        if state == "waiting":
+            tasks = self.task_list(member_id) if tasks is None else tasks
+            name = next((task.get("waiting_for") for task in tasks if task.get("waiting_for")), None)
+            if name:
+                return words["colleague"].format(name=name)
+            if tasks and all(task["state"] == "queued" for task in tasks):
+                return words["queued"]
+        return words.get(state, "")
+
+    def state(self, member_id, *, tasks=None, waiting=None):
+        tasks = self.task_list(member_id) if tasks is None else tasks
+        waiting = self.owner_waiting() if waiting is None else waiting
+        if member_id in waiting or any(task.get("waiting_owner") for task in tasks):
+            return "blocked"
+        if self.last_finish.get(member_id) == "error":
+            return "error"
         things = [state for run in self.running.get(member_id, ())
                   for state in ("thinking", *run.steps.values())]
+        things += ["waiting" for task in tasks if task["state"] in ("queued", "waiting")]
+        if not self.running.get(member_id):
+            things += ["working" for task in tasks if task["state"] == "running"]
         return next((state for state in PRIORITY if state in things),
                     "error" if self.last_finish.get(member_id) == "error" else "idle")
 
     def _publish(self, member_id, state=None):
-        state = state or self.state(member_id)
-        if self.published.get(member_id, "idle") != state:
-            self.published[member_id] = state
+        if state is None:
+            state, label = self.describe(member_id)
+        else:
+            label = self.label(member_id, state)
+        if self.published.get(member_id, ("idle", "")) != (state, label):
+            self.published[member_id] = (state, label)
             if self.notify:
-                self.notify("member.activity", {"member_id": member_id, "state": state})
+                self.notify("member.activity", {"member_id": member_id, "state": state, "label": label})
 
     @contextmanager
     def turn(self, member_id):
@@ -79,7 +125,7 @@ class Activity:
             run.closed = True
             run.steps.clear()
             self.running[member_id].remove(run)
-            self.last_finish[member_id] = "error" if run.finish == "error" else "idle"
+            self.last_finish[member_id] = "error" if run.finish == "error" and self.viewing() != member_id else "idle"
             if not self.running[member_id]:
                 del self.running[member_id]
                 if run.finish == "done":

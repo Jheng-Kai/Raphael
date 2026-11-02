@@ -4,6 +4,16 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "event.routine.created": "定期タスクを作成 {p0}",
+  "event.routine.updated": "定期タスクを更新 {p0}",
+  "event.routine.deleted": "定期タスクを削除 {p0}",
+  "event.calendar.created": "予定を追加 {p0}",
+  "event.calendar.updated": "予定を更新 {p0}",
+  "event.calendar.deleted": "予定を削除 {p0}",
+  "event.changed": "更新しました",
+  "event.group": "{p0}件の記録：{p1}",
+  "event.groupOthers": "ほか{p0}件",
+
   "handoff.group": "{p1}との{p0}件のメッセージ",
   "handoff.groupOthers": "ほか{p0}人",
   "handoff.groupWaiting": "回答待ち",

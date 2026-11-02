@@ -103,6 +103,24 @@ test("message links and preview cards use the safe opener with the full target; 
   agent.hide();
 });
 
+test("each reply control reflects the shared work detail expansion", async () => {
+  api.agentHistoryList.mockResolvedValue({ turns: [turn(1, { messages: [
+    { seq: 1, kind: "progress", text: "Checking the sample.", at_ms: 1 },
+    { seq: 2, kind: "reply", text: "First sample reply.", at_ms: 2 },
+    { seq: 3, kind: "reply", text: "Second sample reply.", at_ms: 3 },
+  ] })] });
+  const agent = mount(); await flush();
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>('.tn[data-id="1"] .message-work')];
+  expect(buttons).toHaveLength(2);
+  buttons[0].click();
+  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(false);
+  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["true", "true"]);
+  buttons[1].click();
+  expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .think-body')!.hidden).toBe(true);
+  expect(buttons.map(button => button.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
+  agent.hide();
+});
+
 test("messages copy plain text, code copies exactly, only the latest reply regenerates, and long replies stay full", async () => {
   const body = "**bold**\n\n```js\na < b\n```\n" + Array.from({ length: 35 }, (_, i) => `line ${i}`).join("\n");
   api.agentHistoryList.mockResolvedValue({ turns: [turn(2, { text: body }), turn(1)] });
@@ -282,18 +300,18 @@ describe("a question of the background", () => {
 });
 
 describe("a continuous typed turn", () => {
-  test("new progress replaces the running turn and the final reply removes the typing dots", async () => {
+  test("new progress updates the live avatar hover and the final reply removes it", async () => {
     vi.useFakeTimers();
     let live = turn(1, { source: "app", status: "running", text: "", messages: [] });
     api.agentHistoryList.mockImplementation(async () => ({ turns: [live] }));
     mount();
     await flush();
-    expect(document.querySelectorAll('.tn[data-id="1"] .think i')).toHaveLength(3);
+    expect(document.querySelectorAll('.tn[data-id="1"] .live-presence')).toHaveLength(1);
     live = { ...live, messages: [{ seq: 1, kind: "progress", text: "《告。先確認今天的日期。》", at_ms: 1 }] };
     send({ type: "AgentTurn", turn_id: 1 });
     await vi.advanceTimersByTimeAsync(200);
-    expect(document.querySelector('.tn[data-id="1"] .work-body')?.textContent).toContain("先確認今天的日期。");
-    expect(document.querySelector('.tn[data-id="1"] .work-body')?.textContent).not.toContain("《");
+    expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .live-presence')?.dataset.tooltip).toBe(live.messages![0]!.text);
+    expect(document.querySelector('.tn[data-id="1"] .work-latest, .tn[data-id="1"] .think')).toBeNull();
     live = { ...live, status: "done", text: "今天星期五。", messages: [...live.messages!, { seq: 2, kind: "reply", text: "《答。今天星期五。》", at_ms: 2 }] };
     send({ type: "AgentTurn", turn_id: 1 });
     await vi.advanceTimersByTimeAsync(200);

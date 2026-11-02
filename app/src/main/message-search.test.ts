@@ -21,3 +21,13 @@ test("cross-conversation results escape markup, mark matches and navigate with t
   search.draw("", "<b>Members again</b>");
   expect(host.textContent).toBe("Members again");
 });
+
+test.each(["routine", "calendar", "meeting", "skill_learned"])("%s search snippets use the event's words", async type => {
+  const raw = JSON.stringify({type, action: "created", id: 987654321, name: "Sample orchard", text: "已建立 · Sample orchard"});
+  vi.mocked(api.core).mockResolvedValue({turns: [{id: 1, member_id: 0, conversation_id: 1, conversation_title: "Samples", question: "", text: "", created_at_ms: 1000, messages: [{kind: "event", text: raw}]}]});
+  const host = document.createElement("div");
+  createMessageSearch(host, {face: () => "", name: () => "Sample", open: vi.fn()}).draw("orchard", "");
+  await vi.waitFor(() => expect(host.querySelector("mark")?.textContent).toBe("orchard"));
+  expect(host.querySelector('.message-search-snippet')?.textContent).toBe("已建立 · Sample orchard");
+  expect(host.textContent).not.toContain('987654321');
+});

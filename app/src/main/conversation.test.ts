@@ -64,11 +64,11 @@ describe("one thread", () => {
       now,
     );
     expect(items.map((item) => (item.kind === "day" ? item.label : item.turn.id))).toEqual([
-      "2025 年 12 月 31 日", 1, "10 月 17 日", 2, "昨天", 3, 4, "今天", 5, 6,
+      "2025 年 12 月 31 日 12:00", 1, "10 月 17 日 12:00", 2, "昨天 09:00", 3, "昨天 23:58", 4, "今天 09:12", 5, 6,
     ]);
     // the keys say which line is which across draws
     expect(items.filter((item) => item.kind === "turn").map((item) => item.key)).toEqual(["turn:1", "turn:2", "turn:3", "turn:4", "turn:5", "turn:6"]);
-    expect(items[0].key).toBe("day:2025 年 12 月 31 日");
+    expect(items[0].key).toBe("time:1");
   });
 
   test("turns of the same moment keep the order they were written in, and the list given is not changed", () => {

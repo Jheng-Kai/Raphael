@@ -58,7 +58,9 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert team.members.store.routines(0) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "progress", "event", "reply"]
-    assert turn["messages"][-2]["text"] == "已建立例行任務 · 每天 08:00 日文練習"
+    receipt = json.loads(turn["messages"][-2]["text"])
+    assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
+    assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
     assert {"computer", "open", "web_search", "routine_create", "create_member"} <= offered  # the same tools as Raphael's
 
@@ -116,7 +118,9 @@ async def test_chat_shows_the_saved_schedule_in_its_confirmation(setup, client, 
     assert saved.schedule.to_json() == schedule
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
     [event] = [message for message in turn["messages"] if message["kind"] == "event"]
-    assert event["text"].endswith(f" · {expected[index]} Review")
+    receipt = json.loads(event["text"])
+    assert receipt["text"].endswith(f" · {expected[index]} Review")
+    assert receipt["id"] == saved.id and receipt["action"] == "created"
 
 
 async def test_api_model_receives_the_free_group_discussion_contract(setup, client):
@@ -191,3 +195,12 @@ async def test_a_member_uses_the_guarded_computer_loop_in_its_own_thread(setup, 
     assert team.memory.own(teacher.id).read().strip() == "（待確認）Untrusted screen data"
     assert team.memory.shared.read() == ""
     assert any(s["tool"] == "memory_update" and s["outcome"] == "ok" for s in turn["steps"])
+
+
+async def test_deleted_routine_receipt_keeps_its_public_name_and_owner(setup):
+    _, team = setup
+    teacher = member(team, name="Sample member")
+    created = await team.members.routine_tool(teacher.id, "routine_create", {"title": "Sample briefing", "prompt": "Review the sample", "schedule": {"kind": "daily", "time": "08:00"}})
+    deleted = await team.members.routine_tool(teacher.id, "routine_delete", {"id": created["routine"]["id"]})
+    assert deleted["routine"] == {"id": created["routine"]["id"], "title": "Sample briefing", "member_id": teacher.id}
+    assert team.members.store.routines(teacher.id) == []

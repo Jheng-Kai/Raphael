@@ -186,9 +186,10 @@ from .quotes import quote_from_wire
 from .ledger import Ledger
 from .drafts import DraftError, clean_field, is_mail_sender
 from .pages import Pages, PageError
+from .public_events import event_record
 from .harness_tools import (
     CALENDAR_LIST, CALENDAR_TOOLS, CONNECTION_TOOLS, CONNECT_APP, FIND_APP, DEFINITIONS as HARNESS_TOOLS, EMAIL_DRAFT, REQUEST_SECRET, ROUTINE_TOOLS, SET_MY_JOB, HarnessToolError,
-    calendar_event, routine_event, tool as harness_tool,
+    tool as harness_tool,
 )
 from ..own_calendar import CalendarError, OwnCalendar, means_own_calendar
 from .team_admin import DEFINITIONS as ADMIN_TOOLS, CONFIRM_TOOLS, LEADERSHIP, BATCH_TOOLS
@@ -2624,11 +2625,11 @@ class AgentService:
                     raise HarnessToolError("unavailable")
                 data = await self._team.routine_tool(ask.speaker.id, name, args)
                 if name != "routine_list":
-                    self._message(ask, "event", routine_event(name, data, ask.language))
+                    self._message(ask, "event", event_record(name, data, ask.language))
             elif name in CALENDAR_TOOLS:
                 data = await self._calendar.tool(ask.speaker.id, name, args)
                 if name != CALENDAR_LIST:
-                    self._message(ask, "event", calendar_event(name, data, ask.language))
+                    self._message(ask, "event", event_record(name, data, ask.language))
             elif name in CONNECTION_TOOLS:
                 data = await self._connection_tool(ask, name, args)
             elif name == CONNECT_APP:

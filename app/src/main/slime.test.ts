@@ -94,7 +94,7 @@ test("a row shows what it knows: an answer it waits for, or sleep after a long s
   expect(drawn({ id: 11, last_at: now - 1000 })).toBe("idle");
   expect(drawn({ id: 11 })).toBe("idle");
   expect(drawn({ id: 11, last_at: now - 3 * 24 * 60 * 60 * 1000 })).toBe("sleeping");
-  expect(drawn({ id: 11, waiting: true, last_at: now - 3 * 24 * 60 * 60 * 1000 })).toBe("waiting");
+  expect(drawn({ id: 11, waiting: true, last_at: now - 3 * 24 * 60 * 60 * 1000 })).toBe("blocked");
 });
 
 test("a window that opens late learns from the list what a member is doing, and a later word wins", () => {
@@ -139,7 +139,7 @@ test("a finish is a moment, then the member goes back to what its row says", () 
   vi.advanceTimersByTime(1999);
   expect(stateIn(document.body)).toBe("done");
   vi.advanceTimersByTime(1);
-  expect(stateIn(document.body)).toBe("waiting");
+  expect(stateIn(document.body)).toBe("blocked");
 });
 
 test("a new turn cuts a finish short and is not undone by its timer", () => {
@@ -262,4 +262,11 @@ test("the pointer wakes a slime once on the way in, and the wiggle ends itself",
   expect(svg.classList.contains("is-delighted")).toBe(true);
   svg.querySelector(".slime-press")!.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-delight" }));
   expect(svg.classList.contains("is-delighted")).toBe(false);
+});
+
+test("presence effects paint their alpha without a composited opacity animation", () => {
+  for (const name of ["slime-dot-pulse", "slime-ribbon-orbit"]) {
+    const frame = keyframes.find(frame => frame.name === name)!;
+    expect(frame.body).not.toMatch(/(^|[{;\s])opacity:/);
+  }
 });

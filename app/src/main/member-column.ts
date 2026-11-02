@@ -44,13 +44,13 @@ function pinnedTileHTML(member: Member, v: ColumnView, top: boolean): string {
   return (
     `<div class="mb-item" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row mb-tile${top ? " mb-chief" : ""}" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}" aria-label="${esc(role ? `${member.name} · ${role}` : member.name)}">` +
-    faceHTML(member, 64) + `<b>${esc(member.name)}</b>${role ? `<small>${esc(role)}</small>` : ""}${memberDot(member)}</button>` +
+    faceHTML(member, 64) + `<b>${esc(member.name)}</b>${memberDot(member)}</button>` +
     iconButton("more", t("members.more", { p0: member.name }), ` data-member-more="${member.id}" aria-haspopup="menu" aria-expanded="false" data-k="member-more:${member.id}"`, "mb-more") +
     `</div>`
   );
 }
 
-/** A member's row: its picture, name, role, preview and dot; then its protected member actions. */
+/** A member's row: its picture, name, time, preview and dot; then its protected member actions. */
 export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "active" | "previews" | "fresh"> & { list?: ColumnView["list"] }): string {
   const lastAt = new Date(member.last_at ?? NaN);
   const preview = previewOf(member, v.previews.get(member.id));
@@ -59,7 +59,7 @@ export function memberRowHTML(member: Member, v: Pick<ColumnView, "current" | "a
     `<div class="mb-item${v.fresh.has(member.id) ? " is-new" : ""}" data-member-item="${member.id}"${member.id ? ' draggable="true"' : ""}>` +
     `<button type="button" class="nav mb-row" data-member="${member.id}" aria-current="${v.active !== false && member.id === v.current}" data-k="member:${member.id}">` +
     faceHTML(member, 40) +
-    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>${memberRole(member) ? `<i>${esc(memberRole(member))}</i>` : ""}` +
+    `<span class="mb-row-main"><span class="mb-row-t"><b>${esc(member.name)}</b>` +
     (Number.isFinite(lastAt.getTime()) ? `<time class="mb-row-time" datetime="${lastAt.toISOString()}">${formatClock(lastAt.getTime())}</time>` : "") + `</span>` +
     (preview.text ? `<span class="mb-row-p${preview.waiting ? " is-wait" : ""}">${esc(preview.text)}</span>` : "") +
     `</span>${dot}</button>` +

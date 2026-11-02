@@ -108,10 +108,10 @@ describe("the column, drawn", () => {
     expect(el.querySelector('[data-group="10"] [data-group-more]')).not.toBeNull();
   });
 
-  test("a row: the picture, the name, the role in small words and the last line", () => {
+  test("a row: the picture, the name, the reserved time and the last line", () => {
     const row = dom(columnHTML(view())).querySelector<HTMLElement>('[data-member="1"]')!;
     expect(row.querySelector(".mb-row-t b")!.textContent).toBe("進度官");
-    expect(row.querySelector(".mb-row-t i")!.textContent).toBe("Raphael 專案");
+    expect(row.querySelector(".mb-row-t i")).toBeNull();
     expect(row.querySelector(".mb-row-p")!.textContent).toBe("PR #17 已開");
     expect(row.querySelector(".mb-row-p")!.classList.contains("is-wait")).toBe(false);
     expect(row.querySelector(".mb-dot")).toBeNull();

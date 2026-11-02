@@ -91,13 +91,13 @@ test("stored CLI envelopes never render as JSON in a conversation reply", () => 
 
 test("a learned skill renders one localized event without exposing its internal payload", () => {
   const html = turnHTML(turn(20, { messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: T0 }] }), emptyTimelineState(), false, LOOK);
-  const lines = html.match(/<div class="conversation-event-line">.*?<\/div>/g)!;
+  const lines = html.match(/<div class="conversation-event-line timeline-event"[^>]*>.*?<\/div>/g)!;
   expect(lines).toHaveLength(1);
   expect(lines[0]).toContain('class="sys event-line"');
   expect(lines[0]).toContain(ico("check"));
   expect(visible(lines[0]).replace(/\s/g, "")).toContain("學會了：research-summary");
   expect(html).not.toContain("skill_learned");
-  expect(html.indexOf('class="conversation-event-line"')).toBeGreaterThan(html.indexOf('class="ra"'));
+  expect(html.indexOf('class="conversation-event-line timeline-event"')).toBeGreaterThan(html.indexOf('class="ra"'));
 });
 
 const at = (iso: string): number => Date.parse(iso);
@@ -132,7 +132,7 @@ test("a spoken quick answer with public progress shows its answer after the work
   const spoken = turn(7, { text: "下午兩點有專案會議。", messages: [{ seq: 1, kind: "progress", text: "《告。正在查看今天下午的行程。》", at_ms: T0 + 500 }] });
   const html = turnHTML(spoken, emptyTimelineState(), false, { face: () => "" });
   expect(visible(html)).toContain("下午兩點有專案會議。");
-  expect(html.indexOf("work-section")).toBeLessThan(html.indexOf("下午兩點有專案會議。"));
+  expect(html.indexOf("work-section")).toBeGreaterThan(html.indexOf("下午兩點有專案會議。"));
   const stopped = turnHTML({ ...spoken, status: "running", text: "" }, emptyTimelineState(), false, { face: () => "" });
   expect(stopped).not.toContain('class="ans"');
 });
@@ -143,12 +143,12 @@ test("a live turn renders ordered public bubbles and event chips without raw ste
     { seq: 2, kind: "event", text: "Example saved", at_ms: T0 },
     { seq: 3, kind: "reply", text: "Your turn?", at_ms: T0 },
   ] }), emptyTimelineState(), false, { face: () => "" });
-  expect(html.indexOf("I will check")).toBeLessThan(html.indexOf("Example saved"));
+  expect(html).toContain('data-tooltip="I will check the examples."');
   expect(html.indexOf("Example saved")).toBeLessThan(html.indexOf("Your turn?"));
-  expect(html).toContain('class="turn-event"');
+  expect(html).toContain('class="sys event-line"');
   expect(html).toContain('class="work-progress"');
-  expect(html).toContain('class="work-time"');
-  expect(html.match(/<i><\/i>/g)).toHaveLength(3);
+  expect(html).not.toContain('class="work-time"');
+  expect(html).toContain('class="live-presence"');
   expect(html).not.toContain("steps-line");
   expect(html).toContain("Google Calendar");
 });
@@ -430,14 +430,13 @@ describe("what a turn did", () => {
 
   test("the visible task controls show how many owner answers are waiting", () => {
     const html = turnHTML(turn(3, { source: "app", route: "delegate", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
-    const controls = html.match(/<div class="turn-event task-actions">.*?<\/div>/)?.[0];
-    expect(controls).toContain("等待你回答 · 1 項");
-    expect(controls).toContain('data-act="stop"');
+    expect(html).not.toContain('class="turn-event task-actions"');
+    expect(html).not.toContain('data-act="stop"');
   });
 
   test("a background turn that waits for the owner does not keep thinking or ticking", () => {
     const html = turnHTML(turn(3, { source: "routine", route: "delegate", status: "running", text: "", task: running({ state: "waiting", waiting_owner: 1 }) }), emptyTimelineState(), false, LOOK);
-    expect(html).toContain("等待你回答 · 1 項");
+    expect(html).not.toContain("work-time");
     expect(html).not.toContain('data-live="true"');
     expect(html).not.toContain("data-work-start");
     expect(html).not.toContain('class="think"');
@@ -526,7 +525,8 @@ describe("a turn", () => {
     expect(html).not.toContain('class="me-src"');
     expect(html).toContain('data-act="edit-message"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
-    expect(html).toContain('<span class="ra-face" title="gpt-6-luna · US$0.0012"><i class="face"></i></span>');
+    expect(html).not.toContain('class="ra-face"');
+    expect(html).toContain('data-tooltip="gpt-6-luna · US$0.0012"');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
   });
@@ -582,7 +582,7 @@ describe("a turn", () => {
     const typed = pendingTurnHTML("明天會下雨嗎？", "app", LOOK);
     expect(typed).toContain('<div class="bubble"><div class="message-text">明天會下雨嗎？</div><button');
     expect(typed).toContain('<i class="face loop">');
-    expect(typed).toContain('class="think" role="img" aria-label="思考中…"');
+    expect(typed).toContain('class="live-presence"');
     expect(pendingTurnHTML(null, "voice", LOOK)).toContain('<span class="shimmer">正在辨識…</span>');
     expect(pendingTurnHTML("<b>", "app", LOOK)).toContain("&lt;b&gt;");
   });
@@ -633,7 +633,7 @@ describe("a turn", () => {
     );
     expect(runningHtml.match(/class="work-section think-box/g)).toHaveLength(1);
     expect(runningHtml).toContain('data-act="thinking" aria-expanded="false"');
-    expect(runningHtml).toContain("work-toggle");
+    expect(runningHtml).not.toContain("work-toggle");
     expect(runningHtml).toContain("主人想看今天的 NHK 新聞與相關影片");
     expect(runningHtml).toContain("已找到新聞頁面與 YouTube 報導影片");
 
@@ -646,7 +646,7 @@ describe("a turn", () => {
     );
     expect(doneHtml.match(/class="work-section think-box/g)).toHaveLength(1);
     expect(doneHtml).toContain('data-act="thinking" aria-expanded="false"');
-    expect(doneHtml).toContain("work-toggle");
+    expect(doneHtml).not.toContain("work-toggle");
     expect(doneHtml).toContain('class="work-body think-body" id="work-20" hidden');
     expect(doneHtml).toContain('data-media-type="link"');
     expect(doneHtml).toContain("日銀維持利率不變 關注春季物價走勢");

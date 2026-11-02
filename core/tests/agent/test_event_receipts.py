@@ -1,12 +1,17 @@
 """Routine confirmations describe the schedule the owner actually saved."""
 import pytest
 
-from raphael_core.agent.harness_tools import routine_event
+from raphael_core.agent.public_events import event_record, event_text
+
+
+def receipt(name, data, language):
+    data["routine"].update(id=1, member_id=0)
+    return event_text(event_record(name, data, language))
 
 
 @pytest.mark.parametrize("language,expected", [("zh-TW", "當 Gmail 有新項目"), ("en", "When Gmail has a new item"), ("ja", "Gmail に新しい項目があるとき")])
 def test_catalogue_event_confirmation_has_no_empty_filter(language, expected):
-    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": None,
+    text = receipt("routine_create", {"routine": {"title": "Review", "schedule": None,
         "app_name": "Gmail", "when": {"app": "composio:gmail", "filter": {"field": "", "equals": ""}}}}, language)
     assert expected in text and " = " not in text
 
@@ -15,7 +20,7 @@ def test_moving_triggers_are_named_in_tool_confirmation(language, month, minutes
     for fields, expected in [({"schedule":{"kind":"monthly","day":31,"time":"08:00"}},month),
                              ({"schedule":{"kind":"every","minutes":30}},minutes),
                              ({"when":{"webhook":True}},webhook)]:
-        assert expected in routine_event("routine_create", {"routine":{"title":"Sample", **fields}}, language)
+        assert expected in receipt("routine_create", {"routine":{"title":"Sample", **fields}}, language)
 
 
 @pytest.mark.parametrize("language,expected", [
@@ -28,7 +33,7 @@ def test_every_schedule_kind_is_said_in_the_owners_language(language, expected, 
     schedule = {"kind": kind, "time": "09:30", "days": [1, 5], "hours": 3}
     if kind == "once":
         schedule["start_date"] = "2099-03-04"
-    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": schedule}}, language)
+    text = receipt("routine_create", {"routine": {"title": "Review", "schedule": schedule}}, language)
     assert text.endswith(f" · {expected[index]} Review")
 
 
@@ -42,7 +47,7 @@ def test_every_schedule_kind_is_said_in_the_owners_language(language, expected, 
 def test_confirmations_include_start_end_and_run_limit(language, start, end, limit, kind, action):
     schedule = {"kind": kind, "time": "09:30", "days": [1], "hours": 3,
                 "start_date": "2099-03-04", "until": "2099-03-31", "max_runs": 5}
-    text = routine_event(action, {"routine": {"title": "Review", "schedule": schedule}}, language)
+    text = receipt(action, {"routine": {"title": "Review", "schedule": schedule}}, language)
     assert text.count("2099-03-04") == 1
     assert start in text if kind != "once" else "2099-03-04 09:30" in text
     assert end in text and limit in text
@@ -50,7 +55,7 @@ def test_confirmations_include_start_end_and_run_limit(language, start, end, lim
 
 @pytest.mark.parametrize("language,expected", [("zh-TW", "每 1 小時"), ("ja", "1時間ごと"), ("en", "Every hour")])
 def test_hourly_confirmation_uses_a_single_hour(language, expected):
-    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": {"kind": "every", "hours": 1}}}, language)
+    text = receipt("routine_create", {"routine": {"title": "Review", "schedule": {"kind": "every", "hours": 1}}}, language)
     assert text.endswith(f" · {expected} Review")
 
 
@@ -59,7 +64,7 @@ def test_hourly_confirmation_uses_a_single_hour(language, expected):
 @pytest.mark.parametrize("action", ["routine_create", "routine_update", "routine_delete"])
 def test_windowed_every_confirmation_keeps_hour_wording_and_window(language, prefix, hours, action):
     schedule = {"kind": "every", "hours": hours, "from": "08:00", "to": "23:00"}
-    text = routine_event(action, {"routine": {"title": "Review", "schedule": schedule}}, language)
+    text = receipt(action, {"routine": {"title": "Review", "schedule": schedule}}, language)
     timing = "Every hour" if language == "en" and hours == 1 else prefix.format(hours=hours)
     assert text.endswith(f" · {timing} · 08:00–23:00 Review")
 
@@ -70,6 +75,6 @@ def test_windowed_every_confirmation_keeps_hour_wording_and_window(language, pre
     ("en", "When Example has a new item matching label = review"),
 ])
 def test_event_routines_keep_their_condition_instead_of_a_clock_schedule(language, expected):
-    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": None,
+    text = receipt("routine_create", {"routine": {"title": "Review", "schedule": None,
         "app_name": "Example", "when": {"app": "example", "filter": {"field": "label", "equals": "review"}}}}, language)
     assert text.endswith(f" · {expected} Review")

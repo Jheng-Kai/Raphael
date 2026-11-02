@@ -24,6 +24,11 @@ from typing import NamedTuple
 
 from ..memory.store import UNCONFIRMED, MemorySnapshot
 
+ACTIVITY_LABELS = {
+    "zh-TW": {"queued": "正在等候執行", "colleague": "等 {name} 的結果", "thinking": "正在思考", "working": "正在處理", "searching": "正在搜尋網路", "computer": "正在使用電腦", "blocked": "等你回答", "waiting": "正在等候同事或排程", "error": "需要你處理"},
+    "en": {"queued": "Waiting in the queue", "colleague": "Waiting for {name}’s result", "thinking": "Thinking", "working": "Working", "searching": "Searching the web", "computer": "Using the computer", "blocked": "Waiting for your answer", "waiting": "Waiting for a colleague or a queue", "error": "Needs your attention"},
+    "ja": {"queued": "順番を待っています", "colleague": "{name}の結果を待っています", "thinking": "考えています", "working": "作業しています", "searching": "ウェブを検索しています", "computer": "コンピューターを操作しています", "blocked": "あなたの回答を待っています", "waiting": "同僚または順番を待っています", "error": "対応が必要です"},
+}
 LANGUAGES = ("zh-TW", "en", "ja")
 DEFAULT_LANGUAGE = "zh-TW"
 

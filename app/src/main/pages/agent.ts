@@ -72,7 +72,7 @@ import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { dayLabel, describeError } from "../format";
+import { dayLabel, describeError, formatClock } from "../format";
 import { loadingHTML } from "../loading";
 import {
   type TimelineState,
@@ -567,9 +567,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
-    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }) };
+    if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }), liveFace: () => faceHTML(members.member(), 28, {loop: true}), activityLabel: members.member().activity_label };
     const member = members.member();
-    return { ...shared, face: () => faceHTML(member, 26) };
+    return { ...shared, face: () => faceHTML(member, 26), liveFace: () => faceHTML(member, 28), activityLabel: member.activity_label };
   };
   /**
    * The question that waits now (null: none), and whose thread it is in: the member a typed or
@@ -774,8 +774,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
     );
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
-    const today = dayLabel(state.nowMs, state.nowMs);
-    if ((outgoing.some(belongs) || hearingBelongs()) && !out.some(line => line.key === `day:${today}`)) out.push({ key: `day:${today}`, html: dayHTML(today) });
+    const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
+    const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
+    if (pendingAt !== undefined && pendingAt - lastAt >= 30 * 60 * 1000) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(`${dayLabel(pendingAt, state.nowMs)} ${formatClock(pendingAt)}`) });
     for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
     if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
     return out;
@@ -1479,14 +1480,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   function toggleThinking(button: HTMLElement): void {
-    const box = button.closest<HTMLElement>(".think-box");
+    const box = button.closest<HTMLElement>(".tn")?.querySelector<HTMLElement>(".think-box");
     const body = box?.querySelector<HTMLElement>(".think-body");
     if (!box || !body) return;
     const id = Number(box.dataset.thinkingTurn ?? button.closest<HTMLElement>(".tn")?.dataset.id);
     const next = Boolean(body.hidden);
     body.hidden = !next;
     box.classList.toggle("is-open", next);
-    button.setAttribute("aria-expanded", String(next));
+    button.closest(".tn")?.querySelectorAll('[data-act="thinking"]').forEach(control => control.setAttribute("aria-expanded", String(next)));
     if (!Number.isNaN(id)) state.thinkingOpen.set(id, next);
     rememberLine(button);
   }
@@ -1856,8 +1857,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const act = (e.target as Element).closest<HTMLElement>("[data-act]");
     if (!act || (act as HTMLButtonElement).disabled) return;
     switch (act.dataset.act) {
+      case "open-calendar-event":
+        if (/^\d{4}-\d{2}-\d{2}$/.test(act.dataset.date ?? "")) app.go("automations", `calendar:${act.dataset.date}:own%3A${act.dataset.event}` as import("../types").CalendarEventFocus);
+        break;
       case "open-routine":
-        void Promise.all([api.routinesList(memberId()), api.membersList()]).then(([routines, team]) => {
+        void Promise.all([api.routinesList(Number(act.dataset.routineMember ?? memberId())), api.membersList()]).then(([routines, team]) => {
           const routine = routines.routines.find(r => r.id === Number(act.dataset.routine));
           if (routine) openRoutineDialog({members:team.members, routine});
           else toaster.info(t("members.profile.noRoutines"));

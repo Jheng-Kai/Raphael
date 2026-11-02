@@ -3,6 +3,16 @@ import { homeZh } from "./home-catalogs";
 import { missingZh } from "./missing-catalogs";
 // Traditional Chinese is the source catalogue. Placeholders are interpolated by t().
 export const zhTW = {
+  "event.routine.created": "已建立例行任務 {p0}",
+  "event.routine.updated": "已更新例行任務 {p0}",
+  "event.routine.deleted": "已刪除例行任務 {p0}",
+  "event.calendar.created": "已加入行程 {p0}",
+  "event.calendar.updated": "已更新行程 {p0}",
+  "event.calendar.deleted": "已刪除行程 {p0}",
+  "event.changed": "已更新",
+  "event.group": "{p0} 則紀錄，{p1}",
+  "event.groupOthers": "其他 {p0} 項",
+
   "handoff.group": "{p0} 則訊息，與 {p1}",
   "handoff.groupOthers": "其他 {p0} 位",
   "handoff.groupWaiting": "等待你回答",

@@ -407,6 +407,7 @@ class BackgroundService:
         self._tools = tools
         self._notify = notify
         self.activity = Activity(notify)
+        self.activity.owner_waiting = self.waiting_members
         self._host = host if host is not None else WorkerHost()
         self._limits = limits
         self._clock = clock
@@ -415,6 +416,7 @@ class BackgroundService:
         self._history = AgentHistory(conn, now_ms)
         self._settings = SettingsStore(conn)
         self._metrics_conn = conn
+        self.activity.task_source = self._activity_tasks
         self._spend = SpendTracker(conn, now_ms, tz)
         self._queue: deque[int] = deque()
         # task id -> the model it runs on (the assistant's model, as it was when it was handed over)
@@ -2201,10 +2203,25 @@ class BackgroundService:
         self._changed(task.id, state, ending=True)
         self._deliver_handoffs()
 
+    def _activity_tasks(self, member_id: int) -> list[dict]:
+        tasks = [dict(row) for row in self._metrics_conn.execute(
+            "SELECT id, state, (EXISTS (SELECT 1 FROM worker_questions q WHERE q.task_id=worker_tasks.id AND q.state='waiting') "
+            "OR EXISTS (SELECT 1 FROM owner_questions q WHERE q.task_id=worker_tasks.id AND q.result IS NULL)) AS waiting_owner "
+            "FROM worker_tasks WHERE member_id=? AND state IN ('queued','running','waiting')", (member_id,))]
+        for task in tasks:
+            child = self._metrics_conn.execute(
+                "SELECT members.name FROM worker_tasks JOIN members ON members.id=worker_tasks.member_id WHERE parent_task_id=? AND state IN ('queued','running','waiting') ORDER BY worker_tasks.id LIMIT 1", (task["id"],)).fetchone()
+            if child:
+                task["waiting_for"] = child[0]
+        return tasks
+
     def _changed(self, task_id: int, state: str, *, ending: bool = False) -> None:
         """Tell the app a task moved on. `running` is whether any task is under way once this change
         has been made (the tray offers to stop them while one is, whichever task changed); the counters
         are those of the task that changed, if it is one that runs, else zero."""
+        task = self._store.get(task_id)
+        if task is not None:
+            self.activity._publish(task.member_id)
         owner = self._runs.get(task_id)
         self._notify(
             "worker.changed",

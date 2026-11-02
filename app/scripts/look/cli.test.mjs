@@ -41,3 +41,9 @@ describe("look CLI", () => {
     expect(result.stderr).not.toContain("not implemented");
   });
 });
+
+
+it("roster animation continuity scenes opt into real motion", () => {
+  const missing = scenes.filter(scene => scene.steps.some(step => step.action === "event-storm" && step.roster) && !scene.motion);
+  expect(missing.map(scene => scene.name)).toEqual([]);
+});

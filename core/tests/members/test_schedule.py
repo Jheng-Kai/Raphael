@@ -123,9 +123,10 @@ def test_window_uses_local_wall_times_across_daylight_saving_and_date_bounds():
 
 @pytest.mark.parametrize("language,words", [("zh-TW", "每 3 小時"), ("ja", "3時間ごと"), ("en", "Every 3 hours")])
 def test_model_schema_and_public_routine_wording_include_the_window(language, words):
-    from raphael_core.agent.harness_tools import SCHEDULE, routine_event
+    from raphael_core.agent.harness_tools import SCHEDULE
+    from raphael_core.agent.public_events import event_record, event_text
     assert {"from", "to"} <= SCHEDULE["properties"].keys()
     assert "one routine" in SCHEDULE["description"]
-    text = routine_event("routine_create", {"routine": {"title": "Review", "schedule": {
-        "kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}}}, language)
+    text = event_text(event_record("routine_create", {"routine": {"id": 1, "member_id": 0, "title": "Review", "schedule": {
+        "kind": "every", "hours": 3, "from": "08:00", "to": "23:00"}}}, language))
     assert words in text and "08:00" in text and "23:00" in text

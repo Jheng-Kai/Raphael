@@ -490,7 +490,7 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
   const replies = () => [...document.querySelectorAll('[data-id="50"] .ra .message-text')].map(element => element.textContent);
   expect(replies()).toEqual(["First"]);
   expect(document.querySelector('[data-id="50"] .ans.thinking, [data-id="50"] .work-section.is-live')).toBeNull();
-  expect($('[data-id="50"] .work-toggle').textContent).toContain("已處理");
+  expect($('[data-id="50"] .work-toggle')).toBeNull();
   if (mode === "finish") await vi.advanceTimersByTimeAsync(2000);
   if (mode === "switch") { await pick(4); await pick(3); }
   if (mode === "search") $('[data-act="search"]').click();
@@ -904,7 +904,7 @@ describe("a member's thread", () => {
     await pick(3);
     const run = $('.tn[data-id="32"]');
     expect(run.querySelector(".sys")!.textContent).toBe("例行任務每天的單字");
-    expect(run.querySelector(".work-toggle .think")).not.toBeNull();
+    expect(run.querySelector(".live-presence")).not.toBeNull();
     expect(run.querySelector(".me")).toBeNull();
     THREADS[3] = [turn(31, { member_id: 3, text: "今天的單字" })];
   });
@@ -1103,7 +1103,8 @@ describe("the details panel", () => {
     name.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await flush();
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 嚴格老師");
-    expect($(".thread .mb-av-slime svg")).not.toBeNull();
+    expect($(".mb-pill-face svg.slime")).not.toBeNull();
+    expect($(".thread .ra-face")).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@
 
 import pytest
 import asyncio
+import json
 
 from raphael_core.agent.history import AgentHistory
 from raphael_core.home import HomeOverview
@@ -45,6 +46,20 @@ async def test_empty_overview_preserves_service_numbers_and_has_no_connector(hom
     assert value["dictation"]["daily"] == list(range(11, 25))
     assert value["report"]["openrouter"]["state"] == "no_key"
     assert rig.conn.total_changes == before
+
+
+@pytest.mark.parametrize("kind", ["routine", "calendar", "meeting", "skill_learned"])
+async def test_home_and_sidebar_do_not_read_receipt_transport_as_a_report(home, rig, kind):
+    member = (await rig.call("members.create", {"name": "Sample colleague"}))["member"]["id"]
+    turn_id = add(rig, member)
+    history = rig.service._history
+    raw = json.dumps({"type": kind, "action": "created", "id": 987654321, "name": "Sample orchard"})
+    history.add_message(turn_id, "event", raw)
+    value = await rig.call("home.overview")
+    rows = (await rig.call("members.list"))["members"]
+    assert next(row for row in rows if row["id"] == member)["preview"] == "A report with details"
+    public = json.dumps(value, ensure_ascii=False)
+    assert "987654321" not in public and raw not in public
 
 
 async def test_five_minute_rhythm_marks_every_day_of_the_month_grid(home, rig):

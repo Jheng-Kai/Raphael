@@ -1,3 +1,4 @@
+@property --slime-dot-alpha { syntax: "<number>"; inherits: false; initial-value: 1; }
 @property --slime-touch { syntax: "<transform-list>"; inherits: false; initial-value: translate(0px); }
 @property --slime-squish { syntax: "<transform-list>"; inherits: false; initial-value: scale(1); }
 /* A slime has no frame of its own: it stands on the row like Grok Bot's mascots, and it is always doing something. */
@@ -39,7 +40,7 @@
 .slime[data-state="sleeping"] { --eye-y: 50px; --eye-w: 3.5; --eyes: path("M 38.51 50.31 Q 43 50 47.49 49.69 M 52.51 49.69 Q 57 50 61.49 50.31"); }
 
 /* At small sizes, fit the eye spacing, centre and stroke to physical pixels rather than shrinking a large face. */
-.slime-surface { --slime-unit: tan(atan2(100cqw, 92px)); }
+.slime-surface { --slime-unit: tan(atan2(min(100cqw, 100cqh), 92px)); }
 .mb-preset-slime .slime-surface { --slime-unit: tan(atan2(round(84cqw, 1px), 92px)); }
 @container (width <= 48px) {
   .slime-face {
@@ -59,7 +60,8 @@
 .slime-surface[data-state="idle"] .slime-idle { display: block; }
 .slime-cels { display: block; width: 700%; height: 100%; transform-origin: 0 0; }
 .slime-cels > svg { display: block; width: 100%; height: 100%; }
-.slime-surface { position: relative; display: block; flex: none; width: 100%; height: 100%; --eye-w: 6; contain: layout paint; overflow: clip; overflow-clip-margin: 100cqw; }
+/* Group grids can reserve a 20x19 cell. Both strip SVGs and the normal SVG need the same square scale. */
+.slime-surface { position: relative; display: block; flex: none; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); --eye-w: 6; contain: layout paint; overflow: clip; overflow-clip-margin: 100cqw; }
 .slime-cel-eye { stroke-width: var(--eye-w); }
 .slime-surface[data-state="idle"] .slime-idle-body .slime-cels { animation: slime-idle-body calc(23.3s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
 .slime-surface[data-state="idle"] .slime-idle-eyes .slime-cels { animation: slime-idle-eyes calc(9.7s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
@@ -95,8 +97,8 @@
   .slime[data-state="idle"] .slime-gaze { animation: slime-idle-large-eyes calc(9.7s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
 }
 @keyframes slime-idle-large-eyes {
-  0%, 4%, 7%, 14%, 34.2%, 52%, 61.4%, 67%, 69.5%, 73%, 100% { translate: 0 0; scale: 1 1; }
-  4.7%, 5.3%, 67.7%, 68.3%, 70.2%, 70.8% { translate: 0 0; scale: 1 0.3; }
+  0%, 4%, 7%, 14%, 34.2%, 52%, 61.4%, 67%, 69.5%, 73%, 100% { translate: 3px -3px; scale: 1 1; }
+  4.7%, 5.3%, 67.7%, 68.3%, 70.2%, 70.8% { translate: 3px -3px; scale: 1 0.3; }
   15.2%, 24% { translate: -3px 0; scale: 1 1; }
   25.2%, 33% { translate: 3px -1px; scale: 1 1; }
   53.2%, 60% { translate: 0 -3px; scale: 1 1; }
@@ -371,6 +373,33 @@
   .slime-surface { transform: none !important; }
   .slime-press { scale: none !important; }
   .slime-z { display: none !important; }
+}
+
+/* Silhouettes remain readable at 28px, including when motion is reduced. */
+.slime-dots, .slime-blocked, .slime-ribbons { display: none; }
+.slime:is([data-state="thinking"], [data-state="blocked"], [data-state="error"]) .slime-press { visibility: hidden; }
+.slime:is([data-state="thinking"], [data-state="blocked"], [data-state="error"]) .slime-press * { animation: none; }
+.slime[data-state="thinking"] .slime-dots { display: block; }
+.slime-dot { transform-box: fill-box; transform-origin: center; fill-opacity: var(--slime-dot-alpha); }
+.slime[data-state="thinking"] .slime-dot { animation: slime-dot-pulse 1.2s ease-in-out calc(var(--slime-delay) + var(--dot) * 160ms) infinite; }
+.slime:is([data-state="blocked"], [data-state="error"]) .slime-blocked { display: block; animation: slime-attention 1.8s ease-in-out var(--slime-delay) infinite; }
+.slime[data-state="working"] .slime-ribbons { display: block; }
+.slime-ribbon { transform-origin: 50px 57px; scale: 1 .55; opacity: .8; }
+.slime[data-state="working"] .slime-ribbon { animation: slime-ribbon-orbit calc(2.4s + var(--ribbon) * .4s) linear calc(var(--slime-delay) - var(--ribbon) * .6s) infinite; }
+.slime[data-state="working"] :is(.slime-motion, .slime-mark) { animation: none; }
+.slime[data-state="working"] .slime-gaze { animation: slime-working-glance 3.6s steps(1) var(--slime-delay) infinite; }
+.slime[data-state="waiting"] { --eye-w: 5; --eyes: path("M 40 48 Q 44 48 48 48 M 56 48 Q 60 48 64 48"); }
+.slime[data-state="waiting"] :is(.slime-motion, .slime-mark) { animation: none; }
+.slime[data-state="waiting"] .slime-gaze { animation: slime-working-glance 7s steps(1) var(--slime-delay) infinite; }
+.slime[data-state="done"] { --eye-w: 6; --eyes: path("M 43 45 Q 43 48 43 51 M 57 45 Q 57 48 57 51"); }
+@keyframes slime-dot-pulse { 0%, 65%, 100% { --slime-dot-alpha: .45; scale: .85; } 30% { --slime-dot-alpha: 1; scale: 1; } }
+@keyframes slime-attention { 0%, 55%, 100% { translate: 0 0; } 72% { translate: 0 -6px; } 85% { translate: 0 0; } }
+@keyframes slime-ribbon-orbit { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes slime-working-glance { 0%, 100% { translate: 2px 0; } 45% { translate: -2px 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .slime-dot:nth-child(2) { opacity: .65; }
+  .slime-dot:nth-child(3) { opacity: .4; }
+  .slime-ribbon { rotate: calc(var(--ribbon) * 60deg); opacity: .8; }
 }
 
 /* The picture menu: shapes, then colours */

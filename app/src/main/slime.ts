@@ -9,7 +9,7 @@
 import "./slime.css";
 import { t } from "./i18n";
 
-export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "done" | "error" | "sleeping" | "arriving";
+export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
 
 const COLORS = {
@@ -131,7 +131,7 @@ const EYES = "M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5";
 const FACE_SCALE = "translate(49.5 48) scale(1.25) translate(-49.5 -48)";
 
 const IDLE_BODY = [[1, 1, 0], [0.995, 1.01, 0], [0.99, 1.02, 0], [0.985, 1.028, 0], [1, 1, 0.04], [1, 1, -0.025], [1, 1, 0.01]] as const;
-const IDLE_EYES = [[0, 0, 1], [0, 0, 0.55], [0, 0, 0.3], [-3, 0, 1], [3, -1, 1], [0, -3, 1], [0, 0, 1.06]] as const;
+const IDLE_EYES = [[3, -3, 1], [0, 0, 0.55], [0, 0, 0.3], [-3, 0, 1], [3, -1, 1], [0, -3, 1], [0, 0, 1.06]] as const;
 
 // Three whole boxes leave room for every pose and keep the raster bounds on physical pixels, including odd avatar sizes.
 const IDLE_FRAME = 276;
@@ -161,7 +161,9 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + (look.marks ?? "") +
     (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
-    `</g></g></g></g>${Z}${Z}</svg>${IDLE_EYE_STRIP}</span>`;
+    `</g></g></g></g><g class="slime-dots" fill="var(--slime-color)">${[28, 50, 72].map((x, i) => `<circle class="slime-dot" cx="${x}" cy="57" r="8" style="--dot:${i}"/>`).join("")}</g>` +
+    `<g class="slime-blocked" fill="var(--slime-color)"><path d="M44 30 Q50 25 56 30 L54 61 Q50 65 46 61 Z"/><circle cx="50" cy="76" r="5"/></g>` +
+    `<g class="slime-ribbons" fill="none" stroke-width="4" stroke-linecap="round">${["#9F86ED", "#54BDB3", "#E3B65D"].map((color, i) => `<g class="slime-ribbon" style="--ribbon:${i}" stroke="${color}"><path d="M14 63 C-2 40 84 33 90 55 C96 72 28 86 14 63"/></g>`).join("")}</g>${Z}${Z}</svg>${IDLE_EYE_STRIP}</span>`;
 }
 
 // ---------- under the pointer ----------
@@ -188,6 +190,7 @@ const settling = new WeakMap<SVGElement, EventListener>();
 // ---------- what each member is doing ----------
 
 const activity = new Map<number, SlimeState>();
+const labels = new Map<number, string>();
 const resting = new Map<number, SlimeState>();
 const fleeting = new Map<number, ReturnType<typeof setTimeout>>();
 /** When each member's state began, so that a redraw in the middle of a moment carries on instead of starting it again. */
@@ -198,13 +201,13 @@ const SLEEP_AFTER_MS = 24 * 60 * 60 * 1000;
 const FLEETING_MS: Partial<Record<SlimeState, number>> = { done: 2000, arriving: 1200 };
 
 /** The states the core tells (`member.activity`). */
-const LIVE_STATES: readonly string[] = ["thinking", "working", "searching", "computer", "done", "error"];
+const LIVE_STATES: readonly string[] = ["thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error"];
 
 interface SlimeFacts { id: number; waiting?: boolean; last_at?: number | null }
 
 /** What a member's own row says, for when it is doing nothing: an answer it waits for, or sleep after a long silence. */
 function restingState(member: SlimeFacts, now: number): SlimeState {
-  if (member.waiting) return "waiting";
+  if (member.waiting) return "blocked";
   const last = member.last_at ?? NaN;
   return Number.isFinite(last) && now - last > SLEEP_AFTER_MS ? "sleeping" : "idle";
 }
@@ -280,13 +283,19 @@ export function handOver(svg: SVGElement, state: SlimeState): void {
   own.forEach((part, index) => startFrom(bridge(part), each[index]!.multiply(poseOf(part, loop).inverse())));
 }
 
+export function presenceAttrs(id: number): string {
+  const label = labels.get(id) ?? "";
+  return ` data-presence-member="${id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""}`;
+}
+
 const paint = (id: number, state: SlimeState): void => {
   for (const svg of document.querySelectorAll<SVGElement>(`svg.slime[data-slime-member="${id}"]`)) handOver(svg, state);
 };
 
 /** The list the core just read says what each member is doing, for a window that opened late. A moment plays out first. */
-export function followSlimeRoster(members: readonly { id: number; activity?: string }[]): void {
-  for (const { id, activity: state } of members) {
+export function followSlimeRoster(members: readonly { id: number; activity?: string; activity_label?: string }[]): void {
+  for (const { id, activity: state, activity_label: label } of members) {
+    if (label !== undefined) labels.set(id, label);
     if (fleeting.has(id)) continue;
     if (state && LIVE_STATES.includes(state)) {
       if (activity.get(id) !== state) began.set(id, performance.now());
@@ -296,7 +305,15 @@ export function followSlimeRoster(members: readonly { id: number; activity?: str
 }
 
 /** What the core says a member is doing; `idle` hands it back to what its row says. A moment like `done` passes by itself. */
-export function setSlimeState(id: number, state: SlimeState): void {
+export function setSlimeState(id: number, state: SlimeState, label?: string): void {
+  if (label !== undefined) {
+    labels.set(id, label);
+    for (const face of document.querySelectorAll<HTMLElement>(`[data-presence-member="${id}"]`)) {
+      if (label) { if (face.dataset.tooltip !== label) face.dataset.tooltip = label; }
+      else face.removeAttribute("data-tooltip");
+    }
+  }
+  if (activity.get(id) === state) return;
   // The core says `idle` right after `done`: the moment plays out, and then the row has its say anyway.
   if (state === "idle" && fleeting.has(id)) return;
   const was = fleeting.get(id);
@@ -323,8 +340,9 @@ export function slimeFaceHTML(member: SlimeFacts & { avatar?: string | null }, s
   const slime = parseSlime(member.avatar) ?? { color: defaultColor(member.id) };
   const rest = restingState(member, Date.now());
   resting.set(member.id, rest);
-  const state = activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
-  return `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" style="--av:${Math.round(size)}px" aria-hidden="true">` +
+  const state = member.waiting ? "blocked" : activity.get(member.id) ?? rest, now = performance.now(), start = began.get(member.id);
+  const label = labels.get(member.id) ?? "";
+  return `<span class="av mb-av mb-av-slime${cls ? ` ${cls}` : ""}" data-presence-member="${member.id}"${label ? ` data-tooltip="${label.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}"` : ""} style="--av:${Math.round(size)}px" aria-hidden="true">` +
     slimeSVG(slime, { state, member: member.id, delay: delayOf(member.id, now), tempo: tempoOf(member.id), since: start === undefined ? undefined : -Math.round(now - start) }) + `</span>`;
 }
 

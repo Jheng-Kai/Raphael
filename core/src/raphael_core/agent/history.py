@@ -53,6 +53,7 @@ from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
 from .steps import Step, work_summary
 from .quotes import quote_from_wire
 from .conversations import Conversations
+from .public_events import event_text
 
 # Where a turn came from when nobody says: the hotkey and the overlay.
 VOICE = "voice"
@@ -209,6 +210,20 @@ class AgentHistory:
     ) -> None:
         self._conn = conn
         self._now_ms = now_ms
+        self._events_indexed = False
+
+    def _repair_event_index(self) -> None:
+        if self._events_indexed:
+            return
+        # Older indexes included transport keys. Repair only turns with structured receipts.
+        rows = self._conn.execute("SELECT DISTINCT t.id, t.question, t.text, t.detail FROM agent_turns t"
+                                  " JOIN agent_messages m ON m.turn_id=t.id WHERE m.kind='event'"
+                                  " AND ltrim(m.text) LIKE '{%'").fetchall()
+        if rows:
+            with self._conn:
+                for row in rows:
+                    self._index(row["id"], row["question"], row["text"], row["detail"])
+        self._events_indexed = True
 
     def add(
         self,
@@ -287,9 +302,9 @@ class AgentHistory:
     def _index(self, turn_id: int, question: str, text: str, detail: str | None) -> None:
         """Put a turn into the search, in place of what it held for it."""
         saved = self._conn.execute(
-            "SELECT text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
+            "SELECT kind, text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
         ).fetchall()
-        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(row[0] for row in saved))
+        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved))
         self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
         self._conn.execute(
             "INSERT INTO agent_turns_fts (rowid, pairs, chars) VALUES (?, ?, ?)",
@@ -365,7 +380,7 @@ class AgentHistory:
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
-            turn.messages = [m["text"] for m in saved.get(turn.id, [])]
+            turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, [])]
         return turns
 
     def messages(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:
@@ -569,12 +584,13 @@ class AgentHistory:
         limit = max(1, min(limit, most))
         if not words:
             return []
+        self._repair_event_index()
         where, params = _filters(since_ms, exclude, member_id, conversation_id)
         found = self._find(words, limit, where, params)
         if not found and any(len(word.pairs) > 1 for word in words):
             pairs = dict.fromkeys(pair for word in words for pair in word.pairs)
             found = self._find([QueryWord(pair, (pair,)) for pair in pairs], limit, where, params)
-        return found
+        return self._with_messages(found)
 
     def _find(
         self, words: Sequence[QueryWord], limit: int, where: str, params: Sequence[object]

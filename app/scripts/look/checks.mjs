@@ -2,6 +2,89 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "event-lines-collapse" || name === "sidebar-row-time" || name === "sidebar-group-author") {
+    const turn = document.querySelector('[data-id="651"]');
+    if (name.startsWith("transcript-")) {
+      require(!turn.querySelector('.ra-face, .me > .owner-face'), "private bubbles have no faces");
+      const body = turn.querySelector(".ra-body");
+      require(body.getBoundingClientRect().width > 200, "private replies use the content column, never the removed face column");
+      require(![...turn.querySelectorAll('.work-toggle')].some(visible), "no default work chip");
+    }
+    if (name === "presence-states-sidebar") for (const [id, state] of [[1,"thinking"],[2,"working"],[3,"blocked"]]) require(document.querySelector(`[data-member="${id}"] .slime`)?.dataset.state === state, `sidebar member ${id} shows ${state}`);
+    if (["presence-hover-action", "presence-sidebar-hover", "presence-rail-hover"].includes(name)) {
+      const tips = [...document.querySelectorAll('[role="tooltip"]')].filter(visible);
+      const nameFirst = name === "presence-rail-hover" && innerWidth >= 860;
+      const member = window.__look.data.members.find(member => member.id === 1);
+      require(tips.length === 1 && tips[0].textContent === `${nameFirst ? member.name + "\n" : ""}Comparing sample sources`, "one open tooltip follows the public action, with the rail name first");
+      const box = tips[0].getBoundingClientRect(), chrome = document.querySelector('.window-chrome').getBoundingClientRect();
+      require(box.left >= 8 && box.right <= innerWidth - 8 && box.top >= chrome.bottom + 8 && box.bottom <= innerHeight - 8, "the complete tooltip stays inside the viewport and clear of window controls");
+      if (name === "presence-sidebar-hover" && innerWidth < 860) {
+        const add = document.querySelector('[data-col="add"]'), control = add.getBoundingClientRect();
+        require(control.top >= chrome.bottom && add.contains(document.elementFromPoint(control.x + control.width / 2, control.y + control.height / 2)), "the compact drawer add button stays below the chrome and receives pointer input");
+      }
+      if (name === "presence-hover-action") {
+        const face = [...document.querySelectorAll('.mb-head .av')].find(visible), control = face.closest('button');
+        require(box.top >= face.getBoundingClientRect().bottom + 6, "the header tooltip opens below the avatar");
+        require(!document.documentElement.hasAttribute('data-keys') && getComputedStyle(control).outlineStyle === 'none', "pointer hover adds no keyboard focus ring");
+        require(getComputedStyle(control).borderColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(control).boxShadow === 'none', "pointer hover adds no ring-like border or shadow");
+      }
+    }
+    if (name === "presence-blocked-stays") require(document.querySelector('.mb-pill-face .slime')?.dataset.state === "blocked", "owner waiting remains blocked after refresh");
+    if (name === "presence-waiting-colleague") require(document.querySelector('.mb-pill-face .slime')?.dataset.state === "waiting", "a colleague wait keeps its own silhouette");
+    if (name === "transcript-working") {
+      const live = turn.querySelector('.live-presence');
+      require(visible(live) && live.getBoundingClientRect().width === 28, "the live avatar is 28px");
+      require(!turn.querySelector('.think, .work-time, .work-latest'), "no text dots or ticking line");
+      require(live.dataset.tooltip === window.__look.data.presenceSample.progress, "public progress is the hover");
+    }
+    if (name === "transcript-hover-detail") {
+      require(visible(turn.querySelector('.work-body')) && turn.querySelector('.work-body').textContent.includes("sample"), "hover action opens the same work detail");
+      const controls = [...turn.querySelectorAll('.message-work')];
+      require(controls.length === 2 && controls.every(control => control.getAttribute('aria-expanded') === 'true'), "both reply controls reflect the same expanded work detail");
+    }
+    if (name === "transcript-time-gap") require(document.querySelectorAll('.tns > .day, .thread > .day, .ra-thread > .day').length === 2 || [...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 2, "thirty-minute gaps have two centred separators");
+    if (name === "event-routine-line") {
+      require(visible(turn.querySelector('.conversation-event-line [data-routine="2"]')) && !turn.querySelector('.work-body .turn-event'), "the routine is outside closed work");
+      const line = turn.querySelector('.timeline-event').getBoundingClientRect();
+      const before = turn.querySelector('.owner-message .bubble').getBoundingClientRect();
+      const after = turn.querySelector('.ra-body .chat-message .ans').getBoundingClientRect();
+      const above = line.top - before.bottom, below = after.top - line.bottom;
+      require(Math.abs(above - below) <= 1 && above >= 12, `event gaps are even (${above}px above, ${below}px below)`);
+    }
+    if (name === "event-routine-spacing") {
+      const items = [...turn.querySelector('.ra-body').children].filter(node => node.matches('.timeline-event, [data-seq], .chat-message'));
+      const visual = node => node.matches('.timeline-event') ? node : node.querySelector('.ans, .media-card');
+      for (let i = 0; i < items.length; i++) {
+        if (!items[i].matches('.timeline-event')) continue;
+        const line = items[i].getBoundingClientRect();
+        const before = (i ? visual(items[i - 1]) : turn.querySelector('.owner-message .bubble')).getBoundingClientRect();
+        const after = visual(items[i + 1]).getBoundingClientRect();
+        const above = line.top - before.bottom, below = after.top - line.bottom;
+        require(Math.abs(above - 32) <= 1 && Math.abs(below - 32) <= 1, `bubble/card/line gaps stay even (${above}px above, ${below}px below)`);
+      }
+    }
+    if (name === "event-routine-opens") require(visible(document.querySelector('.au-routine-dialog')) && document.querySelector('#au-title')?.value === window.__look.data.presenceSample.routine, "the named routine opens");
+    if (name === "event-routine-find") {
+      require(turn.querySelector('.event-line mark')?.textContent === window.__look.data.presenceSample.routine, "find marks the public receipt title");
+      require(!turn.textContent.includes('"type"') && !turn.textContent.includes('"created"'), "transport metadata stays out of thread selection");
+    }
+    if (name === "event-routine-find-group") require(turn.querySelector('[data-event-group]')?.open && visible(turn.querySelector('.handoff-detail mark.is-current')), "the selected receipt is visible in the retained open group");
+    if (name === "event-calendar-line") require(visible(turn.querySelector('[data-act="open-calendar-event"][data-event="1"][data-date="2026-10-24"]')), "the calendar receipt keeps its inspection target");
+    if (name === "event-calendar-opens") require(visible(document.querySelector('.au-pop-detail')) && document.querySelector('.au-pop-detail h2')?.textContent === window.__look.data.presenceSample.calendar, "the named calendar event detail opens");
+    if (name === "event-lines-collapse") {
+      const group = turn.querySelector('[data-event-group]');
+      require(group?.open && turn.querySelectorAll('[data-event-group] [data-routine="2"]').length === 3, "every receipt stays in the open group");
+      const gap = group.nextElementSibling.querySelector('.ans').getBoundingClientRect().top - group.getBoundingClientRect().bottom;
+      require(Math.abs(gap - 32) <= 1, `an opened event group keeps the same 32px gap (${gap}px)`);
+    }
+    if (name === "sidebar-row-time") {
+      const row = document.querySelector('.side [data-member="1"]');
+      require(!row.querySelector('.mb-row-t i') && row.querySelector('time'), "name and time without a role pill");
+      require(getComputedStyle(row.querySelector('time')).opacity === '0' && visible(row.parentElement.querySelector('.mb-more')), "overflow replaces time in its reserved slot");
+    }
+    if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
+    return {check: name};
+  }
   if (name === "menu-scroll-closed") {
     require(!document.querySelector('#app-popover, #app-submenu'), "outside scroll input or resizing closes every menu level");
     return { check: name };
@@ -101,7 +184,7 @@ export function checkRendered(name, context = {}) {
   if (name === "conversation-day-today" || name === "conversation-day-yesterday") {
     const days = [...document.querySelectorAll('.mb-chat .thread .day')], line = document.querySelector('.mb-chat .thread .tn');
     const label = name === "conversation-day-today" ? "今天" : "昨天";
-    require(days.at(-1)?.textContent === label, `the last day heading says ${label} with the shared look clock`);
+    require(days.at(-1)?.textContent.startsWith(`${label} `), `the last day heading says ${label} with the shared look clock`);
     if (name === "conversation-day-today") window.__look.midnightLine = line;
     else require(line === window.__look.midnightLine, "the date change retains the conversation line");
     return { check: name, label };
@@ -1861,7 +1944,7 @@ export function checkRendered(name, context = {}) {
       require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) <= 2, `"${line.textContent}" is centred in the thread`);
       require(!/#\d/.test(line.closest('.handoff-event, .conversation-event-line, li').textContent), `"${line.textContent}" shows no internal number`);
       const size = parseFloat(getComputedStyle(line).fontSize);
-      require(!line.closest('.chat-message, .ra-body') && size >= 12 && size <= 14, `event lines sit outside message bodies at a readable small size (${size}px)`);
+      require(!line.closest('.chat-message, .work-body') && size >= 12 && size <= 14, `event lines sit outside message bodies at a readable small size (${size}px)`);
       const control = line.closest('button');
       if (control) require(getComputedStyle(control).borderTopColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(control).backgroundColor === 'rgba(0, 0, 0, 0)', "an event line is never a pill");
     }
@@ -1980,12 +2063,13 @@ export function checkRendered(name, context = {}) {
     return { check: name, words: plainWords() };
   }
   if (name === "centred-system-events") {
-    const lines = eventLines(2).map(line => line.textContent);
-    require(lines[0].includes("2 則訊息") && lines[1] === "已開啟會議 產品方向討論", `grouped exchanges precede the meeting: ${lines.join("|")}`);
+    const nodes = eventLines(3), lines = nodes.map(line => line.textContent);
+    const historic = window.__look.data.turns.find(turn => turn.id === 1).messages.find(message => message.kind === 'event' && message.seq !== 99);
+    require(lines[0].includes("2 則訊息") && lines[1] === historic.text && lines[2] === "已開啟會議 產品方向討論", `exchanges and historical receipts retain their sequence: ${lines.join("|")}`);
     const receipts = [...document.querySelectorAll('[data-handoff-group] [data-handoff] > summary')].map(line => line.textContent);
     require(receipts.join("|") === "已轉交給 小晴已完成|和 小森 討論執行中", "folded receipts retain their individual words and states");
-    const answer = document.querySelector('.tn[data-id="1"] .ra').getBoundingClientRect(), last = document.querySelector('.tn[data-id="1"] .conversation-event-line').getBoundingClientRect();
-    require(last.bottom <= answer.top, "events stand between the owner's words and Raphael's answer");
+    const answer = document.querySelector('.tn[data-id="1"] .ra [data-reply] .ans').getBoundingClientRect();
+    require(nodes[1].getBoundingClientRect().bottom <= answer.top && nodes[2].getBoundingClientRect().top >= answer.bottom, "the historical receipt precedes the reply and the later meeting follows it");
     return { check: name, lines };
   }
   if (name.startsWith("handoff-group")) {
@@ -2034,32 +2118,18 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "work-dots" || name === "pending-work") {
-    const section = document.querySelector(`${name === "pending-work" ? '.tn.is-pending ' : ''}.work-section.is-live`);
-    require(visible(section), "the live work line is visible");
-    require(!document.querySelector('.page-agent .ans.thinking'), "the conversation never shows a second dots style");
-    const dots = [...section.querySelectorAll('.work-toggle .think i')].filter(visible);
-    require(dots.length === 3, "the live work row shows its three dots");
-    if (name === "work-dots") require(dots.some(dot => getComputedStyle(dot).animationPlayState === "paused" && getComputedStyle(dot).transform !== "none"), "the dots are held mid-bounce");
-    for (const dot of dots) {
-      const box = dot.getBoundingClientRect();
-      for (let parent = dot.parentElement; parent && !parent.matches('.work-section'); parent = parent.parentElement) {
-        if (getComputedStyle(parent).overflow === "visible") continue;
-        const edge = parent.getBoundingClientRect();
-        require(box.top >= edge.top - 0.5 && box.bottom <= edge.bottom + 0.5, "a moving dot is never cut off by the row around it");
-      }
-    }
-    const row = section.querySelector('.work-toggle')?.textContent ?? "";
-    require(row.includes("思考中") && !row.includes("處理中"), "a reply that has just started says once what is happening");
-    require(/^· \d+ 秒$/.test(section.querySelector('.work-time')?.textContent ?? ""), "the live line includes elapsed seconds");
-    if (name === "pending-work") require(!section.querySelector('button, [data-act], .work-chevron, .work-body'), "pending work has nothing empty to expand");
-    return { check: name, row };
+    const section = document.querySelector(`${name === "pending-work" ? '.tn.is-pending ' : ''}.live-presence`);
+    require(visible(section), "one live avatar shows pending work");
+    require(!document.querySelector('.page-agent .ans.thinking, .page-agent .work-time, .page-agent .work-latest'), "no second waiting style or clock");
+    require(!section.querySelector('button, [data-act]'), "pending work has no empty disclosure");
+    return {check: name};
   }
   if (name === "conversation-running") {
     const calls = window.__look.calls.filter(call => call.method === "agent.history.list");
     require(calls.some(call => (call.params?.member_id ?? 0) === 0 && (call.params?.conversation_id ?? 1) === 1), "R-UI-32: running turn belongs to the open formal conversation");
-    require([...document.querySelectorAll('.ra .work-toggle')].some(visible), "R-UI-32: running progress is visible");
+    require([...document.querySelectorAll('.ra .live-presence')].some(visible), "R-UI-32: the live avatar is visible");
     require(![...document.querySelectorAll('.ra .chat-message')].some(visible), "R-UI-32: completed answer is absent while running");
-    require(document.querySelector('.work-latest')?.textContent === "已核對三份報告，正在彙整研究結論。", "R-UI-42: the running state shows the latest step plainly");
+    require(document.querySelector('.live-presence')?.dataset.tooltip === "已核對三份報告，正在彙整研究結論。", "R-UI-42: the public update is the avatar hover");
     return { check: name, running: true, words: plainWords() };
   }
   if (name === "live-scenario-owner-view") {
@@ -2132,7 +2202,7 @@ export function checkRendered(name, context = {}) {
     const turn = document.querySelector('.tn[data-id="91"]');
     require(visible(turn) && turn.querySelector('.me')?.textContent.includes("明天早上要帶傘嗎"), "the Alt+Space question arrived in the open quick conversation");
     require(visible(turn.querySelector('.ra .chat-message[data-reply]')) && turn.querySelector('.ra .chat-message[data-reply]').textContent.includes("出門記得帶傘"), "its answer shows below its public step");
-    const meta = turn.querySelector('.ra-face')?.getAttribute('title') ?? "";
+    const meta = turn.querySelector('.message-work')?.dataset.tooltip ?? "";
     require(/luna/i.test(meta) && !/\bsol\b/i.test(meta), `the answer names the quick model that answered it: ${meta}`);
     require(document.querySelector('.conversation-trigger')?.textContent.includes("快速提問"), "the quick conversation stays open");
     require(!document.querySelector('.tn[data-id="1"]'), "formal history stays out of quick questions");
@@ -3225,7 +3295,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slime-states") {
     const face = id => document.querySelector(`.mb-row[data-member="${id}"] svg.slime`);
-    const wanted = { 1: ["thinking", "slime-thinking-body"], 2: ["working", "slime-working-body"], 3: ["computer", "slime-computer-body"] };
+    const wanted = { 1: ["thinking", "slime-dot-pulse"], 2: ["working", "slime-ribbon-orbit"], 3: ["computer", "slime-computer-body"] };
     for (const [id, [state, animation]] of Object.entries(wanted)) {
       const svg = face(id);
       require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);

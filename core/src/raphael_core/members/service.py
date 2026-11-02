@@ -261,6 +261,8 @@ class MembersService:
         self._settings = SettingsStore(conn)
         from .activity import Activity
         self.activity = getattr(background, "activity", None) or Activity(notify)
+        self.activity.owner_waiting = self.waiting_members
+        self.activity.language = lambda: self._ui_language({})
         self._background = background
         self._memory = memory
         self._language = language
@@ -275,6 +277,7 @@ class MembersService:
         self._raphael_avatar = local_dir / RAPHAEL_AVATAR_DIR
         self._pictures: dict[Path, _Picture] = {}
         self._viewing: int | None = None
+        self.activity.viewing = lambda: self._viewing
         self._waiting_sources: list[Callable[[], Iterable[int]]] = []
         self._events = None
         self._event_poll_task: asyncio.Task | None = None
@@ -573,6 +576,7 @@ class MembersService:
         self, member: Member, unread: set[int], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(member.id)
+        activity, activity_label = self.activity.describe(member.id, waiting)
         view: dict[str, Any] = {
             **{field: getattr(member, field) for field in PROFILE_FIELDS},
             "id": member.id,
@@ -589,7 +593,8 @@ class MembersService:
             "created": member.created_at_ms,
             "unread": member.id in unread,
             "waiting": member.id in waiting,
-            "activity": self.activity.state(member.id),
+            "activity": activity,
+            "activity_label": activity_label,
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
@@ -602,6 +607,7 @@ class MembersService:
         self, language: str, unread: set[int], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(0)
+        activity, activity_label = self.activity.describe(0, waiting)
         view: dict[str, Any] = {
             "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
             "notify": False, "ask_before_members": False, "pinned": self._chief_pinned(), "hidden": False, "draft_first": True,
@@ -619,7 +625,8 @@ class MembersService:
             "created": 0,
             "unread": 0 in unread,
             "waiting": 0 in waiting,
-            "activity": self.activity.state(0),
+            "activity": activity,
+            "activity_label": activity_label,
             "preview": "" if last is None else _preview(last),
             "last_at": None if last is None else last.created_at_ms,
         }
@@ -984,6 +991,7 @@ class MembersService:
         member_id = _whole(params, "id")
         if not self.store.exists(member_id):
             raise RpcError(INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"})
+        self.activity.seen(member_id)
         if self.store.mark_read(member_id):
             self._changed()
         return {}
@@ -996,6 +1004,7 @@ class MembersService:
                 raise RpcError(
                     INVALID_PARAMS, "Invalid params: no such member", {"kind": "not_found"}
                 )
+            self.activity.seen(member_id)
             if self.store.mark_read(member_id):
                 self._changed()
         self._viewing = member_id
@@ -1072,9 +1081,13 @@ class MembersService:
         params = {**arguments, "member_id": target}
         if name in ("routine_update", "routine_delete"):
             routine_id = self._routine_id(params)
-            if self.store.routine(routine_id).member_id != target:
+            routine = self.store.routine(routine_id)
+            if routine.member_id != target:
                 raise invalid_params("routine belongs to another speaker")
-        return await handlers[name](params)
+        result = await handlers[name](params)
+        if name == "routine_delete":
+            result["routine"] = {"id": routine.id, "title": routine.title, "member_id": routine.member_id}
+        return result
 
     def admin_confirmation(self, name: str, arguments: dict, language: str, *, question: bool = True) -> str:
         from ..agent.team_admin import confirmation

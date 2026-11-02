@@ -7,7 +7,7 @@
 // A member's face is a slime (slime.ts), whatever an older build stored for it. Raphael's face is
 // the emblem or his picture (avatar.ts).
 
-import { slimeFaceHTML } from "./slime";
+import { presenceAttrs, slimeFaceHTML } from "./slime";
 import { avatarHTML } from "./avatar";
 import { catalogs, t } from "./i18n";
 import { esc, ico } from "./ui";
@@ -166,7 +166,7 @@ export const initialOf = (name: string): string => Array.from(name.trim())[0] ??
  * Decorative: whoever shows it names it.
  */
 export function faceHTML(member: { id: number; name: string; avatar?: string | null; avatar_url?: string | null }, size: number, o: { loop?: boolean; cls?: string } = {}): string {
-  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls });
+  if (member.id === RAPHAEL_ID) return avatarHTML({ size, loop: o.loop, cls: o.cls }).replace("<span", `<span${presenceAttrs(member.id)}`);
   return slimeFaceHTML(member, size, o.cls);
 }
 

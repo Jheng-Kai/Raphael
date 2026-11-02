@@ -5,6 +5,7 @@ import { esc, ico, iconButton } from "./ui";
 export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement; thread: HTMLElement; scroll: HTMLElement; load(current: () => boolean): Promise<void>; changed?(open: boolean): void }) {
   let opened = false, query = "", index = -1, epoch = 0, complete = false, positioned = false;
   let marks: HTMLElement[] = [], timer: ReturnType<typeof setTimeout> | undefined;
+  let painted: {query: string; text: string | null; marks: HTMLElement[]} | undefined;
   o.bar.className = "ra-find";
   o.bar.hidden = true;
   o.bar.innerHTML = `<span class="ra-find-ic">${ico("search")}</span><input type="search" class="ra-find-input" maxlength="200" autocomplete="off" spellcheck="false" aria-label="${esc(t("agent.search"))}" placeholder="${esc(t("agent.search"))}">` +
@@ -23,6 +24,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     if (complete) position();
   });
   function clear(): void {
+    painted = undefined;
     for (const mark of o.thread.querySelectorAll('mark[data-find-match]')) mark.replaceWith(...mark.childNodes);
     o.thread.normalize(); marks = [];
   }
@@ -31,13 +33,17 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     count.textContent = !query ? "" : marks.length ? `${index + 1}/${marks.length}` : t("chat.findEmpty");
     for (const button of o.bar.querySelectorAll<HTMLButtonElement>('[data-find="next"], [data-find="previous"]')) button.disabled = !complete || !marks.length;
     if (scroll && marks[index]) {
-      const mark = marks[index], message = mark.closest<HTMLElement>('.chat-message');
+      const mark = marks[index], message = mark.closest<HTMLElement>('.chat-message, .timeline-event, .event-group');
+      for (let group = mark.closest('details'); group; group = group.parentElement?.closest('details') ?? null) {
+        if (!group.open && !group.querySelector(':scope > summary')?.contains(mark)) group.open = true;
+      }
       // A collapsed owner preview must reveal the exact occurrence being visited.
       message?.classList.add("is-search-expanded");
       mark.scrollIntoView?.({ block: "center", inline: "nearest" });
     }
   }
   function refresh(newest = false): void {
+    if (opened && complete && painted?.query === query && painted.text === o.thread.textContent && painted.marks.every(mark => o.thread.contains(mark))) return;
     clear();
     if (!opened || !query || !complete) { if (!query) position(); return; }
     const words = query.toLocaleLowerCase();
@@ -46,7 +52,8 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     while (walker.nextNode()) {
       const node = walker.currentNode as Text, parent = node.parentElement;
       const hidden = parent?.closest('[hidden]');
-      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th') && !parent.closest('button, .work-section') && (!hidden || !o.thread.contains(hidden))) nodes.push(node);
+      const event = parent?.closest('.event-line');
+      if (parent?.closest('.message-text, .message-code code, .message-table td, .message-table th, .event-line') && (!parent.closest('button, .work-section') || event) && (!hidden || !o.thread.contains(hidden))) nodes.push(node);
     }
     for (const node of nodes) {
       const text = node.data, lower = text.toLocaleLowerCase(), fragment = document.createDocumentFragment();
@@ -61,6 +68,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
     }
     index = newest ? marks.length - 1 : Math.min(Math.max(index, 0), marks.length - 1);
     position(newest);
+    painted = {query, text: o.thread.textContent, marks: [...marks]};
   }
   async function search(): Promise<void> {
     const mine = ++epoch;
@@ -80,7 +88,7 @@ export function mountConversationFind(o: { button: HTMLElement; bar: HTMLElement
   function open(): void { opened = true; o.changed?.(true); o.bar.hidden = false; o.button.setAttribute('aria-expanded', 'true'); input.focus({preventScroll:true}); }
   function close(focus = true): void {
     const viewport = o.scroll.getBoundingClientRect();
-    const anchor = marks[index]?.closest<HTMLElement>('.chat-message') ?? [...o.thread.querySelectorAll<HTMLElement>('.chat-message, .message-text')].find(el => {
+    const anchor = marks[index]?.closest<HTMLElement>('.chat-message, .timeline-event, .event-group') ?? [...o.thread.querySelectorAll<HTMLElement>('.chat-message, .message-text')].find(el => {
       const box = el.getBoundingClientRect(); return box.bottom > viewport.top && box.top < viewport.bottom;
     });
     const top = anchor?.getBoundingClientRect().top;

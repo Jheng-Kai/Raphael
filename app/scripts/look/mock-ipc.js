@@ -2,6 +2,34 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.presence) {
+    const sample = data.presenceSample;
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4));
+    const working = variant.presence === "working";
+    const turn = {...base, id: 651, question: sample.question, text: working ? "" : sample.answer, status: working ? "running" : "done", task: null, steps: [], handoffs: [],
+      model: "sample/model", cost_usd: .001, messages: [{seq: 1, kind: "progress", text: sample.progress, at_ms: base.created_at_ms + 1000}, ...working ? [] : [{seq: 2, kind: "reply", text: sample.answer, at_ms: base.created_at_ms + 3000}]]};
+    data.turns = [turn];
+    data.members.forEach(member => { member.activity = "idle"; member.activity_label = ""; member.waiting = false; });
+    const states = variant.presence === "states" ? ["thinking", "working", "blocked"] : [variant.presence === "blocked" ? "blocked" : variant.presence === "colleague" ? "waiting" : working ? "working" : variant.presence === "hover" ? "searching" : "idle"];
+    states.forEach((state, i) => Object.assign(data.members.find(member => member.id === i + 1), {activity: state, activity_label: state === "idle" ? "" : sample.progress, waiting: state === "blocked"}));
+    if (["events", "collapse"].includes(variant.presence)) {
+      data.routines.find(routine => routine.id === 2).title = sample.routine;
+      turn.messages = Array.from({length: variant.presence === "collapse" ? 3 : 1}, (_, i) => ({seq: i + 1, kind: "event", text: JSON.stringify({type: "routine", action: "created", id: 2, name: sample.routine}), at_ms: turn.created_at_ms + i}));
+    }
+    if (variant.presence === "calendar") turn.messages = [{seq: 1, kind: "event", text: JSON.stringify({type: "calendar", action: "created", id: 1, name: sample.calendar, date: "2026-10-24"}), at_ms: turn.created_at_ms}];
+    if (variant.presence === "spacing") turn.messages = [
+      {kind: "event", text: JSON.stringify({type: "routine", action: "created", id: 2, name: sample.routine})},
+      {kind: "reply", text: sample.answer},
+      {kind: "event", text: JSON.stringify({type: "routine", action: "updated", id: 2, name: sample.routine})},
+      {kind: "media", text: JSON.stringify({type: "link", url: sample.source, title: sample.routine, description: sample.answer})},
+      {kind: "event", text: JSON.stringify({type: "calendar", action: "created", id: 1, name: sample.calendar, date: "2026-10-24"})},
+      {kind: "event", text: JSON.stringify({type: "routine", action: "deleted", id: 2, name: sample.routine})},
+      {kind: "reply", text: sample.answer},
+    ].map((message, index) => ({...message, seq: index + 1, at_ms: turn.created_at_ms + index}));
+    if (variant.presence === "detail") turn.messages.push({seq: 3, kind: "reply", text: sample.secondAnswer, at_ms: turn.created_at_ms + 3000});
+    if (variant.presence === "gap") data.turns.push(...[5,35].map((minutes, i) => ({...structuredClone(turn), id: 652 + i, created_at_ms: turn.created_at_ms + minutes * 60000})));
+    data.rooms.forEach(room => { room.preview = sample.answer; room.preview_member_id = 1; });
+  }
   const routineEventChoices = variant.noEventApps ? [] : [
     {id:'gmail-mail',toolkit:'gmail',slug:'GMAIL_FETCH_EMAILS',input:'',label:'新郵件',app:'composio:gmail',app_name:'Gmail'},
     {id:'calendar-event',toolkit:'googlecalendar',slug:'GOOGLECALENDAR_EVENTS_LIST',input:'',label:'新行程',app:'composio:googlecalendar',app_name:'Google 日曆'},
@@ -374,6 +402,7 @@ export function installMock(fixture, config = {}, target = window) {
     own(2, "供應商會議", octoberAt(23, 13), octoberAt(23, 14, 30), { ...addedBy(1), notes: "從今天的信件整理：對方想確認交期。" }),
     own(3, "交付截止日", octoberAt(22, 0), octoberAt(23, 0), { all_day: true }),
   ];
+  if (variant.presence === "calendar") data.home.calendar_events.find(item => item.id === "own:1").title = data.presenceSample.calendar;
   if (variant.calendarGoogle && variant.calendarGoogle !== "connected") data.home.calendar_events = data.home.calendar_events.filter(item => item.kind === "own");
   if (variant.homeOwnEvents) {
     const preview = data.home.calendar_events.find(item => item.id === "own:1");

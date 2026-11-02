@@ -113,7 +113,7 @@ async def test_a_routines_run_of_raphaels_is_quiet_too(make_rig, conn):
     assert rig.reports() == []  # in its thread only
     await until(lambda: not rig.service.activity.running)
     activity = [data['state'] for method, data in rig.notifications if method == 'member.activity']
-    assert activity == ['thinking', 'done', 'idle']
+    assert activity == ['waiting', 'thinking', 'done', 'idle']
 
 
 async def test_a_task_of_a_member_that_is_gone_ends_without_running(make_rig):

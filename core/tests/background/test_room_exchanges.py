@@ -52,7 +52,7 @@ async def test_api_room_team_talks_through_shared_worker_and_ends_by_itself(make
         for identifier in (0, alice.id, bob.id):
             activity = [data['state'] for method, data in rig.notifications
                         if method == 'member.activity' and data['member_id'] == identifier]
-            assert activity[0] == 'thinking' and activity[-2:] == ['done', 'idle']
+            assert activity[:2] == ['waiting', 'thinking'] and activity[-2:] == ['done', 'idle']
         assert rig.client.chat_calls[3]["tools"]
         assert "PRECISE-PLANNER" in rig.client.chat_calls[1]["messages"][0]["content"]
         assert "CAUTIOUS-ENGINEER" in rig.client.chat_calls[2]["messages"][0]["content"]

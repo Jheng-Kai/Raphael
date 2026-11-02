@@ -63,7 +63,10 @@ async def test_a_request_to_add_to_todays_schedule_lands_in_the_store_and_on_hom
     # Home's inbox is what needs the owner; an event on the calendar is not.
     assert value["today"] == []
     [turn] = (await rig.call("agent.history.list", {"member_id": secretary.id}))["turns"]
-    assert [m["text"] for m in turn["messages"] if m["kind"] == "event"] == ["已加入行程 · 10/21 15:00 牙醫"]
+    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event"] == [{
+        "type": "calendar", "action": "created", "id": item["event_id"], "name": "牙醫", "date": TODAY,
+        "text": "已加入行程 · 10/21 15:00 牙醫",
+    }]
 
 
 async def test_a_subscription_brain_reaches_the_same_calendar_through_its_mcp_bridge(setup, tmp_path, home):
@@ -129,7 +132,10 @@ async def test_any_member_changes_and_removes_what_any_other_added(setup, client
     await typed(rig, "取消牙醫", second.id)
     assert await own_items(rig) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": second.id}))["turns"]
-    assert [m["text"] for m in turn["messages"] if m["kind"] == "event"] == ["已刪除行程 · 10/21 17:00 牙醫"]
+    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event"] == [{
+        "type": "calendar", "action": "deleted", "id": added["id"], "name": "牙醫", "date": TODAY,
+        "text": "已刪除行程 · 10/21 17:00 牙醫",
+    }]
 
 
 @pytest.mark.parametrize("verdict", ["run", "ask", "deny"])

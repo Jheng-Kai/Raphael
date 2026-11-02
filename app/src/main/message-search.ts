@@ -4,14 +4,15 @@ import { t } from "./i18n";
 import { conversationTitle, relativeTime } from "./conversation-list";
 import { esc, patchHTML } from "./ui";
 import { describeError } from "./format";
+import { publicEventText } from "./public-event";
 
 interface Hit {
   id: number; member_id: number; conversation_id: number; conversation_title: string;
-  question: string; text: string; created_at_ms: number;
+  question: string; text: string; created_at_ms: number; messages?: {kind: string; text: string}[];
 }
 
 function snippet(hit: Hit, query: string): string {
-  const text = [hit.question, hit.text].find(text => text.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? hit.question;
+  const text = [hit.question, hit.text, ...(hit.messages ?? []).filter(message => message.kind === "reply" || message.kind === "event").map(message => publicEventText(message.text))].find(text => text.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? hit.question;
   const index = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
   const start = Math.max(0, index - 24), end = Math.min(text.length, Math.max(index, start) + query.length + 65);
   if (index < 0) return esc(text.slice(0, 100));

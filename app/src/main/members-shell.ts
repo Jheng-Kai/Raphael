@@ -471,7 +471,7 @@ export function createMembers(host: MembersHost): MembersShell {
       } else if (event.type === "MemoryChanged") {
         details.refreshMemory(event.member_id, event.space);
       } else if (event.type === "MemberActivity") {
-        setSlimeState(event.member_id, event.state);
+        setSlimeState(event.member_id, event.state, event.label);
       }
     },
     hide() {

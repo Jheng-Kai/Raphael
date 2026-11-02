@@ -1,6 +1,6 @@
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
-import { idleCost, slimeBoard, slimePointer, slimeSharp } from "./slime-board.mjs";
+import { idleCost, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
 
 export function finiteMotionSettled() {
@@ -394,6 +394,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.addStyleTag({ content: `*, *::before, *::after { animation-delay: -${Number(step.at)}ms !important; animation-play-state: paused !important; }` });
       break;
     case "slime-board": return await page.evaluate(slimeBoard, step.rows, step.columns);
+    case "slime-parts": return await page.evaluate(slimeParts);
     case "slime-sharp": {
       const revision = process.env.LOOK_SLIME_BASELINE;
       return await slimeSharp(page, undefined, evidenceDirectory && `${evidenceDirectory}/sharp-${revision ?? "current"}-${await page.evaluate(() => document.documentElement.dataset.theme)}-${page.viewport().width}`, revision);

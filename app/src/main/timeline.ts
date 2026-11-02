@@ -1,9 +1,8 @@
 import { missingHTML, missingText } from "./missing";
-import { ownerFaceHTML } from "./owner-avatar";
 import { fileKind, sentFileHTML } from "./attachments";
 import { computerCardsHTML, computerResumedLineHTML } from "./computer-card";
 import { connectorCardsHTML, resumedLineHTML } from "./connector-card";
-import { NAME, eventLineHTML } from "./event-line";
+import { NAME, eventLineHTML, eventPeopleHTML } from "./event-line";
 import { handoffGroupHTML } from "./handoff-line";
 import { mailCardsHTML, mailHandedLinesHTML } from "./mail-card";
 import { pageCardsHTML } from "./page-card";
@@ -19,7 +18,7 @@ import { mcpProposalsHTML } from "./mcp-proposal";
 // so that the page can draw again at any time and only what changed moves. Every word that came from
 // the core goes through `esc`.
 
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { routineSentenceHTML } from "./members";
 import type { MessageKey } from "./i18n/zh-TW";
 
@@ -554,6 +553,8 @@ export interface TurnLook {
   regenerateTurnId?: number;
   /** The face of who answers (Raphael's, avatar.ts, or the member's): `loop` while at work on it. */
   face: (loop: boolean) => string;
+  liveFace?: () => string;
+  activityLabel?: string;
   /** The words being looked for, marked wherever they are; blank for none. */
   query?: string;
   /** The name of member `id` (0 is Raphael), for the lines of colleague events. */
@@ -586,11 +587,6 @@ export function filesHTML(files: readonly TurnAttachment[] | undefined): string 
   return `<div class="me-files">${visual.length ? `<div class="attachment-grid${visual.length > 1 ? " is-multiple" : ""}">${visual.map(sentFileHTML).join("")}</div>` : ""}${rest.map(sentFileHTML).join("")}</div>`;
 }
 
-/** Pending requests and running turns share the same public work line. */
-const liveWorkHTML = (latest = t("agent.thinking")): string =>
-  `<span class="think" role="img" aria-label="${esc(t("agent.thinking"))}"><i></i><i></i><i></i></span>` +
-  `<span class="work-latest">${esc(latest)}</span><span class="work-time"></span>`;
-
 /** Background task controls without raw tool labels or a collapsed steps box. */
 function waitsAtCard(turn: AgentTurn): boolean {
   return !!(turn.permissions?.some(card => card.state === "pending") || turn.secrets?.some(card => card.state === "pending" || card.state === "failed") || turn.connectors?.some(card => card.state === "pending" || card.state === "authorizing") || turn.computers?.some(card => card.state === "control") || turn.owner_questions?.some(question => question.state === "asked"));
@@ -614,10 +610,10 @@ function bubbleHTML(words: string, files: readonly TurnAttachment[] | undefined,
   return files?.length ? `<div class="owner-content">${filesHTML(files)}${bubble}</div>` : bubble;
 }
 
-export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true): string {
+export function messageActionsHTML(time: number, regenerate = false, owner?: "edit" | "cancel", actionable = true, work = ""): string {
   const action = (icon: Parameters<typeof iconBtn>[0], label: string, act: string): string =>
     iconBtn(icon, label, ` data-act="${act}"`).replace(" title=", " data-tooltip=");
-  return `<div class="message-actions"><time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` +
+  return `<div class="message-actions"><time tabindex="0" data-tooltip="${esc(new Date(time).toLocaleString())}" datetime="${esc(new Date(time).toISOString())}">${esc(formatClock(time))}</time>` + work +
     (actionable ? action("reply", t("chat.reply"), "reply-message") : "") +
     action("copy", t("chat.copy"), "copy-message") +
     (owner ? action(owner === "edit" ? "pencil" : "x", t(owner === "edit" ? "chat.edit" : "common.cancel"), `${owner}-message`) : "") +
@@ -629,7 +625,20 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
   const expanded = state.expandedMessages.has(`${turn.id}:${key}`);
   return `<div class="chat-message${expanded ? " is-expanded" : ""}" data-message="${esc(key)}"${reply ? ' data-reply="true"' : ""}>` +
     (reply ? replyContentHTML(text, query, turn.status === "running") : `<div class="ans progress"><div class="message-text">${messageHTML(text, query)}</div></div>`) +
-    messageActionsHTML(time, regenerate, undefined, reply) + (reply ? previewCardsHTML(text) : "") + `</div>`;
+    messageActionsHTML(time, regenerate, undefined, reply, reply ? workActionHTML(turn, state) : "") + (reply ? previewCardsHTML(text) : "") + `</div>`;
+}
+
+function workActionHTML(turn: AgentTurn, state: TimelineState): string {
+  if (!(turn.steps?.length || turn.messages?.some(m => m.kind === "progress" || m.kind === "thinking") || turn.model)) return "";
+  const end = turn.task?.finished_at_ms ?? turn.messages?.find(m => m.kind === "reply")?.at_ms ?? Math.max(turn.created_at_ms, ...(turn.steps ?? []).map(s => s.at_ms + s.ms));
+  const label = t("chat.workedFor", { p0: Math.max(0, Math.round((end - turn.created_at_ms) / 1000)) });
+  return btn(`${ico("check")}<span>${esc(label)}</span>`, "sm message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" data-tooltip="${esc(answerMeta(turn) || label)}"`);
+}
+
+function livePresenceHTML(look: TurnLook, progress?: string): string {
+  const face = look.liveFace?.() ?? look.face(true);
+  const current = progress ? face.replace(/\sdata-(?:tooltip|presence-member)="[^"]*"/g, "") : face;
+  return `<div class="live-presence" role="status"${progress || look.activityLabel ? ` data-tooltip="${esc(progress || look.activityLabel || "")}"` : ""}>${current}</div>`;
 }
 
 /** Validates an http(s) URL; returns null for any other scheme or invalid URL. */
@@ -732,24 +741,18 @@ function meetingEvent(text: string): { room_id: number; name: string } | null {
 /** One public line of Raphael's work (《告。…》 on the desktop) as the window shows it: plain. */
 const plainLine = (text: string): string => plainReplies([text])[0];
 
-/** Keep all work behind one closed chip; running turns show their latest public update. */
+/** Work detail opens from the reply action; events stay in the ordered timeline. */
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
-  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && !learnedSkillEvent(m.text) && m.text.trim())
+  const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
-  if (!messages.length && !(turn.steps?.length) && !live && !revealing) return "";
+  if (!messages.length && !(turn.steps?.length) && !turn.model && !live && !revealing) return "";
   const start = state.workStartedAt.get(turn.id) ?? turn.created_at_ms;
-  const firstReply = (turn.messages ?? []).find(m => m.kind === "reply" && m.at_ms >= turn.created_at_ms)?.at_ms;
-  const end = live ? state.nowMs : turn.task?.finished_at_ms ?? firstReply ?? Math.max(turn.created_at_ms, ...messages.map(m => m.at_ms), ...(turn.steps ?? []).map(step => step.at_ms + step.ms));
-  const seconds = Math.max(0, Math.round((end - start) / 1000));
   const open = state.thinkingOpen.get(turn.id) ?? false;
-  const latest = [...messages].reverse().find(m => m.kind === "progress" || m.kind === "thinking");
-  const label = live ? liveWorkHTML(latest?.text) : `${ico("check")}<span>${esc(t("chat.workedFor", { p0: seconds }))}</span>`;
-  const body = messages.map(m => `<div class="chat-message" data-message="${m.seq}"><div class="${m.kind === "event" ? "turn-event" : "work-progress"}">${messageHTML(m.text, query)}</div></div>`).join("") +
+  const body = (answerMeta(turn) ? `<p class="work-meta">${esc(answerMeta(turn))}</p>` : "") + messages.map(m => `<div class="chat-message" data-message="${m.seq}"><div class="work-progress">${messageHTML(m.text, query)}</div></div>`).join("") +
     ((turn.steps?.length ?? 0) > 0 ? `<ol class="step-list">${shownSteps(turn).map(step => stepHTML(step, false)).join("")}</ol>` : "");
-  if (!body) return `<div class="work-section think-box${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}><div class="btn work-toggle" role="status">${label}</div></div>`;
+  if (!body) return "";
   return `<div class="work-section think-box${open ? " is-open" : ""}${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}>` +
-    btn(`${label}<span class="work-chevron">${ico("right")}</span>`, "work-toggle", ` data-act="thinking" aria-expanded="${open}" aria-controls="work-${turn.id}"`) +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
 }
 
@@ -823,14 +826,16 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
 }
 
 /** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", waitingForOwner = false): string {
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", fallback = "", waitingForOwner = false): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
   const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
+  const events = publicEventsHTML(turn);
   const settledDraft = isSettledDraftTurn(turn);
-  return work + settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
+  return settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media" || message.kind === "event").map(message => {
+    if (message.kind === "event") return events.get(message.seq) ?? "";
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
     if (!text) return "";
     if (message.kind === "media") {
@@ -840,7 +845,7 @@ function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, 
       return media ? `<div class="chat-message" data-message="${message.seq}">${mediaCardHTML(media, query, message.seq)}</div>` : "";
     }
     return `<div data-seq="${message.seq}">${messageBlockHTML(turn, String(message.seq), text, message.at_ms, query, state, true, regenerate && message.seq === lastReply)}</div>`;
-  }).join("");
+  }).join("") + (replies.length ? "" : fallback) + work;
 }
 
 /**
@@ -855,11 +860,42 @@ function learnedSkillEvent(text: string): string | null {
 
 function turnEventsHTML(turn: AgentTurn, look: TurnLook, said: boolean): string {
   const owner = said ? { author: t("rooms.owner"), text: turn.question.trim() } : undefined;
-  const meetings = (turn.messages ?? []).filter(m => m.kind === "event").map(m => meetingEvent(m.text)).filter(event => event !== null);
   return handoffGroupHTML((turn.handoffs ?? []).map(task => ({ task, face: look.memberFace?.(task.member_id) ?? "",
     request: task.mode === "consult" && task.request ? { author: look.memberName?.(task.from_member_id) ?? "", text: task.request } : owner,
-    name: look.memberName?.(task.member_id) || task.member_name }))) +
-    meetings.map(event => `<div class="conversation-event-line">${btn(eventLineHTML(t("rooms.meetingOpened", { p0: NAME }), ico("chat"), event.name), "event-open", ` data-meeting-room="${event.room_id}"`)}</div>`).join("");
+    name: look.memberName?.(task.member_id) || task.member_name })));
+}
+
+function publicEventsHTML(turn: AgentTurn): Map<number, string> {
+  const labels = {
+    "routine.created": "event.routine.created", "routine.updated": "event.routine.updated", "routine.deleted": "event.routine.deleted",
+    "calendar.created": "event.calendar.created", "calendar.updated": "event.calendar.updated", "calendar.deleted": "event.calendar.deleted",
+  } as const satisfies Record<string, MessageKey>;
+  const groups: { kind: string; lines: string[]; names: Map<string, {name: string; face: string}>; seq: number }[] = [];
+  for (const message of [...(turn.messages ?? [])].sort((a,b) => a.seq - b.seq)) {
+    if (message.kind !== "event") { groups.push({kind: "break", lines: [], names: new Map(), seq: message.seq}); continue; }
+    let event: {type?: string; action?: string; id?: number; name?: string; date?: string; member_id?: number} = {};
+    try { event = JSON.parse(message.text); } catch { /* Historical events remain readable without a guessed target. */ }
+    const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
+    const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
+    const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
+    const words = known ? eventLineHTML(t(labels[`${event.type}.${event.action}` as keyof typeof labels], {p0: NAME}), ico(event.type === "routine" ? "clock" : "calendar"), event.name!) : meeting ? eventLineHTML(t("rooms.meetingOpened", {p0: NAME}), ico("chat"), meeting.name) : skill ? eventLineHTML(t("skills.learnedNotice", {p0: NAME}), ico("check"), skill) : `<span class="sys event-line">${esc(plainLine(message.text.trim().startsWith("{") || message.text.trim().startsWith("[") ? t("event.changed") : message.text))}</span>`;
+    const attrs = meeting ? `data-meeting-room="${meeting.room_id}"` : event?.type === "routine" ? `data-act="open-routine" data-routine="${event.id}"${Number.isSafeInteger(event.member_id) && event.member_id! >= 0 ? ` data-routine-member="${event.member_id}"` : ""}` : `data-act="open-calendar-event" data-event="${event?.id}" data-date="${esc(event?.date ?? "")}"`;
+    const openable = meeting || known && event?.action !== "deleted" && (event.type === "routine" || /^\d{4}-\d{2}-\d{2}$/.test(event.date ?? ""));
+    const line = `<div class="conversation-event-line timeline-event" data-timeline-event="${turn.id}:${message.seq}">${openable ? btn(words, "event-open", ` ${attrs}`) : words}</div>`;
+    const target = known ? {key: `${event.type}:${event.id}`, name: event.name!, face: ico(event.type === "routine" ? "clock" : "calendar")} : meeting ? {key: `meeting:${meeting.room_id}`, name: meeting.name, face: ico("chat")} : {key: kind, name: skill || t("event.changed"), face: ico("check")};
+    let group = groups[groups.length - 1];
+    if (group?.kind !== kind) { group = {kind, lines: [], names: new Map(), seq: message.seq}; groups.push(group); }
+    group.lines.push(line);
+    group.names.set(target.key, {name: target.name, face: target.face});
+  }
+  return new Map(groups.map(group => {
+    if (group.lines.length < 2) return [group.seq, group.lines.join("")];
+    const people = [...group.names.values()].slice(0, 3);
+    const slots = people.map((_, index) => `\u0000${index}\u0000`);
+    if (group.names.size > 3) slots.push(t("event.groupOthers", {p0: group.names.size - 3}));
+    const names = new Intl.ListFormat(getLocale(), {style: "long", type: "conjunction"}).format(slots);
+    return [group.seq, `<details class="handoff-event event-group" data-event-group="${turn.id}:${group.seq}"><summary>${eventPeopleHTML(t("event.group", {p0: group.lines.length, p1: names}), people)}</summary><div class="handoff-detail">${group.lines.join("")}</div></details>`];
+  }));
 }
 
 /** One question and its answer, with what was done in between. */
@@ -880,7 +916,6 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
-  const meta = esc(answerMeta(turn));
   const more = detail
     ? `<div class="tn-foot">${btn(ico("down"), "sm icon tn-more", ` data-act="detail" aria-expanded="${detailOpen}" aria-controls="tn-detail-${id}" aria-label="${esc(t("agent.detail"))}" title="${esc(t("agent.detail"))}"`)}</div>`
     : "";
@@ -895,18 +930,18 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (handed ? receivedLineHTML(turn, look) : "") +
     (resumed ? resumedLineHTML(turn) + secretResumedLineHTML(turn) + computerResumedLineHTML(turn) : "") +
     (asked
-      ? `<div class="me">${ownerFaceHTML()}` +
+      ? `<div class="me">` +
         `<div class="chat-message owner-message${state.expandedMessages.has(`${id}:question`) ? " is-expanded" : ""}" data-message="question" data-expandable="true">` +
         bubbleHTML(said ? messageHTML(turn.question.trim(), query, false, look.mentions) : "", turn.attachments, turn.quote, messageExpandHTML(turn.question, state.expandedMessages.has(`${id}:question`))) + messageActionsHTML(turn.created_at_ms, false, live || turn.status === "confirm" || turn.task?.state === "waiting" ? "cancel" : "edit") + `</div>` +
         `</div>`
       : "") +
     turnEventsHTML(turn, look, said) + mailHandedLinesHTML(turn, look) +
     (turn.route === "owner_input" ? "" : `<div class="ra${isBotRename(turn) ? " is-system-result" : ""}">` +
-    (isBotRename(turn) ? "" : `<span class="ra-face"${meta ? ` title="${meta}"` : ""}>${look.face(live || revealing)}</span>`) + `<div class="ra-body">` +
+    `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), waitingForOwner) + (turn.messages!.some(m => m.kind === "reply") ? "" : textAnswer)
-      : workSectionHTML(turn, state, query, revealing, waitingForOwner) + permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer) +
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), textAnswer, waitingForOwner)
+      : permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer + workSectionHTML(turn, state, query, revealing, waitingForOwner)) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
@@ -915,10 +950,10 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +
-    (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + (waitingForOwner ? "" : taskActionsHTML(turn, state)) +
-    `</div></div>`) +
-    (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null)
-      .map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + `</li>`
+    (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
+    (waitingForOwner || live || turn.task?.state === "waiting" ? "" : taskActionsHTML(turn, state)) +
+    (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm" ? livePresenceHTML(look, [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text) : "") +
+    `</div></div>`) + `</li>`
   );
 }
 
@@ -931,14 +966,13 @@ export const dayHTML = (label: string): string => `<li class="day"><span>${esc(l
  * question shows the chips of the files it was sent with.
  */
 export function pendingTurnHTML(question: string | null, _source: string, look: TurnLook, files: readonly TurnAttachment[] = [], request?: { id?: string; time: number; quote?: MessageQuote }, nowMs = Date.now(), expanded = false): string {
-  const start = request?.time ?? nowMs;
+  void nowMs;
   const words =
     question === null ? `<span class="shimmer">${esc(t("agent.hearing"))}</span>` : question.trim() === "" ? "" : messageHTML(question.trim(), "", false, look.mentions);
   return (
     `<li class="tn is-pending"${request?.id ? ` data-session="${esc(request.id)}"` : ""}>` +
-    `<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
-    `<div class="ra"><span class="ra-face">${look.face(true)}</span><div class="ra-body">` +
-    `<div class="work-section think-box is-live" data-work-start="${start}"><div class="btn work-toggle" role="status">${liveWorkHTML()}</div></div>` +
+    `<div class="me"><div class="chat-message owner-message${expanded ? " is-expanded" : ""}" data-message="question" data-expandable="true">${bubbleHTML(words, files, request?.quote, messageExpandHTML(question ?? "", expanded))}${request?.id ? messageActionsHTML(request.time, false, "cancel") : ""}</div></div>` +
+    `<div class="ra"><div class="ra-body">` + livePresenceHTML(look) +
     `</div></div></li>`
   );
 }
