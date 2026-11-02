@@ -310,7 +310,7 @@ describe("a continuous typed turn", () => {
     live = { ...live, messages: [{ seq: 1, kind: "progress", text: "《告。先確認今天的日期。》", at_ms: 1 }] };
     send({ type: "AgentTurn", turn_id: 1 });
     await vi.advanceTimersByTimeAsync(200);
-    expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .live-presence')?.dataset.tooltip).toBe(live.messages![0]!.text);
+    expect(document.querySelector<HTMLElement>('.tn[data-id="1"] .live-presence')?.dataset.tooltip).toBe("先確認今天的日期。");
     expect(document.querySelector('.tn[data-id="1"] .work-latest, .tn[data-id="1"] .think')).toBeNull();
     live = { ...live, status: "done", text: "今天星期五。", messages: [...live.messages!, { seq: 2, kind: "reply", text: "《答。今天星期五。》", at_ms: 2 }] };
     send({ type: "AgentTurn", turn_id: 1 });

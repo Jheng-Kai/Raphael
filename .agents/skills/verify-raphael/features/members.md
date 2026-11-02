@@ -237,7 +237,7 @@ not excepted. Telegram's 中斷連線, a pending person's reject and a mail draf
 
 ```powershell
 npm run look -- memory-clear-menu memory-clear-done memory-summary-menu memory-summary-done context-menu-memory-title context-menu-memory-summary details-memory global-private-memory --theme both --width 1120,720,1920x1080
-npm run look -- data data-clear-menu data-clear-undo context-menu-data usage-key-menu usage-key-removed context-menu-api-key messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
+npm run look -- data usage-key-menu usage-key-removed context-menu-api-key messaging-user-menu messaging-user-removed model-choices-local-menu context-menu-local-model --theme both --width 1120,720,1920x1080
 ```
 
 Each scene presses the real right button (the `right-click` driver step, which keeps the point it pressed) and its `context-menu` check asserts that the menu is open, starts
