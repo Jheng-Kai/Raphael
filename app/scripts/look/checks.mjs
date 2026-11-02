@@ -115,6 +115,8 @@ export function checkRendered(name, context = {}) {
       require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(bar), 'the same stream fills the window below its thin bar');
       require(visible(bar.querySelector('.av')) && visible(bar.querySelector('[data-desktop="return"]')), 'the bar identifies the member and offers handback');
       require(frame.getBoundingClientRect().width > innerWidth * .9 && bar.getBoundingClientRect().height <= 64, 'the screen has window width and a thin bar');
+      const strip = document.querySelector('.window-chrome'), stripStyle = getComputedStyle(strip);
+      require(strip.getBoundingClientRect().left === 0 && stripStyle.borderTopLeftRadius === '0px' && stripStyle.backgroundColor === getComputedStyle(panel).backgroundColor, 'the window strip reads as one surface with the bar');
       require(!document.querySelector('[data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
