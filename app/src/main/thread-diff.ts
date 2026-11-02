@@ -11,14 +11,18 @@ function handoffSkeleton(html: string): string {
   return template.innerHTML;
 }
 
+const LIVE_TOOLTIP = /(class="live-presence"[^>]*?) data-tooltip="[^"]*"/g;
+const LIVE_LABEL = /(<span class="live-action">)[^<]*/g;
+
+/** A line without its live words. It runs on every draw of a working turn, so it reads the text and never parses it. */
 function liveSkeleton(html: string): string {
-  const template = document.createElement("template"); template.innerHTML = html;
-  for (const presence of template.content.querySelectorAll(".live-presence")) {
-    presence.removeAttribute("data-tooltip");
-    const label = presence.querySelector(".live-action");
-    if (label) label.textContent = "";
-  }
-  return template.innerHTML;
+  return html.replace(LIVE_TOOLTIP, "$1").replace(LIVE_LABEL, "$1");
+}
+
+function liveWords(html: string): string[] {
+  const template = document.createElement("template");
+  template.innerHTML = [...html.matchAll(LIVE_LABEL)].map(([label]) => `${label}</span>`).join("");
+  return [...template.content.children].map(label => label.textContent ?? "");
 }
 
 function updateEvent(node: HTMLDetailsElement, made: HTMLDetailsElement): void {
@@ -68,9 +72,24 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
   let at = 0;
   for (const line of wanted) {
     // A newly inserted face samples the current phase; an existing face keeps its running clock.
-    const identity = line.html.replace(/style="[^"]*"/g, style => style.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, ""));
+    const identity = line.html.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, "");
     let node = before.get(line.key);
     if (!node || drawn.get(node) !== identity) {
+      const previous = node && drawn.get(node);
+      if (node && previous && identity.includes('class="live-action"') && liveSkeleton(previous) === liveSkeleton(identity)) {
+        const words = liveWords(identity);
+        node.querySelectorAll<HTMLElement>(".live-action").forEach((label, index) => {
+          const text = words[index] ?? "";
+          const presence = label.closest<HTMLElement>(".live-presence")!;
+          if (label.textContent !== text) label.textContent = text;
+          if (presence.dataset.tooltip !== text) presence.dataset.tooltip = text;
+        });
+        drawn.set(node, identity);
+        keep.add(node);
+        const here = thread.children[at++];
+        if (here !== node) thread.insertBefore(node, here ?? null);
+        continue;
+      }
       const template = document.createElement("template"); template.innerHTML = line.html;
       const made = template.content.firstElementChild as HTMLElement;
       made.dataset.key = line.key;
@@ -78,21 +97,6 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
       drawn.set(made, identity);
       if (!node && options.arrives?.(line)) made.classList.add("is-new");
       if (node) {
-        const previous = drawn.get(node);
-        if (previous && node.querySelector(".live-action") && liveSkeleton(previous) === liveSkeleton(identity)) {
-          const oldLines = node.querySelectorAll<HTMLElement>(".live-action"), nextLines = made.querySelectorAll<HTMLElement>(".live-action");
-          oldLines.forEach((label, index) => {
-            const text = nextLines[index].textContent ?? "";
-            const presence = label.closest<HTMLElement>(".live-presence")!;
-            if (label.textContent !== text) label.textContent = text;
-            if (presence.dataset.tooltip !== text) presence.dataset.tooltip = text;
-          });
-          drawn.set(node, identity);
-          keep.add(node);
-          const here = thread.children[at++];
-          if (here !== node) thread.insertBefore(node, here ?? null);
-          continue;
-        }
         if (previous && /class="(?:handoff-event|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
           const old = new Map(outerEvents(node).map(event => [eventKey(event), event]));
           for (const event of outerEvents(made)) updateEvent(old.get(eventKey(event))!, event);

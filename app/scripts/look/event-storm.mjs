@@ -57,7 +57,8 @@ export async function eventStorm(page, options) {
     seen.observer.observe(document.body, { childList: true, subtree: true });
     const proto = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
     Object.defineProperty(scroller, "scrollTop", { configurable: true, get() { return proto.get.call(this); }, set(value) { seen.scrollWrites++; proto.set.call(this, value); } });
-    seen.performance = new PerformanceObserver(list => { for (const entry of list.getEntries()) seen.longTaskMs += entry.duration; });
+    seen.longTasks = [];
+    seen.performance = new PerformanceObserver(list => { for (const entry of list.getEntries()) { seen.longTaskMs += entry.duration; seen.longTasks.push({ atMs: Math.round(entry.startTime - seen.startedMs), ms: Math.round(entry.duration) }); } });
     seen.performance.observe({ entryTypes: ["longtask"] });
     // Time the real input event through paint, excluding automation transport and scheduling.
     seen.keydown = event => {
@@ -128,7 +129,7 @@ export async function eventStorm(page, options) {
     const reads = Object.fromEntries([...new Set(calls)].sort().map(name => [name, calls.filter(method => method === name).length]));
     const input = type ? document.querySelector(type) : null;
     return { check: "busy-team", replacedLines: seen.replacedLines, replacedCards: seen.replacedCards, replacedFaces: seen.replacedFaces, scrollWrites: seen.scrollWrites,
-      reads, allReads: calls.length, memberReads: reads["members.list"] ?? 0, longTaskMs: Math.round(seen.longTaskMs),
+      reads, allReads: calls.length, memberReads: reads["members.list"] ?? 0, longTaskMs: Math.round(seen.longTaskMs), longTasks: seen.longTasks,
       fromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight), height: scroller.scrollHeight,
       keyMs: seen.keyMs, keySlowest: seen.keySlowest, startedMs: seen.startedMs, typed: seen.typed,
       typingIntact: !input || (seen.keyMs.length === seen.typed.length && input.value === seen.typed && document.activeElement === input && input.selectionStart === input.value.length),

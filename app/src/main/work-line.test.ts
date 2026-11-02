@@ -34,6 +34,10 @@ test("a live text change retains the thread, avatar, controls, focus and scroll"
   expect(thread.querySelector(".message-actions")).toBe(controls);
   expect(thread.scrollTop).toBe(150);
   expect(observer.takeRecords().every(record => (record.target as Element).closest?.(".live-presence"))).toBe(true);
+  render(`Reading "a&b" <sample>.md`);
+  expect(thread.firstElementChild).toBe(line);
+  expect(thread.querySelector(".live-action")?.textContent).toBe(`Reading "a&b" <sample>.md`);
+  expect(thread.querySelector(".live-presence")?.getAttribute("data-tooltip")).toBe(`Reading "a&b" <sample>.md`);
   observer.disconnect(); thread.remove();
 });
 

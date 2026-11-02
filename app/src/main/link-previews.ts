@@ -1,4 +1,4 @@
-import { messageUrl, messageUrls, urlLabel } from "./message-content";
+import { messageUrl, rememberedUrls, urlLabel } from "./message-content";
 import { esc } from "./ui";
 
 export interface LinkPreview {
@@ -27,7 +27,7 @@ function isLocalAddress(url: string): boolean {
 }
 
 export function previewCardsHTML(text: string): string {
-  const urls = messageUrls(text).slice(0, 3);
+  const urls = rememberedUrls(text).slice(0, 3);
   return urls.length ? `<div class="preview-cards">${urls.map(url =>
     `<button type="button" class="btn preview-card${isLocalAddress(url) ? " is-local" : ""}" data-act="open-url" data-url="${esc(url)}" data-preview-url="${esc(url)}" title="${esc(url)}">${contents(url)}</button>`).join("")}</div>` : "";
 }

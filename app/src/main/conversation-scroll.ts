@@ -13,7 +13,13 @@ export function mountConversationScroll(scroller: HTMLElement): void {
   };
   button.addEventListener("click", () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }));
   scroller.addEventListener("scroll", sync, { passive: true });
-  new MutationObserver(sync).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  // A draw waits for the next frame: reading the heights right after it would force its layout into the same task.
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; sync(); });
+  }).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
   if (typeof ResizeObserver === "function") {
     const resize = new ResizeObserver(sync);
     resize.observe(scroller);

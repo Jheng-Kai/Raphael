@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, test } from "vitest";
-import { messageHTML, messagePlainText, messageUrls, parseMessageBlocks, replyContentHTML, tablePlainText } from "./message-content";
+import { setLocale } from "./i18n";
+import { messageHTML, messagePlainText, messageUrls, parseMessageBlocks, rememberedUrls, replyContentHTML, tablePlainText } from "./message-content";
 
 const table = '| Name | Value | Notes |\n| :--- | :---: | ---: |\n| **Alpha** | `a|b` | [site](https://example.com) |\n| <img src=x onerror=alert(1)> | a\\|b | 中文長句 |';
 test("typed replies preserve ordered text, aligned tables, code, diagrams and image cards outside bubbles", () => {
@@ -21,6 +22,23 @@ test("typed replies preserve ordered text, aligned tables, code, diagrams and im
   expect(messagePlainText(source, true)).toContain(table);
   expect(messagePlainText(source, true)).toContain("flowchart LR\nA-->B");
   expect(tablePlainText(table)).toContain("Alpha\ta|b\tsite (https://example.com/)");
+});
+
+test("a finished reply drawn again follows the language and the search, and a reply still arriving is never kept", () => {
+  const source = `Sample word\n\n${table}`;
+  setLocale("en");
+  const english = replyContentHTML(source), found = replyContentHTML(source, "Sample");
+  expect(replyContentHTML(source)).toBe(english);
+  expect(found).not.toBe(english);
+  expect(found).toContain("<mark");
+  setLocale("zh-TW");
+  expect(replyContentHTML(source)).not.toBe(english);
+  expect(replyContentHTML("```board\n{", "", true)).toContain("answer-form-pending");
+  expect(replyContentHTML("```board\n{")).not.toContain("answer-form-pending");
+  const urls = "See https://example.com/a and https://example.com/b";
+  expect(rememberedUrls(urls)).toEqual(messageUrls(urls));
+  expect(rememberedUrls(urls)).toEqual(["https://example.com/a", "https://example.com/b"]);
+  expect(rememberedUrls("No address")).toEqual([]);
 });
 
 test("unclosed fences and streaming table cuts retain usable source until complete", () => {

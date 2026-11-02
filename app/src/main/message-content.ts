@@ -1,6 +1,6 @@
 // One typed reply parser for history, streaming, search and copy. Only generated tags enter HTML.
 import { highlightHTML } from "./conversation";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
 import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, ico, iconBtn } from "./ui";
 import { answerFormHTML } from "./message-forms";
@@ -228,14 +228,32 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>, stream
 export const messageHTML = (text: string, query = "", markdown = false, mentions: readonly MentionTarget[] = []): string => markdown
   ? parseMessageBlocks(text).map(block => blockHTML(block, query, new Set())).join("") : inline(text, query, false, new Set(), 0, mentions);
 
+/** A thread is drawn again on every change, and a reply that has finished reads the same each time. */
+const finished = new Map<string, string>();
+function remembered(key: string, make: () => string): string {
+  const known = finished.get(key);
+  if (known !== undefined) return known;
+  const made = make();
+  if (finished.size >= 500) finished.delete(finished.keys().next().value!);
+  finished.set(key, made);
+  return made;
+}
+
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
-export function replyContentHTML(text: string, query = "", streaming = false, renderText = (source: string) => textHTML(source, query, new Set())): string {
-  return parseMessageBlocks(text, streaming).map(block => block.type === "text"
-    ? `<div class="ans"><div class="message-text">${renderText(block.source)}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
+export function replyContentHTML(text: string, query = "", streaming = false, renderText?: (source: string) => string): string {
+  const draw = (): string => parseMessageBlocks(text, streaming).map(block => block.type === "text"
+    ? `<div class="ans"><div class="message-text">${renderText ? renderText(block.source) : textHTML(block.source, query, new Set())}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
+  // A forecast card marks today, so a kept reply lasts the day.
+  return streaming || renderText ? draw() : remembered(`reply\0${new Date().toDateString()}\0${getLocale()}\0${query}\0${text}`, draw);
 }
 export function messageUrls(text: string): string[] {
   const urls = new Set<string>(); parseMessageBlocks(text).forEach(block => { if (block.type === "text" || block.type === "table") blockHTML(block, "", urls); }); return [...urls];
 }
+/** The addresses of finished words, one per line, for the cards under a reply. */
+export const rememberedUrls = (text: string): string[] => {
+  const known = remembered(`urls\0${text}`, () => messageUrls(text).join("\n"));
+  return known ? known.split("\n") : [];
+};
 
 /** Copy rendered Markdown as text, preserving full addresses even when their labels are short. */
 export function messagePlainText(text: string, markdown = false): string {
