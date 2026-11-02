@@ -19,6 +19,10 @@ export interface ConversationInfo {
 }
 
 export const conversationTitle = (conversation?: ConversationInfo): string => conversation?.kind === "quick" ? t("conversations.quick") : conversation?.title || t("conversations.untitled");
+/** Window entry follows activity; unattended core requests keep their stable default. */
+export const newestConversation = (conversations: ConversationInfo[]): ConversationInfo | undefined =>
+  [...conversations].sort((a, b) => Number(a.kind === "quick") - Number(b.kind === "quick") ||
+    (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0) || Number(!!b.is_default) - Number(!!a.is_default) || b.id - a.id)[0];
 export const conversationChange = (memberId: number): void => {
   window.dispatchEvent(new CustomEvent("conversations-changed", { detail: memberId }));
 };
@@ -51,7 +55,7 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     host.querySelector("[data-conversation-new] span")!.textContent = t("conversations.new");
     // The one open is already new: there is nothing another would add.
     const current = options.current?.();
-    const open = conversations.find(c => (current === undefined ? !!c.is_default : c.id === current));
+    const open = current === undefined ? newestConversation(conversations) : conversations.find(c => c.id === current);
     host.querySelector<HTMLButtonElement>("[data-conversation-new]")!.disabled = !!open && isBlank(open);
     const found = conversations.filter(c => conversationTitle(c).toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
     const section = (kind: "quick" | "standard", label: string): string => {

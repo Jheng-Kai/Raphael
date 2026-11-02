@@ -31,6 +31,8 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
   };
   const draw = (): void => {
     const text = input.value;
+    // Long restored/typed drafts use the textarea's own paint instead of a second large DOM.
+    if (text.length >= 2000) { ranges = []; field.classList.remove("has-mentions"); mirror.textContent = ""; return; }
     const links = linkRanges(text), mentions = /[@＠]/u.test(text) ? mentionRanges(text, targets()) : [];
     ranges = [...links, ...mentions.filter(item => !links.some(link => link.start < item.end && item.start < link.end))].sort((a, b) => a.start - b.start);
     field.classList.toggle("has-mentions", ranges.length > 0);
@@ -48,7 +50,7 @@ export function bindMentionField(input: HTMLTextAreaElement, targets: () => read
 
   // Every write of the words redraws them, wherever it comes from: a draft put back, a send that empties the field, a paste.
   const descriptor = Object.getOwnPropertyDescriptor(input, "value") ?? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!;
-  Object.defineProperty(input, "value", { configurable: true, get: () => descriptor.get!.call(input), set: (value: string) => { descriptor.set!.call(input, shortenLinks(value)); draw(); } });
+  Object.defineProperty(input, "value", { configurable: true, get: () => descriptor.get!.call(input), set: (value: string) => { descriptor.set!.call(input, value.length >= 2000 ? value : shortenLinks(value)); draw(); } });
   const setRangeText = input.setRangeText as (...args: unknown[]) => void;
   input.setRangeText = (words: string, ...rest: unknown[]): void => { setRangeText.call(input, shortenLinks(words), ...rest); draw(); };
   const replaceSelection = (words: string): void => {

@@ -23,6 +23,12 @@ const read = (path: string): string => readFileSync(path, "utf8");
 const mainFiles = walk(MAIN);
 /** Application code of the main window: every .ts that is not a test. */
 const sources = mainFiles.filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !f.includes(`${sep}i18n${sep}`));
+
+test("copy controls use the shared in-place feedback", () => {
+  for (const file of sources.filter(file => rel(file) !== 'ui.ts')) {
+    expect(read(file), rel(file)).not.toMatch(/\bcopyText\s*\(/);
+  }
+});
 const i18nFiles = mainFiles.filter((f) => f.includes(`${sep}i18n${sep}`) && !f.endsWith(".test.ts"));
 
 describe("action rows", () => {
@@ -118,6 +124,9 @@ describe("buttons", () => {
     for (const modifier of ["pri", "sm", "row", "danger", "btn"]) classes.delete(modifier);
     // Owner-approved caption hover exception (2026-10-25); ordinary icon controls stay frameless.
     const allowlist: readonly string[] = [
+      // Daily sidebar controls share the owner's requested round soft press surface.
+      'sidebar.css: .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled)',
+      "sidebar.css: .side .btn.icon:hover:not(:disabled)", "sidebar.css: .side .btn.icon:active:not(:disabled)",
       "styles.css: .window-button:hover", "styles.css: .window-button:active",
       "styles.css: .window-close:hover", "styles.css: .window-close:active",
       // R-UI-50: the contextual latest action floats over messages and needs an opaque surface.
@@ -253,7 +262,7 @@ describe("icons", () => {
     const bad = iconRules().flatMap(({ file, selector, body }) =>
       [...body.matchAll(/(?:^|;)\s*(width|height)\s*:\s*([^;]+)/g)]
         // The owner requested the send glyph match the adjacent voice portrait exactly.
-        .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
+        .filter(([, , value]) => !SIZES.has(value.trim()) && !(file === "sidebar.css" && selector === ".room-avatar > .av > svg.i" && value.trim() === "100%") && !(file === "sidebar.css" && selector === ".sidebar-app-marks :is(svg" && value.trim() === "18px") && !(file === "agent.css" && ((selector === ".attachment-drop > .i" && value.trim() === "28px") || (selector === ".composer .cmp-pair .cmp-send .i" && value.trim() === "32px"))))
         .map(([, prop, value]) => `${file}: ${selector} { ${prop}: ${value.trim()} }`),
     );
     expect(iconRules().length).toBeGreaterThan(10);

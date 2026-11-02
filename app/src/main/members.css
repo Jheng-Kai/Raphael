@@ -35,6 +35,7 @@
 .mb-gname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :is(.page-agent, .side) .mb-ghead .btn.icon { width: var(--pa-gh-btn); min-height: var(--pa-gh-btn); border-radius: var(--r-pill); color: var(--text-3); }
 :is(.page-agent, .side) .mb-ghead .btn.icon:hover:not(:disabled) { color: var(--text); }
+:is(.page-agent, .side) .mb-ghead .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .mb-ghead .mb-more { opacity: 0; }
 .mb-ghead:hover .mb-more, .mb-ghead .mb-more:focus-visible, .mb-ghead .mb-more[aria-expanded="true"] { opacity: 1; }
 .mb-fold .i { transition: transform 0.2s ease; }
@@ -50,6 +51,7 @@
 .nav.mb-row { display: grid; grid-template-columns: var(--pa-row-av) minmax(0, 1fr) auto; gap: var(--pa-row-gap); align-items: center; min-height: var(--pa-row-h); padding: var(--sp-2); border-radius: var(--pa-row-r); color: var(--text); }
 .nav.mb-row > .av { --av: var(--pa-row-av) !important; }
 .nav.mb-row[aria-current="true"] { background: var(--selected); }
+.nav.mb-row[aria-current="true"]:active { background: var(--pressed); }
 .mb-row-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
 .mb-row-t { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .mb-row-t b { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--pa-row-name); line-height: 1.35; }
@@ -92,11 +94,13 @@
 .ask-card.is-member .ask-q { color: var(--text); }
 .page-agent .ask-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }
 .page-agent .ask-card.is-member .btn:hover:not(:disabled) { border-color: var(--hover-edge); background: var(--hover); }
+.page-agent .ask-card.is-member .btn:active:not(:disabled) { background: var(--pressed); }
 .page-agent .ask-card.is-member .ask-fill { background: var(--text-2); }
 .bgq-card.is-member { border-color: var(--edge); background: var(--panel); box-shadow: none; animation: none; }
 .bgq-card.is-member .bgq-q, .bgq-card.is-member .bgq-name { color: var(--text); }
 .bgq-card.is-member .btn { border-color: var(--edge); color: var(--text); background: var(--surface-2); }
 .bgq-card.is-member .btn:hover:not(:disabled) { border-color: var(--hover-edge); background: var(--hover); }
+.bgq-card.is-member .btn:active:not(:disabled) { background: var(--pressed); }
 /* the line of a routine's run */
 .sys { align-self: center; display: inline-flex; align-items: center; gap: var(--sp-1); max-width: 100%; font-size: var(--pa-sys); color: var(--text-3); }
 .sys .av { --av: var(--pa-sys-face) !important; }
@@ -122,6 +126,7 @@
 .page-agent .btn.mb-avbtn { width: var(--pa-det-av); height: var(--pa-det-av); min-height: var(--pa-det-av); margin-bottom: calc(4px + 4 * var(--pa-u)); padding: 0; border-color: transparent; background: transparent; transition: opacity 0.15s ease; }
 .page-agent .btn.mb-avbtn .av { --av: var(--pa-det-av) !important; }
 .page-agent .btn.mb-avbtn:hover:not(:disabled), .page-agent .btn.mb-avbtn:active:not(:disabled) { border-color: transparent; background: transparent; opacity: 0.85; }
+.page-agent .btn.mb-avbtn:active:not(:disabled) { color: var(--text); opacity: 0.7; }
 .mb-who-name { max-width: 100%; font-size: var(--pa-dname); font-weight: 600; overflow-wrap: anywhere; }
 .mb-edit { width: 100%; min-width: 0; padding: var(--sp-1) var(--sp-1); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; text-align: center; color: var(--text); outline: 0; }
 .mb-edit:hover { border-color: var(--hover-edge); }
@@ -245,6 +250,7 @@
 .mb-fold-field { gap: var(--sp-2); }
 .mb-field .btn.mb-fold-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); width: 100%; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--btn-edge); border-radius: var(--r-md); background: var(--btn); color: var(--text); text-align: left; font-weight: 400; }
 .mb-field .btn.mb-fold-head:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
+.mb-field .btn.mb-fold-head:active:not(:disabled) { background: var(--pressed); }
 .mb-fold-head .mb-dh { margin: 0; }
 .mb-fold-head .mb-peek { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); font-size: var(--fs-sm); }
 .mb-fold-head > .i { justify-self: end; color: var(--text-3); transition: transform 0.18s ease; }

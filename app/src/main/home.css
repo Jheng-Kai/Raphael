@@ -11,6 +11,7 @@
 .ho-card, .ho-calendar { position: relative; border-radius: var(--r-lg); }
 .ho-card:hover, .ho-calendar:hover { border-color: var(--hover-edge); }
 .page-home .ho-target.btn, .page-home .ho-target.btn:hover, .page-home .ho-target.btn:active { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.ho-card:has(> .ho-target:active:not(:disabled)) { background: var(--pressed); }
 .ho-target:focus { outline: none; }
 :root[data-keys] .ho-target:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ho-card button:not(.ho-target) { position: relative; z-index: 2; }
@@ -40,6 +41,7 @@
 .ho-now::after { content: ""; height: 2px; border-radius: var(--r-pill); background: var(--err); }
 .ho-row.btn { max-width: var(--layout-reading-max); display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); width: 100%; min-height: 44px; height: auto; padding: var(--sp-1) 0; border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; }
 .page-home .ho-row.btn:hover { background: transparent; }
+.page-home .ho-row.btn:active:not(:disabled) { background: var(--pressed); }
 .ho-row-copy { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .ho-row-copy strong, .ho-row-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ho-row-copy strong { font-size: var(--fs-sm); font-weight: 500; }
@@ -84,6 +86,8 @@
 .ho-day { position: relative; min-width: 0; min-height: 0; }
 .page-home .ho-date-btn.btn { position: relative; z-index: 2; display: grid; align-content: center; justify-items: center; gap: 2px; width: 100%; height: 100%; min-height: 28px; min-width: 0; padding: 0; border: 0; background: transparent; border-radius: var(--r-sm); }
 .page-home .ho-calendar .btn:is(:hover, :active) { background: transparent; }
+.page-home .ho-calendar .btn:active:not(:disabled) { background: var(--pressed); }
+.page-home .ho-calendar .btn.icon:active:not(:disabled) { color: color-mix(in srgb, var(--text-2) 85%, transparent); }
 .ho-other-month .ho-date-btn.btn { color: var(--text-3); }
 .ho-date-btn b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 500; }
 .ho-day.is-selected:not(.is-today) b { background: transparent; }

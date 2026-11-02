@@ -24,7 +24,7 @@ import { serviceIconOf } from "./service-icons";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
-import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyText, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, swapHTML, tabs, tg, toaster } from "./ui";
+import { DISCONNECT_CONFIRM_MS, type Choice, actionRow, btn, closeMenu, copyButton, esc, fieldHTML, ico, iconButton, leave, openPopover, row, sel, st, swapHTML, tabs, tg, toaster } from "./ui";
 
 /** `t` for a key that is chosen at run time (its placeholders, if any, are none). */
 const tr = t as unknown as (key: MessageKey) => string;
@@ -1276,11 +1276,11 @@ export function createConnections(host: ConnectionsHost): Connections {
   }
 
   /** Puts the code on the clipboard, so that it is pasted at the page that opens, and opens the page. */
-  async function openDevicePage(): Promise<void> {
+  async function openDevicePage(control: HTMLElement): Promise<void> {
     const d = device;
     if (!d) return;
     try {
-      await copyText(d.user_code);
+      if (!await copyButton(control, d.user_code)) return;
       await api.openLink(d.verification_uri);
     } catch (err) {
       notify(describeError(err), "err");
@@ -1539,7 +1539,7 @@ export function createConnections(host: ConnectionsHost): Connections {
         break;
       }
       case "device-open":
-        void openDevicePage();
+        void openDevicePage(button);
         break;
       case "open-grants": {
         const url = GRANTS_URL[groupById(id)?.catalog_id ?? ""];

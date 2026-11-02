@@ -212,7 +212,8 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
     search.draw(query, columnHTML({ ...host.view(), query, folded }));
     rooms.dispatchEvent(new CustomEvent("sidebar-search", { detail: query }));
-    if (key) list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+    const focused = key ? list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`) : null;
+    if (focused && focused !== document.activeElement) focused.focus({ preventScroll: true });
   }
 
   function groupMenu(id: number, anchor: HTMLElement): void {
@@ -231,6 +232,8 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     );
   }
 
+  let suppressFold = false;
+  el.addEventListener("pointerdown", () => { suppressFold = false; });
   addButton.addEventListener('click', () => {
       openActions(
         addButton,
@@ -253,8 +256,10 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     if (more) return memberMenu(Number(more.dataset.memberMore), more, host);
     const groupMore = target.closest<HTMLElement>("[data-group-more]");
     if (groupMore) return groupMenu(Number(groupMore.dataset.groupMore), groupMore);
-    const fold = target.closest<HTMLElement>("[data-group-fold]");
+    const heading = target.closest<HTMLElement>(".mb-ghead");
+    const fold = heading?.querySelector<HTMLElement>("[data-group-fold]");
     if (fold) {
+      if (suppressFold) { suppressFold = false; if (e.detail !== 0) return; }
       const value = fold.dataset.groupFold!;
       if (value === "none" || query.trim() !== "") return;
       const id = Number(value);
@@ -292,6 +297,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     const group = target.closest<HTMLElement>(".mb-sec[data-group]");
     drag = item && Number(item.dataset.memberItem) ? { kind: "member", id: Number(item.dataset.memberItem) } : group && group.dataset.group !== "none" ? { kind: "group", id: Number(group.dataset.group) } : null;
     if (!drag) { event.preventDefault(); return; }
+    suppressFold = true;
     event.stopPropagation(); event.dataTransfer?.setData(`application/x-raphael-${drag.kind}`, String(drag.id));
     if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
   });

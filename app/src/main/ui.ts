@@ -1029,3 +1029,45 @@ export async function copyText(text: string): Promise<void> {
   area.remove();
   if (!copied) throw new Error(t("ui.002"));
 }
+
+const copyFeedback = new WeakMap<HTMLElement, { html: string; label: string | null; title: string | null; tooltip: string | null; width: string; timer?: ReturnType<typeof setTimeout> }>();
+const copyPresses = new WeakMap<HTMLElement, number>();
+
+/** Reserve both translated labels before the first press so feedback never clips or resizes. */
+export function copyLabel(label: string, withIcon = false): string {
+  return `<span class="copy-label"><span>${withIcon ? ico("copy") : ""}${esc(label)}</span><span class="copy-reserve" aria-hidden="true">${ico("check")}${esc(t("setup.copied"))}</span></span>`;
+}
+
+function resetCopyButton(button: HTMLElement): void {
+  const state = copyFeedback.get(button);
+  if (!state) return;
+  clearTimeout(state.timer);
+  button.innerHTML = state.html; button.style.width = state.width;
+  for (const [name, value] of [["aria-label", state.label], ["title", state.title], ["data-tooltip", state.tooltip]] as const) {
+    if (value === null) button.removeAttribute(name); else button.setAttribute(name, value);
+  }
+  copyFeedback.delete(button);
+}
+
+/** Copy feedback belongs to the pressed control and never shifts its neighbours. */
+export async function copyButton(button: HTMLElement, text: string): Promise<boolean> {
+  const press = (copyPresses.get(button) ?? 0) + 1; copyPresses.set(button, press);
+  try { await copyText(text); }
+  catch { if (copyPresses.get(button) === press) resetCopyButton(button); toaster.info(t("ui.002")); return false; }
+  if (copyPresses.get(button) !== press) return true;
+  let state = copyFeedback.get(button);
+  if (!state) {
+    state = { html: button.innerHTML, label: button.getAttribute("aria-label"), title: button.getAttribute("title"), tooltip: button.getAttribute("data-tooltip"), width: button.style.width };
+    const width = button.getBoundingClientRect().width;
+    if (width) button.style.width = `${width}px`;
+    copyFeedback.set(button, state);
+  }
+  clearTimeout(state.timer);
+  const label = t("setup.copied");
+  button.innerHTML = ico("check") + (button.classList.contains("icon") ? "" : `<span>${esc(label)}</span>`);
+  button.setAttribute("aria-label", label);
+  if (state.tooltip !== null) { button.dataset.tooltip = label; button.removeAttribute("title"); }
+  else button.title = label;
+  state.timer = setTimeout(() => resetCopyButton(button), 1600);
+  return true;
+}

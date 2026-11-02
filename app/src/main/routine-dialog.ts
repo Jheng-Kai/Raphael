@@ -6,7 +6,7 @@ import { openDialog, confirmDelete, type Dialog } from "./member-dialogs";
 import { dayName, faceHTML, HOUR_STEPS, isTime, ROUTINE_TITLE_MAX, ROUTINE_PROMPT_MAX, routineSentenceHTML, routineStatus } from "./members";
 import { dateKey, openDatePicker, windowTimes } from "./schedule-picker";
 import type { Member, Routine, RoutineSchedule, RoutineWhen } from "./types";
-import { btn, copyText, esc, ico, openMenu, sel, tg, toaster } from "./ui";
+import { btn, copyButton, copyLabel, esc, ico, openMenu, sel, tg, toaster } from "./ui";
 import "./automations.css";
 
 export interface RoutineDialogOptions {
@@ -74,7 +74,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     return `<input class="mb-fin au-title" id="au-title" maxlength="${ROUTINE_TITLE_MAX}" placeholder="${esc(t("auto.what"))}" aria-label="${esc(t("auto.what"))}" value="${esc(title)}">` +
       (routine ? `<div class="mp-resource"><span>${esc(t(enabled ? "computer.routineOn" : "computer.routinePaused"))}</span>${tg(enabled, t("members.routineSwitch", {p0: routine.title}), ' data-dlg="enabled"')}</div>` : "") +
       `<section class="au-field"><h3>${esc(t("auto.when"))}</h3>${sel(triggerChoices(),trigger,t("trigger.trigger"),' data-dlg="trigger"')}</section>` +
-      (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p>${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "trigger.showSecret")),"sm",' data-dlg="hook-show"')}${btn(esc(t("trigger.copySecret")),"sm",' data-dlg="hook-copy"')}</div>${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
+      (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p>${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "trigger.showSecret")),"sm",' data-dlg="hook-show"')}${btn(copyLabel(t("trigger.copySecret")),"sm",' data-dlg="hook-copy"')}</div>${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
       trigger === "event" && (!when || eventId) ? eventBody() :
       when && !when.webhook ? `<section class="au-field au-event"><h3>${esc(t("auto.onEvent"))}</h3><p>${routineSentenceHTML({ schedule:null, app_name:routine?.app_name, when })}</p>${when.filter.field ? `<label>${esc(t("auto.triggerFilter"))}<input class="mb-fin" id="au-filter" maxlength="300" value="${esc(when.filter.equals)}"></label>` : ""}<p class="note">${esc(t("auto.triggerHelp"))}</p><p class="note">${esc(routine ? routineStatus(routine) : "")}</p>${routine?.last_error ? btn(esc(t("auto.connections")), "sm", ' data-dlg="connections" data-missing-repair="connections"') : ""}</section>` : `<section class="au-field"><p class="au-trigger-preview">${routineSentenceHTML({schedule:currentSchedule()})}</p><div class="au-start"><span>${esc(t("auto.starts"))}</span>${btn(esc(date), "", ' data-dlg="date" aria-label="' + esc(t("auto.date")) + '"')}<input class="mb-fin au-time" id="au-time" type="text" inputmode="numeric" maxlength="5" value="${esc(kind === "every" && windowFrom ? windowFrom : time)}"${kind === "every" && windowFrom ? " disabled" : ""} aria-label="${esc(t("auto.time"))}" placeholder="00:00"></div>` +
       `<div class="au-chips">${kinds.map(([value, label]) => btn(esc(label), "sm", ` data-dlg="kind" data-kind="${value}" aria-pressed="${kind === value}"`)).join("")}</div>` +
@@ -127,19 +127,34 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     dialog.el.querySelector(".mb-dlg-body")!.innerHTML = body();
     dialog.el.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled = trigger === "event" && !when;
   }
-  async function hookAction(action: string): Promise<void> {
+  async function hookAction(action: string, control?: HTMLElement): Promise<void> {
     if (!routine || !routine.when?.webhook) return;
     if (action === "hook-show" && secret) { secret = ""; read(); draw(); return; }
+    control?.setAttribute("aria-busy", "true");
+    if (control instanceof HTMLButtonElement) control.disabled = true;
     try {
       const result = await api.routineWebhook(routine.id, action !== "address");
       if (!dialog.el.isConnected) return;
-      const unchanged = address === result.address && addressChanged === !!result.address_changed && !hookError;
       address = result.address;
       addressChanged = !!result.address_changed;
-      if (action === "hook-copy") { await copyText(result.secret!); if (unchanged) return; }
+      if (action === "hook-copy") {
+        hookError = "";
+        const section = dialog.el.querySelector(".au-webhook"), line = section?.querySelector(".au-hook-address");
+        if (line && line.textContent !== address) line.textContent = address;
+        section?.querySelector('[role="alert"]')?.remove();
+        const notice = section?.querySelector('[role="status"]');
+        if (!addressChanged) notice?.remove();
+        else if (!notice && section) {
+          const message = document.createElement("p"); message.setAttribute("role", "status");
+          message.textContent = t("trigger.addressChanged"); section.append(message);
+        }
+        if (control) await copyButton(control, result.secret!);
+        return;
+      }
       else if (action === "hook-show") secret = result.secret ?? "";
       hookError = "";
     } catch (error) { hookError = describeError(error); }
+    finally { control?.removeAttribute("aria-busy"); if (control instanceof HTMLButtonElement) control.disabled = false; }
     if (dialog.el.isConnected) { read(); draw(); }
   }
   async function save(): Promise<void> {
@@ -179,7 +194,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
         if (!selectedEvent()?.input) void checkEvent();
       });
       else if (act === "event-check") void checkEvent();
-      else if (act === "hook-show" || act === "hook-copy") void hookAction(act);
+      else if (act === "hook-show" || act === "hook-copy") void hookAction(act, target);
       else if (act === "kind") { kind = target.dataset.kind as typeof kind; draw(); }
       else if (act === "day") { const n = Number(target.dataset.day); if (days.has(n)) days.delete(n); else days.add(n); draw(); }
       else if (act === "destination") openMenu(target, [{ value: "main", label: t("auto.mainThread") }], "main", () => {});

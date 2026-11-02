@@ -355,6 +355,73 @@ export async function perform(page, step, evidenceDirectory) {
       await element.dispose();
       break;
     }
+    case "press-feedback": {
+      const evidence = [];
+      for (const target of step.selectors) {
+        const selector = typeof target === 'string' ? target : target.selector;
+        const behindDrawer = await page.evaluate(selector => matchMedia('(max-width: 859px)').matches && document.documentElement.hasAttribute('data-sidebar-open') && [...document.querySelectorAll(selector)].some(el => !el.closest('#nav')), selector);
+        if (behindDrawer) await page.click('[data-sidebar="collapse"]');
+        const element = await visible(selector);
+        try {
+          const snapshot = () => element.evaluate(button => {
+            const box = button.getBoundingClientRect();
+            return { active: button.matches(':active'), bounds: [box.x, box.y, box.width, box.height], colors: [button.parentElement, button, ...button.querySelectorAll('*')].map(node => {
+              const style = getComputedStyle(node);
+              return [style.color, style.backgroundColor, style.borderColor, style.opacity];
+            }) };
+          });
+          await element.hover();
+          await new Promise(resolve => setTimeout(resolve, 180));
+          if (typeof target !== 'string') {
+            const box = await element.boundingBox();
+            await page.mouse.move(box.x + box.width * target.x, box.y + box.height * target.y);
+            await new Promise(resolve => setTimeout(resolve, 180));
+          }
+          const hovered = await snapshot();
+          await page.mouse.down();
+          let pressed;
+          try { await new Promise(resolve => setTimeout(resolve, 180)); pressed = await snapshot(); }
+          finally { await page.mouse.move(0, 100); await page.mouse.up(); }
+          if (!pressed.active) throw new Error(`Press did not reach control: ${selector}`);
+          if (JSON.stringify(hovered.colors) === JSON.stringify(pressed.colors)) throw new Error(`Press has no color feedback: ${selector}`);
+          if (hovered.bounds.some((value, index) => Math.abs(value - pressed.bounds[index]) > 1)) throw new Error(`Pressed control moved: ${selector}`);
+          evidence.push({ selector, hovered, pressed });
+        } finally { await element.dispose(); }
+      }
+      return { check: "press-feedback", evidence };
+    }
+    case "composer-measure-start": {
+      await page.evaluate(() => {
+        const tasks=[];
+        const observer=new PerformanceObserver(list=>tasks.push(...list.getEntries().map(entry=>({start:entry.startTime,duration:entry.duration}))));
+        observer.observe({type:"longtask"});
+        window.__composerMeasure={tasks,observer,start:performance.now(),writes:0};
+        const original=Storage.prototype.setItem;
+        Storage.prototype.setItem=function(key,value){if(key==="raphael.composer.drafts")window.__composerMeasure.writes++;return original.call(this,key,value);};
+      });
+      break;
+    }
+    case "composer-restore-long": {
+      const draft = await page.evaluate(() => {
+        const conversation=window.__look.data.conversations.find(item=>item.member_id===0&&item.kind!=="quick"&&item.is_default);
+        return JSON.stringify({[`member:0:${conversation.id}`]:{text:"@Notion https://example.test/sample ".repeat(6000)}});
+      });
+      await page.evaluateOnNewDocument(value=>localStorage.setItem("raphael.composer.drafts",value),draft);
+      break;
+    }
+    case "composer-measure-end": {
+      await new Promise(resolve=>setTimeout(resolve,450));
+      const evidence=await page.evaluate(({selector,longDraft})=>{
+        const measure=window.__composerMeasure;
+        measure.tasks.push(...measure.observer.takeRecords().map(entry=>({start:entry.startTime,duration:entry.duration})));measure.observer.disconnect();
+        const input=document.querySelector(selector),chips=input.closest('.composer').querySelectorAll('.cmp-chip');
+        const tasks=measure.tasks.filter(task=>task.start>=measure.start);
+        if(tasks.some(task=>task.duration>100))throw new Error(`Composer long task exceeded 100ms: ${JSON.stringify(tasks)}`);
+        if(longDraft ? input.value.length<100000 : input.value.length!==0||chips.length!==1)throw new Error('Composer text/chip result differs');
+        return {check:'composer-performance',longTasks:tasks,writes:measure.writes,characters:input.value.length,chips:chips.length};
+      },step);
+      return evidence;
+    }
     case "main-event": {
       // Replay only the existing native event boundary; navigation and cards remain real.
       await page.evaluate(event => window.__look.emit(event), step.event);

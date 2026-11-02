@@ -13,7 +13,7 @@ import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
 import type { ToolkitPlan } from "./plugins-data";
 import type { AppNeeds } from "./types";
-import { btn, copyText, esc, ico, st, toaster } from "./ui";
+import { btn, copyButton, copyLabel, esc, ico, st, toaster } from "./ui";
 
 export interface SetupTarget {
   /** The Composio toolkit's slug. */
@@ -97,7 +97,7 @@ export function mountInlineConnectionSetup(thread: HTMLElement,
     if (!button.hasAttribute("data-inline-submit")) {
       const url = button.dataset.dlg === "guide" ? plan.guide_url : button.dataset.dlg === "home" ? plan.app_url : null;
       if (url && /^https:\/\//.test(url)) act(slot, () => api.openExternalUrl(url));
-      if (button.dataset.dlg === "copy" && plan.redirect_url) act(slot, () => copyText(plan.redirect_url!));
+      if (button.dataset.dlg === "copy" && plan.redirect_url) act(slot, () => copyButton(button, plan.redirect_url!));
       return;
     }
     const inputs = [...slot.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
@@ -157,7 +157,7 @@ const redirectHTML = (plan: ToolkitPlan): string => plan.needs === "own_app" && 
   ? `<div class="cn-redirect"><span class="cn-label">${esc(t("setup.redirect"))}</span>` +
     // A read-only field: the address is selected whole with one click and copied with the button beside it.
     `<div class="cn-redirect-row"><input class="field code" readonly spellcheck="false" aria-label="${esc(t("setup.redirect"))}" value="${esc(plan.redirect_url)}" data-setup-redirect>` +
-    btn(`${ico("copy")}${esc(t("setup.copy"))}`, "sm", ' data-dlg="copy"') + `</div></div>` : "";
+    btn(copyLabel(t("setup.copy"), true), "sm", ' data-dlg="copy"') + `</div></div>` : "";
 
 function fieldsHTML(plan: ToolkitPlan): string {
   return `<div class="cn-fields">${plan.fields.map((field, index) =>
@@ -269,7 +269,7 @@ export function openConnectionSetup(target: SetupTarget, hooks: SetupHooks): Pro
         if (act === "add") void submit(dialog);
         else if (act === "guide") open(plan?.guide_url ?? null);
         else if (act === "home") open(plan?.app_url ?? null);
-        else if (act === "copy" && plan?.redirect_url) void copyText(plan.redirect_url).then(() => toaster.info(t("setup.copied")));
+        else if (act === "copy" && plan?.redirect_url) void copyButton(_target, plan.redirect_url);
         else if (act === "retry") void load(dialog);
         else if (act === "composio") { dialog.close(); hooks.composioKey?.(); }
         else if (act === "cancel" && !busy) dialog.close();

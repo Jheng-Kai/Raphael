@@ -5,9 +5,9 @@ import type { ToolkitPlan } from "./plugins-data";
 
 const api = vi.hoisted(() => ({ connectorsToolkit: vi.fn(), openExternalUrl: vi.fn() }));
 vi.mock("./api", () => api);
-vi.mock("./ui", async original => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() }, copyText: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("./ui", async original => ({ ...(await original<typeof import("./ui")>()), toaster: { info: vi.fn() }, copyButton: vi.fn().mockResolvedValue(undefined) }));
 import { openConnectionSetup } from "./connection-setup";
-import { copyText } from "./ui";
+import { copyButton } from "./ui";
 
 const KEY = "zk-test-0123456789";
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -77,7 +77,7 @@ test("a developer app shows the address to register, copies it, and asks for the
   expect(dialog().querySelector<HTMLInputElement>(".cn-redirect input")?.value).toBe("https://backend.example/auth/callback");
   expect(dialog().querySelector<HTMLInputElement>(".cn-redirect input")?.readOnly).toBe(true);
   press("copy"); await settle();
-  expect(copyText).toHaveBeenCalledWith("https://backend.example/auth/callback");
+  expect(copyButton).toHaveBeenCalledWith(expect.any(HTMLElement), "https://backend.example/auth/callback");
   expect([field("client_id").type, field("client_secret").type, field("scopes").type]).toEqual(["text", "password", "text"]);
   expect(field("scopes").placeholder).toBe("read");
   expect(dialog().textContent).toContain("optional");

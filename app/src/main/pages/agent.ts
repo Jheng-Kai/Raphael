@@ -1,3 +1,4 @@
+import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
 import { mountTaskResults } from "../task-result";
 import { patchThread } from "../thread-diff";
@@ -34,7 +35,7 @@ import { patchThread } from "../thread-diff";
 // the closed line of what a colleague asked it (exchange-line.ts).
 
 import { noticeHTML } from "../missing";
-import { conversationTitle, conversationChange, type ConversationInfo } from "../conversation-list";
+import { conversationTitle, conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
@@ -98,7 +99,7 @@ import {
   wantsRefresh,
 } from "../timeline";
 import type { PageArgument, AgentQuestion, AgentTurn, AppContext, GroupDraft, MemberDraft, MessageQuote, Page, TurnAttachment, WireAttachment } from "../types";
-import { copyText, esc, ico, iconButton, patchHTML, toaster } from "../ui";
+import { copyButton, esc, ico, iconButton, patchHTML, toaster } from "../ui";
 import { createRoomPane } from "../group-chats";
 import { bindActionMode, composerHTML, drawTaskSlot } from "../chat-composer";
 import { mountComposerBrain } from "../composer-brain";
@@ -353,15 +354,35 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     try {
       const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
       if (!Array.isArray(result?.conversations)) return;
-      const same = JSON.stringify(conversationCache.get(member)) === JSON.stringify(result.conversations);
+      const previous = conversationCache.get(member);
+      const same = JSON.stringify(previous) === JSON.stringify(result.conversations);
       conversationCache.set(member, result.conversations);
       const chosen = chosenConversations.get(member);
+      const available = new Set(result.conversations.map(c => c.id));
+      const missing = new Set((previous ?? []).filter(c => !available.has(c.id)).map(c => c.id));
+      if (chosen !== undefined && !available.has(chosen)) missing.add(chosen);
+      for (const id of missing) {
+        const removed = draftKey(member, id);
+        discardComposerDraft(removed);
+        if (composerKey === removed) { composerKey = "deleted"; clearTimeout(draftTimer); }
+      }
       if (!result.conversations.some(c => c.id === chosen)) {
-        const next = result.conversations.find(c => c.is_default) ?? result.conversations[0];
+        const next = newestConversation(result.conversations);
         if (next) chosenConversations.set(member, next.id);
         else chosenConversations.delete(member);
       }
-      if (same) return;
+      if (member === memberId() && composerKey !== draftKey()) {
+        saveComposerDraft();
+        const transient = composerKey === `${member}:main` && chosen === undefined ? restored.get(composerKey) : undefined;
+        if (transient && !restored.has(draftKey()) && !readDraftWords(`member:${draftKey()}`)) {
+          restored.set(draftKey(), transient);
+          discardComposerDraft(composerKey);
+          writeDraftWords(`member:${draftKey()}`, { text: wholeLinks(transient.text), quote: transient.quote });
+        }
+        input.value = ""; files = []; missingFiles = []; replacing = undefined; composerQuote = undefined;
+        loadComposerDraft(); drawQuote(); drawFile(); fit();
+      }
+      if (same && chosen === chosenConversations.get(member)) return;
       if (member === memberId()) drawConversation();
       window.dispatchEvent(new CustomEvent("conversation-opened", { detail: member }));
     } catch { /* A core that is restarting keeps the last selection until the next refresh. */ }
@@ -378,13 +399,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   window.addEventListener("conversation-deleted", event => {
     const {member,id}=(event as CustomEvent<{member:number;id:number}>).detail;
+    discardComposerDraft(draftKey(member, id));
     const remaining=(conversationCache.get(member)??[]).filter(c=>c.id!==id);
     conversationCache.set(member,remaining);
     conversationsDirty.add(member);
     if(chosenConversations.get(member)!==id)return;
-    // Reload the authoritative default before history: the cached list predates its promotion.
+    if (composerKey === draftKey(member, id)) { composerKey = "deleted"; clearTimeout(draftTimer); }
+    // Read activity again before history; the core's stable default is not the window's selection.
     chosenConversations.delete(member);
-    if(visible&&member===memberId())switchThread();
+    if(member===memberId())switchThread();
   });
   conversationButton.addEventListener("click", () => {
     members.setDetails(!members.detailsOpen());
@@ -525,6 +548,29 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const drafts = new Map<string, ComposerDraft>();
   const restored = new Map<string, ComposerDraft>();
   const draftKey = (member = memberId(), conversation = conversationId()): string => `${member}:${conversation ?? "main"}`;
+  let composerKey = draftKey();
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
+  function saveComposerDraft(): void {
+    clearTimeout(draftTimer);
+    if (composerKey === "deleted") return;
+    const draft: ComposerDraft = { text: input.value, files: [...files], missing: [...missingFiles], replacing, quote: composerQuote, dictation: correctionLearning.snapshot() };
+    if (draft.text || draft.files.length || draft.missing.length || draft.quote || draft.replacing !== undefined) restored.set(composerKey, draft);
+    else restored.delete(composerKey);
+    writeDraftWords(`member:${composerKey}`, { text: wholeLinks(draft.text), quote: draft.quote });
+  }
+  function loadComposerDraft(): void {
+    composerKey = draftKey();
+    input.dispatchEvent(new Event("composer-draft-restored"));
+    const saved = restored.get(composerKey) ?? readDraftWords<MessageQuote>(`member:${composerKey}`);
+    if (saved) {
+      restoreDraft({ files: [], missing: [], ...saved }, false);
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }
+  function discardComposerDraft(key: string): void {
+    restored.delete(key); writeDraftWords(`member:${key}`);
+  }
+  window.addEventListener("pagehide", saveComposerDraft);
   const retracting = new Set<string>();
   const retracted = new Set<string>();
   let attachmentEpoch = 0;
@@ -658,6 +704,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   /** Keep draft cards mounted while their filenames and remove labels stay current. */
   function drawFile(): void {
+    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
+    // Most restored drafts have no files; an unchanged empty tray needs no layout read.
+    if (!files.length && !missingFiles.length && fileChip.hidden && !fileChip.childElementCount) return;
     const label = esc(t("agent.unattach"));
     const beforeHeight = scroller.scrollHeight, beforeClient = scroller.clientHeight;
     const follows = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= BOTTOM_SLACK_PX;
@@ -682,7 +731,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       `<span class="cmp-chip" data-missing><span class="cmp-chip-t">${esc(file.name)} · ${esc(t("chat.reattach"))}</span>` +
       `<button type="button" class="chip-x" data-act="drop-missing" data-index="${index}" aria-label="${label}">${ico("x")}</button></span>`);
     fileChip.hidden = files.length === 0 && missingFiles.length === 0;
-    sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
     if (follows && (beforeHeight !== scroller.scrollHeight || beforeClient !== scroller.clientHeight)) scroller.scrollTop = scroller.scrollHeight;
   }
 
@@ -971,7 +1019,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       }
     }
     if (routinesChanged) members.refreshRoutines(memberId());
-    const fromBottom = scroller.scrollHeight - scroller.scrollTop;
+    const fromBottom = earlier ? scroller.scrollHeight - scroller.scrollTop : 0;
     if (earlier) {
       loadingEarlier = false;
       turns = mergeTurns(turns, got);
@@ -1089,9 +1137,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const requestId = crypto.randomUUID();
     const draft: ComposerDraft = { text: input.value, files: sending, missing: [], replacing, quote: composerQuote, dictation };
     rememberDraft(requestId, draft);
+    clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
     outgoing.push(mine);
     input.value = "";
+    input.dispatchEvent(new Event("composer-draft-restored"));
     files = [];
     replacing = undefined;
     composerQuote = undefined;
@@ -1130,10 +1180,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The field grows with its text, up to `COMPOSER_LINES` lines. */
   function fit(): void {
     sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
-    input.style.height = "auto";
+    // Restored articles already fill the composer; measuring their full layout blocks typing.
+    if (input.value.length >= 2000) {
+      input.style.height = `calc(${COMPOSER_LINES} * 1lh + 2px)`;
+      input.classList.add("is-tall");
+      return;
+    }
     const line = parseFloat(getComputedStyle(input).lineHeight) || 22;
-    input.style.height = `${Math.min(input.scrollHeight, line * COMPOSER_LINES + 2)}px`;
-    input.classList.toggle("is-tall", input.scrollHeight > line * COMPOSER_LINES + 2);
+    const maximum = line * COMPOSER_LINES + 2;
+    input.style.height = "auto";
+    const height = input.scrollHeight;
+    input.style.height = `${Math.min(height, maximum)}px`;
+    input.classList.toggle("is-tall", height > maximum);
   }
 
   /**
@@ -1154,8 +1212,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    */
   function focusComposer(): void {
     if (!visible || composer.hidden || !composer.isConnected) return;
-    input.focus({ preventScroll: true });
-    input.setSelectionRange(input.value.length, input.value.length);
+    if (document.activeElement !== input) input.focus({ preventScroll: true });
+    const end = input.value.length;
+    if (input.selectionStart !== end || input.selectionEnd !== end) input.setSelectionRange(end, end);
   }
 
   /**
@@ -1404,6 +1463,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * closes, the composer and the card become that thread's, and nothing of the last thread moves in.
    */
   function switchThread(): void {
+    if (composerKey !== "deleted") saveComposerDraft();
     desktop.refresh();
     drawConversation();
     if (roomPane.active) roomPane.close();
@@ -1434,8 +1494,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     replacing = undefined;
     composerQuote = undefined;
     drawQuote();
-    const draft = restored.get(draftKey());
-    if (draft) { restored.delete(draftKey()); restoreDraft(draft); }
+    loadComposerDraft();
     drawFile();
     fit();
     drawComposer();
@@ -1556,7 +1615,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const source = messageSource(control);
     const pending = outgoing.find(item => item.requestId === control.closest<HTMLElement>("[data-session]")?.dataset.session);
     if (!source && !pending) return;
-    try { await copyText(source ? messagePlainText(source.text, source.markdown) : pending!.text); }
+    try { await copyButton(control, source ? messagePlainText(source.text, source.markdown) : pending!.text); }
     catch (err) { toaster.info(describeError(err)); }
   }
 
@@ -1650,7 +1709,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     return draft;
   }
 
-  function restoreDraft(draft: ComposerDraft): void {
+  function restoreDraft(draft: ComposerDraft, focus = true): void {
     correctionLearning.restore(draft.dictation);
     input.value = draft.text;
     attachmentEpoch++;
@@ -1659,7 +1718,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     replacing = draft.replacing;
     composerQuote = draft.quote;
     drawQuote();
-    drawFile(); fit(); focusComposer();
+    drawFile(); fit(); if (focus) focusComposer();
   }
 
   async function editMessage(control: HTMLElement): Promise<void> {
@@ -1923,7 +1982,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         break;
       case "copy-code": {
         const code = act.closest(".message-code")?.querySelector("code")?.textContent;
-        if (code !== undefined && code !== null) void copyText(code).catch(err => toaster.info(describeError(err)));
+        if (code !== undefined && code !== null) void copyButton(act, code).catch(err => toaster.info(describeError(err)));
         break;
       }
       case "regenerate":
@@ -2025,14 +2084,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       cancel: () => { void (listening ? api.cancelSession() : input.value.trim() || files.length || !task.key.startsWith("request:") ? stopComposerTask() : cancelMessage()).catch(error => toaster.info(describeError(error))); },
     } : null;
   });
-  input.addEventListener("input", fit);
+  input.addEventListener("input", () => { fit(); clearTimeout(draftTimer); draftTimer = setTimeout(() => { if (el.isConnected) saveComposerDraft(); }, 300); });
   members.bindMentions(input);
   bindComposerHistory(input, () => api.agentSent());
   picker.addEventListener("change", () => {
     const chosen = Array.from(picker.files ?? []);
     if (chosen.length > 0) void attachAll(chosen);
   });
-  bindFilePaste(input, pasted => { void attachAll(pasted); }, fit);
+  bindFilePaste(input, pasted => { void attachAll(pasted); }, fit, () => files.map(file => file.name));
 
   // The voice button is the question key: down when it is pressed, up when it is let go.
   voiceButton.addEventListener("pointerdown", (e) => {
@@ -2200,7 +2259,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const draft = draftText(arg);
       if (draft !== null) putDraft(draft);
       const refocus = (): void => {
-        if (draft !== null) focusComposer();
+        if (!wasVisible || draft !== null) focusComposer();
       };
       // The page opens at the newest turn, and with the question that waits, if one does.
       void api
@@ -2219,6 +2278,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       drawBackgroundQuestions();
     },
     hide() {
+      saveComposerDraft();
       desktop.hide();
       hideTooltip();
       hideSelection();

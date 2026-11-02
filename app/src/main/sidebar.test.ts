@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import * as api from "./api";
+import type { AppContext, MainEvent } from "./types";
 import { readFileSync } from "node:fs";
 import { columnHTML } from "./member-column";
 import { setLocale } from "./i18n";
@@ -7,6 +9,45 @@ import { createSidebar } from "./sidebar";
 import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
+
+test("the footer opens Connections, keeps named round actions and refreshes only changed app marks", async () => {
+  const inventory = { state: "complete", count: 4, apps: [
+    { name: "Unknown sample", connected: true, last_used_at: 10 },
+    { name: "GitHub", connected: true, last_used_at: 9 },
+    { name: "Notion", connected: true, last_used_at: 8 },
+    { name: "Slack", connected: true, last_used_at: 7 },
+  ] };
+  const read = vi.spyOn(api, "integrationsInventory").mockResolvedValue(inventory as never);
+  let event!: (value: MainEvent) => void;
+  document.body.innerHTML = '<div class="window-chrome"></div><nav id="nav"></nav><main id="main"></main>';
+  const nav = document.getElementById("nav")!;
+  const column = document.createElement("aside");
+  column.innerHTML = '<div class="mb-top"><button data-col="add"></button></div>';
+  createSidebar(nav, column, { onEvent: handler => { event = handler; return () => {}; } } as AppContext);
+  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(3));
+  expect([...nav.querySelectorAll('.side-foot [data-go]')].map(el => [el.getAttribute('data-go'), el.getAttribute('data-pane')])).toEqual([
+    ['settings', 'connections'], ['settings', 'general'], ['dictation', null], ['home', null],
+  ]);
+  expect(nav.querySelector('.sidebar-apps')?.getAttribute('aria-label')).toContain('4');
+  for (const id of ['dictation', 'home']) {
+    const button = nav.querySelector(`[data-go="${id}"]`)!;
+    expect(button.classList.contains('icon')).toBe(true);
+    expect(button.querySelector('.nav-t')).toBeNull();
+    expect(button.getAttribute('aria-label')).toBeTruthy();
+    expect(button.hasAttribute('title') && button.hasAttribute('data-tooltip')).toBe(false);
+  }
+  const mutations: MutationRecord[] = [];
+  const observer = new MutationObserver(records => mutations.push(...records));
+  observer.observe(nav.querySelector('.sidebar-apps')!, { attributes: true, childList: true, subtree: true });
+  event({ type: 'ConnectionsChanged' });
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(mutations).toHaveLength(0);
+  read.mockRejectedValueOnce(new Error('unavailable'));
+  event({ type: 'ConnectionsChanged' });
+  await vi.waitFor(() => expect(nav.querySelectorAll('.sidebar-app-marks .mono')).toHaveLength(0));
+  observer.disconnect(); read.mockRestore();
+});
 
 test("the chief is an ordinary row until it is pinned, then a larger centered face above its name", () => {
   const el = document.createElement("div");
@@ -49,6 +90,31 @@ test("the sidebar has no brand, names Home in each language, and collapses to a 
   expect(add.parentElement!.className).toBe("mb-top");
 });
 
+test("closing an already closed drawer preserves the destination's focus", () => {
+  vi.stubGlobal('matchMedia', () => ({matches:true,addEventListener:vi.fn()}));
+  const read=vi.spyOn(api,'integrationsInventory').mockResolvedValue({state:'complete',count:0,apps:[]} as never);
+  try {
+    document.body.innerHTML='<div class="window-chrome"></div><nav id="nav"></nav><main id="main"><textarea id="entry"></textarea></main>';
+    const nav=document.getElementById('nav')!, column=document.createElement('aside');
+    column.innerHTML='<div class="mb-top"><button data-col="add"></button></div>';
+    const sidebar=createSidebar(nav,column), entry=document.getElementById('entry')!;
+    entry.focus();
+    const observer=new MutationObserver(() => {});
+    observer.observe(document.documentElement,{attributes:true,childList:true,subtree:true});
+    sidebar.close();
+    const mutations=observer.takeRecords(); observer.disconnect();
+    expect(mutations).toHaveLength(0);
+    expect(document.activeElement).toBe(entry);
+    const toggle=document.querySelector<HTMLElement>('[data-sidebar="open"]')!;
+    toggle.click();
+    expect(document.activeElement).toBe(nav.querySelector('[data-sidebar="collapse"]'));
+    sidebar.close();
+    expect(document.activeElement).toBe(toggle);
+    entry.focus(); sidebar.close();
+    expect(document.activeElement).toBe(entry);
+  } finally { read.mockRestore(); vi.unstubAllGlobals(); }
+});
+
 test("the shell has one permanent conversation sidebar and no Team route or apps entry", () => {
   const main = readFileSync("src/main/main.ts", "utf8");
   expect(main).not.toContain("createTeamPage");
@@ -58,7 +124,7 @@ test("the shell has one permanent conversation sidebar and no Team route or apps
   expect(types.match(/export type PageId = ([^;]+)/)?.[1]).not.toContain('"team"');
 });
 
-test("room identity uses the participants' own faces and caps the grid at four", () => {
+test("room identity uses the participants' own faces and caps the cluster at four", () => {
   const list = { members: [1, 2, 3, 4, 5].map(id => ({ id, name: `Person ${id}` } as Member)), groups: [] };
   const el = document.createElement("div");
   el.innerHTML = roomAvatarHTML({ member_ids: [2, 1, 3, 4, 5] }, list);

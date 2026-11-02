@@ -2,12 +2,25 @@
 import { afterEach, expect, test, vi } from "vitest";
 const core = vi.hoisted(() => vi.fn());
 vi.mock("./api", () => ({ core }));
-import { mountConversationList } from "./conversation-list";
+import { mountConversationList, newestConversation, type ConversationInfo } from "./conversation-list";
 import { closeMenu } from "./ui";
 import { installContextMenus } from "./context-menu";
 
 afterEach(() => { closeMenu(); document.body.replaceChildren(); vi.clearAllMocks(); });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+
+test("window entry uses standard activity, default only for a tie, and quick only as a last resort", () => {
+  const rows = [
+    {id:1,kind:'standard',is_default:1,updated_at_ms:10},
+    {id:2,kind:'standard',is_default:0,updated_at_ms:10},
+    {id:3,kind:'quick',updated_at_ms:100},
+  ] as ConversationInfo[];
+  expect(newestConversation(rows)?.id).toBe(1);
+  expect(newestConversation([{...rows[1],updated_at_ms:20},...rows])?.id).toBe(2);
+  expect(newestConversation([rows[2]])?.id).toBe(3);
+  expect(newestConversation([])).toBeUndefined();
+  expect(rows.map(row=>row.id)).toEqual([1,2,3]);
+});
 
 test("quick questions stay first with their localized title and open the persistent conversation", async () => {
   core.mockResolvedValue({ conversations: [

@@ -58,7 +58,7 @@ describe("real app entry with the shared look fixture", () => {
   });
   it("deletes a dictionary word through its overflow menu and keeps undo available", async () => {
     document.querySelector('.modal-scrim [data-act="close"]').click();
-    document.querySelector('#nav .nav[data-go="dictation"]').click();
+    document.querySelector('#nav [data-go="dictation"]').click();
     await vi.waitFor(() => expect(document.querySelector('[data-dictation-tab="dictionary"]')).not.toBeNull());
     document.querySelector('[data-dictation-tab="dictionary"]').click();
     await vi.waitFor(() => expect(document.querySelectorAll('.wrow')).toHaveLength(2));

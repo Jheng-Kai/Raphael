@@ -72,6 +72,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       horizontalOverflow.push({ ...description, width: element.clientWidth, scrollWidth: element.scrollWidth });
     if (!onScreen(element)) continue;
     const floatingLatest = element.matches(".page-agent .ra-stage > button.conversation-latest");
+    const sidebarAction = element.matches(".side .btn.icon");
     const violation = (rule, reason) => productRules.push({ ...description, rule, reason });
     if (element.matches('button:disabled[title], [aria-disabled="true"][title]')) {
       const title = element.getAttribute('title')?.trim();
@@ -92,7 +93,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
     if (element.matches('.mb-av-slime') && (box.width % 1 || box.height % 1)) violation('R-UI-63', `A slime on a fraction of a pixel is drawn soft: ${box.width} x ${box.height}`);
     if (element.matches('.shimmer') && new Set(style.backgroundImage.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
     if (element.matches('button.btn.icon')) {
-      if (!floatingLatest && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
+      if (!floatingLatest && !sidebarAction && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');
       if (glyph) {
         const rect = glyph.getBoundingClientRect();

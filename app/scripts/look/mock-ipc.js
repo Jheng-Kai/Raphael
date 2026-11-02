@@ -1135,7 +1135,7 @@ export function installMock(fixture, config = {}, target = window) {
       }
       case "integrations.catalog": return { services: data.services };
       case "integrations.audit": return { entries: [] };
-      case "integrations.inventory": return inventory();
+      case "integrations.inventory": return variant.appsInventory ?? inventory();
       case "integrations.test": return { ok: true, tools: ["search", "save"] };
       case "integrations.preview": { const entries = Object.entries(JSON.parse(p.text).mcpServers ?? {}); return { candidates: entries.map(([name, definition], index) => ({ ...data.candidates[0], ...definition, id: `paste-${index}`, name })), rejected: 0 }; }
       case "integrations.discover": return { candidates: data.candidates, rejected: 0 };

@@ -207,3 +207,12 @@ test("typing does not draw the picture again",async()=>{
  expect(view.el.querySelector(".cmp-chip")).toBe(chip);
 });
 
+
+test("a delivered paste starts the next draft filename at the base name", async () => {
+ const {view}=mount();
+ paste(view.input,[],'x'.repeat(2000));await new Promise(resolve=>setTimeout(resolve,0));await flush();
+ expect(view.el.querySelector('.cmp-chip-t')!.textContent).toBe('Pasted text.txt');
+ view.el.requestSubmit();await flush();
+ paste(view.input,[],'y'.repeat(2000));await new Promise(resolve=>setTimeout(resolve,0));await flush();
+ expect(view.el.querySelector('.cmp-chip-t')!.textContent).toBe('Pasted text.txt');
+});

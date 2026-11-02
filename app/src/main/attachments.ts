@@ -128,17 +128,28 @@ export function mountStageDrop(stage: HTMLElement, control: () => HTMLElement, a
   return { measure, reset: mountFileDrop(stage, overlay, add) };
 }
 
-/** Clipboard files are attached; any accompanying plain text stays in the composer. */
-export function bindFilePaste(input: HTMLTextAreaElement, add: (files: File[]) => void, fit: () => void): void {
+/** Intercept large text in capture, before mention shortening can put it in the field. */
+export function bindFilePaste(input: HTMLTextAreaElement, add: (files: File[]) => void, fit: () => void, names: () => readonly string[] = () => []): void {
+  const reserved = new Set<string>();
+  input.addEventListener("composer-draft-restored", () => reserved.clear());
   input.addEventListener("paste", e => {
     const pasted = Array.from(e.clipboardData?.files ?? []);
-    if (pasted.length === 0) return;
     const words = e.clipboardData?.getData("text/plain") ?? "";
+    const long = words.length >= 2000 || words.split(/\r\n?|\n/).length >= 40;
+    if (!long && pasted.length === 0) return;
     e.preventDefault();
-    if (words) {
+    e.stopImmediatePropagation();
+    if (long) {
+      const base = t("agent.pastedText"), used = new Set([...names(), ...reserved]);
+      let name = base;
+      for (let number = 2; used.has(name); number++) name = base.replace(/\.txt$/, ` ${number}.txt`);
+      reserved.add(name);
+      pasted.push(new File([words], name, { type: "text/plain" }));
+    } else if (words) {
       input.setRangeText(words, input.selectionStart ?? input.value.length, input.selectionEnd ?? input.value.length, "end");
       fit();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
     }
     add(pasted);
-  });
+  }, true);
 }

@@ -165,7 +165,7 @@ async function start(): Promise<void> {
   const nav = document.getElementById("nav")!;
   const main = document.getElementById("main")!;
   const guide = document.getElementById("ob")!;
-  createSidebar(nav, agent.sidebar);
+  createSidebar(nav, agent.sidebar, ctx);
   void loadAvatar(api.avatarGet);
   void agent.loadSidebar();
   nav.addEventListener("click", (e) => {

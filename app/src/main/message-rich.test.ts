@@ -2,9 +2,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { replyContentHTML } from "./message-content";
 import { mountRichContent, preserveRichScroll } from "./message-rich";
-import { copyText } from "./ui";
+import { copyButton } from "./ui";
 vi.mock("./member-dialogs", () => ({ openDialog: vi.fn() }));
-vi.mock("./ui", async importOriginal => ({ ...await importOriginal<typeof import("./ui")>(), copyText: vi.fn(async () => {}) }));
+vi.mock("./ui", async importOriginal => ({ ...await importOriginal<typeof import("./ui")>(), copyButton: vi.fn(async () => {}) }));
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 test("a remote Markdown image has no source or request until its explicit load click and omits the referrer", () => {
@@ -54,9 +54,9 @@ test("card copy actions copy TSV and exact code source without invoking a tool",
   root.innerHTML = replyContentHTML('| Name | Value |\n| --- | --- |\n| **Alpha** | `a|b` |\n\n```bash\necho "hello"\n```');
   mountRichContent(root);
   root.querySelector<HTMLButtonElement>('[data-rich-act="copy-table"]')!.click();
-  expect(copyText).toHaveBeenLastCalledWith("Name\tValue\nAlpha\ta|b");
+  expect(copyButton).toHaveBeenLastCalledWith(expect.any(HTMLElement), "Name\tValue\nAlpha\ta|b");
   root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
-  expect(copyText).toHaveBeenLastCalledWith('echo "hello"');
+  expect(copyButton).toHaveBeenLastCalledWith(expect.any(HTMLElement), 'echo "hello"');
 });
 
 test("answer forms use the same source copy action as existing code cards", () => {
@@ -65,5 +65,5 @@ test("answer forms use the same source copy action as existing code cards", () =
   root.innerHTML = replyContentHTML("```board\n" + source + "\n```");
   mountRichContent(root);
   root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
-  expect(copyText).toHaveBeenLastCalledWith(source);
+  expect(copyButton).toHaveBeenLastCalledWith(expect.any(HTMLElement), source);
 });

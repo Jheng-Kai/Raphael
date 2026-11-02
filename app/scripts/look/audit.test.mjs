@@ -499,6 +499,10 @@ describe("rendered look checks", () => {
     const { audit } = productAudit('<nav id="nav"><div class="mb-top"><button class="btn icon mb-tool" data-col="other" style="background:#fff;border:1px solid #888"></button></div></nav>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-16', 'R-UI-18']);
   });
+  it("allows the specified round sidebar action surface while rejecting unrelated icon surfaces", () => {
+    const { audit } = productAudit('<nav class="side"><button class="btn icon sidebar-home" style="border:0;background:gray"></button></nav><button class="btn icon" style="border:0;background:gray"></button>');
+    expect(audit().productRules.filter(item => item.rule === 'R-UI-16')).toHaveLength(1);
+  });
   it("rejects icon surfaces, incorrect glyph sizing and off-center icons (R-UI-16/19)", () => {
     const { window, audit } = productAudit('<button class="btn icon" style="border:0;background:gray"><svg class="i"></svg></button>');
     const button = window.document.querySelector('button'), glyph = button.firstElementChild;

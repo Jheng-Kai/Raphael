@@ -285,6 +285,28 @@ describe("the column, used", () => {
     expect(column.el.querySelector<HTMLElement>('[data-group="10"]')!.dataset.open).toBe("true");
   });
 
+  test("the whole group heading folds except its menu, search and a completed drag", () => {
+    const column = mount();
+    const section = column.el.querySelector<HTMLElement>('[data-group="10"]')!;
+    const name = section.querySelector<HTMLElement>('.mb-gname')!;
+    name.click(); expect(section.dataset.open).toBe('false');
+    section.querySelector<HTMLElement>('[data-group-more]')!.click();
+    expect(section.dataset.open).toBe('false');
+    document.querySelector<HTMLElement>('#app-popover [data-pick=rename]')!.click();
+    name.click(); expect(section.dataset.open).toBe('true');
+    name.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
+    name.dispatchEvent(new Event('dragend', { bubbles: true }));
+    name.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 })); expect(section.dataset.open).toBe('true');
+    name.dispatchEvent(new Event('dragstart', { bubbles: true, cancelable: true }));
+    name.dispatchEvent(new Event('dragend', { bubbles: true }));
+    section.querySelector<HTMLElement>('[data-group-fold]')!.click(); expect(section.dataset.open).toBe('false');
+    const search = column.el.querySelector<HTMLInputElement>('.mb-find-input')!;
+    search.value = '老師'; search.dispatchEvent(new Event('input'));
+    const heading = column.el.querySelector<HTMLElement>('.mb-ghead')!;
+    const open = heading.closest<HTMLElement>('.mb-sec')!.dataset.open;
+    heading.click(); expect(heading.closest<HTMLElement>('.mb-sec')!.dataset.open).toBe(open);
+  });
+
   test("member drops and folder reorder use the shared persistence callbacks", () => {
     const column = mount();
     host.dropMember = vi.fn().mockResolvedValue(undefined);

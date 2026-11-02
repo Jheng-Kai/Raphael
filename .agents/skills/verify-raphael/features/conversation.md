@@ -1277,3 +1277,13 @@ to the selected match, retaining that open group through an unchanged refresh.
 ```powershell
 npm run look -- event-routine-find-group --theme both --width 1120,720,1920x1080
 ```
+
+## Daily delegation polish (2026-11-03)
+
+R-UI-85..91: fixed sidebar actions, newest window entry, group heading press, copy feedback, isolated drafts, long paste files and bare overlapping room identities. See README daily section for affected existing sidebar consumers and performance assertions.
+
+```powershell
+npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-press-feedback daily-press-surfaces daily-press-event daily-press-card daily-press-desktop daily-newest daily-folder-heading daily-copy-chief daily-copy-member daily-copy-room daily-copy-setup daily-copy-webhook daily-draft-member daily-draft-room daily-paste-chief daily-paste-room daily-long-draft daily-faces-2-rail daily-faces-3-rail daily-faces-4-rail daily-faces-2 daily-faces-3 daily-faces-4 --theme both --width 1120,720,1920x1080
+```
+
+Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.

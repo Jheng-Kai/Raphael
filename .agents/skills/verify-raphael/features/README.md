@@ -593,3 +593,45 @@ for R-UI-92/86/87, deterministic period fixtures, preparation in all three viewi
 locations, retained motion and wallpaper-to-stream continuity. Protected map and
 rule additions are staged under `.fold/.agents/` for coordinator promotion.
 
+## Daily delegation polish (2026-11-03)
+
+R-UI-85..91: sidebar.ts owns the existing Connections door and inventory marks;
+conversation-list.ts owns window-entry ordering, without changing core routing.
+member-column.ts keeps heading fold, keyboard, search and drag semantics together.
+ui.ts owns copyButton feedback for all existing copy consumers. composer-drafts.ts
+persists only words/quotes under raphael.composer.drafts; member and room composers
+retain files in memory. attachments.ts intercepts long paste in capture before
+mention-field.ts. composer-links.ts preserves full restored URLs and avoids quadratic overlap scans. sidebar.css and automations.css share bare character composites
+and the single participant row. No new page, setting, RPC or migration.
+
+Selected look scenes: all existing sidebar.mjs scenes; busy-team-typing;
+daily-footer-hover, daily-footer-marks, daily-footer-home, daily-press-feedback,
+daily-press-surfaces, daily-press-event, daily-press-card, daily-press-desktop, daily-newest,
+daily-folder-heading, daily-copy-chief, daily-copy-member, daily-copy-room, daily-copy-setup, daily-copy-webhook,
+daily-draft-member, daily-draft-room, daily-paste-chief, daily-paste-room,
+daily-long-draft, daily-faces-2, daily-faces-3, daily-faces-4,
+daily-faces-2-rail, daily-faces-3-rail, daily-faces-4-rail.
+Each uses both themes at 1120,720,1920x1080. sidebar-selection remains an assertion
+in sidebar-rail and daily-footer-home, daily-press-feedback. Composer performance steps retain long-task,
+storage-write, field-length and chip-count evidence in the existing look report.
+The old footer word alignment and square Home checks now protect sensible name
+insets and equal 36px icon actions. The old nonoverlapping round face grid check
+now protects bare overlapping clusters, fixed bounds and one header row. The
+emblem audit includes composite faces; only sidebar controls have a scoped soft
+surface exception to the general transparent icon policy. Service marks are 18px,
+and the emblem scales to its composite slot, as explicit owner requirements.
+
+Press feedback follows actual pointer down/up on the real controls, recording
+computed colors and fixed bounds. Source audit preserves working default,
+primary and calendar states; explicit hover overrides receive a distinct pressed
+state. Representative consumers include the sidebar, composer, Home, connections,
+calendar, model sources, event receipts, conversation cards and desktop preview. Button surfaces
+that delegate painting to their parent are measured with that parent too.
+
+Run npm.cmd run verify and the targeted attachment core tests. The unit prohibits
+network, judge, native journeys, cargo and real providers; those are explicit SKIP.
+Read local reference images outside the repository; never copy owner art or words.
+
+Long draft profiling also covers idempotent drawer close: closing a closed
+drawer never steals the destination focus. Unchanged member controls keep focus
+without another layout, and newest-page reads skip the earlier-page scroll anchor.

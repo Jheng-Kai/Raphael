@@ -33,10 +33,17 @@ export function shortenLinks(text: string): string {
 export function linkRanges(text: string): LinkRange[] {
   if (!addresses.size) return [];
   const names = [...addresses.keys()].sort((a, b) => b.length - a.length), ranges: LinkRange[] = [];
+  // Restored long drafts keep full URLs, which must never expand a short name inside them.
+  const occupied = new Uint8Array(text.length);
+  for (const match of text.matchAll(/https?:\/\//gi)) {
+    occupied.fill(1, match.index, match.index + bareUrl(text.slice(match.index)).length);
+  }
   for (const name of names) {
     for (let start = text.indexOf(name); start >= 0; start = text.indexOf(name, start + name.length)) {
       const end = start + name.length;
-      if (!ranges.some(range => range.start < end && start < range.end)) ranges.push({ start, end });
+      let overlap = false;
+      for (let at = start; at < end; at++) if (occupied[at]) { overlap = true; break; }
+      if (!overlap) { ranges.push({ start, end }); occupied.fill(1, start, end); }
     }
   }
   return ranges.sort((a, b) => a.start - b.start);

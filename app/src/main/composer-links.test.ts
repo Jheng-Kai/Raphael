@@ -1,6 +1,14 @@
 import { expect, test } from "vitest";
 import { linkRanges, shortenLinks, wholeLinks } from "./composer-links";
 
+test("restored full URLs stay whole even when another draft registered their short names", () => {
+  const address = "https://draft.example/article?sample=1";
+  const short = shortenLinks(address);
+  const draft = `Sample ${address} and ${short}`;
+  expect(wholeLinks(draft)).toBe(`Sample ${address} and ${address}`);
+  expect(wholeLinks((address + " ").repeat(6000)) === (address + " ").repeat(6000)).toBe(true);
+});
+
 const LONG = "https://x.com/someone/status/2115177376921293212?ref_src=twsrc%5Etfw&ref_url=https%3A%2F%2Fexample.com%2Fa";
 
 test("a long link stands as its short name and goes out whole, with the words around it as they were", () => {

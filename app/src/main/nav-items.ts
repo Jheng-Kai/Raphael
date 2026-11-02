@@ -8,6 +8,6 @@ export const navItemHTML = (id: string, name: string, lead: string): string =>
 
 /** Names the page `id` of the sidebar `nav` in the language of the window. */
 export function labelNavItem(nav: ParentNode, id: string, name: string): void {
-  // The entry for the connections opens the settings too, at its own tab: it names itself (`renderAppsEntry`).
+  // Pane entrances name themselves; this helper labels only ordinary page entries.
   nav.querySelector<HTMLElement>(`[data-go="${id}"]:not([data-pane]) .nav-t`)!.textContent = name;
 }

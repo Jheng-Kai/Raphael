@@ -84,6 +84,27 @@ test("copying a webhook secret keeps the unchanged form and its mask", async () 
   copied.mockRestore();
 });
 
+test("copying a webhook secret keeps its feedback when the address changes", async () => {
+  const copied = vi.spyOn(navigator.clipboard,'writeText').mockResolvedValue();
+  api.routineWebhook.mockResolvedValueOnce({address:'http://127.0.0.1:43210/routines/1'});
+  openRoutineDialog({members,routine:{...plan,schedule:null,when:{webhook:true}}}); await flush();
+  let complete!: (value: unknown) => void;
+  api.routineWebhook.mockImplementationOnce(() => new Promise(resolve => { complete=resolve; }));
+  const button=document.querySelector<HTMLButtonElement>('[data-dlg="hook-copy"]')!;
+  button.click();
+  expect(button.disabled).toBe(true);
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  complete({address:'http://127.0.0.1:43211/routines/1',address_changed:true,secret:'sample-secret'}); await flush();
+  expect(document.querySelector('.au-hook-address')?.textContent).toContain(':43211/');
+  expect(document.querySelector('.au-webhook [role="status"]')?.textContent).toBeTruthy();
+  expect(document.querySelector('[data-dlg="hook-copy"]')).toBe(button);
+  expect(button.getAttribute('aria-label')).toBe('Copied');
+  expect(button.disabled).toBe(false);
+  expect(button.hasAttribute('aria-busy')).toBe(false);
+  expect(document.querySelector<HTMLInputElement>('.au-hook-secret')?.type).toBe('password');
+  copied.mockRestore();
+});
+
 test("event choices explain the empty verified catalogue", async () => {
   openRoutineDialog({members, routine:plan});
   click('[data-dlg="trigger"]'); click('#app-popover [data-value="event"]'); await flush();

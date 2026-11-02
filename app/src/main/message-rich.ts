@@ -2,7 +2,7 @@ import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import { messageUrl, tablePlainText } from "./message-content";
-import { copyText, esc, toaster } from "./ui";
+import { copyButton, esc, toaster } from "./ui";
 import "./message-rich.css";
 
 /** Preserve the visible reading anchor across asynchronous SVG/image size changes. */
@@ -114,8 +114,8 @@ export function mountRichContent(root: HTMLElement): void {
     const block = target.closest<HTMLElement>(".rich-block")!;
     const source = block.dataset.source ?? "";
     switch (target.dataset.richAct) {
-      case "copy-source": void copyText(source).catch(error => toaster.info(describeError(error))); break;
-      case "copy-table": void copyText(tablePlainText(source)).catch(error => toaster.info(describeError(error))); break;
+      case "copy-source": void copyButton(target, source).catch(error => toaster.info(describeError(error))); break;
+      case "copy-table": void copyButton(target, tablePlainText(source)).catch(error => toaster.info(describeError(error))); break;
       case "view-source": {
         const show = target.getAttribute("aria-expanded") !== "true";
         if (sourceViews.size >= 64) sourceViews.delete(sourceViews.keys().next().value!);

@@ -46,7 +46,9 @@
 .au-month-grid .btn.au-other-month { color: var(--text-3); }
 .au-month-grid .btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-radius: var(--r-pill); }
 .au-month-grid .btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+.au-month-grid .btn[aria-pressed="true"]:active:not(:disabled) { background: var(--accent-pressed); }
 .au-month-grid .btn:hover:not([aria-pressed="true"]) { background: var(--hover); }
+.au-month-grid .btn:active:not(:disabled) { background: var(--pressed); }
 .au-room-members { max-height: 280px; overflow-y: auto; overflow-x: hidden; }
 .au-group-dialog .mb-dlg-body { display: flex; flex-direction: column; gap: var(--sp-4); }
 .au-room-pane.mb-chat { grid-template-rows: auto auto minmax(0, 1fr); }
@@ -54,7 +56,7 @@
 .au-room-pane .mb-head { gap: var(--sp-3); }
 .au-room-heading { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: center; gap: var(--sp-3); }
 .au-room-heading > b { font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.au-room-faces { display: flex; gap: var(--sp-1); flex-shrink: 0; max-width: 140px; overflow: hidden; }
+.au-room-faces { display: flex; gap: 0; flex-shrink: 0; }
 .au-room-pane .ra-dock .composer { width: 100%; max-width: var(--pa-colw); margin-inline: auto; }
 .au-room-author { font-size: var(--fs-2xs); color: var(--text-2); }
 /* Each message keeps its hover actions' row under it, which already parts it from the next. */
@@ -73,7 +75,8 @@
 .au-room-row:hover > .btn:first-child, .au-room-row:has(.au-room-more[aria-expanded="true"]) > .btn:first-child { padding-right: calc(var(--pa-more, var(--h-ctl-sm)) + 8px); }
 .au-room-reply { display: inline-flex; max-width: 100%; margin-left: var(--sp-2); padding: 2px var(--sp-2); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
 .au-room-thread .au-room-thinking { display: flex; flex-direction: row; align-items: center; gap: var(--sp-3); color: var(--text-2); font-size: var(--fs-xs); padding-block: var(--sp-2); }
-.au-room-participant { position: relative; display: inline-flex; padding-right: 4px; }
+.au-room-participant { position: relative; display: inline-flex; }
+.au-room-participant + .au-room-participant { margin-left: -6px; }
 .au-room-faces { overflow: visible; }
 .au-room-crown { position: absolute; right: 0; bottom: 0; display: inline-flex; padding: 1px; border-radius: var(--r-pill); background: var(--panel); color: var(--accent-text); }
 .au-room-crown .i { width: 16px; height: 16px; }
@@ -105,6 +108,7 @@
 .page-agent .btn.event-open { min-height: 0; padding: 2px var(--sp-2); border-color: transparent; background: transparent; font: inherit; color: inherit; }
 .page-agent .btn.event-open:hover:not(:disabled) { border-color: transparent; background: transparent; }
 .page-agent .btn.event-open:hover .event-line, .handoff-event > summary:hover .event-line { color: var(--text-2); }
+.page-agent .btn.event-open:active:not(:disabled) .event-line { color: color-mix(in srgb, var(--text-2) 85%, transparent); }
 .handoff-row, .handoff-event { width: 100%; }
 .handoff-event > summary { cursor: pointer; list-style: none; }
 .handoff-event > summary::-webkit-details-marker { display: none; }
@@ -142,10 +146,13 @@
 .au-calendar-side .au-month-grid .btn { width: 26px; height: 26px; min-height: 26px; justify-self: center; border-radius: var(--r-pill); }
 .au-calendar-side .au-month-grid .btn[aria-pressed="true"], .au-calendar-side .au-month-grid .btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--selected); color: var(--text); }
 .au-calendar-side .au-month-grid .btn[aria-current="date"], .au-calendar-side .au-month-grid .btn[aria-current="date"]:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.au-calendar-side .au-month-grid .btn[aria-pressed="true"]:active:not(:disabled) { background: var(--pressed); }
+.au-calendar-side .au-month-grid .btn[aria-current="date"]:active:not(:disabled) { background: var(--accent-pressed); }
 .au-calendar-side h3 { margin: var(--sp-4) 0 var(--sp-1); font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
 .au-drag-members { display: flex; flex-direction: column; flex: none; gap: 1px; margin-inline: calc(-1 * var(--sp-2)); }
 .btn.au-source { flex: none; justify-content: flex-start; gap: var(--sp-2); min-height: 30px; padding: 3px var(--sp-2); border: 0; background: transparent; font-size: var(--fs-xs); text-align: left; }
 .btn.au-source:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.btn.au-source:active:not(:disabled) { background: var(--pressed); }
 .au-source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .au-source-mark { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--text-2); }
 .au-source > .cal-mark { width: 20px; height: 20px; }
@@ -168,7 +175,9 @@
 .is-one-day .au-day-head { align-items: flex-start; padding-left: var(--sp-3); }
 .btn.au-day-num { width: 38px; height: 38px; min-height: 38px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; font-size: var(--fs-h1); font-weight: 400; font-variant-numeric: tabular-nums; }
 .btn.au-day-num:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.btn.au-day-num:active:not(:disabled) { background: var(--pressed); }
 .is-today > .btn.au-day-num, .is-today > .btn.au-day-num:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
+.is-today > .btn.au-day-num:active:not(:disabled) { background: var(--accent-pressed); }
 .au-all-day-row { grid-column: 1 / -1; display: grid; grid-template-columns: 52px repeat(var(--au-days), minmax(0, 1fr)); grid-template-rows: repeat(var(--au-rows), 22px); row-gap: 2px; padding-bottom: var(--sp-1); }
 .au-all-day-label { grid-column: 1; grid-row: 1 / -1; padding-top: 2px; font-size: var(--fs-2xs); line-height: 18px; color: var(--text-3); text-align: center; white-space: nowrap; }
 .au-all-day { grid-row: 1 / -1; min-width: 0; margin-bottom: calc(-1 * var(--sp-1)); border-left: 1px solid var(--line); }
@@ -188,6 +197,7 @@
 .au-draft .cal-chip.btn { box-shadow: var(--pop); cursor: default; }
 .cal-chip.btn.is-past { opacity: 0.6; }
 .cal-chip.is-own.btn.is-past, .cal-chip.is-own.btn.is-past:hover:not(:disabled) { opacity: 1; background: var(--surface-2); color: var(--text-2); }
+.cal-chip.is-own.btn.is-past:active:not(:disabled) { background: var(--pressed); }
 .cal-chip.is-home-focus, .cal-chip[aria-current="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
 .au-history-mark { position: absolute; right: var(--sp-1); bottom: var(--sp-1); width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--err); pointer-events: none; }
 .au-history-mark[data-status="done"] { background: var(--ok); }
@@ -201,6 +211,7 @@
 .au-now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--err); }
 .btn.cal-more { justify-content: flex-start; min-height: 20px; height: 20px; padding: 0 6px; border: 0; background: transparent; font-size: var(--fs-2xs); color: var(--text-2); }
 .btn.cal-more:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.btn.cal-more:active:not(:disabled) { background: var(--pressed); }
 .btn.cal-more[hidden] { display: none; }
 
 .au-month-view { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 26px repeat(6, minmax(0, 1fr)); user-select: none; }

@@ -93,6 +93,88 @@ const pick = async (id: number) => {
   await flush();
 };
 
+test("member drafts follow the composer owner through switching and page return", async () => {
+  const agent = mount(); await flush();
+  const input = agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value = 'Chief unfinished'; input.dispatchEvent(new Event('input'));
+  await pick(3); expect(input.value).toBe('');
+  input.value = 'Member unfinished'; input.dispatchEvent(new Event('input'));
+  await pick(0); expect(input.value).toBe('Chief unfinished');
+  await pick(3); expect(input.value).toBe('Member unfinished');
+  agent.hide(); agent.show(); await flush();
+  expect(input.value).toBe('Member unfinished');
+  expect(input.selectionStart).toBe(input.value.length);
+  agent.hide();
+});
+
+test("explicit conversation choices and their drafts survive later activity and sending elsewhere", async () => {
+  const conversations = [
+    {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+  ];
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
+  const agent=mount();await flush();
+  $('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="1"]').click();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value='First unfinished';input.dispatchEvent(new Event('input'));
+  conversations[1].updated_at_ms=100;
+  window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
+  expect($('.conversation-caption').textContent).toBe('First sample');
+  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="2"]').click();await flush();
+  expect(input.value).toBe('');input.value='Send second';input.dispatchEvent(new Event('input'));
+  agent.el.querySelector<HTMLFormElement>('.composer')!.requestSubmit();await flush();
+  if($('.mb-det').hidden)$('.conversation-trigger').click();await flush();
+  $('[data-conversation-open="1"]').click();await flush();
+  expect(input.value).toBe('First unfinished');
+  await pick(3);input.value='Other member draft';input.dispatchEvent(new Event('input'));
+  window.dispatchEvent(new CustomEvent('conversation-deleted',{detail:{member:0,id:1}}));await flush();
+  await pick(4);await pick(3);expect(input.value).toBe('Other member draft');agent.hide();
+});
+
+test("typing defers storage work until the pause and a new page restores the saved words", async () => {
+  vi.useFakeTimers();
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:[{id:1,member_id:0,title:'Sample',kind:'standard',is_default:1,updated_at_ms:1}]}:{questions:[]});
+  const agent=mount();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  const read=vi.spyOn(localStorage,'getItem'),write=vi.spyOn(localStorage,'setItem');
+  input.value='Unfinished long sample '.repeat(5000);input.dispatchEvent(new Event('input'));
+  input.value+='Last word';input.dispatchEvent(new Event('input'));
+  expect(read.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(0);
+  expect(write.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(300);
+  expect(write.mock.calls.filter(([key])=>key==='raphael.composer.drafts')).toHaveLength(1);
+  const text=input.value;agent.hide();agent.el.remove();
+  const next=mount();await flush();
+  expect(next.el.querySelector<HTMLTextAreaElement>('.composer textarea')!.value.length).toBe(text.length);
+  next.hide();
+});
+
+test.each([true, false])("an authoritative missing conversation removes its saved draft (open: %s)", async (open) => {
+  let conversations = [
+    {id:1,member_id:0,title:'First sample',kind:'standard',is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:'Recent sample',kind:'standard',is_default:0,updated_at_ms:20},
+  ];
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list'?{conversations:structuredClone(conversations)}:{questions:[]});
+  const agent=mount();await flush();$('.conversation-trigger').click();await flush();$('[data-conversation-open="1"]').click();await flush();
+  const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+  input.value='Removed conversation draft';input.dispatchEvent(new Event('input'));agent.hide();agent.show();await flush();
+  if (!open) { if ($('.mb-det').hidden) $('.conversation-trigger').click(); await flush(); $('[data-conversation-open="2"]').click(); await flush(); }
+  conversations=conversations.filter(item=>item.id!==1);
+  window.dispatchEvent(new CustomEvent('conversations-changed',{detail:0}));await flush();
+  expect($('.conversation-caption').textContent).toBe('Recent sample');expect(input.value).toBe('');
+  expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['member:0:1']).toBeUndefined();agent.hide();
+});
+
+test("a long draft keeps its words without repeated full-text height measurements", async () => {
+ const agent=mount();await flush();
+ const input=agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+ const height=vi.fn(()=>100000);Object.defineProperty(input,'scrollHeight',{get:height,configurable:true});
+ const text='Long sample draft '.repeat(10000);input.value=text;input.dispatchEvent(new Event('input'));
+ expect(input.value).toBe(text);expect(height).not.toHaveBeenCalled();agent.hide();
+});
+
 test("returning to an unchanged thread restores viewing once", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.membersViewing.mockClear();
@@ -219,19 +301,20 @@ test("clearing conversations requires confirmation and scopes the request to tha
   expect(document.querySelector(".mb-confirm")).toBeNull(); agent.hide();
 });
 
-test("deleting the open default conversation follows the new server default instead of quick history", async () => {
+test("a fresh window opens the newest standard conversation and deletion opens the newest remaining", async () => {
   let conversations = [
-    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0},
-    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1},
-    {id:2,member_id:0,title:"New default",kind:"standard",is_default:0},
+    {id:4,member_id:0,title:"Quick",kind:"quick",is_default:0,updated_at_ms:100},
+    {id:1,member_id:0,title:"Old default",kind:"standard",is_default:1,updated_at_ms:1},
+    {id:2,member_id:0,title:"Newest",kind:"standard",is_default:0,updated_at_ms:20},
+    {id:3,member_id:0,title:"Remaining newest",kind:"standard",is_default:0,updated_at_ms:10},
   ];
   api.core.mockImplementation(async (method:string) => method === "conversations.list" ? {conversations:structuredClone(conversations)} : {questions:[]});
   const agent=mount();await flush();
-  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:1}));
-  conversations=conversations.filter(c=>c.id!==1).map(c=>({...c,is_default:c.id===2?1:0}));
-  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:1}}));await flush();
   expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:2}));
-  expect($(".conversation-caption").textContent).toBe("New default");agent.hide();
+  conversations=conversations.filter(c=>c.id!==2);
+  window.dispatchEvent(new CustomEvent("conversation-deleted",{detail:{member:0,id:2}}));await flush();
+  expect(api.agentHistoryList).toHaveBeenLastCalledWith(expect.objectContaining({conversation_id:3}));
+  expect($(".conversation-caption").textContent).toBe("Remaining newest");agent.hide();
 });
 
 test("a member is deleted from its ⋯ menu only after the confirmation, and its open thread returns to Raphael", async () => {
@@ -303,7 +386,7 @@ test("a routine run link selects its member and loads the linked older turn", as
   agent.hide();
 });
 
-beforeEach(() => {
+beforeEach(() => { localStorage.clear();
   document.body.innerHTML = "";
   for (const fn of Object.values(api)) fn.mockReset();
   api.roomsList.mockResolvedValue({rooms:[{id:1,name:"Launch",member_ids:[0,3],is_team:0}]});
@@ -970,7 +1053,7 @@ describe("a member's thread", () => {
     expect(api.membersViewing).toHaveBeenLastCalledWith(null);
   });
 
-  test("switching threads clears unsent composer text, and an in-flight ask that fails on the previous thread does not overwrite the new thread's composer", async () => {
+  test("switching threads shows their own drafts, and a failed earlier ask does not overwrite the new thread's composer", async () => {
     let failAsk!: (err: Error) => void;
     api.agentAskText.mockImplementationOnce(() => new Promise<void>((_, rej) => (failAsk = rej)));
     mount();

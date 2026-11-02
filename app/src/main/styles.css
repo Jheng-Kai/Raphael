@@ -165,7 +165,9 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .app-icon { display: block; width: 40px; height: 40px; flex: none; object-fit: contain; object-position: center; border-radius: 0; background: transparent; }
 .nav { position: relative; display: flex; align-items: center; gap: var(--sp-2); min-height: 38px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-sm); background: transparent; text-align: left; font-size: var(--fs-md); line-height: 1.4; color: var(--text-2); width: 100%; }
 .nav:hover { background: var(--hover); color: var(--text); }
+.nav:active { background: var(--pressed); color: var(--text); }
 .nav[aria-current="page"] { background: var(--selected); color: var(--text); font-weight: 600; }
+.nav[aria-current="page"]:active { background: var(--pressed); }
 .nav[aria-current="page"] .i { color: var(--accent-text); }
 /* 拉斐爾 is Raphael's face, and a gold dot while he waits for a YES or a NO */
 .nav .nav-face { margin: -1px; }
@@ -232,6 +234,9 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .btn:hover:not(:disabled) { background: var(--hover); border-color: var(--hover-edge); }
 .btn:active:not(:disabled) { background: var(--pressed); border-color: var(--hover-edge); filter: none; }
 .btn:disabled { opacity: 0.55; cursor: default; }
+.copy-label { display: inline-grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
+.copy-label > span { grid-area: 1 / 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); }
+.copy-label > .copy-reserve { visibility: hidden; }
 .btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .btn.pri:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn.pri:active:not(:disabled) { background: var(--accent-pressed); border-color: var(--accent-pressed); }
@@ -239,11 +244,11 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Icon-only actions use color for hover and selection; keyboard focus retains its ring. */
 .btn.icon { width: var(--h-ctl); padding: 0; border-color: transparent; background: transparent; color: var(--text-2); }
 .btn.icon:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--text); }
-.btn.icon:active:not(:disabled) { background: transparent; border-color: transparent; color: var(--accent-icon); }
+.btn.icon:active:not(:disabled) { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--text) 85%, transparent); }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .btn.icon.pri { background: transparent; border-color: transparent; color: var(--accent-icon); }
 .btn.icon.pri:hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--accent-icon); }
-.btn.icon.pri:active:not(:disabled) { background: transparent; border-color: transparent; color: var(--accent-icon); }
+.btn.icon.pri:active:not(:disabled) { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--accent-icon) 85%, transparent); }
 /* The small one on a row: copy, delete, close, previous month. */
 .btn.icon.row { width: var(--h-ctl-sm); min-height: var(--h-ctl-sm); padding: 0; }
 /* Scope interaction tokens so menu, icon and page-specific controls retain destructive intent. */
@@ -548,6 +553,7 @@ body:has(.page-agent:not([hidden])[data-det="open"]:not(.is-room)) .toast { max-
 .toast-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--toast-action); transform-origin: left; animation: toast-count linear forwards; }
 .toast .btn { border-color: var(--toast-action); background: transparent; color: var(--toast-action); }
 .toast .btn:hover:not(:disabled), .toast .btn:active:not(:disabled) { background: var(--toast-hover); border-color: var(--toast-action); }
+.toast .btn:active:not(:disabled) { background: color-mix(in srgb, var(--toast-hover) 85%, var(--toast-action)); }
 .toast .btn:focus-visible { outline-color: var(--toast-action); }
 .toast > span { min-width: 0; overflow-wrap: anywhere; }
 .toast .btn { flex: none; }
@@ -724,7 +730,8 @@ kbd.ob-cap { white-space: nowrap; }
 /* Custom icon controls share the same interaction policy as iconButton. */
 /* Window controls use caption hover surfaces, as requested by the owner (2026-10-25). */
 :is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:hover, :active) { background: transparent; color: var(--text); filter: none; }
-:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is(:active, [aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
+:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):is([aria-pressed="true"], [aria-expanded="true"], [aria-selected="true"]):not(:disabled) { background: transparent; color: var(--accent-icon); }
+:is(.btn.icon, .cmp-attach, .cmp-voice, .mp-star, .chip-x):active:not(:disabled) { background: transparent; color: color-mix(in srgb, var(--text) 85%, transparent); }
 :where(:root[data-keys]) .btn.icon:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-attach:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(:root[data-keys]) .cmp-voice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

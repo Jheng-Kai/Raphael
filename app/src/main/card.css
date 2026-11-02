@@ -80,6 +80,7 @@
 @media (prefers-reduced-motion: reduce) { .card-status.is-waiting i { animation: none; } }
 
 .page-agent .conversation-card .btn.pri, .page-agent .conversation-card .btn.pri:hover:not(:disabled), .page-agent .conversation-card .btn.pri:active:not(:disabled) { background: var(--card-primary); color: var(--card-primary-ink); border-color: var(--card-primary-edge); }
+.page-agent .conversation-card .btn.pri:active:not(:disabled) { background: color-mix(in srgb, var(--card-primary) 85%, var(--card-primary-ink)); }
 .conversation-card .question-choice { border: 0 solid var(--edge); border-bottom-width: 1px; }
 .conversation-card .mail-in { font-weight: 400; }
 .conversation-card .draft-more-toggle { padding: 6px 8px; }

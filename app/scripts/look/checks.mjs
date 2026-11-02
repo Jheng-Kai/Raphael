@@ -26,6 +26,10 @@ export function checkRendered(name, context = {}) {
     if (name === 'desktop-boot-expanded') require(!window.__look.calls.some(call => call.method === 'computer.viewer_open'), 'expanding preparation never opens an unready stream');
     return {check:name};
   }
+  if(name === "daily-newest") {require(document.querySelector('.conversation-caption').textContent==='Newest sample','the newest standard conversation opens');return {check:name};}
+  if(name === "daily-copy") {const copied={"zh-TW":"已複製",en:"Copied",ja:"コピーしました"}[document.documentElement.lang];const tick=[...document.querySelectorAll('.thread button, .cn-setup-dialog button, .au-routine-dialog button')].find(el=>el.getAttribute('aria-label')===copied);require(tick&&tick.querySelector('svg'),'the pressed copy control displays its tick and copied name');require(tick.scrollWidth<=tick.clientWidth,'copied words fit in the fixed button width');return {check:name};}
+  if(name === "daily-marks") {require(document.querySelectorAll('.sidebar-app-marks .mono').length===3,'three connected known apps show bare marks');return {check:name};}
+  if(name === "daily-draft-member" || name === "daily-draft-room") {const input=document.querySelector(name.endsWith('room')?'#room-message':'.page-agent .mb-chat:not([hidden]) .cmp-input');require(input.value==='Unfinished sample draft','navigation restores this composer words');require(input.selectionStart===input.value.length,'caret returns to the end');return {check:name};}
   if (name === "group-live-line") {
     const row = document.querySelector('.au-room-thinking');
     require(visible(row?.querySelector('.live-action')), 'the working member has a visible action');
@@ -1165,9 +1169,9 @@ export function checkRendered(name, context = {}) {
     const rail=document.documentElement.hasAttribute('data-sidebar-collapsed');
     require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand; collapse leads the top row and Home sits beside the owner');
     if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
-    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='dictation,settings,home','footer lists dictation above the owner and a square Home');
-    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const square=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(square.width-square.height)<1,'Home is a square');}
-    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&(document.documentElement.hasAttribute('data-sidebar-collapsed')||visible(nav.querySelector('.side-foot [data-go="dictation"] .nav-t'))),'dictation is a named row');
+    require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,settings,dictation,home','footer opens Connections above account, dictation and Home');
+    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(getComputedStyle(home).borderRadius)>=18,'Home keeps the shared round icon surface');}
+    require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
     require(!nav.querySelector('.sidebar-account > svg.i')&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name, without a gear');
     require(!nav.querySelector('.au-rooms-section .mb-ghead, [data-room-new], .mb-sec[data-group="none"] .mb-ghead'),'only owner-created sections have headings');
@@ -1183,7 +1187,8 @@ export function checkRendered(name, context = {}) {
     const chief = column.querySelector('.mb-chief');
     if (!column.querySelector('.mb-find-input').value) require(chief && chief.querySelector('b') && chief.querySelector('.av'), "the top member shows its face and name");
     if(chief)require(!document.querySelector('.mb-star'),'no member carries a star');
-    if(!rail){const mic=nav.querySelector('.side-foot [data-go="dictation"] .nav-t').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account-name').getBoundingClientRect();require(Math.abs(mic.left-owner.left)<1,'dictation and the owner names line up');}
+    if(!rail){const pill=nav.querySelector('.sidebar-apps'),name=pill.querySelector('.nav-t').getBoundingClientRect(),plug=pill.querySelector('.i').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account-name').getBoundingClientRect(),face=nav.querySelector('.sidebar-account .owner-face').getBoundingClientRect();require(name.left>=plug.right+6&&name.left<=plug.right+16&&owner.left>=face.right+6&&owner.left<=face.right+16,'pill and account words start after their own leading mark');}
+    const mic=nav.querySelector('.sidebar-dictation').getBoundingClientRect(),home=nav.querySelector('.sidebar-home').getBoundingClientRect();require(Math.abs(mic.width-home.width)<1&&Math.abs(mic.height-home.height)<1&&Math.abs(mic.width-36)<1,'both footer icon buttons share the top controls size');
     if(chief&&!rail&&!chief.matches('.mb-tile')&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
@@ -1316,24 +1321,18 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name === "sidebar-room-avatar") {
-    const avatar = document.querySelector('.au-room-heading > .room-avatar');
-    require(visible(avatar) && avatar.querySelectorAll('.av').length >= 2, "header uses the members' face grid");
-    require(!document.querySelector('.au-room-heading > svg.i'), "group identity is its members");
-    for (const composite of document.querySelectorAll('.room-avatar')) {
-      const box = composite.getBoundingClientRect();
-      const expected=40;
-      require(Math.abs(box.width-expected)<1&&Math.abs(box.height-expected)<1,'sidebar and header use their shared avatar bounds');
-      require(getComputedStyle(composite).display==='grid'&&getComputedStyle(composite).borderRadius==='0px'&&getComputedStyle(composite).backgroundColor==='rgba(0, 0, 0, 0)','composite is a square grid without an outer disc');
-      for (const face of composite.children) {
-        const style = getComputedStyle(face), rect = face.getBoundingClientRect();
-        require(rect.width>=18&&rect.height>=18,'every member face remains readable');
-        require(style.borderTopWidth==='0px','grid faces have no separating ring');
-        require(rect.left >= box.left - 1 && rect.right <= box.right + 1 && rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1, "whole faces fit inside the composite bounds");
-      }
-      const faces=[...composite.children].map(face=>face.getBoundingClientRect());
-      require(faces.every((face,index)=>faces.slice(index+1).every(other=>Math.min(face.right,other.right)-Math.max(face.left,other.left)<=1||Math.min(face.bottom,other.bottom)-Math.max(face.top,other.top)<=1)),'grid faces never overlap');
+    require(!document.querySelector('.au-room-heading > .room-avatar'), "the header shows its participants once");
+    const participants=[...document.querySelectorAll('.au-room-faces .au-room-participant')];
+    require(participants.length>=2, "the header retains its participant row and chief crown");
+    require(participants.slice(1).every((face,i)=>face.getBoundingClientRect().left<participants[i].getBoundingClientRect().right),'header faces overlap');
+    const composites=[...document.querySelectorAll('.room-avatar')].filter(visible);
+    for (const composite of composites) {
+      const box=composite.getBoundingClientRect();
+      require(Math.abs(box.width-40)<1&&Math.abs(box.height-40)<1,'composite stays in the sidebar avatar slot');
+      const faces=[...composite.children].map(face=>{const style=getComputedStyle(face),rect=face.getBoundingClientRect();require(style.overflow==='visible'&&style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.borderRadius==='0px'&&style.filter==='none'&&style.boxShadow==='none','bare faces keep hats without discs, crop or effects');require(rect.left>=box.left-1&&rect.right<=box.right+1&&rect.top>=box.top-1&&rect.bottom<=box.bottom+1,'face slots stay inside the box');return rect;});
+      if(faces.length>1)require(faces.some((face,i)=>faces.slice(i+1).some(other=>Math.min(face.right,other.right)>Math.max(face.left,other.left)+1&&Math.min(face.bottom,other.bottom)>Math.max(face.top,other.top)+1)),'the member faces form an overlapping cluster');
     }
-    return {check:name, faces:avatar.dataset.faces};
+    return {check:name,composites:composites.length,participants:participants.length};
   }
   if (name === "sidebar-room-summary") {
     const roomId = context.roomId ?? 1;

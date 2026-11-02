@@ -19,6 +19,15 @@ const typeText = (value: string, caret = value.length): void => { input.value = 
 const press = (key: string, init: KeyboardEventInit = {}): KeyboardEvent => { const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }); input.dispatchEvent(event); return event; };
 const caret = (): [number, number] => [input.selectionStart, input.selectionEnd];
 
+test("a restored long draft keeps plain words without building thousands of mirror chips", () => {
+  const words = '@Notion https://example.test/sample '.repeat(400);
+  input.value = words;
+  expect(input.value.length).toBe(words.length);
+  expect(mirror.childElementCount).toBe(0);
+  expect(field.classList.contains('has-mentions')).toBe(false);
+  expect(wholeLinks(input.value).length).toBe(words.length);
+});
+
 test("the words become chips only where they address someone, and then the textarea stops painting its own text", () => {
   typeText("hello");
   expect(field.classList.contains("has-mentions")).toBe(false);

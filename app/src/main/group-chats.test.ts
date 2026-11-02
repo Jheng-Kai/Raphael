@@ -13,6 +13,30 @@ let app:AppContext;
 const pane=async()=>{const view=createRoomPane(app,vi.fn());document.body.append(view.el);await view.open(1);return view;};
 const draft=(text:string)=>{const input=document.querySelector<HTMLTextAreaElement>("#room-message")!;input.value=text;input.dispatchEvent(new Event("input"));return input;};
 
+test("room drafts retain files and quotes in memory and words across a new pane", async () => {
+ const view=await pane(); draft('Unsent room words');
+ const file=new File(['Sample file'],'sample.txt',{type:'text/plain'});
+ const transfer={files:[file],types:['Files']};const drop=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:transfer});view.el.querySelector('.ra-stage')!.dispatchEvent(drop);
+ await new Promise(resolve=>setTimeout(resolve,0));await flush();
+ view.close();await view.open(1);
+ expect(view.el.querySelector<HTMLTextAreaElement>('#room-message')!.value).toBe('Unsent room words');
+ expect(view.el.querySelector('.cmp-chip-t')?.textContent).toBe('sample.txt');
+ view.close();view.el.remove();
+ const next=await pane();expect(next.el.querySelector<HTMLTextAreaElement>('#room-message')!.value).toBe('Unsent room words');
+ expect(next.el.querySelector('.cmp-chip')).toBeNull();next.close();
+});
+
+test("a deleted room drops its stored words and reply target", async () => {
+ api.roomMessages.mockResolvedValue({messages:[{id:12,member_id:1,text:'Quoted sample',created:1,status:'done'}]});
+ const view=await pane();document.querySelector<HTMLElement>('[data-room-act="reply"]')!.click();draft('Unsent sample');
+ view.close();await view.open(1);
+ expect(view.el.querySelector('.cmp-quote')!.textContent).toContain('Reply to Alice');
+ view.close();view.el.remove();
+ const next=await pane();expect(next.el.querySelector('.cmp-quote')!.textContent).toContain('Reply to Alice');
+ api.roomsList.mockResolvedValue({rooms:[]});await next.refresh();
+ expect(JSON.parse(localStorage.getItem('raphael.composer.drafts')??'{}')['room:1']).toBeUndefined();
+});
+
 test("only consecutive room receipts fold, and an arriving receipt preserves the open group and intervening message", async () => {
  const task = (id:number, created:number):HandoffView => ({task_id:id,source_turn_id:1,work_turn_id:100+id,member_id:1,member_name:"Alice",from_member_id:0,
   stage_id:"",mode:"work",state:"done",reason:null,created_at_ms:created,ready_at_ms:created,dispatch_policy:"immediate",result:"Sample result",evidence:[]});
@@ -113,7 +137,7 @@ test("the sidebar offers no everyone group: an empty former team room is gone, o
  expect(await rows([room,{...room,id:2,is_team:1,last_at:5}])).toEqual(["Launch","Everyone"]);
  expect(api.roomsCreate).not.toHaveBeenCalled();
 });
-beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
+beforeEach(()=>{ localStorage.clear();document.body.innerHTML="";vi.clearAllMocks();setLocale("en");const members=[0,1].map(id=>({id,name:id?"Alice":"Raphael",avatar:""} as Member));api.membersList.mockResolvedValue({members,groups:[]});api.roomsCreate.mockResolvedValue({room});api.roomsList.mockResolvedValue({rooms:[room]});api.roomMessages.mockResolvedValue({messages:[]});api.roomSend.mockResolvedValue({message_id:1,duplicate:false});app={go:vi.fn(),onEvent:(fn:any)=>{event=fn;return()=>{};}} as unknown as AppContext;clearRoomSelection();configureRooms(app);api.roomsUpdate.mockResolvedValue({room});});
 test("a primary changes room picker order and becomes the required chief", async () => {
  const { members } = await api.membersList();
  api.membersList.mockResolvedValue({ members, groups: [], team_context: { primary_id: 1 } });
@@ -383,4 +407,13 @@ test("a new room message retains older slime lines across animation clocks", asy
     expect(line!.querySelector("svg.slime")).toBe(face);
     expect(view.el.querySelector('[data-room-message="72"]')?.textContent).toContain("A new reply");
   } finally { clock.mockRestore(); view?.close(); }
+});
+
+test("late room delivery retains the next draft saved while switching away", async () => {
+ let accept!: (value: unknown) => void;
+ api.roomSend.mockImplementationOnce(()=>new Promise(resolve=>{accept=resolve;}));
+ const view=await pane();draft('Submitted sample');view.el.querySelector<HTMLFormElement>('form.composer')!.requestSubmit();await flush();
+ draft('Next unfinished sample');view.close();
+ accept({message_id:1,duplicate:false});await flush();await view.open(1);
+ expect(view.el.querySelector<HTMLTextAreaElement>('#room-message')!.value).toBe('Next unfinished sample');view.close();
 });

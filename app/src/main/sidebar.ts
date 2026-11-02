@@ -1,13 +1,40 @@
 /** The single conversation sidebar persists across page navigation. */
 import { onLocaleChange, t } from "./i18n";
 import { messageTooltip } from "./message-tooltip";
-import { navItemHTML } from "./nav-items";
+import * as api from "./api";
+import { entryLabel, type InventoryView } from "./apps-inventory";
+import { iconHTML } from "./service-mark";
+import { serviceIconOf } from "./service-icons";
+import type { AppContext } from "./types";
 import { onOwnerProfile, ownerFaceHTML, ownerName } from "./owner-avatar";
 import { esc, ico, iconButton } from "./ui";
 
-export function createSidebar(nav: HTMLElement, column: HTMLElement): { close(): void } {
+export function createSidebar(nav: HTMLElement, column: HTMLElement, app?: Pick<AppContext, "onEvent">): { close(): void } {
   nav.classList.add("sidebar");
-  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}</div><div class="sidebar-conversations"></div><div class="side-foot">${navItemHTML("dictation", t("nav.dictation"), ico("mic"))}<div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button><button type="button" class="nav sidebar-home" data-go="home" aria-current="false">${ico("home")}</button></div></div>`;
+  nav.innerHTML = `<div class="sidebar-brand">${iconButton("sidebar", t("nav.collapseSidebar"), ' data-sidebar="collapse" aria-expanded="true"')}</div><div class="sidebar-conversations"></div><div class="side-foot"><button type="button" class="nav sidebar-apps" data-go="settings" data-pane="connections">${ico("plug")}<span class="nav-t"></span><span class="sidebar-app-marks" aria-hidden="true"></span></button><div class="sidebar-foot-row"><button type="button" class="nav sidebar-account" data-go="settings" data-pane="general"></button>${iconButton("mic", t("nav.dictation"), ' data-go="dictation" aria-current="false"', "sidebar-dictation")}${iconButton("home", t("nav.home"), ' data-go="home" aria-current="false"', "sidebar-home")}</div></div>`;
+  let inventory: InventoryView = "loading";
+  let lastMarks = "";
+  const apps = nav.querySelector<HTMLElement>(".sidebar-apps")!;
+  const drawApps = (): void => {
+    const label = entryLabel(inventory), name = t("nav.apps");
+    if (apps.getAttribute("aria-label") !== label) apps.setAttribute("aria-label", label);
+    if (apps.dataset.tooltip !== label) apps.dataset.tooltip = label;
+    if (apps.querySelector(".nav-t")!.textContent !== name) apps.querySelector(".nav-t")!.textContent = name;
+    const marks = typeof inventory === "object" ? [...inventory.apps].filter(item => item.connected)
+      .sort((a, b) => (b.last_used_at ?? 0) - (a.last_used_at ?? 0))
+      .flatMap(item => { const icon = serviceIconOf({ name: item.name }); return icon ? [iconHTML(item.name, icon, "md")] : []; }).slice(0, 3).join("") : "";
+    const host = apps.querySelector(".sidebar-app-marks")!;
+    if (lastMarks !== marks) { host.innerHTML = marks; lastMarks = marks; }
+  };
+  let inventoryRead = 0;
+  const refreshApps = async (): Promise<void> => {
+    const read = ++inventoryRead;
+    const next = await api.integrationsInventory().catch(() => "failed" as const);
+    if (read !== inventoryRead) return;
+    inventory = next; drawApps();
+  };
+  app?.onEvent(event => { if (["ConnectionsChanged", "CoreReady"].includes(event.type)) void refreshApps(); });
+  void refreshApps();
   const header = column.querySelector('.mb-top');
   if (header) header.prepend(nav.querySelector('.sidebar-brand')!);
   nav.querySelector(".sidebar-conversations")!.append(column);
@@ -20,13 +47,16 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
   const scrim = document.createElement("div"); scrim.className = "sidebar-scrim"; scrim.hidden = true;
   nav.after(scrim); document.querySelector(".window-chrome")!.prepend(toggle);
   const setOpen = (open: boolean): void => {
-    document.documentElement.toggleAttribute("data-sidebar-open", open);
-    toggle.setAttribute("aria-expanded", String(open)); scrim.hidden = !open;
+    const wasOpen = document.documentElement.hasAttribute("data-sidebar-open");
+    if (wasOpen !== open) document.documentElement.toggleAttribute("data-sidebar-open", open);
+    if (toggle.getAttribute("aria-expanded") !== String(open)) toggle.setAttribute("aria-expanded", String(open));
+    if (scrim.hidden === open) scrim.hidden = !open;
     const compact = matchMedia("(max-width: 859px)").matches;
-    nav.inert = compact && !open;
-    document.getElementById("main")!.inert = compact && open;
-    if (open) collapse.focus();
-    else if (compact) toggle.focus();
+    if (nav.inert !== (compact && !open)) nav.inert = compact && !open;
+    const main = document.getElementById("main")!;
+    if (main.inert !== (compact && open)) main.inert = compact && open;
+    if (open && !wasOpen) collapse.focus();
+    else if (!open && wasOpen && compact) toggle.focus();
   };
   const close = (): void => setOpen(false);
   const compactWindow = matchMedia("(max-width: 859px)");
@@ -40,7 +70,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     const label = t(rail ? "nav.expandSidebar" : "nav.collapseSidebar");
     collapse.setAttribute("aria-label", label); collapse.title = label;
     if (rail) foot.prepend(add); else header?.append(add);
-    if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip], .side-foot [data-go='dictation'][data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
+    if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
   };
   collapse.addEventListener("click", () => {
     if (compactWindow.matches) { close(); return; }
@@ -51,7 +81,7 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
   // A face in the rail is named on hover or focus; the row's name stays in the page for screen readers.
   const nameFace = (event: Event): void => {
     if (!document.documentElement.hasAttribute("data-sidebar-collapsed")) return;
-    const row = (event.target as Element).closest<HTMLElement>(".mb-row, .sidebar-account, .side-foot [data-go='dictation']");
+    const row = (event.target as Element).closest<HTMLElement>(".mb-row, .sidebar-account");
     if (row) row.dataset.tooltip = row.querySelector("b, .nav-t, .sidebar-account-name")?.textContent ?? "";
   };
   nav.addEventListener("pointerover", nameFace, true);
@@ -60,13 +90,14 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
   const draw = (): void => {
     nav.setAttribute("aria-label", t("nav.pages"));
     const home = nav.querySelector<HTMLElement>('[data-go="home"]')!;
-    home.setAttribute("aria-label", t("nav.home")); home.dataset.tooltip = t("nav.home");
+    home.setAttribute("aria-label", t("nav.home"));
     add.setAttribute("aria-label", t("members.add")); add.title = t("members.add");
     const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
     collapse.setAttribute("aria-label", t(rail ? "nav.expandSidebar" : "nav.collapseSidebar")); collapse.title = collapse.getAttribute("aria-label")!;
     const dictation = nav.querySelector<HTMLElement>('[data-go="dictation"]')!;
-    dictation.querySelector(".nav-t")!.textContent = t("nav.dictation");
     dictation.setAttribute("aria-label", t("nav.dictation"));
+    dictation.title = t("nav.dictation"); home.title = t("nav.home");
+    drawApps();
     const account = nav.querySelector<HTMLElement>(".sidebar-account")!;
     account.innerHTML = `${ownerFaceHTML(32)}<span class="sidebar-account-name">${esc(ownerName())}</span>`;
     account.setAttribute("aria-label", `${ownerName()} · ${t("nav.settings")}`);

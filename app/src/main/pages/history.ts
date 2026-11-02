@@ -14,7 +14,7 @@ import { dayBounds, dayLabel, describeError, formatClock } from "../format";
 import { bindingLabels } from "../keys";
 import type { AppContext, HistoryItem, Page } from "../types";
 import { Deletions, debounce } from "../undo";
-import { btn, closeMenu, copyText, esc, fieldHTML, ico, iconBtn, openMenuOnArrow, swapHTML, tabs, toaster } from "../ui";
+import { btn, closeMenu, copyButton, esc, fieldHTML, ico, iconBtn, openMenuOnArrow, swapHTML, tabs, toaster } from "../ui";
 
 /** The search waits this long after the last key. */
 const SEARCH_DELAY_MS = 200;
@@ -218,12 +218,11 @@ export function createHistory(app: AppContext): HistoryPage {
     });
   }
 
-  async function copy(id: number): Promise<void> {
+  async function copy(id: number, control: HTMLElement): Promise<void> {
     const item = items.find((i) => i.id === id);
     if (!item) return;
     try {
-      await copyText(item.text);
-      toaster.info(t("history.021"));
+      await copyButton(control, item.text);
     } catch (err) {
       toaster.info(describeError(err));
     }
@@ -280,7 +279,7 @@ export function createHistory(app: AppContext): HistoryPage {
       void load(true);
     } else if (act && row) {
       const id = Number(row.dataset.id);
-      if (act.dataset.act === "copy") void copy(id);
+      if (act.dataset.act === "copy") void copy(id, act);
       else if (act.dataset.act === "history-menu") openActions(act, [{ id: "delete", label: t("history.004"), icon: "trash" }], () => remove(id));
     } else if (row) {
       toggle(row);

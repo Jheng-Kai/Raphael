@@ -36,7 +36,6 @@ const subject = (selector: string): string => selector.split(/\s+|>|\+|~/).filte
  * the face of a turn and of the card.
  */
 function reachesEmblem(selector: string): boolean {
-  if (selector === ".room-avatar > .av") return false;
   if (/\.av-custom|\.mb-av\b|\.mb-av-/.test(selector)) return false;
   const last = subject(selector);
   return /\.av(?![\w-])|\.mb-pill-face|\.sys-face|\.mb-avbtn|\.ra-face|\.ask-face|\.nav-face/.test(last);
@@ -52,12 +51,15 @@ function framing(body: string): string[] {
 }
 
 describe("Raphael's emblem stands bare", () => {
-  test("composite grid cells are round faces on the recessed fill, with no ring", () => {
+  test("composite faces stay bare with visible hats and no ring, crop or filter", () => {
     const composite = rules.find(rule => rule.name === "sidebar.css" && rule.selector === ".room-avatar > .av")!;
-    expect(framing(composite.body)).toEqual([
-      "border-radius: var(--r-pill)",
-      "background: var(--surface-2)",
-    ]);
+    expect(framing(composite.body)).toEqual([]);
+    expect(composite.body).toContain("overflow: visible");
+    const slime = rules.find(rule => rule.name === "slime.css" && rule.selector === ".room-avatar > .av.mb-av.mb-av-slime")!;
+    expect(slime.body).toContain("width: round(56%, 1px)");
+    expect(slime.body).toContain("height: round(56%, 1px)");
+    expect(slime.body).toContain("contain: layout");
+    expect(slime.body).toContain("overflow: visible");
   });
   test("no style sheet gives the emblem, or what it is drawn into, a background, an edge, a shadow or a round crop", () => {
     const hits = rules.filter((r) => reachesEmblem(r.selector));
