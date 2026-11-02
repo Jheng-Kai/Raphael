@@ -146,7 +146,8 @@ const IDLE_EYE_STRIP = idleStrip("eyes", IDLE_EYES.map(([x, y, sy], index) => {
 }).join(""));
 const HAT_LIFT = -4;
 
-const Z = `<g class="slime-z"><path d="M 81 24 H 90 L 81 33 H 90" fill="none" stroke="var(--slime-color)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+const DROP = "M 0 -7 C -3 -3 -5 -1 -5 2 C -5 9 5 9 5 2 C 5 -1 3 -3 0 -7 Z";
+const DROPLETS = `<g fill="var(--slime-color)">${["thought", "left", "right", "sweat", "drip"].map(kind => `<path class="slime-drop slime-${kind}" d="${DROP}"/>`).join("")}</g><circle class="slime-bubble" cx="0" cy="0" r="5.5" fill="var(--slime-color)"/>`;
 
 export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number }
 
@@ -161,9 +162,7 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + (look.marks ?? "") +
     (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
-    `</g></g></g></g><g class="slime-dots" fill="var(--slime-color)">${[28, 50, 72].map((x, i) => `<circle class="slime-dot" cx="${x}" cy="57" r="8" style="--dot:${i}"/>`).join("")}</g>` +
-    `<g class="slime-blocked" fill="var(--slime-color)"><path d="M44 30 Q50 25 56 30 L54 61 Q50 65 46 61 Z"/><circle cx="50" cy="76" r="5"/></g>` +
-    `<g class="slime-ribbons" fill="none" stroke-width="4" stroke-linecap="round">${["#9F86ED", "#54BDB3", "#E3B65D"].map((color, i) => `<g class="slime-ribbon" style="--ribbon:${i}" stroke="${color}"><path d="M14 63 C-2 40 84 33 90 55 C96 72 28 86 14 63"/></g>`).join("")}</g>${Z}${Z}</svg>${IDLE_EYE_STRIP}</span>`;
+    `</g></g></g></g>${DROPLETS}</svg>${IDLE_EYE_STRIP}</span>`;
 }
 
 // ---------- under the pointer ----------

@@ -69,11 +69,14 @@ test("finding a receipt inside a closed group reveals the selected line", async 
   find.close();
 });
 
-test("thinking has three own-colour dots, blocked has an exclamation and working has ribbons", () => {
-  const root = dom(slimeSVG({ color: "teal" }, { state: "thinking" }));
-  expect(root.querySelectorAll(".slime-dot")).toHaveLength(3);
-  expect(root.querySelector(".slime-blocked")).not.toBeNull();
-  expect(root.querySelectorAll(".slime-ribbon").length).toBeGreaterThanOrEqual(3);
+test("thinking, blocked and working keep their own-colour slime and liquid props", () => {
+  for (const state of ["thinking", "blocked", "working"] as const) {
+    const root = dom(slimeSVG({ color: "teal" }, { state }));
+    expect(root.querySelector(".slime-body")).not.toBeNull();
+    expect(root.querySelector(".slime-thought, .slime-sweat, .slime-left")).not.toBeNull();
+    expect(root.querySelector(".slime-dots, .slime-blocked, .slime-ribbons")).toBeNull();
+    expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#15897E");
+  }
 });
 
 test("owner waiting overrides running while colleague waiting remains a separate state", () => {

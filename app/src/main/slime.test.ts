@@ -189,10 +189,14 @@ test("every state has its own performance, and the two idle tracks share no beat
   for (const a of distinct) for (const b of distinct) if (a !== b) expect(gcd(Math.round(a), Math.round(b)), `${a} ${b}`).toBeLessThan(3);
 });
 
-test("under reduced motion nothing moves, and a Z does not float", () => {
+test("under reduced motion nothing moves and each liquid state retains its pose and prop", () => {
   const calm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)![1]!;
   expect(calm).toMatch(/\.slime-surface \* \{[^}]*animation: none !important;[^}]*transition: none !important;/);
-  expect(calm).toMatch(/\.slime-z \{ display: none !important; \}/);
+  for (const state of ["working", "thinking", "blocked", "error", "sleeping"]) {
+    expect(calm, state).toContain(`[data-state="${state}"]`);
+  }
+  expect(calm).toContain("scale: 0.92 1.10");
+  expect(calm).toContain("scale: 1.08 0.62");
 });
 
 test("what hangs off a body swings about its own pivot, and what is printed on the skin does not", () => {
@@ -264,9 +268,28 @@ test("the pointer wakes a slime once on the way in, and the wiggle ends itself",
   expect(svg.classList.contains("is-delighted")).toBe(false);
 });
 
-test("presence effects paint their alpha without a composited opacity animation", () => {
-  for (const name of ["slime-dot-pulse", "slime-ribbon-orbit"]) {
-    const frame = keyframes.find(frame => frame.name === name)!;
-    expect(frame.body).not.toMatch(/(^|[{;\s])opacity:/);
+test("every liquid state keeps the body, eyes and costume instead of substituting a symbol", () => {
+  for (const state of ["thinking", "working", "blocked", "error", "sleeping", "done"] as SlimeState[]) {
+    const drawing = document.createElement("div");
+    drawing.innerHTML = slimeSVG({ character: "shion" }, { ...plain, state });
+    expect(drawing.querySelector(".slime-body")).not.toBeNull();
+    expect(drawing.querySelector(".slime-mark")).not.toBeNull();
+    expect(drawing.querySelector(".slime-drop, .slime-bubble")).not.toBeNull();
+    expect(drawing.querySelector(".slime-dots, .slime-blocked, .slime-ribbons, .slime-z")).toBeNull();
+  }
+  expect(css).not.toMatch(/slime-dot-pulse|slime-attention|slime-ribbon-orbit|slime-z|visibility: hidden;[^}]*slime-press/);
+});
+
+test("liquid effects animate only transforms and opacity, never geometry or layout", () => {
+  for (const { body } of keyframes.filter(({ name }) => /droplet|sweat|bubble|drip/.test(name))) {
+    expect(body).not.toMatch(/(?:^|[;{\s])(?:d|width|height|top|left|cx|cy|r):/);
+  }
+});
+
+test("liquid fades repaint SVG alpha instead of promoting the whole moving slime (R-UI-63)", () => {
+  expect(css).toContain('@property --slime-liquid-alpha');
+  for (const { body } of keyframes.filter(({ name }) => /droplet|sweat|bubble|drip/.test(name))) {
+    expect(body).not.toMatch(/(^|[{;\s])opacity:/);
+    expect(body).toContain('--slime-liquid-alpha:');
   }
 });

@@ -502,3 +502,44 @@ waiting/task queries through members.list, including queued labels.
 ```powershell
 npm run look -- slime-parts --theme both --width 1120,720,1920x1080
 ```
+
+
+## Our liquid body language (2026-11-02)
+
+This supersedes the symbol-based presence poses and the sleeping Zs above, under
+R-UI-74, R-UI-78 and R-UI-SLIME-01. The body and costume remain in every state;
+only its shape, eyes and own-colour liquid props change. Thinking sways over 2.8s,
+working kneads every .9s with alternating droplets over 1.8s, blocked shivers over
+1.8s with a lighter own-colour sweat drop, and error holds a .62-height puddle
+with one slow drip. Sleeping uses a crown bubble. Done throws two droplets during
+one happy jump, then the existing state timer hands it back to idle.
+
+`slime-liquid-sheet` shows every state at 22, 28 and 40px at four phases of its
+loop, including a horned character. `slime-liquid-still` exercises reduced motion
+with plain, horned and hatted slimes at the same sizes; it checks eleven distinct
+poses, no animations, visible liquid props and an 8% minimum prop width.
+`slime-parts` now samples droplet/bubble bounds as well as attached eyes/hats,
+including keyframe boundaries and the group's non-square third cell. Existing
+slime-state assertions now require kneading/swaying instead of ribbons/dots.
+Idle strips and state handover continue to protect R-UI-63/71 and slime-cost.
+
+Selected matrix: slime-states, slime-motion-idle, slime-motion-busy,
+slime-motion-moments, slime-motion-change, slime-gallery, slime-parts,
+slime-sharp, slime-cost, slime-liquid-sheet, slime-liquid-still,
+presence-states-sidebar, presence-blocked-stays, presence-waiting-colleague,
+transcript-working and sidebar-group-author, both themes at 1120,720,1920x1080.
+Compare the sidebar/header/live-thread consumers at matching theme/width and
+compare the liquid sheet beside the external Grok reference without copying it.
+The task forbids judge, network, native, cargo and real providers; these remain
+unverified. Product strings and navigation are unchanged.
+
+Liquid fades animate registered --slime-liquid-alpha into SVG fill-opacity;
+direct opacity animation can promote and resample the whole moving SVG.
+The new R-UI-63 regression test and unchanged slime-sharp pixel limits protect it.
+The old presence-transcript test that pinned dots/exclamation/ribbons now protects
+the same body, colour and liquid props; its owner/dependency state-priority tests
+are retained unchanged. No timeline or work-detail implementation is changed.
+
+```powershell
+npm run look -- slime-liquid-sheet slime-liquid-still slime-states slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-gallery slime-parts slime-sharp slime-cost presence-states-sidebar presence-blocked-stays presence-waiting-colleague transcript-working sidebar-group-author --theme both --width 1120,720,1920x1080
+```

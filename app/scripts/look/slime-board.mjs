@@ -88,10 +88,17 @@ export function slimeParts() {
       const b = body.getBoundingClientRect(), e = eyes.getBoundingClientRect();
       const state = svg.dataset.state, size = host.getBoundingClientRect().width;
       const fail = (part, box) => failures.push({state, size, at, part, body: b.toJSON(), box: box.toJSON()});
+      if (!idle && getComputedStyle(body).visibility === 'hidden') fail('missing body', b);
       if (getComputedStyle(eyes).visibility !== 'hidden' && (e.left < b.left - b.width * .08 || e.right > b.right + b.width * .08 || e.top < b.top - b.height * .08 || e.bottom > b.bottom + b.height * .08)) fail('eyes', e);
       for (const mark of svg.querySelectorAll('.slime-mark')) {
         const h = mark.getBoundingClientRect();
         if (getComputedStyle(mark).visibility !== 'hidden' && (h.left < b.left - b.width * .18 || h.right > b.right + b.width * .18 || h.top < b.top - b.height * .8 || h.bottom < b.top - b.height * .1 || h.bottom > b.top + b.height * .55)) fail('hat', h);
+      }
+      const frame = svg.getBoundingClientRect();
+      for (const drop of svg.querySelectorAll('.slime-drop, .slime-bubble')) {
+        if (getComputedStyle(drop).display === 'none') continue;
+        const d = drop.getBoundingClientRect();
+        if (d.left < frame.left - .1 || d.right > frame.right + .1 || d.top < frame.top - .1 || d.bottom > frame.bottom + .1) fail('droplet', d);
       }
       samples++;
       if (failures.length >= 8) break;

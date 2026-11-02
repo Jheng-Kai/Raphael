@@ -3426,7 +3426,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "slime-states") {
     const face = id => document.querySelector(`.mb-row[data-member="${id}"] svg.slime`);
-    const wanted = { 1: ["thinking", "slime-dot-pulse"], 2: ["working", "slime-ribbon-orbit"], 3: ["computer", "slime-computer-body"] };
+    const wanted = { 1: ["thinking", "slime-thinking-body"], 2: ["working", "slime-working-body"], 3: ["computer", "slime-computer-body"] };
     for (const [id, [state, animation]] of Object.entries(wanted)) {
       const svg = face(id);
       require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);
@@ -3442,6 +3442,21 @@ export function checkRendered(name, context = {}) {
       require(box.top >= row.top - 1 && box.bottom <= row.bottom + 1, "a slime stays inside its row");
     }
     return { check: name, rows: rows.length };
+  }
+  if (name === "slime-liquid-still") {
+    const poses = new Map();
+    for (const svg of document.querySelectorAll('.look-slime-board svg.slime')) {
+      const state = svg.dataset.state, body = getComputedStyle(svg.querySelector('.slime-motion'));
+      require(svg.closest('.slime-surface').getAnimations({ subtree: true }).length === 0, `${state} has no reduced-motion animation`);
+      require(getComputedStyle(svg.querySelector('.slime-press')).visibility === 'visible', `${state} retains its body`);
+      const props = [...svg.querySelectorAll('.slime-drop, .slime-bubble')].filter(part => getComputedStyle(part).display !== 'none');
+      const expected = { working: 2, thinking: 1, blocked: 1, error: 1, sleeping: 1, done: 2 };
+      require(props.length === (expected[state] ?? 0), `${state} retains its liquid props`);
+      for (const prop of props) require(Number(getComputedStyle(prop).opacity) > .5 && prop.getBoundingClientRect().width >= svg.getBoundingClientRect().width * .08, `${state} prop is visible even at 22px`);
+      poses.set(state, `${body.translate}/${body.rotate}/${body.scale}/${getComputedStyle(svg.querySelector('.slime-eyes')).d}`);
+    }
+    require(poses.size === 11 && new Set(poses.values()).size === 11, 'all eleven still poses differ');
+    return { check: name, states: poses.size };
   }
   if (name === "slime-handover") {
     // Each row is a change of state: its first frame holds the old pose, its second the instant after the change, and it must not jump.

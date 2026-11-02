@@ -9,7 +9,8 @@ test("the loop bounds check rejects detached eyes and hats", () => {
   const eyes = {getBoundingClientRect: () => box(16, 14, 4, 2)};
   const hat = {getBoundingClientRect: () => box(11, 4, 14, 8)};
   const surface = {parentElement: {getBoundingClientRect: () => box(8, 6, 20, 19)}, getAnimations: () => []};
-  const svg = {dataset: {state: "searching"}, closest: () => surface, querySelector: selector => selector === '.slime-body' ? body : eyes, querySelectorAll: () => [hat]};
+  const drop = {getBoundingClientRect: () => box(9, 7, 2, 3)};
+  const svg = {dataset: {state: "searching"}, closest: () => surface, getBoundingClientRect: () => box(8, 6, 19, 19), querySelector: selector => selector === '.slime-body' ? body : eyes, querySelectorAll: selector => selector === '.slime-mark' ? [hat] : [drop]};
   vi.stubGlobal('document', {querySelectorAll: () => [svg]});
   vi.stubGlobal('getComputedStyle', () => ({visibility: 'visible'}));
   expect(slimeParts()).toEqual({check: 'slime-parts', samples: 1});
@@ -18,6 +19,9 @@ test("the loop bounds check rejects detached eyes and hats", () => {
   expect(slimeParts).toThrow('Slime parts separate');
   eyes.getBoundingClientRect = attachedEyes;
   hat.getBoundingClientRect = () => box(3, 4, 14, 8);
+  expect(slimeParts).toThrow('Slime parts separate');
+  hat.getBoundingClientRect = () => box(11, 4, 14, 8);
+  drop.getBoundingClientRect = () => box(7, 7, 2, 3);
   expect(slimeParts).toThrow('Slime parts separate');
 });
 

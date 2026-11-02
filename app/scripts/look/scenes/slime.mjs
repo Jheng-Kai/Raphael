@@ -26,7 +26,13 @@ const change = (label, state, at, then, slime = SHION) => ({ label, cells: [{ si
 
 const sharp = [20, 40].map(size => ({ icon: true, size, caption: size })).concat(SIZES.map(size => ({ size, slime: SKY, state: "idle" })));
 
+const periods = { idle: 23300, thinking: 2800, working: 1800, searching: 3200, computer: 1700, waiting: 6000, blocked: 1800, done: 1900, error: 6000, sleeping: 5600, arriving: 1200 };
+const liquidSheet = TELLING.map(([label, state]) => ({ label, cells: [0, .25, .5, .75].flatMap(phase => [22, 28, 40].map(size => ({ size, slime: phase === .5 ? SHION : SKY, state, at: state === "working" ? [0, 162, 882, 1062][[0, .25, .5, .75].indexOf(phase)] : Math.round(periods[state] * phase), caption: `${size}/${state === "working" ? [0, 9, 49, 59][[0, .25, .5, .75].indexOf(phase)] : phase * 100}%` }))) }));
+const stillSheet = TELLING.map(([label, state]) => ({ label, cells: [22, 28, 40].flatMap(size => [{ size, slime: SKY, state, at: 0, caption: size }, { size, slime: SHION, state, at: 0, caption: size }, { size, slime: SKY, hat: true, state, at: 0, caption: size }]) }));
+
 export default [
+  { ...scene("slime-liquid-sheet", "Our liquid body language at 22, 28 and 40 pixels, sampled across each loop", [board(liquidSheet), { action: "slime-parts" }]), motion: true },
+  scene("slime-liquid-still", "Reduced motion retains a distinct body, eyes and liquid prop in every state", [board(stillSheet), check("slime-liquid-still"), { action: "slime-parts" }]),
   { ...scene("slime-parts", "Eyes and hats stay with the body at every drawn size throughout every state loop", [board(TELLING.map(([label, state]) => ({label, cells: [{size: 20, height: 19, slime: SKY, state, hat: true, at: 0}, ...[19, 22, 26, 28, 30, 40, 48, 72].map(size => ({size, slime: SKY, state, hat: true, at: 0}))]})), 2), {action: "slime-parts"}]), motion: true },
   { ...scene("slime-states", "Each member's slime moves with what that member is doing", [{ action: "member-column", collapsed: false }, doing(1, "thinking"), doing(2, "working"), doing(3, "computer"),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", roster: true, wheelBy: 0, measure: { name: "roster-motion", enforce: false }, limits: { replacedFaces: 0, longTaskMs: 600 } },
@@ -42,7 +48,7 @@ export default [
   ])]), motion: true },
   { ...scene("slime-motion-busy", "Thinking, working, searching and at the computer, each its own small performance", [board([
     ...strip("思考", "thinking", [0, 500, 1000, 1500, 1800, 2300, 2800, 3300]),
-    ...strip("工作", "working", [0, 75, 150, 290, 400, 580, 730, 870], BENIMARU),
+    ...strip("工作", "working", [0, 100, 162, 360, 610, 720, 810, 882], BENIMARU),
     ...strip("搜尋", "searching", [0, 380, 860, 1000, 1250, 1540, 1980, 2450], TREYNI),
     ...strip("電腦", "computer", [0, 120, 240, 360, 600, 840, 1200, 1580], RIGURD),
   ])]), motion: true },
