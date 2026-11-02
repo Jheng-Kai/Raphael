@@ -48,7 +48,8 @@ test("Shion is lavender and a horn, and no hair", () => {
   expect(shion).toContain("--slime-color:#9270CB");
   expect(shion).toContain("#363140");
   const bare = slimeSVG({ character: "rimuru" }, plain);
-  expect(shion.match(/<path /g)!.length).toBe(bare.match(/<path /g)!.length + 1);
+  // The horn is in the drawing and in each of the idle strip's seven poses.
+  expect(shion.match(/<path /g)!.length).toBe(bare.match(/<path /g)!.length + 8);
 });
 
 test("what earlier builds stored still draws", () => {
@@ -161,6 +162,21 @@ test("a long list does not move in step, and a redraw keeps its place in the mot
   vi.spyOn(performance, "now").mockReturnValue(5000);
   expect(delay(1)).toBe(first - 4000);
   vi.restoreAllMocks();
+});
+
+test("what a character wears on its body stays on it at rest: the idle strip that paints over the drawing carries it too", () => {
+  const host = document.createElement("div");
+  host.innerHTML = slimeSVG({ character: "diablo" });
+  const cells = host.querySelectorAll(".slime-idle-body [data-idle-pose]");
+  expect(cells.length).toBe(7);
+  for (const cell of cells) expect(cell.querySelector('path[fill="#FFF6E9"]'), "the collar in every pose").not.toBeNull();
+  expect(host.querySelector("svg.slime .slime-marks path[fill=\"#FFF6E9\"]"), "and in the drawing for every other state").not.toBeNull();
+  const css = readFileSync(resolve(import.meta.dirname, "slime.css"), "utf8");
+  expect(css).toMatch(/\[data-state="idle"\] :is\([^)]*\.slime-marks[^)]*\) \{ visibility: hidden; \}/);
+  host.innerHTML = slimeSVG({ character: "rigurd" });
+  for (const cell of host.querySelectorAll(".slime-idle-body [data-idle-pose]")) expect(cell.querySelector('circle[fill="#D6A14A"]'), "the bow's knot").not.toBeNull();
+  host.innerHTML = slimeSVG({ color: "sky" }, { now: new Date(2000, 5, 1) });
+  expect(host.querySelector(".slime-idle-body [data-idle-pose]")!.children.length, "a plain slime is only its body").toBe(1);
 });
 
 test("only whole-frame idle strips use composited transforms, deforming poses are repainted (R-UI-63)", () => {

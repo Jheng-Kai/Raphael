@@ -8,6 +8,7 @@ const board = (rows, columns) => ({ action: "slime-board", rows, columns });
 
 const SKY = { color: "sky" }, SHION = { character: "shion" }, BENIMARU = { character: "benimaru" }, RIGURD = { character: "rigurd" }, TREYNI = { character: "treyni" };
 const SIDEBAR = 40, LARGE = 72;
+const CHARACTERS = ["rimuru", "shion", "diablo", "benimaru", "shuna", "souei", "hakurou", "gobta", "rigur", "rigurd", "milim", "veldora", "ranga", "gabiru", "geld", "treyni", "kurobe", "shizu", "hinata", "guy", "testarossa", "ultima", "carrera", "ramiris"];
 
 // Every size the app really draws a slime at, from a calendar chip up to the maker, beside one of the app's own icons.
 const SIZES = [18, 19, 20, 22, 24, 26, 28, 30, 34, 36, 40, 44, 48, 64, 72, 88, 96, 104, 120];
@@ -40,6 +41,8 @@ export default [
   scene("slime-picker", "A member's slime is a character or a colour, tried in a menu that stays open", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('[data-det="gear"]'), click(".mb-avbtn"), wait(".mb-avpop"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-character="shion"]'), check("slime-picker")]),
   scene("slime-sizes", "A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", SHION), sizes("帽", SKY, true)])]),
   { ...scene("slime-gallery", "Every state at the sidebar's size and the large one", [board(gallery(SHION), 2)]), motion: true },
+  { ...scene("slime-characters-at-rest", "Every character keeps what it wears while it rests, at the sizes the sidebar and groups draw it", [board([40, 28, 20].map(size => ({ label: `${size}`, cells: CHARACTERS.map(character => ({ size, slime: { character }, state: "idle", at: 3000 })) })), 1), check("slime-marks-at-rest")]), motion: true },
+  scene("sidebar-characters-at-rest", "The sidebar's real rows show each character's marks at rest", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { members: fixture.members.map(item => ({ ...item, avatar: { 1: "slime:diablo", 2: "slime:rigurd", 3: "slime:souei" }[item.id] ?? item.avatar })) }),
   { ...scene("slime-motion-idle", "Alive and curious: a breath, a blink, a look around and an occasional wobble", [board([
     ...strip("呼吸", "idle", [0, 500, 1000, 1500, 1900, 2400, 3000, 3600]),
     ...strip("眨眼", "idle", [420, 450, 480, 540, 590, 640, 680, 760]),

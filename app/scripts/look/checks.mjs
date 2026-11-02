@@ -1178,6 +1178,21 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name,positions};
   }
+  if (name === "slime-marks-at-rest") {
+    const surfaces = [...document.querySelectorAll('.slime-surface[data-state="idle"]')].filter(visible);
+    require(surfaces.length >= 24, `every character is on the board: ${surfaces.length}`);
+    let marked = 0;
+    for (const surface of surfaces) {
+      const strip = surface.querySelector('.slime-idle-body'), drawing = surface.querySelector('svg.slime .slime-marks');
+      if (!drawing || !drawing.children.length) continue;
+      marked++;
+      require(getComputedStyle(strip).display === 'block', "at rest the strip paints the body");
+      require(strip.querySelector('[data-idle-pose]').children.length > 1, "the strip carries what the character wears");
+      for (const part of drawing.querySelectorAll('path,circle,ellipse')) require(getComputedStyle(part).visibility === 'hidden', "the drawing's copy waits, so nothing shows twice");
+    }
+    require(marked >= 20, `the characters with marks were all seen: ${marked}`);
+    return {check:name,surfaces:surfaces.length,marked};
+  }
   if (name === "dialog-caption") {
     const chrome = document.querySelector('.window-chrome'), dialog = [...document.querySelectorAll('.mb-scrim > .mb-dialog')].find(visible);
     require(dialog, "a dialog is open");
@@ -3468,7 +3483,7 @@ export function checkRendered(name, context = {}) {
           const strip = surface?.querySelector(`.slime-idle-${kind} .slime-cels`);
           if (svg.dataset.state !== "idle" || !strip || getComputedStyle(strip.parentElement).display === "none" || getComputedStyle(strip.parentElement).visibility === "hidden") return svg.querySelector(fallback).getBoundingClientRect();
           const frame = Math.round(-new DOMMatrix(getComputedStyle(strip).transform).e / (surface.clientWidth * 3));
-          return strip.querySelectorAll("[data-idle-pose]")[frame].getBoundingClientRect();
+          return strip.querySelectorAll(kind === "body" ? ".slime-cel-body" : "[data-idle-pose]")[frame].getBoundingClientRect();
         };
         const box = face.getBoundingClientRect(), body = painted("body", ".slime-body"), eyes = painted("eyes", ".slime-eyes");
         return { left: body.left - box.left, top: body.top - box.top, right: body.right - box.left, bottom: body.bottom - box.top, eyeX: (eyes.left + eyes.right) / 2 - box.left };

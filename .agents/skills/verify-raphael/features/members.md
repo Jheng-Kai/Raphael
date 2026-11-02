@@ -500,7 +500,7 @@ core/tests/members/test_presence.py checks viewed/unviewed failures and counts
 waiting/task queries through members.list, including queued labels.
 
 ```powershell
-npm run look -- slime-parts --theme both --width 1120,720,1920x1080
+npm run look -- slime-parts slime-characters-at-rest sidebar-characters-at-rest --theme both --width 1120,720,1920x1080
 ```
 
 

@@ -136,9 +136,10 @@ const IDLE_EYES = [[3, -3, 1], [0, 0, 0.55], [0, 0, 0.3], [-3, 0, 1], [3, -1, 1]
 // Three whole boxes leave room for every pose and keep the raster bounds on physical pixels, including odd avatar sizes.
 const IDLE_FRAME = 276;
 const idleStrip = (kind: string, cells: string): string => `<span class="slime-idle slime-idle-${kind}"><span class="slime-cels"><svg width="1932" height="276" viewBox="-88 -81 1932 276">${cells}</svg></span></span>`;
-const IDLE_BODY_STRIP = idleStrip("body", IDLE_BODY.map(([sx, sy, lean], index) => {
+/** The strip paints over the drawing, so what is worn on the body has to be in every pose of it. */
+const idleBodyStrip = (back = "", worn = ""): string => idleStrip("body", IDLE_BODY.map(([sx, sy, lean], index) => {
   const pose = `matrix(${sx},0,${lean},${sy},0,0)`;
-  return `<g transform="translate(${index * IDLE_FRAME} 0)"><g data-idle-pose="${pose}" transform="translate(50 86) ${pose} translate(-50 -86)"><path d="${BODY}" fill="var(--slime-color)"/></g></g>`;
+  return `<g transform="translate(${index * IDLE_FRAME} 0)">${back}<g data-idle-pose="${pose}" transform="translate(50 86) ${pose} translate(-50 -86)"><path class="slime-cel-body" d="${BODY}" fill="var(--slime-color)"/>${worn}</g></g>`;
 }).join(""));
 const IDLE_EYE_STRIP = idleStrip("eyes", IDLE_EYES.map(([x, y, sy], index) => {
   const pose = `translate(${x}px,${y}px) scale(1,${sy})`;
@@ -156,11 +157,11 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   hearThePointer();
   const look: { color: string; back?: string; marks?: string } = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
   const hat = "character" in slime ? null : seasonalHat(now);
-  const idleBody = look.back ? IDLE_BODY_STRIP.split("<g data-idle-pose=").join(`${look.back}<g data-idle-pose=`) : IDLE_BODY_STRIP;
+  const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
+  const idleBody = idleBodyStrip(look.back, worn);
   return `<span class="slime-surface" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${idleBody}<svg class="slime" viewBox="4 11 92 92" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
-    (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + (look.marks ?? "") +
-    (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "") +
+    (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
     `</g></g></g></g>${DROPLETS}</svg>${IDLE_EYE_STRIP}</span>`;
 }

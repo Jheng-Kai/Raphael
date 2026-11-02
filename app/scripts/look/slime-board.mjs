@@ -83,7 +83,7 @@ export function slimeParts() {
     for (const at of times) {
       animations.forEach(animation => { animation.currentTime = at; });
       const idle = svg.dataset.state === 'idle';
-      const body = idle ? cel('.slime-idle-body path') : svg.querySelector('.slime-body');
+      const body = idle ? cel('.slime-cel-body') : svg.querySelector('.slime-body');
       const eyes = idle ? cel('.slime-cel-eye') : svg.querySelector('.slime-eyes');
       const b = body.getBoundingClientRect(), e = eyes.getBoundingClientRect();
       const state = svg.dataset.state, size = host.getBoundingClientRect().width;
