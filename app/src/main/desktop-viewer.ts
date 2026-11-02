@@ -68,7 +68,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const checkpoints = mountCheckpoints(panel, member);
   const timeline = mountDesktopTimeline(options.timeline, options.name);
   let visible = false, generation = 0, timer: ReturnType<typeof setTimeout> | undefined;
-  let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false;
+  let drawn = "", drawnInline: Element | null = null, suspended = false, returnPanelOpen = false, filesOpen = false, filesOnly = false;
   let returnedRequests: string[] = [];
   let state: DesktopState | undefined, session: DesktopSession | undefined;
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false;
@@ -93,7 +93,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const face = options.face?.() ?? "";
     const hour = new Date().getHours();
     const period = hour >= 6 && hour < 11 ? 'morning' : hour >= 11 && hour < 16 ? 'noon' : hour >= 16 && hour < 19 ? 'dusk' : hour >= 19 && hour < 22 ? 'evening' : 'night';
-    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?/g, ""), getLocale(), session, lastFrames.get(member()), period]);
+    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?/g, ""), getLocale(), session, lastFrames.get(member()), period]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     paint(panel, "hidden", !visible || !state || state.state === 'missing' && state.granted === false);
@@ -135,7 +135,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(frame.style, "pointerEvents", interactive ? "auto" : "none");
     const status = panel.querySelector<HTMLElement>('.desktop-owner')!;
     paint(status, "textContent", t("desktop.operating")); paint(status, "hidden", !owner || !connected);
-    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", !expanded || !!recording); paint(action, "disabled", changing);
+    paint(action, "textContent", t(pending() ? "desktop.done" : "desktop.release")); paint(action, "hidden", !expanded || !!recording || filesOnly);
+    paint(panel.querySelector<HTMLElement>('[data-desktop="menu"]')!, "hidden", filesOnly); paint(action, "disabled", changing);
     const asleep = state?.state === "stopped" || state?.state === "missing";
     paint(retry, "textContent", t(asleep ? "computer.open" : "desktop.retry")); paint(retry, "hidden", !!running || !!preparing || state?.state === "absent"); paint(retry, "disabled", opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
@@ -165,7 +166,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   }
   function closeStream(): void {
     clearTimeout(lingering);
-    generation++; takeOnConnect = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
+    generation++; takeOnConnect = false; filesOnly = false; send(false); frame.remove(); frame.removeAttribute('src'); connected = interactive = false;
     const previous = session; session = undefined;
     if (previous) closePending = closePending.then(() => api.desktopClose(previous.session)).catch(() => {});
     panel.removeAttribute('data-expanded'); document.documentElement.removeAttribute('data-desktop-expanded');
@@ -364,7 +365,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     { id: 'files', label: t('files.changes'), icon: 'file' },
     { id: 'teach', label: teach.textContent ?? t('teach.start'), icon: 'steps' },
   ], choice => { if (choice === 'files') { filesOpen = true; void checkpoints.show(); draw(); } else teach.click(); }));
-  panel.querySelector('[data-desktop="back"]')!.addEventListener('click', () => { filesOpen = false; checkpoints.hide(); review.hidden = true; draw(); });
+  panel.querySelector('[data-desktop="back"]')!.addEventListener('click', () => {
+    filesOpen = false; checkpoints.hide(); review.hidden = true;
+    // Opened from a card, nothing was taken over: Back is the way home.
+    if (filesOnly) { filesOnly = false; expand(false); if (!returnPanelOpen || innerWidth < 1440) options.closePanel?.(); }
+    draw();
+  });
   onLocaleChange(draw);
   return {
     show() { visible = true; suspended = false; clearTimeout(lingering); clearTimeout(timer); void poll(); },
@@ -377,7 +383,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     sync() { timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },
     takeover() { visible = true; acquire(); void poll(); },
-    files() { visible = true; expand(true); filesOpen = true; void checkpoints.show(); draw(); },
+    files() { visible = true; filesOnly = !panel.hasAttribute('data-expanded'); expand(true); filesOpen = true; void checkpoints.show(); draw(); },
     waitingForOwner: turnId => !!state?.works?.some(work => work.turn_id === turnId && work.state === "waiting_control"),
   };
 }

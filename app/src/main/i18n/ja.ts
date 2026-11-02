@@ -947,6 +947,7 @@ export const ja = {
   "chat.reattach": "編集を送信する前に、元のファイルをもう一度添付してください。",
   "chat.table": "表",
   "chat.copyTable": "表をコピー",
+  "chat.formPending": "カードを作成中…",
   "chat.code": "コード",
   "chat.diagram": "図",
   "chat.copySource": "ソースをコピー",

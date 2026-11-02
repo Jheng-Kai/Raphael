@@ -364,6 +364,18 @@ test('handback can be followed by a fresh takeover after its new stream connects
  expect(api.desktopControl).toHaveBeenCalledTimes(3);
 });
 
+test('file changes opened from a card offer only Back, which returns to the conversation',async()=>{
+ panelOpen=false; mounted.show(); await flush();
+ mounted.files(); await flush();
+ expect(panel().hasAttribute('data-expanded')).toBe(true);
+ expect(handback().hidden).toBe(true);
+ expect(host.querySelector<HTMLElement>('[data-desktop="menu"]')!.hidden).toBe(true);
+ host.querySelector<HTMLButtonElement>('[data-desktop="back"]')!.click(); await flush();
+ expect(panel().hasAttribute('data-expanded')).toBe(false);
+ expect(panelOpen).toBe(false);
+ expect(api.desktopControl).not.toHaveBeenCalled();
+});
+
 test('Back hides an unsaved teaching draft and the menu resumes the same editor',async()=>{
  panelOpen=true; mounted.show(); await flush(); message('connected');
  api.desktopTeach.mockResolvedValueOnce({id:'demo',state:'recording',text:''});

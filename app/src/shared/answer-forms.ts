@@ -12,16 +12,18 @@ const word = (v: unknown): v is string => typeof v === "string" && v.trim().leng
 const number = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e12;
 const list = (v: unknown, max: number): v is unknown[] => Array.isArray(v) && v.length > 0 && v.length <= max;
 
+export const isAnswerFormKind = (kind: string): boolean => ["forecast", "board", "chart"].includes(kind);
+
 /** Strict, bounded data only. Invalid and provisional content stays in the ordinary code path. */
 export function parseAnswerForm(kind: string, source: string): AnswerForm | null {
-  if (!["forecast", "board", "chart"].includes(kind) || source.length > 24000) return null;
+  if (!isAnswerFormKind(kind) || source.length > 24000) return null;
   try {
     const v: unknown = JSON.parse(source);
     if (!object(v)) return null;
     if (kind === "forecast" && keys(v, ["place", "units", "days"]) && word(v.place) && word(v.units) && list(v.days, 7) && v.days.every(d => object(d) && keys(d, ["day", "condition", "high", "low"]) && word(d.day) && word(d.condition) && number(d.high) && number(d.low) && d.high >= d.low && Math.abs(d.high) <= 1000 && Math.abs(d.low) <= 1000)) return { kind, ...v } as AnswerForm;
     if (kind === "board" && keys(v, ["columns"]) && list(v.columns, 5) && v.columns.every(c => object(c) && keys(c, ["title", "cards"]) && word(c.title) && Array.isArray(c.cards) && c.cards.length <= 20 && c.cards.every(card => object(card) && keys(card, ["title"], ["line", "owner"]) && word(card.title) && (card.line === undefined || word(card.line)) && (card.owner === undefined || word(card.owner))))) return { kind, ...v } as AnswerForm;
     if (kind === "chart" && keys(v, ["type", "title", "units", "labels", "series"]) && (v.type === "bar" || v.type === "line") && word(v.title) && word(v.units) && list(v.labels, 24) && v.labels.every(word) && list(v.series, 2) && v.series.every(s => object(s) && keys(s, ["name", "values"]) && word(s.name) && Array.isArray(s.values) && s.values.length === (v.labels as unknown[]).length && s.values.every(number))) return { kind, ...v } as AnswerForm;
-  } catch { /* A streaming JSON fragment remains readable code. */ }
+  } catch { /* A broken block remains readable code. */ }
   return null;
 }
 

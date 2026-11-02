@@ -53,7 +53,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.richReply) {
     const source = data.richContent[variant.richReply === true ? "reply" : variant.richReply];
     data.turns = [0, 1].map((member, index) => ({ ...structuredClone(data.turns.find(turn => (turn.member_id ?? 0) === member && turn.conversation_id !== 4)), id: 701 + index,
-      member_id: member, text: source, question: "請整理研究資料，並提供表格與流程。", status: "done", route: "answer", steps: [],
+      member_id: member, text: source, question: "請整理研究資料，並提供表格與流程。", status: variant.richRunning ? "running" : "done", route: "answer", steps: [],
       messages: [{ seq: 1, kind: "reply", text: source, at_ms: data.now }], attachments: [] }));
     data.messages = [{ ...structuredClone(data.messages.find(message => message.member_id !== null)), id: 701, member_id: 1, text: source, kind: "message", status: "done", attachments: [] }];
   }

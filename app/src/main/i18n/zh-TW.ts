@@ -946,6 +946,7 @@ export const zhTW = {
   "chat.reattach": "請重新附加原訊息的檔案，再送出編輯。",
   "chat.table": "表格",
   "chat.copyTable": "複製表格",
+  "chat.formPending": "正在製作圖卡…",
   "chat.code": "程式碼",
   "chat.diagram": "圖表",
   "chat.copySource": "複製原始碼",

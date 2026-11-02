@@ -210,8 +210,10 @@ export function checkRendered(name, context = {}) {
     const scope = document.querySelector('.page-agent:not([hidden]) > .mb-chat:not([hidden])');
     require(scope, 'form checks target the active conversation');
     const cards = [...scope.querySelectorAll('.message-forecast,.message-board,.message-chart')];
-    if (name === "form-invalid" || name === "form-streaming") {
-      require(!cards.length && scope.querySelector('.message-code pre')?.textContent.includes('{'), 'invalid and provisional JSON stays readable code');
+    if (name === "form-invalid" || name === "form-truncated") {
+      require(!cards.length && scope.querySelector('.message-code pre')?.textContent.includes('{'), 'invalid and truncated JSON stays readable code');
+    } else if (name === "form-streaming") {
+      require(visible(scope.querySelector('.answer-form-pending')) && !scope.querySelector('.message-code') && !scope.textContent.includes('{"'), 'a form still arriving shows no JSON');
     } else {
       require(cards.length === (name === "form-room" ? 3 : 1), 'each valid form renders once in the reply');
       for (const card of cards) {

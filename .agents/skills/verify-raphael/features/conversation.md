@@ -1014,7 +1014,7 @@ background reports, spoken text and dictated captions get readable values; histo
 keeps the original fences. Existing tables retain their conversion behavior.
 
 ```powershell
-npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
+npm run look -- form-forecast form-board form-chart-bar form-chart-line form-invalid form-streaming form-truncated form-room rich-chief rich-member rich-room rich-code rich-diagram rich-source rich-expand rich-image rich-image-loaded rich-table-example rich-invalid rich-streaming rich-sequence rich-class rich-state rich-er rich-architecture rich-wide-table long-owner long-owner-expanded long-member-reply long-room-messages reply-split-bubbles bot-message-from-centred overlay-long-answer --theme both --width 1120,720,1920x1080
 ```
 
 There are no message-* scenes in this branch: message-content/message-rich tests,

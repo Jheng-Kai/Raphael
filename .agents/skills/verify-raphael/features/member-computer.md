@@ -6,6 +6,8 @@ The monitor is always an icon entry and turns purple only for a running computer
 Details opens on the screen/caption, direct routine rows and conversations. The
 gear leads to existing identity, fields and resources; Back returns through that
 hierarchy. Skills and slash-command templates retain their distinct editors.
+File changes opened from a result card offer only Back, which returns to the conversation;
+nothing was taken over, so handback and the menu are absent there.
 Routine pausing is saved inside the ordinary editor, never on the landing row.
 An unprovisioned/ungranted computer is omitted; unavailable/install/preparation
 states retain their existing localized words and repair/start actions.

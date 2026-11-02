@@ -4,7 +4,7 @@ import { t } from "./i18n";
 import { mentionsHTML, type MentionTarget } from "./mention-text";
 import { esc, ico, iconBtn } from "./ui";
 import { answerFormHTML } from "./message-forms";
-import { answerFormText, parseAnswerForm } from "../shared/answer-forms";
+import { answerFormText, isAnswerFormKind, parseAnswerForm } from "../shared/answer-forms";
 import { publicEventText } from "./public-event";
 
 // A file of the team folder is one press from opening; any other path is words the owner can use.
@@ -202,7 +202,7 @@ function textHTML(text: string, query: string, urls: Set<string>, depth = 0): st
   flush(); closeList(); return out;
 }
 
-function blockHTML(block: MessageBlock, query: string, urls: Set<string>): string {
+function blockHTML(block: MessageBlock, query: string, urls: Set<string>, streaming = false): string {
   if (block.type === "text") return textHTML(block.source, query, urls);
   if (block.type === "table") {
     const cells = (row: string[], tag: string): string => row.map((cell, i) => `<${tag} class="align-${block.align[i]}">${inline(cell, query, true, urls)}</${tag}>`).join("");
@@ -210,6 +210,8 @@ function blockHTML(block: MessageBlock, query: string, urls: Set<string>): strin
   }
   if (block.type === "image") return `<section class="rich-block message-image" data-image-url="${esc(block.url)}"><header class="rich-head"><span>${esc(block.alt || t("chat.image"))}</span><span>${esc(new URL(block.url).host)}</span></header><div class="rich-image-body"><button type="button" class="btn sm" data-rich-act="load-image">${esc(t("chat.loadImage"))}</button></div></section>`;
   const diagram = block.type === "diagram";
+  // A form still arriving is half a JSON document: the owner sees that a card is coming, not its source.
+  if (!diagram && !block.complete && streaming && isAnswerFormKind(block.language)) return `<section class="rich-block answer-form-pending" role="status"><header class="rich-head"><span>${esc(t("chat.formPending"))}</span></header></section>`;
   if (!diagram && block.complete) {
     const form = parseAnswerForm(block.language, block.source);
     if (form) return answerFormHTML(form, block.source);
@@ -225,7 +227,7 @@ export const messageHTML = (text: string, query = "", markdown = false, mentions
 /** Rich cards are siblings of text bubbles, including in authored multi-message replies. */
 export function replyContentHTML(text: string, query = "", streaming = false, renderText = (source: string) => textHTML(source, query, new Set())): string {
   return parseMessageBlocks(text, streaming).map(block => block.type === "text"
-    ? `<div class="ans"><div class="message-text">${renderText(block.source)}</div></div>` : blockHTML(block, query, new Set())).join("");
+    ? `<div class="ans"><div class="message-text">${renderText(block.source)}</div></div>` : blockHTML(block, query, new Set(), streaming)).join("");
 }
 export function messageUrls(text: string): string[] {
   const urls = new Set<string>(); parseMessageBlocks(text).forEach(block => { if (block.type === "text" || block.type === "table") blockHTML(block, "", urls); }); return [...urls];

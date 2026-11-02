@@ -21,9 +21,18 @@ for (const [kind, example] of Object.entries(examples)) {
   test(`${kind} invalid, oversized and incomplete blocks remain escaped code`, () => {
     expect(parseAnswerForm(kind, JSON.stringify(example) + " ".repeat(24000))).toBeNull();
     for (const text of [fence(kind, {}), fence(kind, { ...example, extra: true }), "```" + kind + "\n" + JSON.stringify(example), fence(kind, { ...example, title: "x".repeat(20000) }), "```" + kind + "\n{\"place\":"]) {
-      expect(replyContentHTML(text, "", true)).toContain("<pre>");
-      expect(replyContentHTML(text, "", true)).not.toContain(`message-${kind}`);
+      expect(replyContentHTML(text)).toContain("<pre>");
+      expect(replyContentHTML(text)).not.toContain(`message-${kind}`);
     }
+  });
+  test(`${kind} is a quiet pending card while its fence is still arriving`, () => {
+    const open = "```" + kind + "\n" + JSON.stringify(example).slice(0, 20);
+    const html = replyContentHTML(open, "", true);
+    expect(html).toContain("answer-form-pending");
+    expect(html).not.toContain("<pre>");
+    expect(html).not.toContain(JSON.stringify(example).slice(1, 12));
+    expect(replyContentHTML(open)).toContain("<pre>");
+    expect(replyContentHTML(fence(kind, {}), "", true)).toContain("<pre>");
   });
   test(`${kind} every text field is escaped without active HTML or remote content`, () => {
     const attack = '<img src="https://example.test/a" onerror="alert(1)"><script>x</script>';

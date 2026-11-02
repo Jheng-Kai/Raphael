@@ -947,6 +947,7 @@ export const en = {
   "chat.reattach": "Reattach the original files before sending this edit.",
   "chat.table": "Table",
   "chat.copyTable": "Copy table",
+  "chat.formPending": "Preparing the card…",
   "chat.code": "Code",
   "chat.diagram": "Diagram",
   "chat.copySource": "Copy source",
