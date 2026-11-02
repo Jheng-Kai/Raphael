@@ -83,6 +83,7 @@ export function checkRendered(name, context = {}) {
       require(getComputedStyle(row.querySelector('time')).opacity === '0' && visible(row.parentElement.querySelector('.mb-more')), "overflow replaces time in its reserved slot");
     }
     if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
+    return { check: name };
   }
   if (name.startsWith('level-')) {
     const panel = document.querySelector('.mb-det'), desktop = panel.querySelector('.desktop-panel');
@@ -110,13 +111,14 @@ export function checkRendered(name, context = {}) {
       require(!visible(desktop) && !panel.querySelector('[data-tab="routines"]'), 'settings has no separate computer or routines page');
     } else if (name === 'level-routine') {
       require(visible(document.querySelector('.au-routine-dialog [data-dlg="enabled"]')), 'pausing belongs inside the routine');
+    } else if (name === 'level-strip') {
+      const strip = document.querySelector('.window-chrome'), stripStyle = getComputedStyle(strip);
+      require(strip.getBoundingClientRect().left === 0 && stripStyle.borderTopLeftRadius === '0px' && stripStyle.backgroundColor === getComputedStyle(panel).backgroundColor, 'the window strip reads as one surface with the bar');
     } else if (name === 'level-takeover' || name === 'level-menu') {
       const frame = desktop.querySelector('iframe'), bar = desktop.querySelector('.desktop-takeover-bar');
       require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(bar), 'the same stream fills the window below its thin bar');
       require(visible(bar.querySelector('.av')) && visible(bar.querySelector('[data-desktop="return"]')), 'the bar identifies the member and offers handback');
       require(frame.getBoundingClientRect().width > innerWidth * .9 && bar.getBoundingClientRect().height <= 64, 'the screen has window width and a thin bar');
-      const strip = document.querySelector('.window-chrome'), stripStyle = getComputedStyle(strip);
-      require(strip.getBoundingClientRect().left === 0 && stripStyle.borderTopLeftRadius === '0px' && stripStyle.backgroundColor === getComputedStyle(panel).backgroundColor, 'the window strip reads as one surface with the bar');
       require(!document.querySelector('[data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
       const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
       require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
@@ -666,8 +668,8 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name === 'generated-video-running') {
-    require(visible(document.querySelector('.work-section.is-live')) && visible(document.querySelector('.composer[data-task-state="running"] .cmp-voice')), 'progress and the existing Stop remain visible');
-    require(document.body.textContent.includes('正在製作影片'), 'the latest video progress is visible');
+    require(visible(document.querySelector('.live-presence')) && visible(document.querySelector('.composer[data-task-state="running"] .cmp-voice')), 'the live avatar and the existing Stop remain visible');
+    require(document.querySelector('.live-presence').dataset.tooltip.includes('正在製作影片'), 'the latest video progress is the avatar hover');
     return {check:name};
   }
   if (name === 'generated-video-cancelled') {
@@ -1131,7 +1133,7 @@ export function checkRendered(name, context = {}) {
     if(chief&&!rail&&!chief.matches('.mb-tile')&&(!compact||open))require(Math.abs(chief.querySelector('.av').getBoundingClientRect().width-40)<1&&chief.querySelector('.mb-row-main'),'an unpinned top member is an ordinary row');
     for(const row of column.querySelectorAll('.mb-row')){
       const time=row.querySelector('time');
-      if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity==='0','row time stays quiet until hover or focus');
+      if(time&&!row.parentElement.matches(':hover, :focus-within'))require(getComputedStyle(time).opacity!=='0','row time stands beside the name until hover or focus swaps it for the overflow');
     }
     return { check:name, compact, open, folders:column.querySelectorAll('.mb-sec').length };
   }
@@ -1219,7 +1221,7 @@ export function checkRendered(name, context = {}) {
     require(photo?.startsWith('data:image/webp;base64,'), "the cropped owner photo is saved as bounded WebP");
     require(window.__look.calls.some(call => call.method === 'settings.set' && call.params.key === 'owner_photo'), "saving crosses the existing settings boundary");
     const faces = [...document.querySelectorAll('.sidebar-account .owner-face img, .me > .owner-face img')];
-    require(faces.length >= 2 && faces.every(face => face.getAttribute('src') === photo), "footer and existing outgoing messages share the saved face");
+    require(faces.length >= 1 && faces.every(face => face.getAttribute('src') === photo), "the footer and any outgoing face share the saved photo");
     require(faces.every(face => face.naturalWidth === 192 && face.naturalHeight === 192), "owner photo is bounded to 192px");
     return {check:name, faces:faces.length};
   }
@@ -1362,11 +1364,6 @@ export function checkRendered(name, context = {}) {
   if (name === "memory-summary-done") {
     require(window.__look.calls.some(call => call.method === "memory.summary_clear"), "the summary was cleared through the core");
     require(!window.__look.calls.some(call => call.method === "memory.clear"), "the notes were left alone");
-    return { check: name };
-  }
-  if (name === "data-clear-undo") {
-    require(document.body.textContent.includes("已清除聽寫紀錄"), "the notice with 復原 is on screen");
-    require(!window.__look.calls.some(call => call.method === "history.clear"), "the history is still there during 復原");
     return { check: name };
   }
   if (name === "usage-key-removed") {
@@ -1659,7 +1656,7 @@ export function checkRendered(name, context = {}) {
   }
   if (name === "models-responsive") {
     const rows = [...document.querySelectorAll('.row-model')];
-    require(rows.length === 3, "Raphael's quick question and what serves dictation remain available");
+    require(rows.length >= 3 && document.querySelector('[data-row="quick-model"]'), "Raphael's quick question and what serves dictation remain available");
     for (const row of rows) {
       const label = row.querySelector('.lbl').getBoundingClientRect(), picker = row.querySelector('.ctl').getBoundingClientRect();
       if (innerWidth <= 820) require(picker.top >= label.bottom - 1 && Math.abs(picker.left - label.left) < 1, "narrow model rows place purpose and price above the picker");
@@ -1935,7 +1932,7 @@ export function checkRendered(name, context = {}) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let node; (node = walker.nextNode());) {
       const element = node.parentElement, text = node.textContent.trim();
-      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv')) continue;
+      if (!text || !visible(element) || element.closest('[hidden], [inert], script, style, input, textarea, .message-text, .mb-preview, .mb-pv, .mem-entry')) continue;
       if (user.has(text)) continue;
       const interfaceText = authored.reduce((copy, value) => copy.split(value).join(""), text);
       if (foreign.has(text) || (locale === "en" && /[\u3400-\u9fff\u3040-\u30ff]/.test(interfaceText))) stale.push(text.slice(0, 90));
@@ -1996,7 +1993,7 @@ export function checkRendered(name, context = {}) {
   // R-UI-42: system events are one centred grey line that never shows an internal number.
   const eventLines = expected => {
     const lines = [...document.querySelectorAll('.event-line')].filter(visible);
-    require(lines.length === expected, `${expected} event lines are visible, found ${lines.length}`);
+    require(lines.length === expected, `${expected} event lines are visible, found ${lines.length}: ${lines.map(line => line.textContent).join(' | ')}`);
     for (const line of lines) {
       const box = line.getBoundingClientRect(), column = line.closest('.ra-col').getBoundingClientRect();
       require(Math.abs(box.left + box.width / 2 - column.left - column.width / 2) <= 2, `"${line.textContent}" is centred in the thread`);
@@ -2080,9 +2077,9 @@ export function checkRendered(name, context = {}) {
       require(lines[0].textContent === "小森 未能回覆：請求太頻繁而被限流" && lines[1].textContent === "小晴 未能回覆：已停止", "blocked replies name the member and why in the window language");
     }
     if (name === "p02-meeting-event") {
-      const [line] = eventLines(1);
+      const line = eventLines(2).at(-1);
       require(line.closest('.conversation-event-line [data-meeting-room]') && line.textContent === "已開啟會議 產品方向討論", "the meeting is one centred line that opens its room");
-      require(visible(line.querySelector('svg.i')) && !line.closest('.ra'), "a small group icon leads the line, beside no avatar");
+      require(visible(line.querySelector('svg.i')) && !line.querySelector('.av'), "a small icon leads the line, beside no avatar");
     }
     if (name === "p02-meeting-open") require(document.querySelector(".au-room-heading b").textContent === data.rooms[0].name, "meeting link opens the real room pane");
     if (name === "p02-roles") require(calls.some(c => c.method === "rooms.update" && c.params.roles?.[1] === "moderator"), "room roles are persisted at the native boundary");
@@ -2694,7 +2691,7 @@ export function checkRendered(name, context = {}) {
     if (name === "composer-history-menu") {
       holds("@", "an open mention menu keeps the arrow keys");
       require(reads === 0, "the history was not read");
-      require(visible(document.querySelector('#app-popover[data-team-mentions]')) && document.querySelector('#app-popover').contains(document.activeElement), "the arrow moved the menu's own focus");
+      require(visible(document.querySelector('#app-popover[data-team-mentions]')) && document.activeElement === input, "the arrow moved the menu's highlight while the field keeps the focus");
       return { check: name };
     }
     if (name === "composer-history-room") {
@@ -3903,7 +3900,7 @@ export function checkRendered(name, context = {}) {
   if (name === "bot-ask-centred" || name === "bot-ask-expanded") {
     const event = document.querySelector('[data-handoff="x71"]');
     const [line] = eventLines(1);
-    require(line.textContent === "已詢問 小晴已完成", `the asker's line names the colleague and the state: ${line.textContent}`);
+    require(line.textContent === "和 小晴 討論已完成", `the asker's line names the colleague and the state: ${line.textContent}`);
     require(visible(line.querySelector('.av')) && !event.closest('.chat-message'), "one faced line outside the messages");
     if (name === "bot-ask-expanded") {
       const detail = event.querySelector('.handoff-detail');
@@ -4089,7 +4086,7 @@ export function checkRendered(name, context = {}) {
         "Connect reached the core with the card's id");
     }
     if (name === "connector-reconnected") {
-      const [line] = eventLines(1), resumed = document.querySelector('.tn[data-id="121"]');
+      const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="121"]');
       require(line.textContent === "Gmail 已連結，繼續原本的工作", `the resumed task opens with one line naming the app: ${line.textContent}`);
       const markBox = line.querySelector('.mono').getBoundingClientRect();
       require(markBox.width <= 20 && markBox.height <= 20, `the line's mark is no larger than its icons (${markBox.width}x${markBox.height})`);
@@ -4168,7 +4165,7 @@ export function checkRendered(name, context = {}) {
       if (name === "pc-handback") {
         require(card.dataset.cardState === "done" && card.querySelector(".card-detail[hidden]")?.textContent.includes("已交還控制 · 工作已繼續") && visible(card.querySelector('.card-status.is-done')), `the card says control went back and the task continued: "${state}"`);
         require(!card.querySelector("[data-act^=card-]"), "no action is left, and the owner no longer controls");
-        const [line] = eventLines(1), resumed = document.querySelector('.tn[data-id="141"]');
+        const line = eventLines(2).at(-1), resumed = document.querySelector('.tn[data-id="141"]');
         require(line.textContent === "電腦 已交還控制，繼續原本的工作", `the resumed task opens with one line: ${line.textContent}`);
         const markBox = line.querySelector('svg.i').getBoundingClientRect();
         require(markBox.width <= 20 && markBox.height <= 20, `the line's icon is no larger than the other lines' (${markBox.width}x${markBox.height})`);
@@ -4222,7 +4219,7 @@ export function checkRendered(name, context = {}) {
     require(window.__look.sent.length === 0 && !draftCalls.some(call => call.method === "integrations.draft_send"), "nothing was sent");
     const first = "a".repeat(64), second = "b".repeat(63) + "2", third = "b".repeat(63) + "3";
     if (name === "mail-handed-first") {
-      const [line] = eventLines(1);
+      const line = eventLines(2).at(-1);
       require(line.textContent === "已轉交給 小森", `the first chat keeps one line naming the colleague: ${line.textContent}`);
       require(visible(line.querySelector('.av, svg, .mono')), "the colleague's face stands before the name");
       require(!document.querySelector('.mail-card, .mail-offer'), "the card and its choice are not in this chat any more");

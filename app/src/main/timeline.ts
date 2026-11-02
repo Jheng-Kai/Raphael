@@ -741,6 +741,11 @@ function meetingEvent(text: string): { room_id: number; name: string } | null {
 /** One public line of Raphael's work (《告。…》 on the desktop) as the window shows it: plain. */
 const plainLine = (text: string): string => plainReplies([text])[0];
 
+function latestProgress(turn: AgentTurn): string | undefined {
+  const text = [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text;
+  return text && plainLine(text);
+}
+
 /** Work detail opens from the reply action; events stay in the ordered timeline. */
 function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
@@ -952,7 +957,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     more +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (waitingForOwner || live || turn.task?.state === "waiting" ? "" : taskActionsHTML(turn, state)) +
-    (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm" ? livePresenceHTML(look, [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text) : "") +
+    (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm" ? livePresenceHTML(look, latestProgress(turn)) : "") +
     `</div></div>`) + `</li>`
   );
 }

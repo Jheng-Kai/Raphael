@@ -1,4 +1,4 @@
-import { check, click, member, page, scene, settings, wait } from "./steps.mjs";
+import { check, click, key, member, page, scene, settings, wait, waitGone } from "./steps.mjs";
 
 const details = [{ action: "open-details" }, wait('.mb-det:not([hidden])')];
 const open = id => [...details, click(`[data-conversation-open="${id}"]`)];
@@ -14,7 +14,7 @@ export default [
     click('.modal-scrim [data-act="close"]'),
     ...["home", "agent", "dictation"].flatMap(name => [page(name), check(`locale-${locale}`)]),
     ...["history", "dictionary", "overview"].flatMap(tab => [page("dictation"), click(`[data-dictation-tab="${tab}"]`), check(`locale-${locale}`)]),
-    page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`),
+    page("home"), click('.ho-calendar [data-home-go="calendar"]'), wait('.au-page:not([hidden]) .au-day-col'), check(`locale-${locale}`), key("Escape"), waitGone('.au-pop-detail'),
     click('#nav [data-go="settings"]'), check(`locale-${locale}`), click('.modal-scrim [data-act="close"]'),
     ...settings("general"), check(`locale-${locale}`),
   ])),

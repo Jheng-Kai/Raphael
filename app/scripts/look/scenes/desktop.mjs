@@ -19,7 +19,7 @@ export default [
   scene('panel-gear','The gear owns identity, instructions and resources',[...entry,click('[data-det="gear"]'),check('level-gear')],computer()),
   scene('panel-routine-row','A routine opens its editor with pausing inside',[...entry,click('.mb-rt'),wait('.au-routine-dialog'),check('level-routine')],computer()),
   scene('panel-raphael','Raphael shares the landing layout',[{action:'open-details'},wait('.desktop-panel[data-desktop-state="member"]'),wait('.desktop-screen iframe:not([hidden])'),check('level-panel')],teachComputer()),
-  scene('takeover-bar','The existing stream fills the window under one thin handback bar',[...take,check('level-takeover')],computer()),
+  scene('takeover-bar','The existing stream fills the window under one thin handback bar',[...take,check('level-takeover'),check('level-strip')],computer()),
   scene('takeover-menu','Files and teaching use the existing shared menu',[...take,...menu,check('level-menu')],computer()),
   scene('takeover-handback','Handback restores the conversation place and allows a fresh takeover',[...take,click('[data-desktop="return"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check('level-handback'),{action:'open-details'},wait('[data-desktop="peek"]:not([hidden])'),click('[data-desktop="peek"]'),wait('.desktop-panel[data-interactive="true"]'),check('level-reopen'),click('[data-desktop="return"]'),wait('.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'),check('level-handback-second')],computer()),
   scene('desktop-teach-recording','Owner demonstration records only the member computer with a visible privacy line',[...teaching,check('teach-recording')],teachComputer()),

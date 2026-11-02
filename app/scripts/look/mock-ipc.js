@@ -389,7 +389,7 @@ export function installMock(fixture, config = {}, target = window) {
   }
   const own = (id, title, start, end, more = {}) => ({ id: `own:${id}`, kind: "own", event_id: id, title, summary: "", at_ms: start, end_ms: end, member_id: -1, name: "", avatar: "", turn_id: null, conversation_id: null, routine_id: null, all_day: false, notes: "", added_by: null, ...more });
   const octoberAt = (day, hour, minute = 0) => new Date(2026, 9, day, hour, minute).getTime();
-  const addedBy = id => { const person = data.members.find(member => member.id === id); return { member_id: id, added_by: id, name: person.name, avatar: person.avatar ?? "" }; };
+  const addedBy = id => { const person = data.members.find(member => member.id === id); return { member_id: id, added_by: id, name: person?.name ?? "", avatar: person?.avatar ?? "" }; };
   const daily = structuredClone(data.home.calendar.find(item => item.kind === "routine" && item.routine_id === 1));
   const routineTime = new Date(daily.at_ms); routineTime.setHours(9, 0, 0, 0);
   daily.at_ms = routineTime.getTime(); daily.id = `routine:1:${daily.at_ms}`;
