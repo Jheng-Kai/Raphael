@@ -5,6 +5,7 @@ import { patchThread } from "./thread-diff";
 // Group chat entry points share the global sidebar and the conversation header.
 import { mountConversationFind } from "./conversation-find";
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { onAvatarChange } from "./avatar";
 import { ownerFaceHTML } from "./owner-avatar";
 import { describeError, formatClock } from "./format";
@@ -59,7 +60,6 @@ let selectedRoom: number | null = null;
 export const currentRoomId = (): number | null => selectedRoom;
 export function clearRoomSelection(): void { selectedRoom = null; changed(); }
 const changed = (): void => { for (const listener of listeners) listener(); };
-onAvatarChange(changed);
 const responderChoices = (list: MembersList, selected: Set<number>) => [
   { value: "auto", label: t("rooms.autoResponder") },
   ...primaryFirst(list.members, primaryIdOf(list)).filter(m => selected.has(m.id)).map(m => ({ value: `member:${m.id}`, label: m.name })),
@@ -257,7 +257,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
   const pagesHost = mountPages(thread, { send: text => {
-    if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(refresh);
+    if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(() => refresh());
   }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
   const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread)) : null;
   messageResize?.observe(thread);
@@ -377,14 +377,15 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     finder.refresh();
     onRender();
   }
-  async function refresh():Promise<void>{
+  async function refresh(fromEvent=false, readRoom=true):Promise<void>{
     const mine=++generation,id=roomId;if(!opened||!id)return;
     const missing=():void=>{forgetRoomDraft(id);toaster.info(t("rooms.deleted"));};
     try{
-      const [people,rooms]=await Promise.all([rosterDirty ? api.membersList(getLocale()) : Promise.resolve(list),api.roomsList()]);
+      const peopleRead=()=>api.membersList(getLocale()), roomsRead=()=>api.roomsList();
+      const [people,rooms]=await Promise.all([rosterDirty ? (fromEvent ? eventRead(`members.list:${getLocale()}`,peopleRead,context) : peopleRead()) : Promise.resolve(list),readRoom || !room ? (fromEvent ? eventRead('rooms.list',roomsRead,context) : roomsRead()) : Promise.resolve({rooms:[room]})]);
       if(mine!==generation||!opened)return;
       const found=rooms.rooms.find(r=>r.id===id);if(!found){missing();return;}
-      const history=await api.roomMessages(id);if(mine!==generation||!opened)return;
+      const history=await (fromEvent ? eventRead(`rooms.messages:${id}`,()=>api.roomMessages(id),context) : api.roomMessages(id));if(mine!==generation||!opened)return;
       list=people;rosterDirty=false;room=found;exchange=history.exchange;
       if (found.unread && !el.closest("[hidden]")) await api.roomsUpdate(id, { read: true, read_through: history.messages[history.messages.length - 1]?.id ?? 0 });
       if (mine!==generation||!opened) return;
@@ -430,10 +431,11 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if (event?.type === "RoomsChanged" && event.room_id !== undefined && event.room_id !== roomId) return;
     if (event?.type === "WorkerChanged" && !handoffs.some(task => task.task_id === event.task_id) && !messages.some(message => message.turn?.task?.id === event.task_id)) return;
     if (event?.type === "AgentTurn" && !messages.some(message => message.turn_id === event.turn_id) && !room?.member_ids.includes(event.member_id ?? 0)) return;
-    if (event?.type !== "WorkerChanged") { void refresh(); void questions.load(); return; }
+    if (event?.type !== "WorkerChanged") { void refresh(true,!event || event.type==='RoomsChanged' || ['CoreReady'].includes(event.type)); void questions.load(); return; }
     if (refreshTimer !== undefined) return;
-    refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(); if (!event || event.type !== "WorkerChanged" || event.state === "waiting") void questions.load(); }, 150);
+    refreshTimer = setTimeout(() => { refreshTimer = undefined; void refresh(true,false); if (!event || event.type !== "WorkerChanged" || event.state === "waiting") void questions.load(); }, 300);
   };listeners.add(listener);onLocaleChange(()=>{if(opened)draw();});
+  onAvatarChange(()=>{if(opened && el.isConnected)draw();});
   return {el,close,refresh,async open(id:number){
     finder.close(false);
     saveRoomDraft();
@@ -461,19 +463,23 @@ export function createRoomsSection(active: () => boolean = () => true): HTMLElem
         return `<div class="au-room-row"><button type="button" class="nav mb-row" data-room="${room.id}" aria-current="${active() && selectedRoom === room.id}">${roomAvatarHTML(room,list,40)}<span class="mb-row-main"><span class="mb-row-t"><b>${esc(name)}</b>${room.pinned ? ico("pin") : ""}${Number.isFinite(date.getTime()) ? `<time class="mb-row-time" datetime="${date.toISOString()}">${formatClock(date.getTime())}</time>` : ""}</span><span class="mb-row-p${room.waiting ? " is-wait" : ""}">${esc(room.waiting ? t("members.waitingShort") : ((room.preview && room.preview_member_id !== undefined ? `${room.preview_member_id === null ? t("rooms.owner") : list?.members.find(m => m.id === room.preview_member_id)?.name ?? t("members.title")}：` : "") + plainLine(replyBody(room.preview ?? ""))))}</span></span>${room.waiting ? `<span class="mb-dot is-wait" role="img" aria-label="${esc(t("members.waitingShort"))}"></span>` : room.unread ? `<span class="mb-dot is-unread" role="img" aria-label="${esc(t("members.unread"))}"></span>` : ""}</button>${room.id ? iconButton("more", t("members.more",{p0:name}), ` data-room-more="${room.id}" aria-haspopup="menu" aria-expanded="false"`, "au-room-more") : ""}</div>`;
       }).join(""));
   };
-  const load = async (): Promise<void> => {
+  const load = async (fromEvent=false, readRooms=true): Promise<void> => {
     const mine = ++generation;
-    try { const [result, people] = await Promise.all([api.roomsList(), rosterDirty ? api.membersList(getLocale()) : Promise.resolve(list)]); if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; draw(); }
+    try {
+      const roomRead=()=>api.roomsList(), peopleRead=()=>api.membersList(getLocale());
+      const [result, people] = await Promise.all([readRooms ? (fromEvent ? eventRead('rooms.list',roomRead,context) : roomRead()) : Promise.resolve({rooms}), rosterDirty ? (fromEvent ? eventRead(`members.list:${getLocale()}`,peopleRead,context) : peopleRead()) : Promise.resolve(list)]);
+      if (mine !== generation) return; rooms = result.rooms; list = people; rosterDirty = false; draw();
+    }
     catch { /* A core starting up can temporarily have no rooms. */ }
   };
   listeners.add(event => {
+    if(!el.isConnected)return;
+    if(event?.type==='WorkerChanged' || event?.type==='AgentTurn')return;
     if (!event || event.type === "MembersChanged" || ["CoreReady"].includes(event.type)) rosterDirty = true;
-    if (event?.type === "WorkerChanged") {
-      if (event.state === "running" && !rooms.some(room => room.waiting)) return;
-      if (timer === undefined) timer = setTimeout(() => { timer = undefined; void load(); }, 1000);
-    } else { clearTimeout(timer); timer = undefined; void load(); }
+    clearTimeout(timer); timer = undefined; void load(true,!event || event.type==='RoomsChanged' || ['CoreReady'].includes(event.type));
   }); onLocaleChange(() => { draw(); void load(); });
   el.addEventListener("sidebar-search", event => { query = (event as CustomEvent<string>).detail.trim().toLocaleLowerCase(); if (query !== drawnQuery || drawnSelection !== (active() ? selectedRoom : null)) draw(); });
+  onAvatarChange(()=>{if(el.isConnected)draw();});
   el.addEventListener("click", e => {
     const target = (e.target as Element).closest<HTMLElement>("[data-room], [data-room-new], [data-room-more]");
     if (!target) return;

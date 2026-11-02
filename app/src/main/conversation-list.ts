@@ -1,6 +1,7 @@
 // A self-contained conversation list in the member details panel.
 // The caller owns navigation; this component owns loading, searching and its CRUD dialogs.
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { onLocaleChange, t } from "./i18n";
 import { describeError } from "./format";
 import { openDialog, confirmDelete } from "./member-dialogs";
@@ -38,9 +39,9 @@ export function relativeTime(ms: number, now = Date.now()): string {
 /** A conversation nobody has written in yet: its title comes from its first question. */
 const isBlank = (conversation: ConversationInfo): boolean => conversation.kind !== "quick" && !conversation.title;
 
-export function mountConversationList(host: HTMLElement, options: { memberId: number; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
+export function mountConversationList(host: HTMLElement, options: { memberId: number; scope?: object; active?(): boolean; onOpen(id: number): void; collapseWhenEmpty?: boolean; onVisibility?(visible: boolean): void; current?(): number | undefined }): { refresh(): Promise<void>; destroy(): void } {
   let conversations: ConversationInfo[] = [];
-  let epoch = 0, destroyed = false;
+  let epoch = 0, destroyed = false, dirty = false;
   host.classList.add("conversation-list");
   host.innerHTML = btn(`${ico("plus")}<span>${esc(t("conversations.new"))}</span>`, "conversation-new", " data-conversation-new") +
     `<div class="conversation-tools"><input type="search" maxlength="200" autocomplete="off"></div><div class="conversation-rows" aria-live="polite"></div>`;
@@ -68,10 +69,12 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
     rows.innerHTML = section("quick", t("conversations.quick")) + section("standard", t("conversations.heading"));
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(fromEvent=false): Promise<void> {
+    dirty=false;
     const mine = ++epoch;
     try {
-      const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: options.memberId });
+      const read=()=>api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: options.memberId });
+      const result = await (fromEvent ? eventRead(`conversations.list:${options.memberId}`,read,options.scope ?? host) : read());
       if (!destroyed && mine === epoch) { conversations = Array.isArray(result?.conversations) ? [...result.conversations].sort((a, b) => Number(b.kind === "quick") - Number(a.kind === "quick")) : []; draw(); }
     } catch (error) {
       if (!destroyed && mine === epoch) rows.textContent = describeError(error);
@@ -128,9 +131,13 @@ export function mountConversationList(host: HTMLElement, options: { memberId: nu
   };
   host.addEventListener("click", clicked);
   input.addEventListener("input", draw);
-  const changed = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) void refresh(); };
+  const changed = (event: Event): void => {
+    if ((event as CustomEvent<number>).detail !== options.memberId) return;
+    if(options.active?.()===false){dirty=true;return;}
+    void refresh(true);
+  };
   window.addEventListener("conversations-changed", changed);
-  const opened = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) draw(); };
+  const opened = (event: Event): void => { if ((event as CustomEvent<number>).detail === options.memberId) { if(dirty && options.active?.()!==false)void refresh(true);else draw(); } };
   window.addEventListener("conversation-opened", opened);
   const stopLocale = onLocaleChange(draw);
   draw(); void refresh();

@@ -419,6 +419,20 @@ describe("rendered look checks", () => {
     window.document.querySelector('.shimmer').style.backgroundImage = 'linear-gradient(90deg,rgba(9,9,9,0.4),rgb(9,9,9))';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-55')).toEqual([]);
   });
+  it("checks the painted masked shimmer and still rejects a missing mask or a flat light (R-UI-55)", () => {
+    const { window, audit } = productAudit('<span class="shimmer">Sample<span class="shimmer-mask" style="mask-image:url(data:image/svg+xml,sample)"></span></span>');
+    const read=window.getComputedStyle.bind(window);
+    let gradient='linear-gradient(90deg,rgba(9,9,9,0),rgb(9,9,9))';
+    const styles=vi.spyOn(window,'getComputedStyle').mockImplementation((element,pseudo)=>pseudo==='::after' ? {backgroundImage:gradient} : read(element));
+    try {
+      expect(audit().productRules.filter(item=>item.rule==='R-UI-55')).toEqual([]);
+      gradient='linear-gradient(90deg,rgb(9,9,9),rgb(9,9,9))';
+      expect(audit().productRules.filter(item=>item.rule==='R-UI-55')).toHaveLength(1);
+      gradient='linear-gradient(90deg,rgba(9,9,9,0),rgb(9,9,9))';
+      window.document.querySelector('.shimmer-mask').style.maskImage='none';
+      expect(audit().productRules.filter(item=>item.rule==='R-UI-55')).toHaveLength(1);
+    } finally { styles.mockRestore(); window.happyDOM.abort(); }
+  });
   it("rejects a scrollbar outside a wide page (R-UI-62)", () => {
     const { window, audit } = productAudit('<div class="mb-det-scroll" style="overflow-y:auto">x</div><div class="main" style="overflow-y:auto">y</div>');
     for (const element of window.document.querySelectorAll('.mb-det-scroll, .main')) {

@@ -16,8 +16,28 @@ export const esc = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => 
 
 /** Update generated markup without discarding its live controls. */
 export function patchHTML(root: Element, html: string): void {
+  const faces = new Map<string, Element[]>(), retained: Element[] = [];
+  for (const surface of root.querySelectorAll('.slime-surface[data-slime-reuse]')) {
+    const id=`${surface.getAttribute('data-slime-reuse')}|${surface.getAttribute('data-state')}`;
+    const matches=faces.get(id) ?? [];matches.push(surface);faces.set(id,matches);
+  }
+  // Skip parsing unchanged vector cels, as well as skipping their DOM patch.
+  // Only generated surfaces opt in; changed identity/state still takes the normal path.
+  const starts=/<span class="slime-surface"[^>]*data-slime-reuse="([^"]+)"[^>]*>/g;
+  const spans=/<\/?span\b[^>]*>/g;
+  let match: RegExpExecArray | null, end=0, compact='';
+  while ((match=starts.exec(html))) {
+    const id=`${match[1]}|${match[0].match(/data-state="([^"]+)"/)?.[1]}`;
+    const surface=faces.get(id)?.shift();if(!surface)continue;
+    spans.lastIndex=starts.lastIndex;
+    let depth=1, tag:RegExpExecArray|null;
+    while(depth && (tag=spans.exec(html)))depth+=tag[0].startsWith('</')?-1:1;
+    if(depth)continue;
+    compact+=html.slice(end,match.index)+`<span data-patch-slime="${retained.length}"></span>`;
+    retained.push(surface);end=spans.lastIndex;starts.lastIndex=end;
+  }
   const template = document.createElement("template");
-  template.innerHTML = html;
+  template.innerHTML = compact+html.slice(end);
   const key = (node: Node): string | null => node instanceof Element
     ? ["data-k", "data-member-item", "data-group", "data-room"].map(name => node.hasAttribute(name) ? `${name}:${node.getAttribute(name)}` : "").find(Boolean) ?? null : null;
   const face = (element: Element): Element | null => element.matches("svg.slime") ? element : element.matches(".slime-surface") ? element.querySelector("svg.slime") : null;
@@ -25,15 +45,23 @@ export function patchHTML(root: Element, html: string): void {
     const keyed = new Map([...live.childNodes].flatMap(node => key(node) ? [[key(node)!, node] as const] : []));
     let at = live.firstChild;
     for (const fresh of [...next.childNodes]) {
+      if (fresh instanceof Element && fresh.hasAttribute('data-patch-slime')) {
+        const node=retained[Number(fresh.getAttribute('data-patch-slime'))]!;
+        if(node!==at)live.insertBefore(node,at);
+        at=node.nextSibling;continue;
+      }
       const id = key(fresh);
       let node: Node | null = id ? keyed.get(id) ?? null : at && !key(at) ? at : null;
       if (!node || node.nodeType !== fresh.nodeType || (node instanceof Element && fresh instanceof Element && (node.tagName !== fresh.tagName || node.namespaceURI !== fresh.namespaceURI))) {
-        node = fresh.cloneNode(true);
+        // The parsed subtree is already detached; copying cels only creates garbage.
+        node = fresh;
+        if(node instanceof Element)for(const placeholder of node.querySelectorAll('[data-patch-slime]'))placeholder.replaceWith(retained[Number(placeholder.getAttribute('data-patch-slime'))]!);
         live.insertBefore(node, at);
       } else {
         if (node !== at) live.insertBefore(node, at);
         if (node instanceof Element && fresh instanceof Element) {
           const oldFace = face(node), nextFace = face(fresh);
+          const sameDrawing = node.matches('.slime-surface[data-slime-drawing]') && node.getAttribute('data-slime-drawing') === fresh.getAttribute('data-slime-drawing') && (oldFace as SVGElement | null)?.style.getPropertyValue('--slime-color') === (nextFace as SVGElement | null)?.style.getPropertyValue('--slime-color');
           const keepMotion = oldFace && nextFace ? oldFace.getAttribute("data-slime-member") === nextFace.getAttribute("data-slime-member") && oldFace.getAttribute("data-state") === nextFace.getAttribute("data-state") : motion;
           if (keepMotion) {
             // Generated faces sample a phase for new nodes; retained nodes already have a clock and transition.
@@ -51,7 +79,7 @@ export function patchHTML(root: Element, html: string): void {
           }
           for (const attr of [...node.attributes]) if (!fresh.hasAttribute(attr.name)) node.removeAttribute(attr.name);
           for (const attr of [...fresh.attributes]) if (node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value);
-          walk(node, fresh, !!keepMotion);
+          if (!(keepMotion && sameDrawing)) walk(node, fresh, !!keepMotion);
         } else if (node.nodeValue !== fresh.nodeValue) node.nodeValue = fresh.nodeValue;
       }
       at = node.nextSibling;

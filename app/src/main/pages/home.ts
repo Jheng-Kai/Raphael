@@ -1,5 +1,6 @@
 // Home keeps four equal summaries and a month calendar in the same places for every data state.
 import * as api from "../api";
+import { eventRead } from '../event-read';
 import { avatarHTML, onAvatarChange } from "../avatar";
 import { chipHTML, dismissOffer, googleNoticeHTML, type EntryKind } from "../calendar-view";
 import type { GoogleCalendarState, HomeItem, HomeOverview } from "../home-types";
@@ -160,14 +161,16 @@ export function createHome(app: AppContext): Page {
     }
   };
   const sameData = (next: HomeOverview): boolean => data !== null && JSON.stringify(data) === JSON.stringify(next);
-  async function load(): Promise<void> {
+  async function load(fromEvent = false): Promise<void> {
     const mine = ++generation;
     if (!data) el.innerHTML = loadingHTML();
     try {
       const requestedMonth = month ? dateKey(month).slice(0, 7) : undefined;
-      const next = await api.homeOverview(false, requestedMonth);
+      const read=()=>api.homeOverview(false, requestedMonth);
+      const next = await (fromEvent ? eventRead(`home.overview:${requestedMonth ?? ''}`,read,app) : read());
       if (!visible || mine !== generation) return;
       if (!sameData(next)) { data = next; paint(); }
+      if (fromEvent) return;
       // Local records paint first. One live read fills the same page without emitting changes.
       if (!live) {
         const pending = api.homeOverview(true, requestedMonth);
@@ -261,7 +264,7 @@ export function createHome(app: AppContext): Page {
         break;
       case "report":
         if (data && buildReport(data.report, data.generated_at_ms).action?.target === "retry") {
-          void api.statusCheckOpenrouter().then(load, load);
+          void api.statusCheckOpenrouter().then(() => load(), () => load());
         } else app.go("settings", data?.report.openrouter.state === "ok" ? "usage" : "models");
         break;
       default: app.go("agent");
@@ -272,7 +275,7 @@ export function createHome(app: AppContext): Page {
   // Settings retains Home behind its dialog. Translate cached data even while the page is inactive.
   onLocaleChange(paint);
   app.onEvent(event => {
-    if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load();
+    if (visible && ["AgentTurn", "MembersChanged", "RoutinesChanged", "CalendarChanged", "SettingsChanged", "QuotaChanged", "AgentQuestion", "AgentQuestionClosed", "ConversationsChanged", "ConnectionsChanged"].includes(event.type)) void load(true);
   });
   app.cleared.on("dictation", () => { if (visible) void load(); });
   app.cleared.on("conversation", () => { if (visible) void load(); });

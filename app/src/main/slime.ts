@@ -8,6 +8,8 @@
  */
 import "./slime.css";
 import { t } from "./i18n";
+import { motionStrips } from "./slime-cels";
+import { loopState, LOOPS, sample } from "./slime-motion";
 
 export type SlimeState = "idle" | "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "sleeping" | "arriving";
 type Hat = "witch" | "santa";
@@ -146,6 +148,13 @@ const IDLE_EYE_STRIP = idleStrip("eyes", IDLE_EYES.map(([x, y, sy], index) => {
   return `<g transform="translate(${index * IDLE_FRAME} 0)"><g class="slime-face" transform="${FACE_SCALE}"><g data-idle-pose="${pose}" transform="translate(${x} ${y}) translate(50 50) scale(1 ${sy}) translate(-50 -50)"><path class="slime-cel-eye" d="${EYES}" fill="none" stroke="#fff" stroke-linecap="round"/></g></g></g>`;
 }).join(""));
 const HAT_LIFT = -4;
+const drawings = new Map<string, { back: string; worn: string; idle: string }>();
+const drawingIds = new Map<string, string>();
+
+function strips(state: SlimeState, drawing: {back: string; worn: string; idle: string}): [string,string] {
+  if (state === 'idle') return [drawing.idle, IDLE_EYE_STRIP];
+  return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,DROP,drawing.back,drawing.worn) : ['',''];
+}
 
 const DROP = "M 0 -7 C -3 -3 -5 -1 -5 2 C -5 9 5 9 5 2 C 5 -1 3 -3 0 -7 Z";
 const DROPLETS = `<g fill="var(--slime-color)">${["thought", "left", "right", "sweat", "drip"].map(kind => `<path class="slime-drop slime-${kind}" d="${DROP}"/>`).join("")}</g><circle class="slime-bubble" cx="0" cy="0" r="5.5" fill="var(--slime-color)"/>`;
@@ -158,12 +167,15 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   const look: { color: string; back?: string; marks?: string } = "character" in slime ? CHARACTERS[slime.character] : { color: COLORS[slime.color] };
   const hat = "character" in slime ? null : seasonalHat(now);
   const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
-  const idleBody = idleBodyStrip(look.back, worn);
-  return `<span class="slime-surface" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${idleBody}<svg class="slime" viewBox="4 11 92 92" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
+  const key = `${look.back ?? ''}|${worn}`;
+  let drawingId = drawingIds.get(key);
+  if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn,idle:idleBodyStrip(look.back,worn)}); }
+  const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
+  return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
-    `</g></g></g></g>${DROPLETS}</svg>${IDLE_EYE_STRIP}</span>`;
+    `</g></g></g></g>${DROPLETS}</svg>${eyeStrip}</span>`;
 }
 
 // ---------- under the pointer ----------
@@ -182,6 +194,12 @@ function hearThePointer(): void {
   });
   document.addEventListener("animationend", event => {
     if (event.animationName === "slime-delight") (event.target as Element).closest(".slime-surface")?.querySelector("svg.slime")?.classList.remove("is-delighted");
+    if (event.animationName === 'slime-idle-hide') {
+      const svg=(event.target as Element).closest<SVGElement>('svg.slime');
+      if(!svg)return;
+      delete svg.dataset.transitioning;
+      for(const part of svg.querySelectorAll<SVGElement>('[style]'))part.style.removeProperty('animation-delay');
+    }
   });
 }
 
@@ -226,11 +244,34 @@ function poseOf(part: Element, properties: readonly PoseProperty[] = WHOLE_POSE)
 
 function idlePose(svg: SVGElement, kind: string): DOMMatrix {
   const surface = svg.parentElement!;
-  const strip = surface.querySelector(`.slime-idle-${kind} .slime-cels`)!;
+  const strip = surface.querySelector(`.slime-idle-${kind} .slime-cels`);
+  if (!strip) return new DOMMatrix();
   if (getComputedStyle(strip.parentElement!).display === "none") return new DOMMatrix();
   const frame = Math.round(-poseOf(strip).e / (surface.clientWidth * 3));
   const cell = strip.querySelectorAll<SVGElement>("[data-idle-pose]")[frame];
   return new DOMMatrix(cell?.dataset.idlePose);
+}
+
+function loopPose(svg: SVGElement, kind: 'body'|'eyes'): DOMMatrix {
+  const state=svg.dataset.state!;
+  if (!loopState(state)) return new DOMMatrix();
+  const surface=svg.parentElement!, strip=surface.querySelector('.slime-loop-body .slime-cels');
+  if (!strip || getComputedStyle(strip.parentElement!).display==='none' || getComputedStyle(strip.parentElement!).visibility==='hidden') return new DOMMatrix();
+  const index=Math.round(-poseOf(strip).e/(surface.clientWidth*3));
+  if (kind==='body') {
+    const props=strip.querySelector('.slime-prop-cels');
+    const row=props?Math.round(-poseOf(props).f/(surface.clientWidth*3)):0;
+    const cell=strip.querySelectorAll<SVGElement>('[data-loop-pose]')[row*12+index];
+    if (!cell) return new DOMMatrix();
+    const pose=JSON.parse(cell.dataset.loopPose!);
+    return new DOMMatrix().translate(pose.translate[0],pose.translate[1]).rotate(pose.rotate[0]).scale(pose.scale[0],pose.scale[1]);
+  }
+  const eyeStrip=surface.querySelector('.slime-eye-cels')!;
+  const blinking=state==='thinking'||state==='searching';
+  const eyeIndex=Math.round(-poseOf(eyeStrip).f/(surface.clientWidth*3*(blinking?4:1)));
+  const gaze=sample(`slime-${state}-gaze`,eyeIndex/12,LOOPS[state].gaze);
+  if(state==='blocked')gaze.translate=[0,-6];
+  return new DOMMatrix().translate(gaze.translate[0],gaze.translate[1]);
 }
 
 /** Starts a part from a pose; its transition in slime.css brings it home. */
@@ -273,11 +314,28 @@ export function handOver(svg: SVGElement, state: SlimeState): void {
   const bridged = (part: SVGElement): DOMMatrix => poseOf(part).multiply(poseOf(part.firstElementChild!));
   const loop: readonly PoseProperty[] = ["translate", "rotate", "scale"];
   const wasIdle = svg.dataset.state === "idle";
-  const body = bridged(settle).multiply(poseOf(motion)), eyes = bridged(look).multiply(poseOf(gaze, loop)).multiply(wasIdle ? idlePose(svg, "eyes") : new DOMMatrix());
+  const cel = svg.parentElement!.querySelector('.slime-loop-body');
+  const paintedLoop = cel && getComputedStyle(cel).display !== 'none' && getComputedStyle(cel).visibility !== 'hidden';
+  const body = paintedLoop ? loopPose(svg,'body') : bridged(settle).multiply(poseOf(motion));
+  const eyes = paintedLoop ? loopPose(svg,'eyes') : bridged(look).multiply(poseOf(gaze, loop)).multiply(wasIdle ? idlePose(svg, "eyes") : new DOMMatrix());
   const each = own.map(part => bridged(bridge(part)).multiply(poseOf(part)).multiply(wasIdle && part.classList.contains("slime-body") ? idlePose(svg, "body") : new DOMMatrix()));
+  // Error's first deflate uses the same hide animation name as a handover.
+  // Cancel its old timeline before starting this finite bridge.
+  svg.style.animationName='none';
+  void getComputedStyle(svg).animationName;
   svg.dataset.state = svg.dataset.moved = state;
   svg.parentElement!.dataset.state = state;
+  const surface=svg.parentElement!;
+  for(const strip of surface.querySelectorAll(':scope > .slime-idle, :scope > .slime-loop'))strip.remove();
+  const drawing=drawings.get(surface.dataset.slimeDrawing!);
+  if(drawing){const [bodyStrip,eyeStrip]=strips(state,drawing);svg.insertAdjacentHTML('beforebegin',bodyStrip);svg.insertAdjacentHTML('afterend',eyeStrip);}
+  if(state==='idle'||loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
   svg.style.setProperty("--slime-since", "0ms");
+  svg.style.removeProperty('animation-name');
+  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark,.slime-drop,.slime-bubble')){
+    const style=getComputedStyle(part), durations=style.animationDuration.split(',').map(parseFloat);
+    part.style.animationDelay=style.animationDelay.split(',').map((delay,index)=>`${parseFloat(delay)%(durations[index]??durations[0]??1)}s`).join(',');
+  }
   startFrom(settle, body.multiply(poseOf(motion).inverse()));
   startFrom(look, eyes.multiply(poseOf(gaze, loop).inverse()));
   own.forEach((part, index) => startFrom(bridge(part), each[index]!.multiply(poseOf(part, loop).inverse())));

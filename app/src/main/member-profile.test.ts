@@ -10,6 +10,25 @@ import type { Member } from "./types";
 vi.mock("./api", () => ({ core: vi.fn(), membersUpdate: vi.fn(), membersSkillsList: vi.fn(), membersSkillsImport: vi.fn(), membersSkillsUpdate: vi.fn(), membersSkillsDelete: vi.fn(), membersCommandsList: vi.fn(), membersCommandsSave: vi.fn(), membersCommandsDelete: vi.fn(), membersVoices: vi.fn(), routinesList: vi.fn(), routinesCreate: vi.fn(), routinesUpdate: vi.fn(), routinesDelete: vi.fn() }));
 const member: Member = { id: 7, name: "Mia", role: "Research", instructions: "Keep sources", personality: "Careful", avatar: "", group_id: null, model: "", tools: null, position: 0, created: 0, unread: false, waiting: false, preview: "", last_at: null };
 const flush = async (): Promise<void> => { for (let i = 0; i < 25; i++) await Promise.resolve(); };
+
+test('open resource consumers share event reads and retain the trailing skill change', async () => {
+  vi.useFakeTimers();
+  const scope = {}, roots = [document.createElement('div'),document.createElement('div')];
+  roots.forEach(root=>document.body.append(root));
+  const editors=roots.map(root=>mountMemberResources(root,{memberId:7,tab:'skills',scope}));
+  try {
+    await flush(); vi.mocked(api.membersSkillsList).mockClear(); vi.mocked(api.membersCommandsList).mockClear();
+    const refresh=(editor:typeof editors[number])=>editor.refresh(true);
+    await Promise.all(editors.map(refresh));
+    expect(api.membersSkillsList).toHaveBeenCalledTimes(1);
+    expect(api.membersCommandsList).toHaveBeenCalledTimes(1);
+    const pending=editors.map(refresh);
+    vi.mocked(api.membersSkillsList).mockResolvedValue({skills:[{id:1,name:'Fresh sample skill',description:'Changed',enabled:true,source:'owner'}] } as Awaited<ReturnType<typeof api.membersSkillsList>>);
+    await vi.advanceTimersByTimeAsync(300); await Promise.all(pending);
+    roots.forEach(root=>expect(root.textContent).toContain('Fresh sample skill'));
+    expect(api.membersSkillsList).toHaveBeenCalledTimes(2);
+  } finally {editors.forEach(editor=>editor.destroy());vi.useRealTimers();}
+});
 const host = (over: Partial<MemberProfileHost> = {}): MemberProfileHost => ({ groups: [], taken: [], ...over });
 const click = (root: ParentNode, selector: string): void => root.querySelector<HTMLElement>(selector)!.click();
 const fill = (root: ParentNode, selector: string, text: string): void => { const field = root.querySelector<HTMLInputElement>(selector)!; field.value = text; field.dispatchEvent(new Event("input", { bubbles: true })); };

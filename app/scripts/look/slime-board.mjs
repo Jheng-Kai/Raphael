@@ -2,15 +2,43 @@ import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { transpileModule } from "typescript";
 
+/** The actually painted cel, rather than its hidden vector fallback or another cell in the sheet. */
+export function paintedSlime(svg) {
+  const surface=svg.closest('.slime-surface');
+  const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')],props:[...svg.querySelectorAll('.slime-drop,.slime-bubble')]});
+  const bodyStrip=surface.querySelector('.slime-loop-body .slime-cels');
+  if(bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden'){
+    const frame=surface.clientWidth*3, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
+    const props=bodyStrip.querySelector('.slime-prop-cels');
+    const row=props?Math.round(-new DOMMatrix(getComputedStyle(props).transform).f/frame):0;
+    const bodyCell=(props??bodyStrip).firstElementChild.children[row*12+index];
+    const eye=surface.querySelector('.slime-eye-cels'), blink=surface.querySelector('.slime-blink-cels');
+    const eyeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye.parentElement).transform).e/frame);
+    const count=bodyStrip.parentElement.classList.contains('has-blink')?4:1;
+    const gazeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye).transform).f/(frame*count));
+    const blinkIndex=Math.round(-new DOMMatrix(getComputedStyle(blink).transform).f/frame);
+    const eyeCell=blink.firstElementChild.children[(gazeIndex*12+eyeIndex)*count+blinkIndex];
+    return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')],props:[...bodyCell.querySelectorAll('.slime-cel-prop')]};
+  }
+  const idle=surface.querySelector('.slime-idle-body .slime-cels');
+  if(idle && getComputedStyle(idle.parentElement).display!=='none' && getComputedStyle(idle.parentElement).visibility!=='hidden'){
+    const at=strip=>Math.round(-new DOMMatrix(getComputedStyle(strip).transform).e/(surface.clientWidth*3));
+    const body=idle.firstElementChild.children[at(idle)], eyes=surface.querySelector('.slime-idle-eyes .slime-cels');
+    return {body:body.querySelector('.slime-cel-body'),eyes:eyes.firstElementChild.children[at(eyes)].querySelector('.slime-cel-eye'),marks:[...body.querySelectorAll('.slime-mark')],props:[]};
+  }
+  return fallback();
+}
+
 // Pictures of the real slime: its own code and stylesheet in the running app, held at chosen moments, so that sharpness and motion can be judged in stills.
 
-async function baseline(page, revision) {
+export async function baseline(page, revision) {
   if (!/^[a-f0-9]{7,40}$/.test(revision)) throw new Error("A slime baseline must be a commit ID");
   const read = file => execFileSync("git", ["show", `${revision}:app/src/main/${file}`], { cwd: import.meta.dirname, encoding: "utf8", windowsHide: true });
   const source = read("slime.ts").replace(/^import .*;\r?\n/gm, "");
   const code = transpileModule(`const t = (key) => key;\n${source}`, { compilerOptions: { target: 99, module: 99 } }).outputText;
   return page.evaluate(async (code, css) => {
     const old = await import(`data:text/javascript;base64,${btoa(code)}`);
+    window.__slimeBaseline = {slimeSVG:old.slimeSVG,handOver:old.handOver};
     const styles = [...document.querySelectorAll('style[data-vite-dev-id$="/slime.css"]')];
     styles.forEach(style => { style.disabled = true; });
     const sheet = document.createElement("style"); sheet.textContent = css; document.head.append(sheet);
@@ -23,12 +51,16 @@ async function baseline(page, revision) {
     });
     [...document.querySelectorAll("svg.slime")].forEach((svg, index) => {
       const original = document.createElement("div"); original.innerHTML = faces[index];
-      svg.style.setProperty("--slime-color", original.firstElementChild.style.getPropertyValue("--slime-color"));
+      for(const name of ['--slime-color','--slime-tempo']) {
+        const value=original.querySelector('svg.slime').style.getPropertyValue(name);
+        svg.style.setProperty(name,value);svg.closest('.slime-surface').style.setProperty(name,value);
+      }
       svg.dataset.lookAt = original.querySelector("svg.slime").dataset.lookAt ?? "700";
     });
     window.__slimeRestore = () => {
-      [...document.querySelectorAll("svg.slime")].forEach((svg, index) => { svg.outerHTML = faces[index]; });
+      [...document.querySelectorAll("svg.slime")].forEach((svg, index) => { (svg.closest('.slime-surface') ?? svg).outerHTML = faces[index]; });
       sheet.remove(); styles.forEach(style => { style.disabled = false; });
+      delete window.__slimeBaseline;
     };
   }, code, read("slime.css"));
 }
@@ -83,19 +115,20 @@ export function slimeParts() {
     for (const at of times) {
       animations.forEach(animation => { animation.currentTime = at; });
       const idle = svg.dataset.state === 'idle';
-      const body = idle ? cel('.slime-cel-body') : svg.querySelector('.slime-body');
-      const eyes = idle ? cel('.slime-cel-eye') : svg.querySelector('.slime-eyes');
+      const drawn=globalThis.__lookPaintedSlime?.(svg);
+      const body = drawn?.body ?? (idle ? cel('.slime-cel-body') : svg.querySelector('.slime-body'));
+      const eyes = drawn?.eyes ?? (idle ? cel('.slime-cel-eye') : svg.querySelector('.slime-eyes'));
       const b = body.getBoundingClientRect(), e = eyes.getBoundingClientRect();
       const state = svg.dataset.state, size = host.getBoundingClientRect().width;
       const fail = (part, box) => failures.push({state, size, at, part, body: b.toJSON(), box: box.toJSON()});
-      if (!idle && getComputedStyle(body).visibility === 'hidden') fail('missing body', b);
+      if (getComputedStyle(body).visibility === 'hidden') fail('missing body', b);
       if (getComputedStyle(eyes).visibility !== 'hidden' && (e.left < b.left - b.width * .08 || e.right > b.right + b.width * .08 || e.top < b.top - b.height * .08 || e.bottom > b.bottom + b.height * .08)) fail('eyes', e);
-      for (const mark of svg.querySelectorAll('.slime-mark')) {
+      for (const mark of drawn?.marks ?? svg.querySelectorAll('.slime-mark')) {
         const h = mark.getBoundingClientRect();
         if (getComputedStyle(mark).visibility !== 'hidden' && (h.left < b.left - b.width * .18 || h.right > b.right + b.width * .18 || h.top < b.top - b.height * .8 || h.bottom < b.top - b.height * .1 || h.bottom > b.top + b.height * .55)) fail('hat', h);
       }
       const frame = svg.getBoundingClientRect();
-      for (const drop of svg.querySelectorAll('.slime-drop, .slime-bubble')) {
+      for (const drop of drawn?.props ?? svg.querySelectorAll('.slime-drop, .slime-bubble')) {
         if (getComputedStyle(drop).display === 'none') continue;
         const d = drop.getBoundingClientRect();
         if (d.left < frame.left - .1 || d.right > frame.right + .1 || d.top < frame.top - .1 || d.bottom > frame.bottom + .1) fail('droplet', d);
@@ -142,7 +175,7 @@ export async function slimeSharp(page, scope = ".look-slime-board", evidence, re
   const sampled = await page.evaluate(scope => [...document.querySelectorAll(`${scope} svg.slime`)].map(svg => ({
     size: svg.getBoundingClientRect().width,
     body: getComputedStyle(svg.querySelector(".slime-body") ?? svg.firstElementChild).animationName,
-    strip: svg.closest(".slime-surface") && getComputedStyle(svg.closest(".slime-surface").querySelector(".slime-idle-body")).display,
+    strip: svg.closest(".slime-surface")?.querySelector('.slime-idle-body,.slime-loop-body') ? getComputedStyle(svg.closest(".slime-surface").querySelector('.slime-idle-body,.slime-loop-body')).display : 'none',
     animations: (svg.closest(".slime-surface") ?? svg).getAnimations({ subtree: true }).map(a => [a.animationName, a.effect.target.className.baseVal ?? a.effect.target.className]),
   })), scope);
   await page.evaluate(holdStaticPose, scope);
@@ -218,9 +251,10 @@ export async function idleCost(page, seconds, revision) {
   const after = await main(), cpuAfter = await cpu();
   const percent = name => Number(((after[name] - before[name]) / seconds * 100).toFixed(1));
   const layers = await page.evaluate(() => document.querySelectorAll("svg.slime").length);
+  const avatarNodes = await page.evaluate(() => [...document.querySelectorAll('svg.slime')].reduce((count,svg)=>count+svg.closest('.slime-surface').querySelectorAll('*').length,0));
   await client.detach(); await browser.detach();
   if (revision) await page.evaluate(() => window.__slimeRestore());
-  return { check: "idle-cost", revision: revision ?? "working-tree", seconds, slimes: layers, mainThread: percent("TaskDuration"), style: percent("RecalcStyleDuration"), layout: percent("LayoutDuration"), script: percent("ScriptDuration"), browser: Number(((cpuAfter - cpuBefore) / seconds * 100).toFixed(1)) };
+  return { check: "idle-cost", revision: revision ?? "working-tree", seconds, slimes: layers, avatarNodes, mainThread: percent("TaskDuration"), style: percent("RecalcStyleDuration"), layout: percent("LayoutDuration"), script: percent("ScriptDuration"), browser: Number(((cpuAfter - cpuBefore) / seconds * 100).toFixed(1)) };
 }
 
 /** A hover wiggles a slime, the wiggle finishes after the pointer has gone, and a press squashes it until it is let go, with the control standing still. */

@@ -2,6 +2,7 @@
 // resource action is written immediately.
 import { noticeHTML } from "./missing";
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { openActions } from "./member-column";
 import { describeError, formatDate } from "./format";
 import { onLocaleChange, t } from "./i18n";
@@ -10,6 +11,7 @@ import { btn, esc, iconButton, openMenu, sel, tg, toaster } from "./ui";
 
 export interface ResourceHost {
   memberId: number;
+  scope?: object;
   tab: "skills" | "commands" | "voice";
   /** The narrow details panel gives skills and commands separate subpages. */
   standalone?: boolean;
@@ -21,7 +23,7 @@ export interface ResourceHost {
   draft?: { text: string; save(text: string): Promise<void>; discard(): Promise<void> };
 }
 export interface ResourceEditor {
-  refresh(): Promise<void>;
+  refresh(fromEvent?: boolean): Promise<void>;
   suggest(command: Omit<MemberCommand, "id">): void;
   destroy(): void;
 }
@@ -76,16 +78,16 @@ export function mountMemberResources(container: HTMLElement, host: ResourceHost)
         `<section class="mp-card">${(["read_aloud", "notify"] as const).map(key => `<div class="mp-resource"><span>${esc(t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"))}</span>${tg(voiceState[key], t(key === "read_aloud" ? "members.profile.readAloud" : "members.profile.notify"), ` data-res="${key}"${off}`)}</div>`).join("")}</section>` :
       (host.tab === "skills" ? skillHTML : "") + (host.tab === "commands" || !host.standalone ? commandsHTML : "");
   }
-  async function refresh(): Promise<void> {
+  async function refresh(fromEvent = false): Promise<void> {
     const mine = ++generation;
     try {
       if (host.tab === "voice") {
-        const answer = await api.membersVoices();
+        const answer = await (fromEvent ? eventRead('members.voices',()=>api.membersVoices(),host.scope ?? container) : api.membersVoices());
         if (!alive || mine !== generation) return;
         voices = answer.voices;
         configured = answer.configured;
       } else {
-        const [s, c] = await Promise.all([api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
+        const [s, c] = await Promise.all(fromEvent ? [eventRead(`members.skills.list:${host.memberId}`,()=>api.membersSkillsList(host.memberId),host.scope ?? container),eventRead(`members.commands.list:${host.memberId}`,()=>api.membersCommandsList(host.memberId),host.scope ?? container)] : [api.membersSkillsList(host.memberId), api.membersCommandsList(host.memberId)]);
         if (!alive || mine !== generation) return;
         skills = s.skills;
         undo = s.undo ?? null;

@@ -28,6 +28,7 @@ import {
 } from "./members";
 import type { AppContext, Member, MemberPatch, MembersList, Routine } from "./types";
 import { esc, ico, iconButton, openMenu, patchHTML, sel, toaster } from "./ui";
+import { eventRead } from './event-read';
 
 export type DetailsTab = "details" | "settings" | "memory" | "skills" | "commands" | "voice";
 
@@ -36,6 +37,7 @@ export interface DetailsHost {
   /** The member whose thread is open. */
   member(): Member;
   list(): MembersList | null;
+  visible?(): boolean;
   /** Changes the member and reads the list again; false (with a toast) when the core refused. */
   update(id: number, patch: MemberPatch): Promise<boolean>;
   /** A picture of this PC for the member; then the list again. */
@@ -57,6 +59,7 @@ export interface DetailsPanel {
   showMember(): void;
   refreshRoutines(): void;
   refreshMemory(memberId: number, space?: "own" | "shared"): void;
+  refreshResources(): void;
 }
 
 export function createDetails(host: DetailsHost): DetailsPanel {
@@ -95,6 +98,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (!slot || !host.openConversation) return;
     if (conversationHost.parentElement !== slot) slot.replaceChildren(conversationHost);
     if (!conversationList) conversationList = mountConversationList(conversationHost, {
+      scope: host.app,
+      active: () => host.visible?.() ?? true,
       memberId, collapseWhenEmpty: true,
       onVisibility(visible) { const current = body.querySelector<HTMLElement>('[data-slot="conversations"]'); if (current && current.hidden !== !visible) current.hidden = !visible; },
       onOpen(id) { host.openConversation?.(memberId, id); },
@@ -102,12 +107,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     });
     slot.hidden = conversationHost.hidden;
   }
-  async function loadCounts(): Promise<void> {
+  async function loadCounts(fromEvent = false): Promise<void> {
     const epoch = ++countEpoch, id = host.member().id;
     const result = await Promise.allSettled([
-      api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
-      id === RAPHAEL_ID ? Promise.resolve({commands: []}) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
-      api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
+      fromEvent ? eventRead(`members.skills.list:${id}`,()=>api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),host.app) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
+      id === RAPHAEL_ID ? Promise.resolve({commands: []}) : fromEvent ? eventRead(`members.commands.list:${id}`,()=>api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),host.app) : api.core<{commands: unknown[]}>("members.commands.list", {member_id: id}),
+      fromEvent ? eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app) : api.core<{ entries: number }>("memory.get", { member_id: id, space: "own" }),
     ]);
     if (epoch !== countEpoch || id !== host.member().id) return;
     counts = {
@@ -277,7 +282,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     if (resourceTab) {
       if (!resources) {
         body.replaceChildren();
-        resources = mountMemberResources(body, {memberId: member.id, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
+        resources = mountMemberResources(body, {memberId: member.id, scope: host.app, tab: resourceTab, member, standalone: true, changed: () => void loadCounts()});
       }
     } else {
       if (tab === "details") {
@@ -445,8 +450,12 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     draw,
     overview() { tab = "details"; draw(); },
     refreshRoutines() { void loadRoutines(); },
+    refreshResources() { void loadCounts(true); void resources?.refresh(true); },
     refreshMemory(memberId, space) {
-      if (memberId === host.member().id) { void loadCounts(); void resources?.refresh(); }
+      if (memberId === host.member().id) {
+        const id=memberId;
+        void eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app).then(result=>{if(id===host.member().id){counts.memory=result.entries;draw();}}).catch(()=>{});
+      }
       if (!memoryHost.visible()) return;
       if (space !== "own") void shared.load();
       if (space !== "shared" && memberId === host.member().id) void own.load();

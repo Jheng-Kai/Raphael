@@ -1,7 +1,8 @@
 import { assertStableClick, stableSnapshot, stableControls } from "./stable-click.mjs";
 import { checkRendered } from "./checks.mjs";
-import { idleCost, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
+import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
+import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 export function finiteMotionSettled() {
   return document.getAnimations().every(animation => animation.playState !== "running" || animation.effect?.getTiming().iterations === Infinity ||
@@ -460,7 +461,10 @@ export async function perform(page, step, evidenceDirectory) {
       // Every animation held `at` ms in, also on elements drawn again later, so a moving frame is the same each run.
       await page.addStyleTag({ content: `*, *::before, *::after { animation-delay: -${Number(step.at)}ms !important; animation-play-state: paused !important; }` });
       break;
-    case "slime-board": return await page.evaluate(slimeBoard, step.rows, step.columns);
+    case "slime-board": {
+      await page.evaluate(`globalThis.__lookPaintedSlime = ${paintedSlime}`);
+      return await page.evaluate(slimeBoard, step.rows, step.columns);
+    }
     case "slime-parts": return await page.evaluate(slimeParts);
     case "slime-sharp": {
       const revision = process.env.LOOK_SLIME_BASELINE;
@@ -468,6 +472,13 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "slime-pointer": return await slimePointer(page, step.selector);
     case "idle-cost": return await idleCost(page, step.seconds, step.revision);
+    case "motion-cost": return await motionCost(page,step.revision);
+    case "motion-details": return await motionDetails(page);
+    case "motion-audit": {
+      const result = {check:'motion-audit',...await page.evaluate(animationAudit)};
+      if(result.failures.length) throw Object.assign(new Error(`Non-compositable endless motion: ${JSON.stringify(result)}`),{assertion:result});
+      return result;
+    }
     case "event-storm": return await eventStorm(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.

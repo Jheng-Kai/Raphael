@@ -1,13 +1,14 @@
 // Discovery and completion share the mention menu. The core resolves the selected name at send time.
 import { membersCommandsList, membersSkillsList } from "./api";
+import { eventRead } from './event-read';
 import { RECALL } from "./composer-history";
 import { t } from "./i18n";
 import type { MemberCommand, MemberSkill } from "./types";
 import { textPositionRect } from "./text-position";
 import { closeMenu, matchingChoices, menuIsOpenFor, openMenu, placeMenu, type Choice } from "./ui";
 
-export interface SlashMenuOptions { memberId(): number }
-export interface SlashMenu { refresh(): Promise<void>; destroy(): void }
+export interface SlashMenuOptions { memberId(): number; scope?: object }
+export interface SlashMenu { refresh(fromEvent?: boolean): Promise<void>; destroy(): void }
 const queryOf = (text: string): string | undefined => /^\/([^\s/]*)$/u.exec(text)?.[1];
 export const matchingCommands = (commands: readonly MemberCommand[], text: string): MemberCommand[] => {
   const query = queryOf(text)?.toLocaleLowerCase();
@@ -43,11 +44,11 @@ export function mountSlashMenu(input: HTMLTextAreaElement | HTMLInputElement, op
     panel.style.minWidth = `${Math.min(360, input.getBoundingClientRect().width, innerWidth - 16)}px`;
     placeMenu();
   }
-  async function refresh(): Promise<void> {
+  async function refresh(fromEvent=false): Promise<void> {
     const mine = ++generation, memberId = options.memberId();
     close();
     try {
-      const [commandAnswer, skillAnswer] = await Promise.all([membersCommandsList(memberId), membersSkillsList(memberId)]);
+      const [commandAnswer, skillAnswer] = await Promise.all(fromEvent ? [eventRead(`members.commands.list:${memberId}`,()=>membersCommandsList(memberId),options.scope ?? input),eventRead(`members.skills.list:${memberId}`,()=>membersSkillsList(memberId),options.scope ?? input)] : [membersCommandsList(memberId), membersSkillsList(memberId)]);
       if (!alive || mine !== generation || memberId !== options.memberId()) return;
       commands = commandAnswer.commands; skills = skillAnswer.skills;
       loadedFor = memberId; draw();

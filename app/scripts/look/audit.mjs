@@ -91,7 +91,11 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       if (style.overflow !== 'clip' || reserve < Math.max(box.width, box.height)) violation('R-UI-54', 'A crop cuts the horns and wings of a slime');
     }
     if (element.matches('.mb-av-slime') && (box.width % 1 || box.height % 1)) violation('R-UI-63', `A slime on a fraction of a pixel is drawn soft: ${box.width} x ${box.height}`);
-    if (element.matches('.shimmer') && new Set(style.backgroundImage.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
+    if (element.matches('.shimmer')) {
+      const mask=element.querySelector(':scope > .shimmer-mask'), image=mask && win.getComputedStyle(mask).maskImage;
+      const light=image && image!=='none' ? win.getComputedStyle(mask,'::after').backgroundImage : style.backgroundImage;
+      if (new Set(light.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2) violation('R-UI-55', 'A light passing over words in the colour of the words shows nothing');
+    }
     if (element.matches('button.btn.icon')) {
       if (!floatingLatest && !sidebarAction && !['transparent', 'rgba(0, 0, 0, 0)', ''].includes(style.backgroundColor)) violation('R-UI-16', 'Icon action has a background surface');
       const glyph = element.querySelector(':scope > svg.i');

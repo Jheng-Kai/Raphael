@@ -220,10 +220,10 @@ export async function drive(name, context) {
     await pause(context.audioMs + 700);
     await click(page, ".composer .cmp-voice");
     await page.waitForSelector('[data-key="hearing"] .shimmer', { timeout: 15000 });
-    const light = await page.$eval('[data-key="hearing"] .shimmer', el => { const style = getComputedStyle(el); return { image: style.backgroundImage, name: style.animationName }; });
+    const light = await page.$eval('[data-key="hearing"] .shimmer', el => { const mask=el.querySelector('.shimmer-mask'), style=getComputedStyle(mask ?? el,mask ? '::after' : null); return { image: style.backgroundImage, name: style.animationName, mask: mask ? getComputedStyle(mask).maskImage : 'none' }; });
     result.light = light;
     await capture("recognising");
-    if (new Set(light.image.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2 || light.name === "none") throw new Error(`The recognising light shows nothing: ${JSON.stringify(light)}`);
+    if (new Set(light.image.match(/rgba?\([^)]*\)|color\([^)]*\)/g) ?? []).size < 2 || light.name === "none" || light.mask === 'none') throw new Error(`The recognising light shows nothing: ${JSON.stringify(light)}`);
     let turn;
     for (let i = 0; i < 600 && !turn; i++) {
       turn = (await snapshot()).agent_turns.find(row => !before.has(row.id) && row.conversation_id === conversation);

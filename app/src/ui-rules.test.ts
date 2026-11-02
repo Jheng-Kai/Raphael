@@ -244,7 +244,7 @@ describe("icons", () => {
   // at 16 px, or 20 where a larger one is meant, and keeps its stroke. The window's own minimise,
   // maximise and close are Windows' caption glyphs, drawn for 12 px: not icons of the set.
   const SIZES = new Set(["16px", "20px"]);
-  const NOT_ICONS = new Set([".slime-cels > svg", ".window-button svg"]);
+  const NOT_ICONS = new Set([".slime-cels > svg", ".slime-prop-cels > svg", ".slime-blink-cels > svg", ".window-button svg"]);
   const strip = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, "");
   const cssFiles = [...mainFiles, ...walk(join(SRC, "overlay"))].filter((f) => f.endsWith(".css"));
   const iconRules = (): { file: string; selector: string; body: string }[] =>

@@ -143,8 +143,10 @@ export async function eventStorm(page, options) {
     };
   }, { selector, type, hover, arrival, position, liveText });
   Object.assign(result, keyLatency(result.keyMs));
+  if (!roster) result.unrelatedReads = ['members.skills.list', 'members.commands.list', 'rooms.list'].reduce((sum, name) => sum + (result.reads[name] ?? 0), 0);
   if (control) result.quiet = control;
   const over = Object.entries(limits).filter(([name, limit]) => result[name] > limit).map(([name, limit]) => `${name} ${result[name]} > ${limit}`);
+  if (result.unrelatedReads) over.push(`unrelated reads ${result.unrelatedReads}`);
   if (!result.typingIntact || !result.hoverIntact || !result.arrivalShown || !result.motionIntact) over.push("typing, hover, arrival or animation lost");
   if (progress && result.changedKeys.some(key => key !== "turn:200000")) over.push("an unchanged line was replaced");
   if (result.liveTextUpdated === false) over.push("the current public action did not update");

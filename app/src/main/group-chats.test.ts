@@ -6,6 +6,16 @@ const api=vi.hoisted(()=>({membersList:vi.fn(),roomsCreate:vi.fn(),roomsList:vi.
 vi.mock("./api",()=>api);
 import { configureRooms, openNewGroupChat, openGroupChat, openRoomsMenu, createRoomsSection, createRoomPane, clearRoomSelection } from "./group-chats";
 import { setLocale } from "./i18n";
+import { setAvatar } from './avatar';
+
+test('an avatar repaint uses the loaded room and roster without IPC reads', async () => {
+  const section=createRoomsSection();document.body.append(section);await flush();
+  await pane(); api.roomsList.mockClear();api.membersList.mockClear();api.roomMessages.mockClear();
+  setAvatar(null);await flush();
+  expect(api.roomsList).not.toHaveBeenCalled();
+  expect(api.membersList).not.toHaveBeenCalled();
+  expect(api.roomMessages).not.toHaveBeenCalled();
+});
 const flush=async():Promise<void>=>{for(let i=0;i<24;i++)await Promise.resolve();};
 const room={id:1,name:"Launch",member_ids:[0,1],group_id:null,created:1,is_team:0};
 let event:(e:any)=>void;

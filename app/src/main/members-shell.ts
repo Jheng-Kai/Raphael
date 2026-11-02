@@ -14,6 +14,7 @@
 // leaves Raphael alone in the column: the page works as it did before.
 
 import * as api from "./api";
+import { eventRead } from './event-read';
 import { describeError } from "./format";
 import { currentRoomId, openNewGroupChat, openRoomsMenu } from "./group-chats";
 import { getLocale, onLocaleChange, t } from "./i18n";
@@ -150,6 +151,7 @@ export function createMembers(host: MembersHost): MembersShell {
   });
 
   const details = createDetails({
+    visible: host.visible,
     app: host.app,
     member,
     list: () => list,
@@ -187,7 +189,7 @@ export function createMembers(host: MembersHost): MembersShell {
 
   // ---------- reading ----------
 
-  async function load(): Promise<void> {
+  async function load(fromEvent = false): Promise<void> {
     const mine = ++loads;
     // the panel reads Raphael's routines the first time the page is on screen, not when the app starts
     if (!panelRead) {
@@ -199,7 +201,8 @@ export function createMembers(host: MembersHost): MembersShell {
     refreshOnShow = false;
     let read: MembersList;
     try {
-      read = await Promise.resolve().then(() => api.membersList(getLocale()));
+      const fetch = () => api.membersList(getLocale());
+      read = await (fromEvent ? eventRead(`members.list:${getLocale()}`,fetch,host.app) : Promise.resolve().then(fetch));
       if (!read || !Array.isArray(read.members) || !Array.isArray(read.groups)) throw new Error("no members");
     } catch {
       if (mine !== loads) return;
@@ -230,7 +233,6 @@ export function createMembers(host: MembersHost): MembersShell {
       toaster.info(t("common.deleted"));
       details.showMember();
     }
-    details.refreshMemory(current);
     drawAll();
     host.onUpdate?.();
     void readThread();
@@ -266,7 +268,7 @@ export function createMembers(host: MembersHost): MembersShell {
     refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      void load();
+      void load(true);
     }, delay);
   }
 
@@ -465,7 +467,8 @@ export function createMembers(host: MembersHost): MembersShell {
       if (restarted || event.type === "MembersChanged" || event.type === "ConnectionsChanged") {
         if (refreshTimer !== null) clearTimeout(refreshTimer);
         refreshTimer = null;
-        void load();
+        void load(true);
+        details.refreshResources();
       } else if (event.type === "RoutinesChanged" && event.member_id === current) {
         details.refreshRoutines();
       } else if (event.type === "MemoryChanged") {

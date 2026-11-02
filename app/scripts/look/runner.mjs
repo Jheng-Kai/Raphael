@@ -166,7 +166,7 @@ export async function run(options) {
         for (const step of scene.steps) {
           const trace = process.env.LOOK_TRACE === "1" && step.measure
             ? `${scene.name}-${theme}-${width}-${step.measure.name}.trace.json` : null;
-          if (trace) await page.tracing.start({ path: join(directory, trace), categories: ["devtools.timeline", "blink.user_timing", "v8.execute", "disabled-by-default-v8.cpu_profiler"] });
+          if (trace) await page.tracing.start({ path: join(directory, trace), categories: ["toplevel", "devtools.timeline", "blink.user_timing", "blink_gc", "v8", "v8.execute", "disabled-by-default-v8.cpu_profiler"] });
           let assertion;
           try { assertion = await perform(page, step, directory); }
           catch (error) {

@@ -1,6 +1,67 @@
 // @vitest-environment happy-dom
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { patchHTML } from "./ui";
+import { slimeSVG } from './slime';
+
+test('an unchanged generated face is reused before its cel markup is parsed', () => {
+  const root=document.createElement('div');
+  const picture=slimeSVG({character:'shion'},{state:'thinking',member:3});
+  patchHTML(root,`<button data-k="3">${picture}<b>Old</b></button>`);
+  const surface=root.querySelector('.slime-surface');
+  const template=document.createElement('template');
+  const parse=vi.spyOn(template,'innerHTML','set');
+  const create=document.createElement.bind(document);
+  const allocation=vi.spyOn(document,'createElement').mockImplementation((name,options)=>name==='template'?template:create(name,options));
+  try {
+    patchHTML(root,`<button data-k="3">${picture}<b>New</b></button>`);
+    expect(parse.mock.calls[0]?.[0]).not.toContain('slime-cel-eye');
+    expect(root.querySelector('.slime-surface')).toBe(surface);
+    expect(root.querySelector('b')?.textContent).toBe('New');
+  } finally {allocation.mockRestore();parse.mockRestore();}
+});
+
+test('inserting a generated cel subtree does not allocate a second copy for garbage collection', () => {
+  const root=document.createElement('div');
+  const clone=vi.spyOn(Node.prototype,'cloneNode');
+  try {
+    patchHTML(root,`<span class="slime-surface"><svg>${'<path d="M0 0"/>'.repeat(576)}</svg></span>`);
+    expect(root.querySelectorAll('path')).toHaveLength(576);
+    expect(clone).not.toHaveBeenCalled();
+  } finally {clone.mockRestore();}
+});
+
+test('generated face reuse follows keyed reorders and still updates a changed identity or state', () => {
+  const root=document.createElement('div');
+  const row=(id:number,state:'thinking'|'working',color:'sky'|'coral'='sky')=>`<button data-k="${id}">${slimeSVG({color},{state,member:id})}</button>`;
+  patchHTML(root,row(1,'thinking')+row(2,'working'));
+  const [one,two]=[...root.querySelectorAll('svg.slime')];
+  patchHTML(root,row(2,'working')+row(1,'thinking'));
+  expect([...root.querySelectorAll('svg.slime')]).toEqual([two,one]);
+  patchHTML(root,row(2,'thinking','coral')+row(1,'thinking'));
+  expect(root.querySelector('svg.slime')).toBe(two);
+  expect(two?.getAttribute('data-state')).toBe('thinking');
+  expect((two as SVGElement).style.getPropertyValue('--slime-color')).toBe('#D4556D');
+  expect(root.querySelectorAll('.slime-loop-body[data-state="thinking"]')).toHaveLength(2);
+});
+
+test('a colour change updates the retained vector fallback as well as its cel surface', () => {
+  const root = document.createElement('div');
+  const picture=(color:string)=>`<span class="slime-surface" data-slime-drawing="plain" style="--slime-color:${color}"><svg class="slime" data-state="working" data-slime-member="1" style="--slime-color:${color}"></svg></span>`;
+  patchHTML(root,picture('red')); const face=root.querySelector('svg');
+  patchHTML(root,picture('blue'));
+  expect(root.querySelector('svg')).toBe(face);
+  expect(root.querySelector('svg')?.style.getPropertyValue('--slime-color')).toBe('blue');
+});
+
+test('a retained cel surface still updates a changed character drawing', () => {
+  const root = document.createElement('div');
+  const picture = (id: string) => `<span class="slime-surface" data-slime-drawing="${id}"><svg class="slime" data-state="working" data-slime-member="1"><path d="${id}"/></svg></span>`;
+  patchHTML(root,picture('one'));
+  const face=root.querySelector('svg');
+  patchHTML(root,picture('two'));
+  expect(root.querySelector('svg')).toBe(face);
+  expect(root.querySelector('path')?.getAttribute('d')).toBe('two');
+});
 
 test("a no-op patch has no mutations and preserves focus, selection and listeners", async () => {
   const root = document.createElement("div"); document.body.append(root);

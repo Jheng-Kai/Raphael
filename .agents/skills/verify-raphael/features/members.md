@@ -543,3 +543,69 @@ are retained unchanged. No timeline or work-detail implementation is changed.
 ```powershell
 npm run look -- slime-liquid-sheet slime-liquid-still slime-states slime-motion-idle slime-motion-busy slime-motion-moments slime-motion-change slime-gallery slime-parts slime-sharp slime-cost presence-states-sidebar presence-blocked-stays presence-waiting-colleague transcript-working sidebar-group-author --theme both --width 1120,720,1920x1080
 ```
+
+## Motion cost (2026-11-03)
+
+R-PERF-01 extends R-UI-63/71/74/84 and R-UI-SLIME-01. The keyframes in
+slime.css remain the vector source; `node scripts/slime-cels.mjs` regenerates
+the checked pose data. At 72px and below every loop uses whole-frame HTML cels;
+independent axes retain body, props, marks, gaze and blink periods. Each axis has
+twelve sampled poses (four lid shapes retain the short blink's boundaries); the
+working body keeps 900ms while its droplets keep 1800ms. Only the current state's
+strips are mounted. Finite transitions, done, arriving and touch stay vector.
+The named `large-avatar-vector` exception applies only above 72px.
+
+`motion-cost` audits running infinite animations and repeats Performance.TaskDuration
+under a synthetic eight-working/two-sleeping load. Every sample must stay below
+3 percent of one core. It runs on slime-states, presence-states-sidebar,
+busy-team-thread, busy-team-home, busy-team-room and running. The separate
+motion-cost-details scene isolates the unchanged animated emblem against its still
+and measures one 96px working vector. It is measurement, not native acceptance.
+motion-idle-cost repeats twelve resting members against starting revision
+e2143ec7 twice each. slime-motion-recovery protects error/blocked handovers.
+
+Selected matrix: those six scenes plus slime-gallery, slime-liquid-sheet,
+slime-liquid-still, slime-parts, slime-sharp, slime-motion-change,
+slime-motion-busy, slime-motion-moments, slime-motion-idle, slime-pointer,
+slime-characters-at-rest and the affected question/pending-work consumers,
+both themes at 1120,720,1920x1080. Inspect every contact and the full-size small
+faces beside the before run and external reference. `slimeParts`, handover and
+sharpness inspect the actually painted cel, with their existing geometry/pixel
+limits retained. The old idle-only transform allowlist now allows whole-frame
+translations for active strips too. Event freshness assertions remain intact.
+
+Event reads follow ConversationsChanged/AgentTurn for conversation metadata and
+history, MembersChanged for capabilities, RoomsChanged for room metadata/messages,
+MemoryChanged for memory, and relevant WorkerChanged for loaded work history.
+The common event reader shares simultaneous consumers, limits starts to 300ms
+and always delivers an invalidation that arrived during an in-flight read.
+The existing event-storm checks assert no work-triggered rooms/skills/commands
+reads, preserved faces/scroll/input and bounded total reads.
+
+No new RPC, migration, product text, preference or navigation is introduced.
+Judge, native, cargo, real providers and network are explicitly prohibited.
+
+Final selection is recorded in .fold/motion-selected.txt: 33 scenes, both themes,
+1120,720,1920x1080. This includes the six additional busy-team variants, recovery, picker,
+sizes and pending composer. Benchmarks repeat two 2.5-second windows after
+6.5 seconds of warmup, explicitly loading eight visible small working avatars
+and two sleeping avatars. Idle comparison records avatar DOM counts. Admission
+uses elapsed performance time, independently of the fixture or system wall clock.
+
+Working shares its commensurate 900ms body and 1800ms droplet cycle in
+24 combined frames (twelve poses per knead), avoiding a 12 by 12 DOM product.
+The representative character DOM budget is protected in slime.test.ts.
+
+```powershell
+npm run look -- slime-states presence-states-sidebar busy-team-thread busy-team-home busy-team-room running slime-gallery slime-liquid-sheet slime-liquid-still slime-parts slime-sharp slime-motion-change slime-motion-recovery slime-motion-busy slime-motion-moments slime-motion-idle slime-pointer slime-characters-at-rest slime-picker slime-sizes busy-team-up busy-team-steps busy-team-typing busy-team-follow busy-team-anchor busy-team-hover admin-approval room-question-card composer-stop-voice composer-stop-pending motion-cost-comparison motion-cost-details motion-idle-cost --theme both --width 1120,720,1920x1080
+```
+
+Generated surfaces with unchanged identity, colour, member, tempo and state are retained before parsing their cel markup. Newly parsed subtrees are inserted directly without a duplicate clone. ui-patch.test.ts guards allocation, keyed reorder and changed identity/state. The mixed-load setup changes each selected avatar directly to its measured state once; it does not inject an intermediate idle handover. The same setup applies to the baseline and current implementation.
+
+The glyph mask clips the moving gradient's layout overflow. R-UI-55 audits the
+painted pseudo-element gradient and requires its glyph mask; its original flat
+gradient rejection remains. The native recognising-light check reads that same
+painted element, but no native journey is authorized for this unit. Home's
+four-second event storm is bounded to 27 total reads. After the 33-scene matrix,
+the local shimmer/limit corrections are rechecked in composer-stop-voice,
+composer-stop-pending, running and busy-team-home at both themes and all three sizes.

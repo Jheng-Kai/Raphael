@@ -3494,7 +3494,10 @@ export function checkRendered(name, context = {}) {
     for (const [id, [state, animation]] of Object.entries(wanted)) {
       const svg = face(id);
       require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);
-      require(svg.getAnimations({ subtree: true }).some(running => running.animationName === animation && running.playState === "running"), `member ${id} is really moving as ${state}`);
+      const small = svg.getBoundingClientRect().width <= 72;
+      const moving = small ? svg.closest('.slime-surface').querySelector('.slime-loop-body .slime-cels') : svg;
+      const name=small ? state==='working'?'slime-loop-working-x':'slime-loop-x' : animation;
+      require(moving?.getAnimations({ subtree: true }).some(running => running.animationName === name && running.playState === "running"), `member ${id} is really moving as ${state}`);
       const eye = getComputedStyle(svg.querySelector(".slime-eyes"));
       require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent path");
     }
@@ -3528,6 +3531,8 @@ export function checkRendered(name, context = {}) {
       const [before, after] = [...row.querySelectorAll(".mb-av-slime")].map(face => {
         const svg = face.querySelector("svg.slime");
         const painted = (kind, fallback) => {
+          const drawn=globalThis.__lookPaintedSlime?.(svg);
+          if(drawn)return drawn[kind].getBoundingClientRect();
           const surface = svg.closest(".slime-surface");
           const strip = surface?.querySelector(`.slime-idle-${kind} .slime-cels`);
           if (svg.dataset.state !== "idle" || !strip || getComputedStyle(strip.parentElement).display === "none" || getComputedStyle(strip.parentElement).visibility === "hidden") return svg.querySelector(fallback).getBoundingClientRect();

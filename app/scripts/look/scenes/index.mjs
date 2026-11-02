@@ -40,4 +40,15 @@ scenes.push(...menus);
 scenes.push(...cards);
 scenes.push(...presence);
 scenes.push(...answerForms);
+scenes.push({name:'motion-cost-details',description:'Isolated emblem decoder and single large vector cost',fixture:{},motion:true,steps:[{action:'motion-details'}]});
+scenes.push({name:'motion-cost-comparison',description:'Identical mixed-state fixture and sampling window, starting revision versus current cels',fixture:{},motion:true,steps:[{action:'motion-cost',revision:'e2143ec7'},{action:'motion-cost'}]});
+for (const scene of scenes) if (['admin-approval','room-question-card','composer-stop-voice'].includes(scene.name)) {
+  scene.motion=true;
+  scene.steps.push({action:'motion-audit'});
+}
+for (const scene of scenes) if (['slime-states', 'presence-states-sidebar', 'busy-team-thread', 'busy-team-home', 'busy-team-room', 'running'].includes(scene.name)) {
+  scene.motion = true;
+  const freeze = scene.steps.findIndex(step => step.action === 'freeze-motion');
+  scene.steps.splice(freeze < 0 ? scene.steps.length : freeze, 0, { action: 'motion-cost', ...(process.env.LOOK_TRACE==='1'?{measure:{name:'motion-cost',enforce:false}}:{}) });
+}
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

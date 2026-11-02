@@ -19,6 +19,29 @@ const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
 
+test.each(['thinking','working','searching','computer','waiting','blocked','sleeping','error'] as const)('R-PERF-01: %s carries only its current cels and keeps character marks in every body cel', state => {
+  const host = document.createElement('div');
+  host.innerHTML = slimeSVG({ character: 'shion' }, { ...plain, state });
+  expect(host.querySelector('.slime-idle')).toBeNull();
+  const bodies = host.querySelectorAll('.slime-loop-body .slime-cel-body');
+  expect(bodies).toHaveLength(state==='working'?24:['thinking','searching'].includes(state)?12*12:12);
+  for (const body of bodies) expect(body.parentElement!.innerHTML).toContain('#363140');
+  expect(host.querySelector('.slime-loop-eyes .slime-cel-eye')).not.toBeNull();
+});
+
+test('working reuses its commensurate body and droplet cycle without a Cartesian DOM expansion', () => {
+  const host=document.createElement('div');
+  host.innerHTML=slimeSVG({character:'shion'},{...plain,state:'working'});
+  expect(host.querySelectorAll('*').length).toBeLessThan(800);
+});
+
+test('thinking cels avoid transient transform wrappers that inflate collection work', () => {
+  const host=document.createElement('div');
+  host.innerHTML=slimeSVG({character:'shion'},{...plain,state:'thinking'});
+  expect(host.querySelectorAll('*').length).toBeLessThan(2000);
+  expect(host.querySelector('.slime-loop .slime-correction, .slime-loop .slime-counterturn')).toBeNull();
+});
+
 afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ""; });
 
 test("a member without a picture is a slime, its chosen one or a colour from its id; Raphael is not", () => {
@@ -180,11 +203,21 @@ test("what a character wears on its body stays on it at rest: the idle strip tha
 });
 
 test("only whole-frame idle strips use composited transforms, deforming poses are repainted (R-UI-63)", () => {
+  const idle = keyframes.filter(({name}) => ['slime-idle-body','slime-idle-eyes'].includes(name));
+  expect(idle).toHaveLength(2);
+  for (const {body} of idle) for (const [,value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
+    const frame=Number(value)*7/100;
+    expect(Math.abs(frame-Math.round(frame))).toBeLessThan(.00001);
+  }
+  expect(css).not.toMatch(/\.slime-in-between[^{]*\{[^}]*\btransform:/);
+});
+
+test("only whole-frame cel strips use composited transforms (R-UI-63, R-PERF-01)", () => {
   expect(keyframes.length).toBeGreaterThan(20);
   const composited = keyframes.filter(({ body }) => /(^|[{;\s])transform:/.test(body));
-  expect(composited.map(({ name }) => name).sort()).toEqual(["slime-idle-body", "slime-idle-eyes"]);
+  expect(composited.map(({ name }) => name).sort()).toEqual(["slime-idle-body", "slime-idle-eyes", "slime-loop-blink", "slime-loop-x", "slime-loop-working-x", "slime-loop-y"].sort());
   for (const { body } of composited) for (const [, value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
-    const frame = Number(value) * 7 / 100;
+    const frame = Number(value) * (body.includes('translateX(-4.16666667%)') ? 24 : body.includes('translateX(-8.33333333%)') ? 12 : 7) / 100;
     expect(Math.abs(frame - Math.round(frame))).toBeLessThan(0.00001);
   }
   expect(css).not.toMatch(/will-change|filter:/);

@@ -34,7 +34,8 @@ it("mechanical rules link existing named tests", () => {
 });
 
 it("a rule named in the code is in the ledger", () => {
-  const ledger = read(join(root, ".agents/product/RULES.md"));
+  const staged = join(root, ".fold/.agents/product/RULES.md");
+  const ledger = read(existsSync(staged) ? staged : join(root, ".agents/product/RULES.md"));
   const known = new Set([...ledger.matchAll(/^(?:\| )?(R-[A-Z]+(?:-[A-Z]+)*-\d+)(?: \||:)/gm)].map(match => match[1]));
   const unknownOnPurpose = "R-UI-99"; // test_design_judge.py proves an unknown rule id is refused
   const code = ["app/src", "app/scripts", "core/src", "core/tests"].flatMap(dir => walk(join(root, dir)))

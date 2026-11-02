@@ -36,6 +36,7 @@ import { patchThread } from "../thread-diff";
 
 import { noticeHTML } from "../missing";
 import { conversationTitle, conversationChange, newestConversation, type ConversationInfo } from "../conversation-list";
+import { eventRead } from '../event-read';
 import { cancelGesture } from "../../shared/cancel-gesture";
 import { openActions } from "../member-column";
 import { mountConversationFind } from "../conversation-find";
@@ -349,10 +350,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   const conversationsDirty = new Set<number>();
-  async function readConversations(member: number): Promise<void> {
+  async function readConversations(member: number, fromEvent = false): Promise<void> {
     conversationsDirty.delete(member);
     try {
-      const result = await api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
+      const fetch = () => api.core<{ conversations: ConversationInfo[] }>("conversations.list", { member_id: member });
+      const result = await (fromEvent ? eventRead(`conversations.list:${member}`,fetch,app) : fetch());
       if (!Array.isArray(result?.conversations)) return;
       const previous = conversationCache.get(member);
       const same = JSON.stringify(previous) === JSON.stringify(result.conversations);
@@ -417,8 +419,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;
+    if (!visible) { conversationsDirty.add(member); return; }
     const old = conversationId();
-    void readConversations(member).then(() => {
+    void readConversations(member,true).then(() => {
       if (visible && member === memberId() && old !== conversationId()) switchThread();
     });
   });
@@ -470,7 +473,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   composer.innerHTML = composerHTML();
   const input = composer.querySelector<HTMLTextAreaElement>(".cmp-input")!;
   const correctionLearning = bindComposerLearning(input);
-  const slashMenu = mountSlashMenu(input, { memberId });
+  const slashMenu = mountSlashMenu(input, { memberId, scope: app });
   const attachButton = composer.querySelector<HTMLElement>(".cmp-attach")!;
   bindActionMode(composer.querySelector<HTMLElement>(".cmp-mode")!);
   composerBrain = mountComposerBrain(composer.querySelector<HTMLElement>(".cmp-model")!, () => members.member(), { onEvent: handler => app.onEvent(handler), quick: () => conversationCache.get(memberId())?.find(c => c.id === conversationId())?.kind === "quick" });
@@ -947,11 +950,11 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   let readAgain = false;
-  async function load(earlier: boolean): Promise<void> {
+  async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);
     const key = `${memberId()}:${conversationId()}:${loads}`;
     if (activeRead?.key === key) { readAgain = true; return activeRead.promise; }
-    const promise = readPage(false);
+    const promise = readPage(false,fromEvent);
     const active = { key: `${memberId()}:${conversationId()}:${loads}`, promise };
     activeRead = active;
     try { await promise; }
@@ -962,7 +965,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       }
     }
   }
-  async function readPage(earlier: boolean): Promise<void> {
+  async function readPage(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier && (loadingEarlier || !canLoadEarlier)) return;
     const mine = earlier ? loads : ++loads;
     if (earlier) loadingEarlier = true;
@@ -973,17 +976,20 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     try {
       const before = earlier ? oldestId(turns) : undefined;
       const member = memberId();
-      if (!conversationCache.has(member) || conversationsDirty.has(member)) await readConversations(member);
+      // The event's metadata reader will switch the thread if its selection changes;
+      // its trailing read must not hold up a reply in the current conversation.
+      if (conversationsDirty.has(member) || (!fromEvent && !conversationCache.has(member))) await readConversations(member,fromEvent);
       if (mine !== loads) return;
-      got = (
-        await api.agentHistoryList({
+      const chosen = conversationId();
+      const params = {
           limit: PAGE_SIZE,
-          ...(conversationId() !== undefined ? { conversation_id: conversationId() } : {}),
+          ...(chosen !== undefined ? { conversation_id: chosen } : {}),
           ...(!earlier && targetTurn !== undefined ? { around_id: targetTurn } : {}),
           ...(before === undefined ? {} : { before_id: before }),
           ...(member === RAPHAEL_ID ? {} : { member_id: member }),
-        })
-      ).turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
+        };
+      const historyRead = () => api.agentHistoryList(params);
+      got = (await (fromEvent ? eventRead(`agent.history.list:${JSON.stringify(params)}`,historyRead,app) : historyRead())).turns.filter(turn => !turn.session_id || !retracted.has(turn.session_id));
     } catch (err) {
       // A newer load of the newest turns took over: what this one shows does not count, but an
       // earlier page that failed must still let the reader page up again.
@@ -1109,7 +1115,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      void load(false);
+      void load(false,true);
     }, delay);
   }
 
@@ -2136,11 +2142,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (event.type === "ConversationsChanged") { conversationsDirty.add(event.member_id); conversationChange(event.member_id); }
     if (event.type === "AgentTurn") { conversationsDirty.add(event.member_id ?? RAPHAEL_ID); conversationChange(event.member_id ?? RAPHAEL_ID); }
     if (event.type === "QuotaChanged") void readQuotas();
-    if (event.type === "MembersChanged") void slashMenu.refresh();
+    if (event.type === "MembersChanged") void slashMenu.refresh(true);
     if (wantsRefresh(event)) {
       // a turn of another thread changes only that member's row
-      if (event.type === "WorkerChanged") scheduleRefresh(hasWorkerTask(turns, event.task_id) ? REFRESH_DELAY_MS : 1000);
-      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
+      if (event.type === "WorkerChanged") {
+        const loaded=hasWorkerTask(turns,event.task_id);
+        if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
+        scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
+      }
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh(0);
       // Loaded running work changes history; activity and turn events own the roster's state and preview.
       if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }

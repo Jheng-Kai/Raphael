@@ -4,6 +4,7 @@ import { openDialog } from "./member-dialogs";
 import { messageUrl, tablePlainText } from "./message-content";
 import { copyButton, esc, toaster } from "./ui";
 import "./message-rich.css";
+import { mountShimmers } from './shimmer';
 
 /** Preserve the visible reading anchor across asynchronous SVG/image size changes. */
 export function preserveRichScroll(root: HTMLElement, change: () => void): void {
@@ -51,6 +52,7 @@ export function mountRichContent(root: HTMLElement): void {
   const sourceViews = new Map<string, boolean>();
   const refresh = (): void => {
     if (!root.isConnected || !root.getBoundingClientRect().width) return;
+    mountShimmers(root);
     const viewport = root.getBoundingClientRect();
     for (const block of root.querySelectorAll<HTMLElement>(".message-code")) {
       const rect = block.getBoundingClientRect();

@@ -397,7 +397,9 @@
 /* under way: a turning ring, and light passing over what is being done */
 .spin { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: var(--r-pill); border: 2px solid var(--track); border-top-color: var(--accent-text); animation: ra-spin 0.8s linear infinite; }
 /* The words dim and the light their full colour, so it shows whatever the theme's colours are. */
-.shimmer { --shimmer-dim: color-mix(in srgb, currentColor 45%, transparent); background: linear-gradient(90deg, var(--shimmer-dim) 0%, var(--shimmer-dim) 38%, currentColor 50%, var(--shimmer-dim) 62%, var(--shimmer-dim) 100%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: ra-shimmer 1.6s linear infinite; }
+.shimmer { position: relative; display: inline-block; --shimmer-dim: color-mix(in srgb, currentColor 45%, transparent); -webkit-text-fill-color: var(--shimmer-dim); }
+.shimmer-mask { position: absolute; inset: 0; overflow: clip; pointer-events: none; mask-size: 100% 100%; }
+.shimmer-mask::after { content: ""; display: block; width: 250%; height: 100%; background: linear-gradient(90deg, transparent 38%, currentColor 50%, transparent 62%); animation: ra-shimmer 1.6s linear infinite; }
 .think { display: inline-flex; gap: calc(6px + 2 * var(--pa-u)); }
 .think i { display: block; width: calc(var(--pa-dot) - 1px); height: calc(var(--pa-dot) - 1px); border-radius: var(--r-pill); background: var(--text-3); animation: ra-dots 1.2s ease-in-out infinite; }
 .think i:nth-child(2) { animation-delay: 0.15s; }
@@ -549,14 +551,17 @@
 @keyframes ra-step-in { from { opacity: 0; transform: translateY(5px); } }
 @keyframes ra-pop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
 @keyframes ra-spin { to { transform: rotate(360deg); } }
-@keyframes ra-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
-@keyframes ra-glow { 50% { box-shadow: 0 0 0 5px var(--rg-glow), 0 12px 36px var(--rg-glow); } }
+@keyframes ra-shimmer { from { transform: translateX(-60%); } to { transform: translateX(0%); } }
+@keyframes ra-glow { 50% { opacity: 1; } }
+.ask-card { position: relative; }
+.ask-card::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 5px var(--rg-glow), 0 12px 36px var(--rg-glow); opacity: 0; }
+.conversation-card.ask-card::before, .ask-card.is-member::before { display: none; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ask-card { animation: ra-glow 2.4s ease-in-out infinite; }
+  .ask-card::before { animation: ra-glow 2.4s ease-in-out infinite; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer, .think i, .ask-card { animation: none !important; }
+  .tn.is-new, .step.is-new, .task-check.is-pop, .spin, .shimmer-mask::after, .think i, .ask-card::before { animation: none !important; }
   .steps-body, .steps-chev .i, .tn-more .i, .composer, .btn.cmp-voice { transition: none !important; }
   .ask-yes[data-hold="holding"] .ask-fill { transition: none; }
 }

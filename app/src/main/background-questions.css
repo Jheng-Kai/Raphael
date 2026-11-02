@@ -17,8 +17,12 @@
 .btn.bgq-yes { min-height: 30px; padding: var(--sp-1) var(--sp-4); border-color: var(--rg-btn); background: var(--rg-btn); color: var(--rg-on); font-weight: 600; }
 .btn.bgq-yes:hover:not(:disabled) { background: var(--rg-btn); border-color: var(--rg-btn); filter: brightness(1.05); }
 .btn.bgq-yes:active:not(:disabled) { background: color-mix(in srgb, var(--rg-btn) 85%, var(--text)); filter: none; }
-@keyframes bgq-glow { 50% { box-shadow: 0 0 0 5px var(--rg-glow), 0 8px 24px var(--rg-glow); } }
+@keyframes bgq-glow { 50% { opacity: 1; } }
+.bgq-card { position: relative; }
+.bgq-card::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 5px var(--rg-glow), 0 8px 24px var(--rg-glow); opacity: 0; }
+.bgq-card.is-member::before { display: none; }
 @keyframes bgq-in { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: no-preference) {
-  .bgq-card { animation: bgq-in 0.18s ease-out, bgq-glow 2.4s ease-in-out 0.18s infinite; }
+  .bgq-card { animation: bgq-in 0.18s ease-out; }
+  .bgq-card::before { animation: bgq-glow 2.4s ease-in-out 0.18s infinite; }
 }

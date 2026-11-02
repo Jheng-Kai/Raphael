@@ -635,3 +635,6 @@ Read local reference images outside the repository; never copy owner art or word
 Long draft profiling also covers idempotent drawer close: closing a closed
 drawer never steals the destination focus. Unchanged member controls keep focus
 without another layout, and newest-page reads skip the earlier-page scroll anchor.
+## Motion cost (2026-11-03)
+
+[Members](members.md#motion-cost-2026-11-03) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget. The task forbids judge, native, cargo, network and real providers.

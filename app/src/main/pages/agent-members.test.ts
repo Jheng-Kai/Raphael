@@ -175,6 +175,33 @@ test("a long draft keeps its words without repeated full-text height measurement
  expect(input.value).toBe(text);expect(height).not.toHaveBeenCalled();agent.hide();
 });
 
+test('work events refresh the visible preview without rereading skills or commands', async () => {
+  vi.useFakeTimers();
+  const agent=mount(); await flush(); await pick(3);
+  api.core.mockClear();
+  api.membersList.mockResolvedValue({...LIST,members:LIST.members.map(member => member.id===3 ? {...member,preview:'Updated sample progress'} : member)});
+  send({type:'WorkerChanged',task_id:999,state:'done',running:false});
+  await vi.advanceTimersByTimeAsync(1200); await flush();
+  expect(document.querySelector('[data-member="3"] .mb-row-p')?.textContent).toContain('Updated sample progress');
+  expect(api.core.mock.calls.map(call => call[0])).not.toContain('members.skills.list');
+  expect(api.core.mock.calls.map(call => call[0])).not.toContain('members.commands.list');
+  agent.hide();
+});
+
+test('hidden thread metadata waits until the thread is shown and returns with its latest title', async () => {
+  vi.useFakeTimers();
+  let title='Original sample';
+  api.core.mockImplementation(async (method:string)=>method==='conversations.list' ? {conversations:[{id:701,member_id:0,is_default:1,kind:'main',title,created_at_ms:1,updated_at_ms:1}]} : {questions:[]});
+  const agent=mount(); await flush(); agent.hide();
+  api.core.mockClear(); title='Updated sample';
+  send({type:'AgentTurn',turn_id:1,member_id:0});
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  expect(api.core.mock.calls.filter(call=>call[0]==='conversations.list')).toHaveLength(0);
+  agent.show(); await flush();
+  expect(document.querySelector('.conversation-trigger')?.textContent).toContain('Updated sample');
+  agent.hide();
+});
+
 test("returning to an unchanged thread restores viewing once", async () => {
   const agent = mount(); await flush(); await pick(3);
   api.membersViewing.mockClear();
