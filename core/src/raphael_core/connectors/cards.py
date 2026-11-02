@@ -97,11 +97,18 @@ class Card:
         return self.app_name or (APPS[self.app].name if self.app in APPS else self.app)
 
     def view(self) -> dict:
-        """The card as the window draws it."""
+        """The card as the window draws it. One that timed out has nothing left to set up."""
+        error = _shown_error(self.error, self.app)
         return {"id": self.id, "app": self.app, "name": self.name, "logo": self.app_logo, "state": self.state,
-                "error": self.error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
+                "error": error or None, "reconnect": self.reconnect, "tool_count": self.tool_count,
                 "expires_at_ms": self.expires_at_ms, "resumed": self.resumed,
-                **({"missing": missing.wire()} if (missing := _card_missing(self.error)) else {})}
+                **({"missing": missing.wire()} if self.state != "expired" and (missing := _card_missing(error)) else {})}
+
+
+def _shown_error(error, app):
+    """`not_configured` is about Raphael's own Google sign-in: any other app waits for the Composio key."""
+    google = app in APPS and APPS[app].provider == "google"
+    return "needs_composio_key" if error == "not_configured" and not google else error
 
 
 def _card_missing(error):

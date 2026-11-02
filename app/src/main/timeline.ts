@@ -597,6 +597,8 @@ function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
   if (!task) return "";
   if (turn.permissions?.length || turn.secrets?.length || turn.connectors?.length || turn.computers?.length || turn.connection_proposals?.length || turn.pages?.length || turn.drafts?.some(draft => draft.mode === "card") || turn.owner_questions?.some(question => question.kind === "ask_owner" || question.kind === "show_page")) return "";
   if (task.state === "waiting" && turn.owner_questions?.some(question => question.state === "asked")) return "";
+  // A reply already says the work is finished.
+  if (task.state === "done" && (turn.text.trim() || turn.messages?.some(message => message.kind === "reply" && message.text.trim()))) return "";
   const live = isLive(task) || task.state === "waiting";
   const label = task.state === "waiting" ? task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
   return `<div class="turn-event task-actions"><span>${esc(label)}</span>` +

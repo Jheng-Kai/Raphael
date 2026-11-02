@@ -45,6 +45,14 @@ test("a pending permission card replaces duplicate running and waiting task cont
   }
 });
 
+test("a finished task's reply stands alone, and only an unfinished one says how it ended", () => {
+  const draw = (over: Partial<AgentTurn>) => { document.body.innerHTML = turnHTML(turn(74, over), emptyTimelineState(), false, LOOK); return document.querySelector(".task-actions"); };
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "", messages: [{ seq: 1, kind: "reply", text: "The sample report is ready.", at_ms: 1 }], task: { id: 74, state: "done" } as AgentTask })).toBeNull();
+  expect(draw({ text: "", messages: [], task: { id: 74, state: "done" } as AgentTask })).not.toBeNull();
+  expect(draw({ text: "The sample report is ready.", task: { id: 74, state: "failed" } as AgentTask })?.querySelector('[data-act="rerun"]')).not.toBeNull();
+});
+
 test("a settled permission card also owns its task's completed state", () => {
   const item=turn(72,{task:{id:72,state:"done"} as AgentTask,permissions:[{id:"settled",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"allowed",expires_at_ms:0}]});
   document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);

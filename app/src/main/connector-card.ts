@@ -83,7 +83,7 @@ export function connectorCardHTML(card: ConnectorCard): string {
   return cardHTML({
     title: asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? t("cards.connect", { p0: card.name }) : card.name, mark: appMarkHTML(card.app, card.logo),
     status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
-    statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asksMore(card) && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : undefined,
+    statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asksMore(card) && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : card.state === "expired" ? t("cards.expired") : card.state === "cancelled" ? t("cards.cancelled") : undefined,
     body: state || t("cards.connectWhy"),
     content: (card.missing ? missingHTML(card.missing) : "") + (asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"></div>` : ""),
     actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : actionHTML(card),

@@ -22,6 +22,13 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map(match => match[1]);
 
 describe("a connector card", () => {
+  test("an ended card says how it ended, never that it is ready", () => {
+    for (const [state, words] of [["expired", "已逾時"], ["cancelled", "已取消"]] as const) {
+      const html = connectorCardHTML(card({ state }));
+      expect(html).toContain(`<span data-card-status-text>${words}</span>`);
+      expect(html).not.toContain("準備就緒");
+    }
+  });
   test("names the inline key connection in its title", () => {
     expect(connectorCardHTML(card({ needs: "key" }))).toContain('<b class="card-title cc-name">連結 Gmail</b>');
   });

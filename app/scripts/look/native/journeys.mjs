@@ -733,7 +733,7 @@ export async function drive(name, context) {
     const shown = async (trigger, model, effort, label) => {
       await page.waitForFunction((selector, name) => document.querySelector(selector)?.textContent.includes(name), {}, trigger, model.name);
       await click(page, trigger); await wait(page, `.model-chooser [data-model="${model.id}"][aria-checked="true"]`);
-      if (effort) await wait(page, `.model-chooser [data-effort="${effort}"][aria-pressed="true"]`);
+      if (effort) await wait(page, `.model-chooser [data-effort="${effort}"][data-on="true"]`);
       else if (await page.$('.model-chooser [data-effort]')) throw new Error("A saved non-reasoning model offered effort");
       await capture(`${label}-reopened`);
       await click(page, '.model-chooser [data-dlg="close"]');

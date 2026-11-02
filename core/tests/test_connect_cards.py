@@ -11,7 +11,7 @@ import pytest
 from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.team_context import snapshot
 from raphael_core.connectors.apps import APPS
-from raphael_core.connectors.cards import CardStore, ConnectorCards
+from raphael_core.connectors.cards import Card, CardStore, ConnectorCards
 from raphael_core.connectors.service import ConnectorsService
 from raphael_core.evaluate.google_fixture import CLIENT_ID, GoogleFixture
 from raphael_core.integrations.service import IntegrationsService
@@ -273,3 +273,19 @@ async def test_unknown_cards_are_refused(tmp_path, conn, fixture):
     for params in ({}, {"id": 3}, {"id": "missing"}):
         with pytest.raises(RpcError):
             await rig.router.call("integrations.card_connect", params)
+
+
+def _shown(app, state, error):
+    return Card("c", 1, 1, 1, app, "zh-TW", False, state, error, None, (), 0, 0, False, "", "", "").view()
+
+
+def test_only_a_google_app_is_told_about_the_google_sign_in():
+    other = _shown("twitter", "failed", "not_configured")
+    assert other["error"] == "needs_composio_key" and other["missing"]["requirement"] == "composio_key"
+    google = _shown("gmail", "failed", "not_configured")
+    assert google["error"] == "not_configured" and google["missing"]["requirement"] == "google_client"
+
+
+def test_a_card_that_timed_out_asks_for_no_setup():
+    assert "missing" not in _shown("twitter", "expired", "not_configured")
+    assert "missing" not in _shown("gmail", "expired", "needs_composio_key")
