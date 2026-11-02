@@ -210,9 +210,7 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     findInput.setAttribute("aria-label", t("chat.searchAll"));
     const focusKey = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-k]");
     const key = focusKey && list.contains(focusKey) ? focusKey.dataset.k : undefined;
-    // The rail has no folder headings to open a folder with, so it shows every face.
-    const rail = document.documentElement.hasAttribute("data-sidebar-collapsed");
-    search.draw(query, columnHTML({ ...host.view(), query, folded: rail ? new Set() : folded }));
+    search.draw(query, columnHTML({ ...host.view(), query, folded }));
     rooms.dispatchEvent(new CustomEvent("sidebar-search", { detail: query }));
     if (key) list.querySelector<HTMLElement>(`[data-k="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
   }
@@ -233,7 +231,6 @@ export function createMemberColumn(host: ColumnHost): MemberColumn {
     );
   }
 
-  el.addEventListener("sidebar-rail", draw);
   addButton.addEventListener('click', () => {
       openActions(
         addButton,

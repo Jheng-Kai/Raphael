@@ -53,6 +53,25 @@ function mount() {
   document.body.append(agent.el); agent.show();
 }
 
+test("while work runs the field sends message after message and stops nothing", async () => {
+  turns = [live()];
+  mount(); await flush();
+  expectStop();
+  const input = $<HTMLTextAreaElement>(".cmp-input");
+  for (const words of ["First addition", "Second addition", "Third addition"]) {
+    input.value = words;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(false);
+    $(".cmp-send").click();
+    await flush();
+    expect(input.value).toBe("");
+    expect($<HTMLButtonElement>(".cmp-send").disabled).toBe(true);
+  }
+  expect(api.agentAskText.mock.calls.map(call => call[0])).toEqual(["First addition", "Second addition", "Third addition"]);
+  expect(api.agentStop).not.toHaveBeenCalled();
+  expectStop();
+});
+
 test.each([[0, 1], [0, 2], [3, 31], [3, 32]])("the composer voice press stays in member %s conversation %s through navigation", async (member, conversation) => {
   mount(); await flush(); await choose(member, conversation);
   press(); await flush();

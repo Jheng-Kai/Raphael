@@ -151,6 +151,9 @@
 .chat-message > .turn-event { width: fit-content; max-width: 100%; margin-inline: auto; }
 .owner-message { align-items: flex-end; margin-inline-start: auto; max-width: min(var(--pa-bw), 78%); }
 .owner-message .bubble { box-sizing: border-box; max-width: 100%; }
+.mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
+.mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
+.mb-chat[data-member-bubble="dark"] .owner-message { --on-bubble: var(--on-tint-dark); }
 .chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }
@@ -193,8 +196,10 @@
 .bubble > .btn.message-expand { margin-top: var(--sp-1); margin-inline-start: calc(-1 * var(--sp-2)); align-self: flex-start; font: inherit; color: inherit; border-color: transparent; background: transparent; padding-inline: var(--sp-2); }
 .bubble > .btn.message-expand:hover:not(:disabled) { background: color-mix(in srgb, currentColor 14%, transparent); border-color: transparent; }
 .bubble > .btn.message-expand:active:not(:disabled) { background: color-mix(in srgb, currentColor 22%, transparent); border-color: transparent; }
-.preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); min-width: 0; }
+.chat-message:has(> .preview-cards) { width: 100%; }
+.preview-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); width: min(calc(440px + 120 * var(--pa-u)), 100%); min-width: 0; }
 .page-agent .btn.preview-card { display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-3); width: 100%; height: 112px; min-height: 112px; padding: var(--sp-3); text-align: start; white-space: normal; border-inline-start: 3px solid var(--accent-text); background: var(--surface-2); border-radius: var(--r-sm); overflow: hidden; }
+.page-agent .btn.preview-card.is-local { height: 56px; min-height: 56px; }
 .preview-image { flex: none; width: 80px; height: 80px; object-fit: cover; border-radius: var(--r-sm); }
 .preview-meta { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); flex: 1; }
 .preview-site { font: var(--fs-2xs)/1.5 var(--ui); color: var(--accent-text); }
@@ -632,10 +637,11 @@
   .draft-more-toggle .steps-chev .i, .draft-done-sum .steps-chev .i { transition: none !important; }
 }
 
-/* Active work owns the existing gold slot, including drafts and acknowledgement. */
-.composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-send { display: none; }
+/* Active work owns the existing gold slot while the field is empty; words in the field make it Send, so the owner can always send more. */
+.composer[data-task-state="recording"] .cmp-pair .cmp-send, .composer .cmp-pair:has([data-cancel-armed="true"]) .cmp-send { display: none; }
 /* The voice emblem turns into the same primary icon action as Send of the same size, so it still reads as that one control. */
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--r-pill); }
+.composer[data-task-state]:not([data-task-state="idle"], [data-task-state="recording"]) .cmp-pair:has(.cmp-send:not(:disabled)):not(:has([data-cancel-armed="true"])) .cmp-voice { display: none; }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-pair .cmp-voice:disabled { opacity: .6; }
 .composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice .i { width: 20px; height: 20px; fill: currentColor; stroke: none; }
 .owner-question-form { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }

@@ -2063,14 +2063,16 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
                 return None;
             }
         };
+        // Words added to work already running are in the thread, with nothing to say for them.
+        let added = reply.get("steered").and_then(Value::as_bool) == Some(true);
         // A member's answer is in its thread on the 拉斐爾 page, and it has no prefix: the overlay is
         // Raphael's alone. The turn is over, as when an answer has been on screen long enough.
-        if member != 0 && reply.get("status").and_then(Value::as_str) == Some("done") {
+        if added || (member != 0 && reply.get("status").and_then(Value::as_str) == Some("done")) {
             let shown = lock(&self.state).on_overlay;
             self.end_session(id);
             // A member's recording may have shown the shared listening overlay. Its answer
             // stays in the thread, so no answer overlay will replace that listening state.
-            if self.voice.is_none() || shown {
+            if shown || (!added && self.voice.is_none()) {
                 self.overlay.hide();
             }
             return None;
@@ -6515,6 +6517,27 @@ mod tests {
         );
         assert_eq!(c.agent_stage(), None);
         assert!(c.ask_typed("你好").is_ok(), "the next question is taken");
+    }
+
+    #[tokio::test]
+    async fn a_message_added_to_work_already_running_is_never_a_failure_on_the_overlay() {
+        for member in [0, 1] {
+            let c = agent(json!({ "status": "done", "turn_id": 9, "prefix": "", "text": "", "steered": true }));
+            c.ask_typed_with("也請附上價格", Vec::new(), member)
+                .unwrap()
+                .await
+                .unwrap();
+            assert!(
+                c.overlay()
+                    .events()
+                    .iter()
+                    .all(|e| !e.starts_with("notice")),
+                "{:?}",
+                c.overlay().events()
+            );
+            assert_eq!(c.agent_stage(), None);
+            assert!(c.ask_typed("你好").is_ok(), "the next message is taken");
+        }
     }
 
     #[tokio::test]

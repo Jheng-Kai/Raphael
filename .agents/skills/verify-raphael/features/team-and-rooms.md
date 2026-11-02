@@ -58,7 +58,7 @@ Open a room in the global sidebar; use the menu button in a compact window.
 ## Driving it with look
 
 ```powershell
-npm run look -- sidebar-folders sidebar-folded sidebar-group-avatar sidebar-chief-pinned sidebar-rail room-text room-mentions --theme both --width 1120,720,1920x1080,1280x800
+npm run look -- sidebar-folders sidebar-folded sidebar-group-avatar sidebar-chief-pinned sidebar-rail sidebar-rail-folded room-text room-mentions --theme both --width 1120,720,1920x1080,1280x800
 npm run look -- sidebar-group-avatar-hover sidebar-group-avatar-pair sidebar-group-avatar-four sidebar-room-home --theme both --width 1120,720,1920x1080
 ```
 

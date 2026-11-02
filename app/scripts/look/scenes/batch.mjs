@@ -1,4 +1,8 @@
-import { scene, member, room, wait, waitGone, click, type, key } from "./steps.mjs";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { scene, member, room, wait, waitGone, click, type, key, check } from "./steps.mjs";
+
+const fixture = JSON.parse(readFileSync(join(import.meta.dirname, "../fixture.json"), "utf8"));
 
 const file = { id: `${"a".repeat(32)}.wav`, name: "speech.wav", mime: "audio/wav", size: 16044 };
 const turn = (member_id, extra = {}) => ({ id: 801 + member_id, member_id, conversation_id: member_id ? 11 : 1,
@@ -6,6 +10,7 @@ const turn = (member_id, extra = {}) => ({ id: 801 + member_id, member_id, conve
   prefix: "", text: "語音檔已準備好。", status: "done", cost_usd: 0, steps: [], attachments: [file],
   messages: [{seq: 1, kind: "media", text: JSON.stringify({attachment: file}), at_ms: 1792807160000},
     {seq: 2, kind: "reply", text: "語音檔已準備好。", at_ms: 1792807160100}], ...extra });
+const plain = (member_id, extra = {}) => turn(member_id, {attachments: [], text: "好的。", messages: [{seq: 1, kind: "reply", text: "好的。", at_ms: 1792807160000}], ...extra});
 const missing = {resource: "fish", requirement: "setup", state: "missing", repair: "voice"};
 const absent = turn(1, {status: "error", attachments: [], text: "請先設定語音服務。", messages: [{seq: 1, kind: "media", text: JSON.stringify({missing}), at_ms: 1792807160000}],
   steps: [{kind: "tool", tool: "generate_audio", server: "Raphael", outcome: "error", reason: "not_configured", detail: "fish", missing, ms: 20, at_ms: 1792807155000}]});
@@ -19,4 +24,19 @@ export default [
   scene("generated-audio-repair", "Audio generation opens the existing voice service settings", [...openMissing, click('.step-list [data-missing-repair="voice"]'), wait('#svc-voice-id')], {turns: [absent]}),
   scene("owner-addition", "An owner addition appears immediately beside continuing work and Stop", [member(1), type('.cmp-input', "也請保留原始檔案。"), key("Enter"), wait('.tn[data-id="901"] .owner-message'), waitGone('.tn[data-id="901"] .ra-face'), wait('.composer[data-task-state="running"]')],
     {running: true, runningMember: 1, ownerAddition: true}),
+  scene("composer-send-while-working", "Words in the field make the slot Send while work runs; message after message goes out at once and nothing stops", [member(1), wait('.composer[data-task-state="running"]'), check("composer-slot-stop"), type('.cmp-input', "第一則補充"), check("composer-slot-send"), click('.cmp-send'), wait('.tn[data-id="901"] .owner-message'), check("composer-slot-stop"), type('.cmp-input', "第二則補充"), key("Enter"), wait('.tn[data-id="902"] .owner-message'), type('.cmp-input', "第三則補充"), key("Enter"), wait('.tn[data-id="903"] .owner-message'), check("composer-slot-stop"), check("owner-additions-in-order")],
+    {running: true, runningMember: 1, ownerAddition: true}),
+  scene("composer-stop-armed-with-words", "Escape with words in the field still shows the Stop it arms, and the words stay", [member(1), wait('.composer[data-task-state="running"]'), type('.cmp-input', "還沒寫完"), key("Escape"), check("composer-slot-armed")],
+    {running: true, runningMember: 1, ownerAddition: true}),
+  scene("link-card-short-reply", "A link card keeps its full width under a short reply, an internal address included", [member(1), wait('.thread .preview-card[data-preview-state]'), check("preview-card-wide")],
+    {turns: [turn(1, {attachments: [], text: "開好了", messages: [{seq: 1, kind: "reply", text: "開好了 http://127.0.0.1:5173/ https://example.com/a", at_ms: 1792807160000}]})]}),
+  scene("dialog-caption-confirm", "A small dialog dims the caption too, and the window buttons still answer", [{action: "member-column", collapsed: false}, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker"), check("dialog-caption")]),
+  scene("owner-bubble-member", "The owner's bubble in a member's conversation wears that member's colour", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1), plain(0)]}),
+  scene("owner-bubble-other-member", "Another member's conversation has its own colour", [member(2), wait('.owner-message .bubble'), check("owner-bubble-tinted")],
+    {turns: [plain(2, {conversation_id: 12})], conversations: [...fixture.conversations, {...fixture.conversations.find(item => item.id === 11), id: 12, member_id: 2}]}),
+  scene("owner-bubble-light-character", "A light character keeps its colour and takes dark words", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")],
+    {turns: [plain(1)], members: fixture.members.map(item => item.id === 1 ? {...item, avatar: "slime:rimuru"} : item)}),
+  scene("owner-bubble-long", "A long tinted bubble keeps its link and expand control readable", [member(1), wait('.owner-message .bubble'), check("owner-bubble-tinted")], {turns: [plain(1, {question: `請看這個連結 https://example.com/a\n${"這是一段很長的需求說明，要確定展開按鈕和連結在角色顏色上都看得清楚。".repeat(14)}`})]}),
+  scene("owner-bubble-chief", "Raphael's conversation stays neutral", [member(0), wait('.owner-message .bubble'), check("owner-bubble-neutral")], {turns: [plain(1), plain(0)]}),
+  scene("owner-bubble-room", "A group talks to everyone, so its bubbles stay neutral", [member(1), room(1), wait('.au-room-pane .owner-message .bubble, .au-room-pane .bubble'), check("owner-bubble-neutral")]),
 ];

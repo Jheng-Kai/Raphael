@@ -29,8 +29,6 @@ test("the sidebar has no brand, names Home in each language, and collapses to a 
   const nav = document.getElementById("nav")!;
   const column = document.createElement("aside");
   column.innerHTML = '<div class="mb-top"><button type="button" data-col="add"></button></div>';
-  const redraws: Event[] = [];
-  column.addEventListener("sidebar-rail", event => redraws.push(event));
   createSidebar(nav, column);
   expect(nav.querySelector(".brand, .app-icon")).toBeNull();
   for (const [locale, label] of [["zh-TW", "回到首頁"], ["en", "Back to home"], ["ja", "ホームへ"]] as const) {
@@ -41,13 +39,11 @@ test("the sidebar has no brand, names Home in each language, and collapses to a 
   const collapse = nav.querySelector<HTMLElement>('[data-sidebar="collapse"]')!;
   const add = nav.querySelector<HTMLElement>('[data-col="add"]')!;
   expect(add.parentElement!.className).toBe("mb-top");
-  const before = redraws.length;
   collapse.click();
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(true);
   expect(collapse.getAttribute("aria-label")).toBe("展開側欄");
   expect(add.parentElement!.className).toBe("side-foot");
   expect(localStorage.getItem("raphael.sidebar.collapsed")).toBe("true");
-  expect(redraws.length).toBe(before + 1);
   collapse.click();
   expect(document.documentElement.hasAttribute("data-sidebar-collapsed")).toBe(false);
   expect(add.parentElement!.className).toBe("mb-top");

@@ -41,7 +41,6 @@ export function createSidebar(nav: HTMLElement, column: HTMLElement): { close():
     collapse.setAttribute("aria-label", label); collapse.title = label;
     if (rail) foot.prepend(add); else header?.append(add);
     if (!rail) nav.querySelectorAll(".mb-row[data-tooltip], .sidebar-account[data-tooltip], .side-foot [data-go='dictation'][data-tooltip]").forEach(row => row.removeAttribute("data-tooltip"));
-    column.dispatchEvent(new Event("sidebar-rail"));
   };
   collapse.addEventListener("click", () => {
     if (compactWindow.matches) { close(); return; }

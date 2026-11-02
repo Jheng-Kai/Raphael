@@ -1,4 +1,4 @@
-import { messageUrl, messageUrls, shortUrl } from "./message-content";
+import { messageUrl, messageUrls, urlLabel } from "./message-content";
 import { esc } from "./ui";
 
 export interface LinkPreview {
@@ -14,15 +14,22 @@ function contents(url: string, preview: LinkPreview | null = null): string {
   const thumbnail = preview?.thumbnail;
   const image = typeof thumbnail === "string" && /^data:image\/(?:png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/=]+$/.test(thumbnail)
     ? `<img class="preview-image" src="${esc(thumbnail)}" alt="" width="80" height="80">` : "";
-  return image + `<span class="preview-meta"><span class="preview-site">${esc(preview?.site || new URL(url).host)}</span>` +
-    `<span class="preview-title">${esc(preview?.title || shortUrl(url))}</span>` +
-    `<span class="preview-description">${esc(preview?.description || new URL(url).host)}</span></span>`;
+  // A page with no title of its own (an internal address, say) is its address, once.
+  return image + `<span class="preview-meta">` + (preview?.title ? `<span class="preview-site">${esc(preview.site || new URL(url).host)}</span>` : "") +
+    `<span class="preview-title">${esc(preview?.title || urlLabel(url))}</span>` +
+    (preview?.title && preview.description ? `<span class="preview-description">${esc(preview.description)}</span>` : "") + `</span>`;
+}
+
+/** An address only this machine or its network can open: no public page is behind it, so its card never fills. */
+function isLocalAddress(url: string): boolean {
+  const host = new URL(url).hostname;
+  return !host.includes(".") || /\.(?:local|internal|lan)$/.test(host) || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
 }
 
 export function previewCardsHTML(text: string): string {
   const urls = messageUrls(text).slice(0, 3);
   return urls.length ? `<div class="preview-cards">${urls.map(url =>
-    `<button type="button" class="btn preview-card" data-act="open-url" data-url="${esc(url)}" data-preview-url="${esc(url)}" title="${esc(url)}">${contents(url)}</button>`).join("")}</div>` : "";
+    `<button type="button" class="btn preview-card${isLocalAddress(url) ? " is-local" : ""}" data-act="open-url" data-url="${esc(url)}" data-preview-url="${esc(url)}" title="${esc(url)}">${contents(url)}</button>`).join("")}</div>` : "";
 }
 
 /** Observes only cards near the reader, sharing in-flight and cached results across thread draws. */

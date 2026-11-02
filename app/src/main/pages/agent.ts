@@ -72,6 +72,8 @@ import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
+import { ownerBubble } from "../owner-bubble";
+import { slimeColorOf } from "../slime";
 import { dayLabel, describeError, formatClock } from "../format";
 import { loadingHTML } from "../loading";
 import {
@@ -608,9 +610,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     drawComposerTask();
     if (inRaphael()) {
       patchHTML(hero, avatarHTML({ size: 132, loop: true }));
+      delete memberChat.dataset.memberBubble;
     } else {
       const member = members.member();
       patchHTML(hero, faceHTML(member, 96));
+      const bubble = ownerBubble(slimeColorOf(member));
+      memberChat.dataset.memberBubble = bubble.words;
+      memberChat.style.setProperty("--member-bubble", bubble.fill);
     }
     voice.redraw();
   }

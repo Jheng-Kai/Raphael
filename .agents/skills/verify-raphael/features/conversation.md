@@ -798,15 +798,32 @@ The composer's right-hand slot is one real button (`.cmp-voice`, 32px, the same 
 voice emblem at rest; while the owner speaks into the composer (`data-task-state="recording"`) the send glyph, labelled with the send
 label, because pressing it ends the recording and sends what was said (the question key goes down and up; nothing is cancelled,
 and Escape still cancels at once); the Stop square only once something has been sent (`ack`, `running`, `waiting`, including the
-native voice processing before a turn exists), for as long as that runs, and it stops that. `.cmp-send` stays hidden in the
-non-idle states, so one control alone fills the slot, and `.cmp-voice` stays the selector the native `voice-keys` journey clicks.
+native voice processing before a turn exists), for as long as that runs, and it stops that. Words or files in the field make the
+slot Send even while work runs, so the owner can always send another message; the field empties and Stop returns. One control alone
+fills the slot in every state, Escape shows the Stop it arms, and `.cmp-voice` stays the selector the native `voice-keys` journey clicks.
 A room keeps its browser recorder but uses the same recording/send slot: the next press transcribes and sends the spoken
 words together with the typed draft once. Escape discards recording or pending transcription; Stop represents sent work only.
 Room speech uses the shared dictation finalizer and dictionary learning (`chat-composer.test.ts`).
 See [Owner polish](owner-polish.md) for the group recording comparison and shared conversation-find matrix.
 
 ```powershell
-npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+npm run look -- composer-voice-recording composer-voice-sent composer-stop-voice composer-stop-voice-result composer-stop-pending composer-send-while-working composer-stop-armed-with-words esc-recording-cancel composer-learn chat --theme both --width 1120,720,1920x1080
+```
+
+`composer-send-while-working` sends three messages during running work and checks the slot never moves, each message shows in order and nothing stops.
+
+## The owner's bubble and link cards (2026-11-02)
+
+The owner's bubble in a member's own conversation wears that member's colour (`owner-bubble.ts`, set in `drawFaces` so an avatar change follows at once); Raphael's conversation and group chats stay neutral. A link card under a reply is the media card's width whatever the reply says, and an address with no title reads once, in full.
+
+```powershell
+npm run look -- owner-bubble-member owner-bubble-other-member owner-bubble-light-character owner-bubble-long owner-bubble-chief owner-bubble-room link-card-short-reply --theme both --width 1120,720,1920x1080
+```
+
+A dialog dims the window caption too and starts below it, and the window buttons still answer:
+
+```powershell
+npm run look -- dialog-caption-confirm automation-window --theme both --width 1120,720,1920x1080
 ```
 
 `composer-voice-recording` measures the button at rest and while recording (same place and size, send glyph and label, no Stop,

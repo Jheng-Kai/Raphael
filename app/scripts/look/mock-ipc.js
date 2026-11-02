@@ -1218,8 +1218,9 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.ownerAddition) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
           if (!active) throw new Error("No running member turn");
-          data.turns.push({...active, id: 901, session_id: args.requestId, question: args.text, route: "owner_input", text: "", status: "done", steps: [], messages: [], created_at_ms: data.now});
-          notify("AgentTurn", {turn_id: 901, member_id: active.member_id});
+          const addition = 901 + data.turns.filter(turn => turn.route === "owner_input").length;
+          data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: "owner_input", text: "", status: "done", steps: [], messages: [], created_at_ms: data.now});
+          notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
         }
         // The native call stays pending until the reply ends, including before the first agent.turn.

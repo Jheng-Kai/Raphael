@@ -22,12 +22,16 @@ export function messageUrl(raw: unknown): string | null {
   } catch { return null; }
 }
 
-export function shortUrl(url: string): string {
+export function urlLabel(url: string): string {
   const parsed = new URL(url);
   // A path in another script reads as the words it is, not as its percent codes.
   let path = parsed.pathname;
   try { path = decodeURI(path); } catch { /* A broken code stays as it came. */ }
-  const label = parsed.host + (path === "/" ? "" : path);
+  return parsed.host + (path === "/" ? "" : path);
+}
+
+export function shortUrl(url: string): string {
+  const label = urlLabel(url);
   return label.length > 32 ? label.slice(0, 31) + "…" : label;
 }
 

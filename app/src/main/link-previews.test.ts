@@ -33,6 +33,22 @@ test("cards load on intersection, share cached requests on redraw, reserve space
   previews.pause();
 });
 
+test("an address with no page behind it reads once, in full, and says nothing else", () => {
+  const root = document.createElement("div");
+  root.innerHTML = previewCardsHTML("http://127.0.0.1:5173/some/rather/long/path/to/a/page/of/the/tool");
+  const lines = [...root.querySelectorAll(".preview-meta > span")].map(line => line.textContent);
+  expect(lines).toEqual(["127.0.0.1:5173/some/rather/long/path/to/a/page/of/the/tool"]);
+  root.innerHTML = previewCardsHTML("http://127.0.0.1:5173/");
+  expect([...root.querySelectorAll(".preview-meta > span")].map(line => line.textContent)).toEqual(["127.0.0.1:5173"]);
+});
+
+test("only an address no public page can stand behind gets the short card", () => {
+  const root = document.createElement("div");
+  const short = (url: string): boolean => { root.innerHTML = previewCardsHTML(url); return root.querySelector(".preview-card")!.classList.contains("is-local"); };
+  for (const url of ["http://127.0.0.1:5173/", "http://localhost:3000/a", "http://192.168.1.20/", "http://10.0.0.5/", "http://172.16.0.1/", "http://printer.local/", "http://nas/"]) expect(short(url), url).toBe(true);
+  for (const url of ["https://example.com/a", "http://172.32.0.1/", "http://192.169.1.1/"]) expect(short(url), url).toBe(false);
+});
+
 test("a pending result cannot mutate a hidden or replaced thread, and can be reused when shown", async () => {
   vi.stubGlobal("IntersectionObserver", undefined);
   let resolve!: (value: null) => void;

@@ -179,6 +179,17 @@ describe("the column, used", () => {
     return column;
   };
 
+  test("a folder folded in the list stays folded in the rail", () => {
+    localStorage.setItem("raphael.sidebar.folders", "[10]");
+    document.documentElement.setAttribute("data-sidebar-collapsed", "");
+    const column = mount();
+    document.documentElement.removeAttribute("data-sidebar-collapsed");
+    const folder = column.el.querySelector<HTMLElement>('.mb-sec[data-group="10"]')!;
+    expect(folder.dataset.open).toBe("false");
+    expect(folder.querySelector(".mb-gbody")!.hasAttribute("inert")).toBe(true);
+    expect(column.el.querySelector<HTMLElement>('.mb-sec[data-group="20"]')!.dataset.open).toBe("true");
+  });
+
   test("a click on a row opens that member's thread", () => {
     const column = mount();
     column.el.querySelector<HTMLElement>('[data-member="3"] .mb-row-t')!.click();

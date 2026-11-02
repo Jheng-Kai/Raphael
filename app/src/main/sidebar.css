@@ -38,7 +38,7 @@
 :root[data-sidebar-collapsed] { --sidebar-width: 72px; }
 :root[data-sidebar-collapsed] .side .mb-top { flex-direction: column; min-height: 0; }
 :root[data-sidebar-collapsed] .side .sidebar-brand { flex: none; flex-direction: column; }
-:root[data-sidebar-collapsed] .side .mb-find, :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-row-time, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.mb-more { display: none; }
+:root[data-sidebar-collapsed] .side .mb-sec[data-open="false"], :root[data-sidebar-collapsed] .side .mb-find, :root[data-sidebar-collapsed] .side .mb-ghead, :root[data-sidebar-collapsed] .side .mb-row-time, :root[data-sidebar-collapsed] .side .mb-item .btn.mb-more, :root[data-sidebar-collapsed] .side .au-room-row .btn.mb-more { display: none; }
 :root[data-sidebar-collapsed] .side .mb-pinned { grid-template-columns: minmax(0, 1fr); }
 :root[data-sidebar-collapsed] .side .mb-row-main * { overflow: hidden; }
 :root[data-sidebar-collapsed] .side .mb-item .nav.mb-row, :root[data-sidebar-collapsed] .side .au-room-row > .nav.mb-row, :root[data-sidebar-collapsed] .side .mb-pinned .mb-item .nav.mb-tile.mb-row { position: relative; display: flex; justify-content: center; min-height: 48px; padding: var(--sp-1); }

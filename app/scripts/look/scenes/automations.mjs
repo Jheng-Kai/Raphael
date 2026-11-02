@@ -44,7 +44,7 @@ export default [
   scene("calendar-rhythm-month", "At most one rhythm line per day, without a clock", [...auto,...view("month"),check("calendar-rhythm-month")], rhythm),
   scene("calendar-rhythm-popover", "Today's runs, icon statuses, next run, edit and off", [...rhythmDetail,check("calendar-rhythm-popover")], rhythm),
   scene("calendar-rhythm-hidden", "The member checkbox hides rhythm and exceptions together", [...auto,{action:"calendar-tools"},click('[data-source="member:1"]'),check("calendar-rhythm-hidden")], rhythm),
-  scene("automation-window", "One every routine keeps its daytime window", [...windowDialog,check("routine-window")], rhythm),
+  scene("automation-window", "One every routine keeps its daytime window", [...windowDialog,check("routine-window"),check("dialog-caption")], rhythm),
   scene("automation-window-menu", "The daytime window uses the shared time menu", [...windowDialog,click('[data-dlg="window-from"]'),wait('#app-popover')], rhythm),
   scene("automation-window-saved", "One save preserves the full daytime rhythm", [...windowDialog,click('[data-dlg="window-from"]'),click('#app-popover [data-value="07:00"]'),click('[data-dlg="save"]'),waitGone('.au-routine-dialog'),...rhythmDetail.slice(auto.length),click('[data-pop="open-routine"]'),wait('[data-dlg="window-from"]'),check("routine-window-saved")], rhythm),
   scene("routine-event-row", "An event and its check/fire times share the existing routine row and switch", [...eventDetails, check("routine-event-row")], { routines: [eventRoutine] }),

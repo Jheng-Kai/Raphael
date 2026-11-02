@@ -42,7 +42,7 @@
   --accent-ring: rgba(0, 0, 0, 0.14); --conversation-glow: transparent; --focus: #0a0a0a;
   --selected: #e8e8e8; --selection: #d4d4d4; --on-selection: #0a0a0a;
   /* the owner's own bubble */
-  --bubble: #efefef; --on-bubble: #0a0a0a;
+  --bubble: #efefef; --on-bubble: #0a0a0a; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
   --computer-active: #7138bd;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
@@ -73,7 +73,7 @@
   --accent-hover: #ffffff; --accent-pressed: #d6d6d6;
   --accent-ring: rgba(255, 255, 255, 0.2); --conversation-glow: transparent; --focus: #eeeeee;
   --selected: #282828; --selection: #454545; --on-selection: #ffffff;
-  --bubble: #262626; --on-bubble: #f5f5f5;
+  --bubble: #262626; --on-bubble: #f5f5f5; --on-tint-light: #ffffff; --on-tint-dark: #0a0a0a;
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
   --computer-active: #b98aff;
   --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
@@ -130,6 +130,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .window-chrome { position: fixed; inset: 0 0 auto; z-index: 150; display: flex; height: var(--window-controls-height); background: var(--content); user-select: none; }
 :root[data-window-layout="main"] .window-chrome { left: var(--sidebar-width); border-top-left-radius: var(--r-lg); border-top: 0; border-left: 0; }
 :root[data-window-modal="true"] .window-chrome { background: transparent; border-color: transparent; }
+/* A dialog dims the caption with everything else; its buttons still answer on top of the dim. */
+:root:has(.mb-scrim:not(.cr-scrim)) .window-chrome { background: transparent; border-color: transparent; }
 .window-drag { flex: 1; min-width: 0; }
 .window-controls { display: flex; flex: none; gap: 4px; padding: 4px; }
 .window-button { display: grid; place-items: center; width: 38px; height: 100%; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); cursor: default; transition: background-color 120ms ease, color 120ms ease; }
@@ -140,6 +142,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 /* Caption actions retain a visible keyboard outline inside the window. */
 .window-close:hover:focus-visible { outline-color: var(--focus); }
 :root[data-window-modal="true"] .window-button:focus-visible:not(:hover) { background: transparent; }
+:root:has(.mb-scrim:not(.cr-scrim)) .window-button:focus-visible:not(:hover) { background: transparent; }
 .window-close:hover { background: var(--close); color: var(--on-close); }
 .window-close:active { background: var(--close); color: var(--on-close); }
 .window-restore-glyph { display: none; }

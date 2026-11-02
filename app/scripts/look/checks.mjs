@@ -1160,7 +1160,7 @@ export function checkRendered(name, context = {}) {
     }
     require(document.documentElement.hasAttribute('data-sidebar-collapsed')&&Math.abs(nav.getBoundingClientRect().width-72)<1,'the list collapses to a 72px rail');
     require(!visible(nav.querySelector('.mb-find-input'))&&!visible(nav.querySelector('.sidebar-account-name')),'the rail shows no search or names');
-    const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')];
+    const faces=[...nav.querySelectorAll('.mb-row > .av, .mb-row > .room-avatar')].filter(visible);
     require(faces.length>0&&faces.every(face=>{const box=face.getBoundingClientRect();return Math.abs(box.left+box.width/2-36)<1;}),'every face is centered in the rail');
     const add=nav.querySelector('.side-foot [data-col="add"]').getBoundingClientRect(),owner=nav.querySelector('.sidebar-account').getBoundingClientRect();
     require(add.bottom<=owner.top,'plus sits above the owner in the rail');
@@ -1177,6 +1177,75 @@ export function checkRendered(name, context = {}) {
       require(positions.every((box,index)=>Math.abs(box.x-window.__sidebarSearchPositions[index].x)<1&&Math.abs(box.y-window.__sidebarSearchPositions[index].y)<1),'opening search never moves its icon or plus');
     }
     return {check:name,positions};
+  }
+  if (name === "dialog-caption") {
+    const chrome = document.querySelector('.window-chrome'), dialog = [...document.querySelectorAll('.mb-scrim > .mb-dialog')].find(visible);
+    require(dialog, "a dialog is open");
+    require(getComputedStyle(chrome).backgroundColor === "rgba(0, 0, 0, 0)", "the caption takes the same dim as everything else");
+    require(dialog.getBoundingClientRect().top >= chrome.getBoundingClientRect().bottom, "the dialog starts below the caption, its corners showing");
+    const close = chrome.querySelector('.window-close'), box = close.getBoundingClientRect();
+    require(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('.window-close') === close, "the window buttons still answer over a dialog");
+    return {check:name,top:dialog.getBoundingClientRect().top};
+  }
+  if (name === "sidebar-rail-folded") {
+    if (matchMedia('(max-width: 859px)').matches) return {check:name,compact:true};
+    const folder = document.querySelector('#nav .mb-sec[data-group="1"]');
+    require(folder.dataset.open === "false" && folder.querySelector('.mb-gbody').inert, "the folder stays folded in the rail");
+    require(folder.querySelectorAll('.mb-row').length > 0 && ![...folder.querySelectorAll('.mb-row')].some(visible), "a folded folder shows no faces in the rail");
+    const open = document.querySelector('#nav .mb-sec[data-group="2"] .mb-row');
+    require(visible(open), "an open folder keeps its faces in the rail");
+    return {check:name};
+  }
+  if (name === "composer-slot-stop" || name === "composer-slot-send" || name === "composer-slot-armed") {
+    const form = document.querySelector('.page-agent .composer'), send = form.querySelector('.cmp-send'), stop = form.querySelector('.cmp-voice');
+    require(form.dataset.taskState === "running", "the work is still running");
+    const shown = name === "composer-slot-send" ? send : stop, gone = shown === send ? stop : send;
+    require(visible(shown) && !visible(gone), `${name}: one control fills the slot`);
+    const box = shown.getBoundingClientRect(), place = `${Math.round(box.left)},${Math.round(box.top)},${box.width},${box.height}`;
+    window.__lookSlot ??= place;
+    require(window.__lookSlot === place, `the slot never moves: ${window.__lookSlot} then ${place}`);
+    if (name === "composer-slot-armed") {
+      require(stop.dataset.cancelArmed === "true", "Escape arms the Stop it shows");
+      require(form.querySelector('.cmp-input').value === "還沒寫完", "the words stay in the field");
+    }
+    return {check:name,place};
+  }
+  if (name === "owner-additions-in-order") {
+    const words = [...document.querySelectorAll('.thread .tn .owner-message .message-text')].map(node => node.textContent.trim());
+    const at = ["第一則補充", "第二則補充", "第三則補充"].map(text => words.indexOf(text));
+    require(at.every((index, i) => index >= 0 && (i === 0 || index > at[i - 1])), `every message shows, in the order sent: ${at}`);
+    require(!window.__look.calls.some(call => call.method === "agent.history.stop" || call.method === "worker.cancel"), "sending stops nothing");
+    require(window.__look.calls.filter(call => call.command === "agent_ask_text").length === 3, "each message went out once");
+    return {check:name,at};
+  }
+  if (name === "preview-card-wide") {
+    const cards = [...document.querySelectorAll('.thread .preview-card')].filter(visible);
+    require(cards.length === 2, `both links have a card: ${cards.length}`);
+    const room = cards[0].closest('.ra-body').getBoundingClientRect().width, widths = cards.map(card => card.getBoundingClientRect().width);
+    for (const width of widths) require(width >= Math.min(440, room) - 1, `a card is as wide as the media cards, whatever its words: ${width} of ${room}`);
+    require(widths[0] === widths[1], `an internal address and a public one are the same width: ${widths}`);
+    const internal = cards[0].querySelector('.preview-meta').innerText;
+    require(internal.split(/\n/).filter(line => line.includes("127.0.0.1")).length === 1, `the address is not repeated: ${internal}`);
+    for (const line of cards[0].querySelectorAll('.preview-meta > span')) require(line.scrollWidth <= cards[0].clientWidth, "the words stay inside the card");
+    return {check:name,widths};
+  }
+  if (name === "owner-bubble-tinted" || name === "owner-bubble-neutral") {
+    const bubble = [...document.querySelectorAll('.owner-message .bubble')].find(visible);
+    const style = getComputedStyle(bubble), chat = bubble.closest('.mb-chat');
+    const channel = value => value / 255 <= 0.03928 ? value / 255 / 12.92 : ((value / 255 + 0.055) / 1.055) ** 2.4;
+    const light = color => { const [r, g, b] = color.match(/[\d.]+/g).map(Number); return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b); };
+    const [a, b] = [light(style.backgroundColor), light(style.color)], ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    require(ratio >= 4.5, `the words read on the bubble: ${ratio}`);
+    const probe = document.createElement('i'); probe.style.background = 'var(--bubble)'; document.documentElement.append(probe);
+    const neutral = getComputedStyle(probe).backgroundColor; probe.remove();
+    if (name === "owner-bubble-neutral") {
+      require(style.backgroundColor === neutral, `this conversation stays neutral: ${style.backgroundColor}`);
+    } else {
+      require(style.backgroundColor !== neutral, "the owner's bubble wears the member's colour");
+      for (const link of bubble.querySelectorAll('.message-link, .btn.message-expand')) require(getComputedStyle(link).color === style.color, "a link and the expand control take the bubble's words colour");
+      require(chat && chat.dataset.memberBubble !== undefined, "the colour comes from the member's conversation");
+    }
+    return {check:name,background:style.backgroundColor,ratio:Number(ratio.toFixed(2))};
   }
   if (name === "sidebar-folded") {
     const folder = document.querySelector('.mb-sec[data-group="1"]');
