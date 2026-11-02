@@ -235,6 +235,7 @@ export function installMock(fixture, config = {}, target = window) {
   // way the core reports it (authorizing, then connected) and adds the turn that resumes the task.
   if (variant.connectorCard) {
     const turn = structuredClone(data.connectorTurns[variant.connectorCard]);
+    if (variant.connectorState) turn.connectors[0].state = variant.connectorState;
     if (variant.connectorMember) Object.assign(turn, { member_id: variant.connectorMember,
       conversation_id: data.conversations.find(item => item.member_id === variant.connectorMember && item.is_default).id, prefix: "" });
     data.turns.push(turn);

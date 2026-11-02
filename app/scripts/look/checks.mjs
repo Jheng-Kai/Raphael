@@ -134,6 +134,11 @@ export function checkRendered(name, context = {}) {
     }
     return {check: name};
   }
+  if (name.startsWith("card-connect-ended:")) {
+    const status = document.querySelector('[data-connector="card-slack"] [data-card-status-text]');
+    require(visible(status) && status.textContent === name.split(":")[1], `the pill names how the card ended: ${status?.textContent}`);
+    return { check: name };
+  }
   if (name === "menu-scroll-closed") {
     require(!document.querySelector('#app-popover, #app-submenu'), "outside scroll input or resizing closes every menu level");
     return { check: name };
@@ -833,7 +838,7 @@ export function checkRendered(name, context = {}) {
       const restores = calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
       require(restores.length === 1 && restores[0].params.review_token === 'a'.repeat(64) && !document.querySelector('[data-task-restore]'), 'one confirmed restore uses the exact reviewed checkpoint token');
     }
-    if (name === 'card-task-prose') require(!document.querySelector('.task-result'), 'no files means no result card');
+    if (name === 'card-task-prose') require(!document.querySelector('.task-result') && !document.querySelector('.tn[data-id="980"] .task-actions'), 'no files means no result card, and the reply already says it is finished');
     if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 9 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
     if (name === 'card-permission-settled') require(calls.filter(call=>call.command==='agent_question_answer').length===1 && !document.querySelector('[data-act=perm-once]'), 'one answer settles the card and removes controls');
     return {check:name};
@@ -1203,7 +1208,7 @@ export function checkRendered(name, context = {}) {
     const roomId = context.roomId ?? 1;
     const row = document.querySelector(`.au-room-row [data-room="${roomId}"]`);
     const last = context.latest ?? [...window.__look.data.messages].reverse().find(message => message.room_id === roomId && message.status === 'done' && message.text?.trim() && message.text.trim() !== '(pass)');
-    require(last && row?.querySelector('.mb-row-p')?.textContent === last.text.replace(/\s+/g, ' '), "a room with messages shows its latest visible message");
+    require(last && row?.querySelector('.mb-row-p')?.textContent.endsWith(last.text.replace(/\s+/g, ' ')), "a room with messages shows its latest visible message, after who said it");
     const time = row.querySelector('time');
     require(visible(time) && time.dateTime === new Date(last.created).toISOString(), "that room's own row shows its latest message time");
     return {check:name, preview:row.querySelector('.mb-row-p').textContent, datetime:time.dateTime};

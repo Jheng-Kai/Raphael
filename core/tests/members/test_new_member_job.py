@@ -52,12 +52,14 @@ async def test_the_owners_answer_becomes_its_job_and_the_next_turn_runs_on_it(se
     await typed(rig, "幫我每天整理未讀信件，重要的先問我", new["id"])
     prompt = client.chat_calls[0]["messages"][0]["content"]
     assert "set_my_job" in prompt and "have no job yet" in prompt
+    assert "<new_member_step>" in client.chat_calls[0]["messages"][-1]["content"]
     saved = team.members.store.member(new["id"])
     assert (saved.role, saved.instructions) == ("信件管家", "每天整理未讀信件，重要的先問我。")
     client.chats = [live_said("好的。")]
     await rig.call("agent.ask", {"session_id": "s2", "text": "今天呢", "ui_language": "zh-TW", "source": "app", "member_id": new["id"]})
     prompt = client.chat_calls[-1]["messages"][0]["content"]
     assert "每天整理未讀信件" in prompt and "have no job yet" not in prompt
+    assert "<new_member_step>" not in client.chat_calls[-1]["messages"][-1]["content"]
     assert not any(item["function"]["name"] == "set_my_job" for item in client.chat_calls[-1]["tools"])
 
 

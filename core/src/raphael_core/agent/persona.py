@@ -1006,6 +1006,12 @@ NEW_MEMBER = (
     "and begin if there is something to begin. If it is only a one-off question, answer it without the tool. "
     "Never make up a job for yourself.\n</new_member>"
 )
+# Beside the owner's words as well: a quick model answers the message in front of it and misses a rule far above.
+NEW_MEMBER_STEP = (
+    "\n\n<new_member_step>Your greeting asked the owner what you are for, and this message is their answer. Unless it is "
+    "plainly a one-off question or small talk, your first action is the set_my_job tool; reply only after it returns. "
+    "Never say you will do this from now on without having saved it.</new_member_step>"
+)
 
 
 def _member_fields(language: str, name: str, role: str, instructions: str, personality: str) -> dict[str, str]:

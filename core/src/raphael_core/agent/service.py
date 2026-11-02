@@ -171,7 +171,7 @@ from ..members.activity import Activity, member_turn, step as activity_step, too
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import COMPUTER_CHANGED, TOOLS_FOUND, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
-from .persona import FULL_PERMISSION, NEW_MEMBER, PLAN_MODE
+from .persona import FULL_PERMISSION, NEW_MEMBER, NEW_MEMBER_STEP, PLAN_MODE
 from ..brain.owner import owner_context
 from .cities import cities_in
 from .commands import COMMANDS, AppCatalog, run_command
@@ -1803,6 +1803,8 @@ class AgentService:
                 quote=ask.quote,
                 recall=self._recall(ask),
             )
+            if ask.speaker.has_no_job and ask.scope == "private" and ask.exchange_speakers is None:
+                user += NEW_MEMBER_STEP
             if ask.resumption is not None:
                 user += ask.resumption.note()
             if brain_ref(settings.model):

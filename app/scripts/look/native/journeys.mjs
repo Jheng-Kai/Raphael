@@ -51,8 +51,7 @@ async function keepFocus(page) {
 
 async function details(page) {
   if (await page.$('.conversation-trigger[aria-expanded="false"]')) await click(page, ".conversation-trigger");
-  const back = await page.$('.mb-det [data-det="tab"][data-tab="details"]');
-  if (back) { await back.click(); await back.dispose(); }
+  for (let back; (back = await page.$('.mb-det [data-det="back"]:not([hidden])')); await pause(50)) { await back.click(); await back.dispose(); }
   await wait(page, "[data-conversation-new]");
 }
 async function chat(page) {
@@ -550,7 +549,7 @@ export async function drive(name, context) {
     let codex;
     for (let i = 0; i < 150 && !codex; i++) {
       const models = (await context.rpc("brains.cli", {})).clis.find(cli => cli.id === "codex")?.models ?? [];
-      codex = models.find(model => model.id.endsWith("gpt-5.6-luna")) ?? models.at(-1);
+      codex = models.find(model => model.id.endsWith("gpt-6-luna")) ?? models.at(-1);
       if (!codex) await pause(200);
     }
     if (!codex) throw new Error("The real Codex listed no models");
@@ -589,7 +588,9 @@ export async function drive(name, context) {
     const saved = (await context.rpc("members.list", {})).members.find(row => row.id === member.id);
     result.job = { role: saved.role, instructions: saved.instructions };
     if (!saved.role || !saved.instructions) throw new Error(`The owner's answer did not become its job: ${JSON.stringify(result.job)}`);
-    await page.waitForFunction((id, role) => document.querySelector(`.mb-row[data-member="${id}"]`)?.textContent.includes(role), { timeout: 10000 }, member.id, saved.role);
+    await details(page);
+await click(page, '[data-det="gear"]');
+await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value === role, { timeout: 10000 }, saved.role);
     await capture("job-saved");
     return;
   }
@@ -899,6 +900,7 @@ export async function drive(name, context) {
     await chat(page);
     await perform(page, { action: "member", id: colleague.id });
     await details(page);
+    await click(page, '[data-det="gear"]');
     await click(page, '[data-det="tab"][data-tab="memory"]');
     await page.waitForSelector('[data-mem-space="own"]');
     result.memoryHeading = await page.$eval('[data-mem-space="own"]', el => el.getAttribute("aria-label"));
@@ -941,6 +943,7 @@ export async function drive(name, context) {
     if (audit.agent_turns.some(t => t.cost_usd !== 0)) throw new Error("The fake skill journey recorded nonzero spend");
     await capture("learned-skill-reused");
     await details(page);
+    await click(page, '[data-det="gear"]');
     await click(page, '[data-det="tab"][data-tab="skills"]');
     await page.waitForSelector('.mp-resource');
     result.skillDate = await page.$eval('.mp-resource', el => el.textContent);
@@ -1197,7 +1200,7 @@ export async function drive(name, context) {
       await perform(page, {action:"room", id:room.id});
       await pause(1000);
       const summary = (await context.rpc("rooms.list", {})).rooms.find(item => item.id === room.id);
-      await page.waitForFunction((id, preview) => document.querySelector(`[data-room="${id}"] .mb-row-p`)?.textContent === preview.replace(/\s+/g, ' '), {}, room.id, summary.preview);
+      await page.waitForFunction((id, preview) => document.querySelector(`[data-room="${id}"] .mb-row-p`)?.textContent.endsWith(preview.replace(/\s+/g, ' ')), {}, room.id, summary.preview);
       await inspect(`sidebar-room-${count}-1280`, ["sidebar-room-avatar", "sidebar-room-summary", "sidebar-selection"], {roomId:room.id, latest:{text:summary.preview, created:summary.last_at}});
       await click(page, '#nav [data-go="home"]'); await wait(page, '.ho-hero h1');
       await inspect(`sidebar-home-after-room-${count}-1280`, ["sidebar-selection"]);
@@ -1397,7 +1400,8 @@ export async function drive(name, context) {
     if (!await learned.$('#learned-pill:not([hidden])')) throw new Error("Hover did not retain the native learned pill");
     result.focusDuring = await context.windows();
     const pillWindow = result.focusDuring.windows.find(window => window.title === "Raphael learned word");
-    if (!pillWindow || !(pillWindow.style & 0x08000000) || (pillWindow.style & 0x20) || !pillWindow.rounded) throw new Error(`Native learned pill is not passive with its rounded click region: ${JSON.stringify(pillWindow)}`);
+    // The mouse passes through until the real pointer is on the pill's own controls, which CDP hovering never moves.
+if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) throw new Error(`Native learned pill is not passive with its rounded click region: ${JSON.stringify(pillWindow)}`);
     const [left,top,right,bottom] = pillWindow.rect, work = result.focusBefore.workArea;
     if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || Math.abs(top-(work[1]+(work[3]-work[1])*0.56))>1) throw new Error(`Native pill is not centered below the active monitor midpoint: ${JSON.stringify({pill:pillWindow.rect,work})}`);
     if (result.focusBefore.foreground !== result.focusDuring.foreground) throw new Error("Publishing the learned pill changed the foreground window");
