@@ -315,3 +315,15 @@ test("slow history reads still publish while worker events outrun them", async (
   for (let i = 0; i < 12; i++) { emit({ type: "WorkerChanged", task_id: 71, state: "running", running: true }); await vi.advanceTimersByTimeAsync(200); }
   expect(document.body.textContent).toContain("Progress arrived");
 });
+
+test("a failed typed send restores the exact draft and clears the failure on successful retry", async () => {
+ api.agentAskText.mockRejectedValueOnce(new Error("Synthetic unavailable")).mockResolvedValue(undefined);
+ mount(); await flush();
+ const input = $<HTMLTextAreaElement>(".cmp-input"); input.value = "Please review the note";
+ input.dispatchEvent(new Event("input", {bubbles:true}));
+ $(".composer").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})); await flush();
+ expect(input.value).toBe("Please review the note"); expect(document.querySelector(".composer-failure .card-status.is-failed")).not.toBeNull();
+ input.dispatchEvent(new Event("input", {bubbles:true}));
+ $(".cmp-send").click(); await flush();
+ expect(api.agentAskText).toHaveBeenCalledTimes(2); expect(document.querySelector(".composer-failure")).toBeNull();
+});

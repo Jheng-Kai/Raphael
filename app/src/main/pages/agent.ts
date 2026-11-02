@@ -1,3 +1,5 @@
+import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
+import { mountTaskResults } from "../task-result";
 import { patchThread } from "../thread-diff";
 // 拉斐爾: the one conversation with Raphael (`agent.history.list`), oldest at the top and newest at
 // the bottom, under the days it was had, whether it was said to the emblem, sent from a chat app or
@@ -64,12 +66,12 @@ import { createDraftPanel, hasDrafts } from "../member-draft";
 import { mountBackgroundQuestions } from "../background-mount";
 import { TYPED, VOICE, exchangeTurn, mergeTurns, oldestId, refreshTurns, sourceOf, threadItems, visibleTurn } from "../conversation";
 import { carryTyped } from "../secret-card";
-import { openConnectionSetup } from "../connection-setup";
+import { carryInlineSetup, mountInlineConnectionSetup } from "../connection-setup";
 import { carryMail } from "../mail-card";
 import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
-import { permissionFor } from "../permission-card";
+import { approvalCopy, permissionFor } from "../permission-card";
 import { dayLabel, describeError } from "../format";
 import { loadingHTML } from "../loading";
 import {
@@ -121,8 +123,6 @@ export const TYPED_MAX_CHARS = 100_000;
 const COMPOSER_LINES = 6;
 /** A question said aloud whose turn never comes (the core went away) stops waiting after this long. */
 const HEARING_MAX_MS = 120_000;
-/** The YES of a question that cannot be undone (T3) is held this long, as on the overlay (`HOLD_MS`). */
-const HOLD_MS = 600;
 /** The voice button sent the key, and the app did not start listening within this long: the picture comes back down. */
 const LISTEN_WAIT_MS = 1500;
 
@@ -137,15 +137,15 @@ export function openQuestion(q: AgentQuestion): AgentQuestion {
 
 /**
  * What the card's buttons say: the question's own words for the two plain answers when it brings
- * them (the question about an app says 「允許一次」 and 「不要」), else the page's 是 and 否; `always`
+ * them, else the page's Allow and Deny; `always`
  * is the third button's label, null when the question has two answers.
  */
 export function askLabels(q: AgentQuestion | null): { yes: string; no: string; always: string | null } {
   const always = q?.always ? q.always : null;
   return {
-    // The question's own words are used only with a third answer: the plain questions keep 是 and 否.
-    yes: (always !== null && q?.yes) || t("agent.yes"),
-    no: (always !== null && q?.no) || t("agent.no"),
+    // A third answer keeps the core's explicit choices; ordinary approvals use the shared permission words.
+    yes: (always !== null && q?.yes) || t("local.allow"),
+    no: (always !== null && q?.no) || t("perm.deny"),
     always,
   };
 }
@@ -300,7 +300,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     name: () => members.nameOf(members.current()),
     openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
     available: on => { el.querySelector<HTMLElement>('[data-act="computer"]')!.hidden = !on; },
+    changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
+    stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
   });
   const detailsScrim = document.createElement("div");
   detailsScrim.className = "mb-det-scrim";
@@ -461,15 +463,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
 
   const askCard = document.createElement("div");
-  askCard.className = "ask-card";
+  askCard.className = "ask-card-host";
   askCard.hidden = true;
   askCard.setAttribute("role", "group");
-  askCard.innerHTML =
-    `<span class="ask-face"></span><p class="ask-q" tabindex="0"></p>` +
-    `<div class="ask-row"><button type="button" class="btn ask-no" data-act="no"></button>` +
-    `<button type="button" class="btn ask-always" data-act="always" hidden></button>` +
-    `<button type="button" class="btn ask-yes" data-act="yes"><span class="ask-yes-t"></span><i class="ask-fill" aria-hidden="true"></i></button></div>`;
-  const askFace = askCard.querySelector<HTMLElement>(".ask-face")!;
+  askCard.innerHTML = cardHTML({ title: t("cards.permission", { p0: t("agent.title") }), status: "waiting", statusText: cardPromptText("permission"), cls: "ask-card",
+    body: t("perm.title"),
+    content: cardDisclosureHTML("approval", `<p class="ask-q card-body"></p>`),
+    actions: `<button type="button" class="btn sm pri ask-yes" data-act="yes"><span class="ask-yes-t"></span></button>` +
+      `<button type="button" class="btn sm ask-always" data-act="always" hidden></button>` +
+      `<button type="button" class="btn sm ask-no" data-act="no"></button>`,
+  });
   const askText = askCard.querySelector<HTMLElement>(".ask-q")!;
   const noButton = askCard.querySelector<HTMLButtonElement>(".ask-no")!;
   const alwaysButton = askCard.querySelector<HTMLButtonElement>(".ask-always")!;
@@ -561,7 +564,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const look = (): TurnLook => {
     const latest = turns.filter(turn => turn.question.trim() && sourceOf(turn) !== "routine" && sourceOf(turn) !== "member" && turn.route !== "exchange" && (turn.text.trim() || turn.messages?.some(m => m.kind === "reply"))).reduce((id, turn) => Math.max(id, turn.id), 0);
     const busy = pacing.active || regenerating.size > 0 || outgoing.some(belongs) || own().some(turn => turn.status === "running" || isLive(turn.task));
-    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
+    const shared = { regenerateTurnId: busy ? undefined : latest, revealing: (id: number) => pacing.waiting(id), waitingForOwner: desktop.waitingForOwner, memberName: members.nameOf, memberFace: (id: number, size = 18) => members.faceOf(id, size), mentions: members.mentionTargets(),
       // A permission card in the thread can be answered while the window holds its question and is not answering it.
       answerable: (cardId: string) => question?.id === cardId && !answering };
     if (inRaphael()) return { ...shared, face: (loop) => avatarHTML({ size: 26, loop }) };
@@ -606,11 +609,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   function drawFaces(): void {
     drawComposerTask();
     if (inRaphael()) {
-      patchHTML(askFace, avatarHTML({ size: 30 }));
       patchHTML(hero, avatarHTML({ size: 132, loop: true }));
     } else {
       const member = members.member();
-      patchHTML(askFace, faceHTML(member, 30));
       patchHTML(hero, faceHTML(member, 96));
     }
     voice.redraw();
@@ -699,7 +700,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     return chip;
   }
 
-  /** The words of the card's buttons: the page's own 是 and 否, or the question's (and its third button, if it has one). */
+  /** Permission words, or the question's explicit choices when it offers a third answer. */
   function drawAskLabels(): void {
     const labels = askLabels(question);
     noButton.textContent = labels.no;
@@ -751,9 +752,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     }
     if (voice.isUp) voice.drop();
     const q = question!;
+    if (askCard.dataset.id !== q.id) askCard.querySelector<HTMLButtonElement>("[data-card-dismiss]")?.click();
     askCard.dataset.id = q.id;
     askCard.dataset.tier = q.tier;
     askText.textContent = q.text;
+    const copy = approvalCopy(q.text, inRaphael() ? t("agent.title") : members.nameOf(memberId()));
+    askCard.querySelector(".card-title")!.textContent = copy.title;
+    askCard.querySelector(".card-body.cc-state")!.textContent = copy.body;
+    askCard.querySelector<HTMLElement>(".card-disclosure")!.hidden = q.text.trim() === copy.body || copy.title.includes(q.text.trim());
     drawAskLabels();
     noButton.disabled = alwaysButton.disabled = yesButton.disabled = answering;
     yesButton.dataset.hold = "idle";
@@ -796,8 +802,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
-        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made);
-        return () => { node.before(made); restorePages(); node.remove(); restore(); restoreMail(); };
+        const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); desktop.carry(node); node.remove(); restore(); restoreMail(); };
       },
     });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
@@ -806,6 +812,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) previews.sync();
     else previews.pause();
     desktop.sync();
+    taskResults.sync();
     pagesHost.sync();
     measureMessages();
     updateLiveTimes(thread);
@@ -1068,6 +1075,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       if (input.value.trim() !== "") toaster.info(t("agent.tooLong"));
       return;
     }
+    composer.querySelector(".composer-failure")?.remove();
     const sending = files;
     const dictation = correctionLearning.snapshot();
     const corrections = correctionLearning.take(input.value);
@@ -1096,7 +1104,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       outgoing = outgoing.filter((item) => item !== mine);
       if (memberId() === member && conversationId() === sentConversation && input.value === "" && !files.length) restoreDraft(draft);
       else restored.set(draftKey(member, sentConversation), draft);
-      toaster.info(describeError(err));
+      if (memberId() === member && conversationId() === sentConversation) {
+        const failed = document.createElement("div"); failed.className = "composer-failure";
+        failed.innerHTML = cardHTML({ title: t("cards.sendFailed"), status: "failed" });
+        composer.querySelector(".composer-failure")?.remove(); composer.prepend(failed);
+        cardFailure(failed.firstElementChild, () => { failed.remove(); void send(); }, () => failed.remove());
+      }
       render();
       return;
     }
@@ -1290,29 +1303,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (hasDrafts(question)) draftPanel.sync(question, false);
         redrawCards();
       }
-      toaster.info(describeError(err));
+      if (question?.id !== id) return;
+      cardFailure(thread.querySelector(`[data-permission-card="${CSS.escape(id)}"]`) ?? draftPanel.el.querySelector(".conversation-card") ?? askCard.querySelector(".conversation-card"), () => { if (question?.id === id) void answer(approved, always, editedDrafts, groups); });
     }
   }
 
   /** The permission cards in the thread are drawn again when the question they wait on comes, goes or is being answered. */
   function redrawCards(): void {
     if (visible && turns.some((turn) => turn.permissions?.length)) drawThread();
-  }
-
-  let holdTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The YES of a T3 question: held for `HOLD_MS` it is armed, and let go on it then, it answers. */
-  function holdStart(): void {
-    if (question?.tier !== "T3" || answering) return;
-    yesButton.dataset.hold = "holding";
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => (yesButton.dataset.hold = "armed"), HOLD_MS);
-  }
-  function holdEnd(onButton: boolean): void {
-    if (question?.tier !== "T3") return;
-    clearTimeout(holdTimer);
-    const armed = yesButton.dataset.hold === "armed";
-    yesButton.dataset.hold = "idle";
-    if (armed && onButton) void answer(true);
   }
 
   const finder = mountConversationFind({ button: searchButton, bar: find, thread, scroll: scroller, changed: open => { searching = open; if (open) { pacing.flush(); render(); } }, load: async current => {
@@ -1745,28 +1743,20 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         }
       }
     } catch (err) {
-      toaster.info(describeError(err));
+      if (!cardFailure(act.closest(".conversation-card"), () => { void cardAction(act); })) toaster.info(describeError(err));
       (act as HTMLButtonElement).disabled = false;
     }
   }
 
-  /**
-   * 填入金鑰 or 設定開發者 app on a connector card: the form that asks for what the app needs opens over the page. What is typed
-   * goes from it to the core in this one call (`integrations.card_connect`) and nowhere else, never into the chat; the card's
-   * new states come back as `AgentTurn`, and a failed card names what is missing and offers the form again.
-   */
+  /** Focus the credential form already mounted in its originating conversation card. */
   async function cardSetup(act: HTMLElement): Promise<void> {
-    const id = act.dataset.card ?? "";
-    const needs = act.dataset.needs === "own_app" ? "own_app" : "key";
-    await openConnectionSetup({ slug: act.dataset.toolkit ?? "", name: act.dataset.name ?? "", needs }, {
-      connect: async (fields) => {
-        const result = await api.cardConnect(id, fields);
-        // Not started while the card still waits: another card's sign-in holds the browser.
-        return result.started || !["pending", "failed", "cancelled"].includes(result.card.state) ? { connected: true } : { connected: false, error: "busy" };
-      },
-      composioKey: () => app.go("settings", "connections"),
-    });
+    act.closest("[data-connector]")?.querySelector<HTMLInputElement>("[data-setup-field]")?.focus();
   }
+
+  mountInlineConnectionSetup(thread, async (id, fields) => {
+    const result = await api.cardConnect(id, fields);
+    return { connected: result.started || !["pending", "failed", "cancelled"].includes(result.card.state), error: result.card.error ?? undefined };
+  });
 
   /**
    * Save the key typed into a secret card. It is read from the field here, the field is emptied before the
@@ -1785,7 +1775,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     try {
       await api.cardSave(act.dataset.card ?? "", value);
     } catch (err) {
-      toaster.info(describeError(err));
+      cardFailure(act.closest(".conversation-card"), () => { field.focus(); });
     } finally {
       field.disabled = false;
     }
@@ -1797,11 +1787,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const buttons = [...(act.closest(".connector-card")?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
     for (const button of buttons) button.disabled = true;
     try {
+      if (act.dataset.act === "card-takeover") { desktop.takeover(); for (const button of buttons) button.disabled = false; return; }
       if (act.dataset.act === "card-resume") await api.cardResume(id);
       else if (act.dataset.act === "card-done") await api.cardDone(id);
       else await api.cardStop(id);
     } catch (err) {
-      toaster.info(describeError(err));
+      cardFailure(act.closest(".conversation-card"), () => { void taskCardAction(act); });
       for (const button of buttons) button.disabled = false;
     }
   }
@@ -1822,7 +1813,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       try {
         await api.permissionAnswer(choice, id, card?.dataset.digest ?? "");
       } catch (err) {
-        toaster.info(describeError(err));
+        cardFailure(card, () => { void permissionAnswer(act); });
         for (const button of buttons) button.disabled = false;
       }
       return;
@@ -1834,6 +1825,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       await answer(false);
     } else await answer(choice !== "deny", choice === "always");
   }
+
+  const taskResults = mountTaskResults(thread, memberId, () => { desktop.files(); });
 
   mountMailActions(thread, (err) => toaster.info(describeError(err)), (words) => toaster.info(words));
 
@@ -1985,6 +1978,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void secretSave(act);
         break;
       case "card-resume":
+      case "card-takeover":
       case "card-done":
       case "card-stop":
         void taskCardAction(act);
@@ -2002,7 +1996,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         void answer(true, true);
         break;
       case "yes":
-        if (question?.tier !== "T3") void answer(true);
+        void answer(true);
         break;
     }
   });
@@ -2062,26 +2056,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   });
   window.addEventListener("blur", () => {
     if (heldKey !== null) releaseKey();
-  });
-
-  yesButton.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
-    yesButton.setPointerCapture(e.pointerId);
-    holdStart();
-  });
-  yesButton.addEventListener("pointerup", (e) => {
-    const box = yesButton.getBoundingClientRect();
-    holdEnd(e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom);
-  });
-  yesButton.addEventListener("pointercancel", () => holdEnd(false));
-  yesButton.addEventListener("keydown", (e) => {
-    if ((e.key === "Enter" || e.key === " ") && !e.repeat && question?.tier === "T3") {
-      e.preventDefault();
-      holdStart();
-    }
-  });
-  yesButton.addEventListener("keyup", (e) => {
-    if (e.key === "Enter" || e.key === " ") holdEnd(true);
   });
 
   scroller.addEventListener("scroll", () => {
@@ -2173,9 +2147,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!el.isConnected) return;
     if (roomPane.active) roomPane.close();
     const jump = ++memberJump;
-    const { memberId, turnId } = (event as CustomEvent<{ memberId: number; turnId?: number }>).detail;
+    const { memberId, turnId, files } = (event as CustomEvent<{ memberId: number; turnId?: number; files?: boolean }>).detail;
     void members.load().then(async () => {
       members.select(memberId);
+      if (files) { desktop.files(); }
       if (!turnId) return;
       await load(false);
       const generation = loads;
@@ -2252,7 +2227,6 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       dropResize?.disconnect();
       members.hide();
       input.dispatchEvent(new Event("blur"));
-      clearTimeout(holdTimer);
       clearTimeout(listenTimer);
       loads++;
       loadingEarlier = false;

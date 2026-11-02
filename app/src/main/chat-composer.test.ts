@@ -116,7 +116,7 @@ test("a voice delivery failure keeps the combined draft and learns corrections o
   const {view,send}=mount(vi.fn().mockRejectedValueOnce(new Error('Synthetic delivery failure')).mockResolvedValue(undefined));view.setDraft('Use');
   const voice=view.el.querySelector<HTMLButtonElement>('.cmp-voice')!;voice.click();await flush();voice.click();await flush();
   expect(send).toHaveBeenCalledExactlyOnceWith('Use Open Mouse Bot',[]);expect(view.input.value).toBe('Use Open Mouse Bot');
-  expect(document.querySelector('.toasts')?.textContent).toContain('Message could not be sent');
+  expect(document.querySelector('.conversation-card')?.textContent).toContain('Could not send');
   view.input.value='Use OpenMausBot';view.input.dispatchEvent(new Event('input'));view.el.requestSubmit();await flush();
   expect(api.core).toHaveBeenCalledWith('dictionary.correct',{edits:[{before:'Open Mouse Bot',after:'OpenMausBot'}]});
  } finally {vi.unstubAllGlobals();}

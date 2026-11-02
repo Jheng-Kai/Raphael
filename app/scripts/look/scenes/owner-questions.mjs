@@ -1,4 +1,4 @@
-import { scene, check, click, member, room, type, wait } from "./steps.mjs";
+import { scene, check, click, hover, member, room, type, wait } from "./steps.mjs";
 
 const open = [member(1), wait('[data-owner-question="owner-choice"]')];
 export default [
@@ -10,8 +10,9 @@ export default [
     check(`owner-card-room-${kind}`)], { roomOwnerCard: kind, ...(kind === "page" ? { pageTurn: true } : {}) })),
   scene("owner-question-room", "The room uses the same durable card and answers through the shared controller", [room(1), wait('[data-owner-question="owner-choice"]'), check("owner-question-room"), click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "room" }),
   scene("owner-question-asked", "A durable question uses the shared card with four real options, text and cancel", [...open, check("owner-question-asked")], { ownerQuestion: "asked" }),
+  scene("owner-question-typed", "A typed answer enables the visible white primary before any send", [...open, check("owner-question-asked"), type('[data-owner-answer-input]', "請先確認下週的範例排程。"), hover('[data-owner-answer="text"]'), check("owner-question-typed")], { ownerQuestion: "asked" }),
   scene("owner-question-answered", "An option settles the same question once and removes answer controls", [...open, click('[data-owner-option="星期二"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
   scene("owner-question-cancelled", "Cancel reports the decision on the original card", [...open, click('[data-owner-answer="cancel"]'), wait('[data-card-state="cancelled"]'), check("owner-question-cancelled")], { ownerQuestion: "asked" }),
-  scene("owner-question-background", "A routine's question lives in its member conversation and shows a waiting count", [...open, check("owner-question-background")], { ownerQuestion: "background" }),
-  scene("owner-question-text", "An owner can send a free text answer using the same card", [...open, type('[data-owner-question] textarea', "請改到下週五寄出，先讓我確認內容。"), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
+  scene("owner-question-background", "A routine's question lives in its member conversation and keeps Stop in the composer", [...open, check("owner-question-background")], { ownerQuestion: "background" }),
+  scene("owner-question-text", "An owner can send a free text answer using the same card", [...open, type('[data-owner-answer-input]', "請改到下週五寄出，先讓我確認內容。"), click('[data-owner-answer="text"]'), wait('[data-card-state="answered"]'), check("owner-question-answered")], { ownerQuestion: "asked" }),
 ];

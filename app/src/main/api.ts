@@ -377,8 +377,8 @@ export const mailSave = (id: string, digest: string, fields: { to: string; cc: s
   core("integrations.draft_save", { id, digest, ...fields });
 
 /** 傳送: the version whose digest the card holds, once. */
-export const mailSend = (id: string, digest: string): Promise<{ draft: import("./types").MailDraftCard | null; sent: boolean }> =>
-  core("integrations.draft_send", { id, digest });
+export const mailSend = (id: string, digest: string, retryVersion?: number): Promise<{ draft: import("./types").MailDraftCard | null; sent: boolean }> =>
+  core("integrations.draft_send", { id, digest, ...(retryVersion === undefined ? {} : { retry_version: retryVersion }) });
 
 /** 捨棄: nothing outside changes. */
 export const mailDiscard = (id: string): Promise<{ draft: import("./types").MailDraftCard | null; discarded: boolean }> =>

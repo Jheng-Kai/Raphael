@@ -1,3 +1,4 @@
+import { carryInlineSetup } from "./connection-setup";
 import { patchThread } from "./thread-diff";
 // Group chat entry points share the global sidebar and the conversation header.
 import { mountConversationFind } from "./conversation-find";
@@ -22,6 +23,7 @@ import { createBackgroundQuestions } from "./background-questions";
 import { conversationCardsHTML, filesHTML, messageActionsHTML, updateLiveTimes } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
+import { mountTaskResults } from "./task-result";
 import { mountPages } from "./page-card";
 import { carryTyped } from "./secret-card";
 import { carryMail } from "./mail-card";
@@ -226,6 +228,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   mountConversationScroll(scroll);
   mountRichContent(scroll);
   mountOwnerQuestions(thread, () => { void refresh(); });
+  const resultCards = new WeakMap<HTMLElement, { sync(): void }>();
   mountConversationCardActions(thread, () => _app.go("settings", "connections"));
   const pagesHost = mountPages(thread, { send: text => {
     if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(refresh);
@@ -320,18 +323,29 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       const reply=source?`<span class="au-room-reply">${esc(source.unavailable?t("rooms.sourceMissing"):t("rooms.replyTo",{p0:source.author_kind==="owner"?t("rooms.owner"):person(source.author_member_id??null)?.name??t("rooms.sourceMissing")}))}</span>`:"";
       const actions= messageActionsHTML(m.created, false, undefined, false).replace('</div>',(!owner?iconButton("reply",t("rooms.reply"),` data-room-act="reply" data-message="${m.id}"`).replace(" title="," data-tooltip="):"")+"</div>");
       const preview = ` data-expandable="true"`, expanded = expandedMessages.has(m.id) ? " is-expanded" : "";
-      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn) : ""}</div></div>`}</li>`;
+      return `<li class="tn au-room-message${m.kind==="wrapup"?" au-room-wrapup":""}" data-room-message="${m.id}">${owner?`<div class="me">${ownerFaceHTML()}<div class="chat-message owner-message${expanded}"${preview}>${reply}${filesHTML(m.attachments)}${words?`<div class="bubble"><div class="message-text">${messageHTML(words, "", false, addressable)}</div>${messageExpandHTML(words, expandedMessages.has(m.id))}</div>`:""}${actions}</div></div>`:`<div class="ra"><span class="ra-face">${member?faceHTML(member,30):""}</span><div class="ra-body"><div class="au-room-meta"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${reply}</div>${(parts.some(part=>part.trim())?parts:[words]).map((part,index)=>`<div class="chat-message" data-room-part="${index}">${replyContentHTML(part,"",m.status==="running")}${index===parts.length-1?actions:""}</div>`).join("")}${m.turn ? conversationCardsHTML(m.turn, m.member_id ? member?.name : t("agent.title")) : ""}</div></div>`}</li>`;
     })(), })).filter(line => line.html) : [{ key: "empty", html: `<li class="au-empty">${esc(t("rooms.empty"))}</li>`, turnId: undefined }];
     patchThread(thread, wanted, drawn, {
       arrives: line => drewOnce && line.turnId !== undefined && line.turnId > newestMessage,
       carry(node, made) {
-        const restorePages = pagesHost.carry(node, made), restoreTyped = carryTyped(node, made), restoreMail = carryMail(node, made);
-        return () => { node.before(made); restorePages(); node.remove(); restoreTyped(); restoreMail(); };
+        const restorePages = pagesHost.carry(node, made), restoreTyped = carryTyped(node, made), restoreMail = carryMail(node, made), restoreSetup = carryInlineSetup(node, made);
+        return () => { node.before(made); restorePages(); restoreSetup(); node.remove(); restoreTyped(); restoreMail(); };
       },
     });
     newestMessage = Math.max(newestMessage, ...messages.map(message => message.id)); drewOnce = true;
     updateLiveTimes(thread);
     pagesHost.sync();
+    for (const slot of thread.querySelectorAll<HTMLElement>("[data-task-result-slot]")) {
+      const host = slot.parentElement!, owner = Number(slot.dataset.taskMember);
+      let results = resultCards.get(host);
+      if (!results) {
+        results = mountTaskResults(host, () => owner, () => {
+          window.dispatchEvent(new CustomEvent("raphael:open-member", { detail: { memberId: owner, files: true } }));
+        });
+        resultCards.set(host, results);
+      }
+      results.sync();
+    }
     measureMessagePreviews(thread);
     attachmentMedia.sync();
     composer.draw(); mentions.refresh(); });

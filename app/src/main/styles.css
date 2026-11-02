@@ -5,6 +5,7 @@
 
 /* ---------- tokens ---------- */
 :root {
+  --card-primary: #ffffff; --card-primary-ink: #171717; --card-primary-edge: #d6d6d6;
   --desktop-frame-bg: #171717; --desktop-frame-text: #f0f0f0;
   --sidebar-width: 296px; --window-controls-height: 32px;
   /* scale: spacing, type, radius, control heights (docs/ui.md) */

@@ -1,4 +1,4 @@
-import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, scroll, waitScrollEnd, paste, dropFile } from "./steps.mjs";
+import { scene, click, hover, type, wait, waitGone, member, room, search, check, key, scroll, paste, dropFile } from "./steps.mjs";
 
 const LONG_LINK = "https://x.com/someone/status/2115177376921293212?ref_src=twsrc%5Etfw%7Ctwcamp%5Etweetembed%7Ctwterm%5E2115177376921293212&ref_url=https%3A%2F%2Fexample.com%2Fai-agents-pixel-office-tools";
 const linked = selector => paste(selector, { text: `${LONG_LINK}\n這個是我當時看到的` });
@@ -20,7 +20,7 @@ const mailCard = '[data-mail-card="mail-1"]';
 const mailField = field => `${mailCard} [data-mail-field="${field}"]`;
 // The owner's primary contact (P15b): 小森's menu, 設為主要, and 選擇主要成員 with 小森 chosen already.
 const primaryMenu = [{ action: "member-column", collapsed: false }, click('.mb-col [data-member-more="2"]'), click('#app-popover [data-pick="primary"]'), wait(".mb-dialog.mb-primary-picker")];
-const adminDraftEdits = [wait('.draft-panel:not([hidden])'), type('[data-draft-group="group-1"]', "工作室"), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")];
+const adminDraftEdits = [wait('.draft-panel:not([hidden])'), type('[data-draft-group="group-1"]', "工作室"), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")];
 // Pick the quick conversation, then close the details panel, which covers the composer at compact width.
 const quickOpen = [{ action: "open-details" }, click('[data-conversation-open="4"]'), wait('.tn[data-id="90"]'),
   click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]')];
@@ -111,18 +111,17 @@ export default [
   scene("connector-key", "An app that needs the owner's own key says so on its card, with the button that opens the form",
     [wait('[data-connector="card-acme"]'), check("connector-key")], { connectorCard: "key" }),
   scene("connector-app", "An app that needs a developer app of the owner's own says so on its card",
-    [wait('[data-connector="card-orbit"]'), check("connector-app")], { connectorCard: "app" }),
+    [wait('[data-connector="card-orbit"]'), wait('[data-inline-setup] .cn-fields'), click('[data-connector="card-orbit"] [data-card-disclosure]'), check("connector-app")], { connectorCard: "app" }),
   scene("connector-key-form", "The card's button opens the same form as the store's; nothing is typed into the chat",
-    [wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'), wait('.cn-setup-dialog [data-setup-field]'),
-      type('.cn-setup-dialog [data-setup-field]', setupKey), check("card-setup-form")], { connectorCard: "key" }),
+    [wait('[data-connector="card-acme"]'), wait('[data-inline-setup] [data-setup-field]'),
+      type('[data-inline-setup] [data-setup-field]', setupKey), check("card-setup-form")], { connectorCard: "key" }),
   scene("connector-key-sent", "The key goes to the core in the card's one call and the card follows the core's states",
-    [wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'), wait('.cn-setup-dialog [data-setup-field]'),
-      type('.cn-setup-dialog [data-setup-field]', setupKey), click('.cn-setup-dialog [data-dlg="add"]'), waitGone('.cn-setup-dialog'),
+    [wait('[data-connector="card-acme"]'), wait('[data-inline-setup] [data-setup-field]'),
+      type('[data-inline-setup] [data-setup-field]', setupKey), click('[data-inline-submit]'),
       wait('[data-connector="card-acme"][data-card-state="connected"]'), check("card-setup-sent")], { connectorCard: "key", cardSignIn: "approve" }),
   scene("connector-key-rejected", "A key that was not accepted: the card says so and offers the form again, and the member names what to do",
-    [member(1), wait('[data-connector="card-acme"]'), click('[data-connector="card-acme"] [data-act="card-setup"]'),
-      wait('.cn-setup-dialog [data-setup-field]'), type('.cn-setup-dialog [data-setup-field]', setupKey), click('.cn-setup-dialog [data-dlg="add"]'),
-      waitGone('.cn-setup-dialog'), wait('[data-connector="card-acme"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-reply]'),
+    [member(1), wait('[data-connector="card-acme"]'), wait('[data-inline-setup] [data-setup-field]'), type('[data-inline-setup] [data-setup-field]', setupKey), click('[data-inline-submit]'),
+       wait('[data-connector="card-acme"][data-card-state="failed"]'), wait('.tn[data-id="121"] .ra .chat-message[data-reply]'),
       check("card-key-rejected")],
     { connectorCard: "key", connectorMember: 1, cardSignIn: "fail", cardFailureKind: "key_rejected",
       cardFailureText: "Acme Ledger 沒有接受這把金鑰。請在卡片上按「填入金鑰」再貼一次，或到「設定 › 連接 › 商店」的 Acme Ledger 重新加入。" }),
@@ -145,7 +144,7 @@ export default [
     [wait('[data-secret-card="card-notion"]'), type(secretField, lookKey), click('[data-secret-card="card-notion"] [data-act="card-save"]'),
       wait('[data-secret-card="card-notion"][data-card-error="resume_failed"]'), check("secret-saved-not-resumed")], { secretCard: "notion", resumeFails: true }),
   scene("chat-computer-takeover", "A sign-in request opens the member side panel while chat keeps one centered event",
-    [member(1), wait('.desktop-panel[data-desktop-state="member"]'), check("computer-takeover")], { running:"fresh", runningMember:1, desktop:{state:"running",ready:true,control:"member",works:[{id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state:"waiting_control",tool:"get_desktop_state",reason:"sign_in"}] } }),
+    [member(1), wait('[data-card-desktop-screen] iframe:not([hidden])'), check("computer-takeover")], { running:"fresh", runningMember:1, desktop:{state:"running",ready:true,control:"member",works:[{id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state:"waiting_control",tool:"get_desktop_state",reason:"sign_in"}] } }),
   scene("chat-human-control", "我完成了 pressed before the sign-in is done: the form is still there, so the computer stays the owner's and the card says so",
     [member(1), wait(pcCard), click(`${pcCard} [data-act="card-done"]`), wait(`${pcCard}[data-card-note="still"]`), check("pc-human-control")], { computerCard: "signin" }),
   scene("chat-handback", "我完成了 after the sign-in: the computer goes back, the same task carries on once and its answer follows the card",
@@ -153,27 +152,27 @@ export default [
   scene("local-permission-card", "A step that needs the owner's yes shows a permission card in the chat: the exact action, 拒絕, 一律允許 and 允許一次, and the gold card stays away",
     [wait(permCard("perm-gmail")), check("local-permission-card")], { permissionCard: "tool" }),
   scene("local-command-consent", "All-member consent names the member and keeps the exact command only in the shared card",
-    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "first" }),
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "first" }),
   scene("local-command-later", "Later command approval has Allow, Skip and settings in the same card",
-    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "later" }),
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "later" }),
   scene("local-command-background", "Background local approval uses the same member card and a thirty-minute expiry",
-    [member(1), wait(permCard("perm-local")), check("local-command-card")], { localCommand: "background" }),
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), check("local-command-card")], { localCommand: "background" }),
   ...["once", "always", "never", "deny"].map(choice => scene(`local-command-${choice}`, `The real ${choice} button settles the local command card`,
     [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="perm-${choice}"]`), wait(`${permCard("perm-local")}:not([data-card-state="pending"])`), check("local-command-settled")], { localCommand: "first" })),
   scene("local-command-manage", "The local card opens the shared command permission setting",
-    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-act="local-settings"]`), wait('[data-k="local-commands"]'), scroll('[data-k="local-commands"]'), check("local-command-setting")], { localCommand: "later" }),
+    [member(1), wait(permCard("perm-local")), click(`${permCard("perm-local")} [data-card-disclosure]`), click(`${permCard("perm-local")} [data-act="local-settings"]`), wait('[data-k="local-commands"]'), scroll('[data-k="local-commands"]'), check("local-command-setting")], { localCommand: "later" }),
   scene("draft-preference-ask-first", "A member set to send mail itself still asks when the owner's rule says to ask first: the card names the rule and has no 一律允許",
     [member(1), { action: "open-details" }, click('[data-det="edit"]'), wait(".mb-dialog"), click("#mp-tab-permissions"), wait('.mb-dialog [data-dlg="draft"]'), check("member-draft-switch"),
       click('.mb-dialog [data-dlg="cancel"]'), click('.mb-det [data-det="close"]'), wait('.conversation-trigger[aria-expanded="false"]'),
       wait(permCard("perm-rule")), check("draft-preference-ask-first")], { permissionCard: "ask-first", memberDraftFirst: false }),
   scene("email-draft-edit", "The owner edits the copy and the subject of a member's email draft: each edit is a new version, the card holds the newest digest and nothing is sent",
     [member(1), wait(mailCard), type(mailField("cc"), "boss@example.com"), wait(`${mailCard}[data-version="2"]`), type(mailField("subject"), "回覆：週四下午三點的會議（改期確認）"),
-      wait(`${mailCard}[data-version="3"]`), check("email-draft-edit")], { mailDraft: "draft" }),
+      wait(`${mailCard}[data-version="3"]`), check("email-draft-edit")], { mailDraft: "draft", mailCopy: "reviewer@example.com" }),
   scene("email-draft-discard", "捨棄 drops the draft: one quiet line, and nothing is saved or sent",
     [member(1), wait(mailCard), click(`${mailCard} [data-act="mail-discard"]`), wait(`${mailCard}[data-mail-state="discarded"]`), check("email-draft-discard")], { mailDraft: "draft" }),
   scene("email-draft-handed-off", "The owner lets 小森 send the reply: one centred line in 小晴's chat, and the same version editable in 小森's chat; nothing is sent",
     [member(1), wait('[data-mail-offer="mail-1"]'), click('[data-mail-offer="mail-1"] [data-act="mail-handover-yes"]'), wait('[data-mail-handed="mail-1"]'), check("mail-handed-first"),
-      member(2), wait(mailCard), check("email-draft-handed-off")], { mailDraft: "draft", mailOffer: true }),
+      member(2), wait(mailCard), check("email-draft-handed-off")], { mailDraft: "draft", mailOffer: true, mailCopy: "reviewer@example.com" }),
   scene("composer-learn", "A corrected dictated name is learned on send with one notice", [
     { action: "dictation-paste", selector: ".cmp-input", text: dictationText.before },
     type(".cmp-input", dictationText.after), check("composer-pair"), click(".cmp-send"),
@@ -204,18 +203,18 @@ export default [
   scene("running", "Conversation while a reply is being prepared", [wait('.work-section.is-live'), check("conversation-running")], { running: true }),
   { ...scene("running-motion", "A reply that has just started: its dots move inside their row, held at the top of their bounce, and it says once what is happening", [wait('.work-section.is-live'), { action: "freeze-motion", at: 600 }, check("work-dots")], { running: "fresh" }), motion: true },
   scene("admin-approval", "Raphael's approval survives a concurrent member question", [
-    wait('.ask-card:not([hidden])'),
+    wait('.ask-card-host:not([hidden])'),
     { action: "main-event", event: { type: "AgentQuestion", id: "concurrent-member", member_id: 1, prefix: "問", text: "要儲存研究摘要嗎？", tier: "T2", timeout_ms: 30_000 } },
-    member(1), wait('.ask-card[data-id="concurrent-member"]:not([hidden])'),
-    member(0), wait('.ask-card:not([data-id="concurrent-member"]):not([hidden])'), check("admin-approval"),
+    member(1), wait('.ask-card-host[data-id="concurrent-member"]:not([hidden])'),
+    member(0), wait('.ask-card-host:not([data-id="concurrent-member"]):not([hidden])'), check("admin-approval"),
   ], { adminApproval: "create" }),
-  scene("admin-approval-batch", "One approval lists eight members and the new group", [wait('.ask-card:not([hidden])'), click('.ask-q'), key("End"), waitScrollEnd('.ask-q'), check("admin-approval-batch")], { adminApproval: "batch" }),
-  scene("admin-approval-long", "Complete long instructions remain readable in the approval card", [wait('.ask-card:not([hidden])'), click('.ask-q'), key("End"), waitScrollEnd('.ask-q'), check("admin-approval-long")], { adminApproval: "long" }),
-  scene("admin-delete-approval", "Deleting a member always requires held approval", [wait('.ask-card[data-tier="T3"]:not([hidden])'), check("admin-approval")], { adminApproval: "delete" }),
-  scene("admin-approved", "Approve creation and select the live member", [wait('.ask-card:not([hidden])'), click('.ask-yes'), member(8), { action: "open-details" }, wait('.mb-det:not([hidden])'), check("admin-created")], { adminApproval: "create" }),
-  scene("admin-denied", "Declining creation leaves the team unchanged", [wait('.ask-card:not([hidden])'), click('.ask-no'), wait('.composer:not([hidden])'), check("admin-denied")], { adminApproval: "create" }),
+  scene("admin-approval-batch", "One approval lists eight members and the new group", [wait('.ask-card-host:not([hidden])'), check("admin-approval-batch")], { adminApproval: "batch" }),
+  scene("admin-approval-long", "Complete long instructions remain readable in the approval card", [wait('.ask-card-host:not([hidden])'), check("admin-approval-long")], { adminApproval: "long" }),
+  scene("admin-delete-approval", "Deleting a member requires explicit approval", [wait('.ask-card-host[data-tier="T3"]:not([hidden])'), check("admin-approval")], { adminApproval: "delete" }),
+  scene("admin-approved", "Approve creation and select the live member", [wait('.ask-card-host:not([hidden])'), click('.ask-yes'), member(8), { action: "open-details" }, wait('.mb-det:not([hidden])'), check("admin-created")], { adminApproval: "create" }),
+  scene("admin-denied", "Declining creation leaves the team unchanged", [wait('.ask-card-host:not([hidden])'), click('.ask-no'), wait('.composer:not([hidden])'), check("admin-denied")], { adminApproval: "create" }),
   scene("member-draft", "Editable member draft cards in the conversation", [wait('.draft-panel:not([hidden])'), check("member-draft")], { adminApproval: "draft" }),
-  scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
+  scene("member-draft-edit", "Owner edits a member draft and removes another before confirming", [wait('.draft-panel:not([hidden])'), click('[data-draft-id="draft-1"] [data-draft-act="more"]'), type('[data-draft-id="draft-1"] [data-draft-field="role"]', "首席營運長"), click('[data-draft-id="draft-3"] [data-draft-act="remove"]'), check("member-draft-edit")], { adminApproval: "draft" }),
   scene("member-draft-done", "Confirmed drafts settle into a summary and add members to the column", [wait('.draft-panel:not([hidden])'), click('[data-draft-act="confirm"]'), check('member-draft-submitted'), wait('.draft-done'), click('[data-act="draft-done"]'), wait('.draft-done.is-open'), check("member-draft-done")], { adminApproval: "draft" }),
   scene("empty", "Conversation without turns", [], { turns: [] }),
   scene("row-menu", "Conversation actions in the details panel", [...details, click('.mb-det [data-conversation-section="standard"] [data-conversation-more]'), wait("#app-popover [data-pick]")]),
@@ -283,4 +282,4 @@ export default [
       scene(`${context}-text`, `${context} composer draft`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), check("composer-pair"), ...(context === "member" ? [check("skill-learned-notice")] : [])], context === "member" ? { turns: [{ id: 501, member_id: 1, conversation_id: 11, session_id: "look-skill", created_at_ms: 1792807154000, question: "整理研究摘要", route: "answer", source: "app", prefix: "", text: "研究摘要已整理完成。", status: "done", cost_usd: 0, messages: [{ seq: 1, kind: "event", text: JSON.stringify({ type: "skill_learned", name: "research-summary" }), at_ms: 1792807155000 }], steps: [], attachments: [] }] } : {}),
       scene(`${context}-composer-hover`, `${context} composer send hover`, [...base, type(`${form} textarea`, "請整理今天的研究進度。"), hover(`${form} .cmp-send`), wait('.message-tooltip:not([hidden])'), check("composer-pair")])];
   }),
-];
+].map(scene => ['connector-app','connector-key-form'].includes(scene.name) ? {...scene, captureColumn:true} : scene);

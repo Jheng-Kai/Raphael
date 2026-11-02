@@ -566,3 +566,17 @@ R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges-2026-11-02
 R-UI-73: [members.md](members.md#menus-beside-their-rows-2026-11-02) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080; no look --all, judge, native, cargo or provider requests are authorized.
 
 Review follow-up (2026-11-02): conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
+
+### Shared conversation cards (2026-11-02)
+
+R-CARD-01..75: see the appended shared-card section in `conversation.md` and
+`app/scripts/look/scenes/cards.mjs`. The common `card-shell` assertion applies to
+new and existing card consumers. Run only the mapped card matrix, both themes,
+1120,720,1920x1080; inspect sheets and full-size controls. This task's explicit
+no-judge/no-native/no-network restrictions override integration acceptance steps.
+
+R-CARD-05..77: conversation.md also maps exact connected-message previews and the owner review follow-up (localized action titles, meaningful disclosures, one state, per-kind prompt words and one-line credential hints).
+
+Conversation review: R-CARD-07 covers single-call Composio draft projection and localized member/app identity while preserving approval semantics. R-CARD-08 exempts unanswered owner questions from the waiting pill and covers the rightmost Close plus visible empty/typed submit states. See conversation.md for the selected card, question and approval matrix.
+
+R-CARD-06 review coverage also includes neutral cancelled questions without redundant disclosures and viewer-driven computer waits without a second live work line. conversation.md records the selected 21-scene recheck and the unchanged-renewal/same-stream regression tests.

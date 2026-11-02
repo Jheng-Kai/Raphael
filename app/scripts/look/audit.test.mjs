@@ -72,6 +72,7 @@ describe("rendered look checks", () => {
     for (const scene of files) expect(needsDesktopFixture([scene]), scene.name).toBe(true);
     expect(needsDesktopFixture([{name:'home', fixture:{}}])).toBe(false);
     expect(needsDesktopFixture([{name:'desktop-owner', fixture:{}}])).toBe(true);
+    expect(needsDesktopFixture([{name:'card-sheet', fixture:{cardDeck:true}}])).toBe(true);
   });
   it("treats file paths and diff contents as owner data while still checking checkpoint controls", () => {
     const window = new Window();
@@ -176,6 +177,24 @@ describe("rendered look checks", () => {
       window.document.body.style.backgroundColor = 'white';
       expect(() => checkRendered('desktop-frame')).toThrow('viewer gutters');
     } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
+  });
+  it("checks the same framebuffer after its iframe moves into the conversation card", () => {
+    const window = new Window();
+    window.document.body.innerHTML = '<div class="desktop-shell" hidden style="background:rgb(23,23,23)"></div><section class="conversation-card"><header class="card-head">Computer</header><div data-card-desktop-screen><iframe></iframe></div></section>';
+    const frame = window.document.querySelector('iframe'), win = new Window(), doc = win.document;
+    Object.defineProperty(frame, 'contentDocument', {value:doc});
+    doc.body.style.backgroundColor = 'rgb(23,23,23)';
+    doc.body.innerHTML = `<div id="noVNC_container"><canvas width="${win.innerWidth}" height="${win.innerHeight}"></canvas></div>`;
+    const canvas = doc.querySelector('canvas');
+    canvas.getBoundingClientRect = () => new win.DOMRect(0,0,win.innerWidth,win.innerHeight);
+    doc.elementFromPoint = () => canvas;
+    for (const element of window.document.querySelectorAll('section,header,[data-card-desktop-screen],iframe')) element.getBoundingClientRect = () => new window.DOMRect(0,0,480,270);
+    vi.stubGlobal('document',window.document); vi.stubGlobal('getComputedStyle',window.getComputedStyle.bind(window));
+    try {
+      expect(checkRendered('desktop-frame').check).toBe('desktop-frame');
+      doc.body.style.backgroundColor = 'white';
+      expect(() => checkRendered('desktop-frame')).toThrow('viewer gutters');
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); win.happyDOM.abort(); }
   });
   it("checks remote host settings without entering the computer panel contract", () => {
     const window = new Window();
@@ -721,4 +740,51 @@ it("rejects divergent store add classes, row markup and card styling", () => {
     second.getBoundingClientRect = () => new browser.DOMRect(0, 0, 320, 64);
     expect(() => checkRendered("plugins-store-rows")).toThrow("actions fit inside their row");
   } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
+});
+
+it("allows only the shared card quiet exit to be frameless while rejecting ordinary text actions", () => {
+ const browser = new Window(); browser.document.body.innerHTML='<section class="conversation-card"><footer class="card-actions"><button class="btn card-quiet">Skip</button></footer></section><button class="btn card-quiet">Delete</button>';
+ for(const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect=()=>({left:10,top:10,right:110,bottom:40,width:100,height:30});
+ const result=auditDocument(browser.document,{width:1120,height:900},[],null);
+ const frames=result.productRules.filter(rule=>rule.rule==='R-UI-18'); expect(frames.map(rule=>rule.text)).toEqual(['Delete']); browser.happyDOM.abort();
+});
+
+it("waits for takeover on the visible inline screen rather than its hidden panel", () => {
+  for (const name of ['desktop-takeover-owner', 'desktop-takeover-done']) {
+    const scene = scenes.find(scene => scene.name === name);
+    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '[data-card-desktop-screen][data-owner-control]')).toBe(true);
+    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '.desktop-panel[data-interactive="true"]')).toBe(false);
+  }
+});
+
+it("dispatches task room, file-view and restore assertions through the shared rendered check", () => {
+  const browser = new Window(); browser.document.body.innerHTML='<section data-task-result="950">+1 −1</section><section class="desktop-checkpoints"></section>';
+  browser.document.querySelector('.desktop-checkpoints').getBoundingClientRect=()=>({width:300,height:300});
+  browser.__look={calls:[{method:'computer.checkpoints',params:{action:'restore',review_token:'a'.repeat(64)}}]};
+  const previous={document:globalThis.document,window:globalThis.window}; globalThis.document=browser.document; globalThis.window=browser;
+  try { for (const name of ['card-task-room','card-task-files','card-task-restored']) expect(checkRendered(name)).toEqual({check:name}); }
+  finally { globalThis.document=previous.document; globalThis.window=previous.window; browser.happyDOM.abort(); }
+});
+
+it("requires every card disclosure to add visible text rather than repeat its face", () => {
+  const browser=new Window();
+  browser.document.body.innerHTML='<section class="conversation-card"><p>Already visible</p><div class="card-disclosure"><button data-card-disclosure aria-expanded="false">Show</button><div class="card-detail" hidden></div></div></section>';
+  for(const node of browser.document.querySelectorAll('*')) node.getBoundingClientRect=()=>({width:100,height:30});
+  const previous={document:globalThis.document,window:globalThis.window};globalThis.document=browser.document;globalThis.window=browser;
+  try {
+    expect(()=>checkRendered("card-disclosures")).toThrow("adds visible text");
+    const detail=browser.document.querySelector(".card-detail");detail.textContent="Already visible";
+    expect(()=>checkRendered("card-disclosures")).toThrow("adds visible text");
+    detail.textContent="A previously hidden file path";
+    expect(checkRendered("card-disclosures")).toEqual({check:"card-disclosures"});
+    expect(detail.hidden).toBe(true);
+  } finally {globalThis.document=previous.document;globalThis.window=previous.window;browser.happyDOM.abort();}
+});
+
+it("captures the typed owner answer before submitting, including its enabled primary", () => {
+  const typed = scenes.find(scene => scene.name === "owner-question-typed");
+  expect(typed).toBeDefined();
+  expect(typed.steps.some(step => step.action === "type" && step.selector === "[data-owner-answer-input]")).toBe(true);
+  expect(typed.steps.some(step => step.action === "check" && step.name === "owner-question-typed")).toBe(true);
+  expect(typed.steps.some(step => step.action === "click" && step.selector === '[data-owner-answer="text"]')).toBe(false);
 });

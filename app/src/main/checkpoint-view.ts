@@ -42,7 +42,7 @@ export function confirmRestore(): Promise<boolean> {
   });
 }
 
-export function mountCheckpoints(panel: HTMLElement, member: () => number): { update(available: boolean): void } {
+export function mountCheckpoints(panel: HTMLElement, member: () => number): { update(available: boolean): void; show(): Promise<void> } {
   const button = document.createElement("span");
   button.innerHTML = btn(esc(t("files.changes")), "sm", ' data-checkpoint-open');
   panel.querySelector(".desktop-actions")!.prepend(button.firstElementChild!);
@@ -50,7 +50,7 @@ export function mountCheckpoints(panel: HTMLElement, member: () => number): { up
   const review = document.createElement("div");
   review.className = "desktop-checkpoints"; review.hidden = true;
   panel.append(review);
-  let current = member(), generation = 0, busy = false, confirmationRequired = true;
+  let current = member(), generation = 0, busy = false, confirmationRequired = true, requested = false;
   let kept: string[] = [];
   async function load(): Promise<void> {
     const request = generation, owner = member();
@@ -60,13 +60,16 @@ export function mountCheckpoints(panel: HTMLElement, member: () => number): { up
       review.innerHTML = (kept.length ? `<p class="foot">${esc(t("files.kept"))}</p><ul class="checkpoint-uncovered">${kept.map(path => `<li>${esc(fileName(path))}</li>`).join("")}</ul>` : "") + checkpointsHTML(result.checkpoints, result.busy, result.coverage_warning);
     }
   }
-  open.addEventListener("click", async () => {
+  async function show(): Promise<void> {
     if (busy) return;
-    review.hidden = !review.hidden;
-    if (review.hidden) return;
+    requested = true; review.hidden = false; open.hidden = false;
     busy = open.disabled = true;
     try { await load(); } catch (error) { toaster.info(describeError(error)); }
     finally { busy = open.disabled = false; }
+  }
+  open.addEventListener("click", () => {
+    if (!review.hidden) { requested = false; review.hidden = true; return; }
+    void show();
   });
   review.addEventListener("click", async event => {
     const restore = (event.target as Element).closest<HTMLButtonElement>("[data-checkpoint-restore]");
@@ -85,9 +88,9 @@ export function mountCheckpoints(panel: HTMLElement, member: () => number): { up
     } catch (error) { toaster.info(describeError(error)); }
     finally { busy = restore.disabled = false; }
   });
-  return { update(available) {
-    if (current !== member()) { current = member(); generation++; kept = []; review.hidden = true; review.innerHTML = ""; }
-    open.textContent = t("files.changes"); open.hidden = !available;
-    if (!available) review.hidden = true;
+  return { show, update(available) {
+    if (current !== member()) { current = member(); generation++; requested = false; kept = []; review.hidden = true; review.innerHTML = ""; }
+    open.textContent = t("files.changes"); open.hidden = !available && !requested;
+    if (!available && !requested) review.hidden = true;
   } };
 }

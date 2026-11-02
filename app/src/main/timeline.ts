@@ -364,8 +364,8 @@ function liveStepHTML(task: AgentTask): string {
 const actionsText = (count: number): string => (count === 1 ? t("agent.stepsDoneOne") : t("agent.stepsDone", { p0: count }));
 
 /** The same conversation cards and controls are used in private and room replies. */
-export function conversationCardsHTML(turn: AgentTurn): string {
-  return connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn) +
+export function conversationCardsHTML(turn: AgentTurn, memberName?: string): string {
+  return (turn.task?.state === "done" ? `<div data-task-result-slot="${turn.id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + permissionCardsHTML(turn, undefined, false, memberName) +
     mailCardsHTML(turn) + pageCardsHTML(turn) + ownerQuestionsHTML(turn) +
     (turn.messages ?? []).filter(message => message.kind === "media").map(message => artifactHTML(message.text, message.seq)).join("");
 }
@@ -550,6 +550,7 @@ export function answerMeta(turn: AgentTurn): string {
 /** How a turn is drawn besides its data. */
 export interface TurnLook {
   revealing?: (turnId: number) => boolean;
+  waitingForOwner?: (turnId: number) => boolean;
   regenerateTurnId?: number;
   /** The face of who answers (Raphael's, avatar.ts, or the member's): `loop` while at work on it. */
   face: (loop: boolean) => string;
@@ -591,9 +592,15 @@ const liveWorkHTML = (latest = t("agent.thinking")): string =>
   `<span class="work-latest">${esc(latest)}</span><span class="work-time"></span>`;
 
 /** Background task controls without raw tool labels or a collapsed steps box. */
+function waitsAtCard(turn: AgentTurn): boolean {
+  return !!(turn.permissions?.some(card => card.state === "pending") || turn.secrets?.some(card => card.state === "pending" || card.state === "failed") || turn.connectors?.some(card => card.state === "pending" || card.state === "authorizing") || turn.computers?.some(card => card.state === "control") || turn.owner_questions?.some(question => question.state === "asked"));
+}
+
 function taskActionsHTML(turn: AgentTurn, state: TimelineState): string {
   const task = turn.task;
   if (!task) return "";
+  if (turn.permissions?.length || turn.secrets?.length || turn.connectors?.length || turn.computers?.length || turn.connection_proposals?.length || turn.pages?.length || turn.drafts?.some(draft => draft.mode === "card") || turn.owner_questions?.some(question => question.kind === "ask_owner" || question.kind === "show_page")) return "";
+  if (task.state === "waiting" && turn.owner_questions?.some(question => question.state === "asked")) return "";
   const live = isLive(task) || task.state === "waiting";
   const label = task.state === "waiting" ? task.waiting_owner ? t("ownerQuestion.waiting", { p0: task.waiting_owner }) : t("agent.taskWaiting") : isLive(task) ? t("agent.working") : plain(TASK_ENDS[task.state] ?? "agent.ok");
   return `<div class="turn-event task-actions"><span>${esc(label)}</span>` +
@@ -726,10 +733,10 @@ function meetingEvent(text: string): { room_id: number; name: string } | null {
 const plainLine = (text: string): string => plainReplies([text])[0];
 
 /** Keep all work behind one closed chip; running turns show their latest public update. */
-function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false): string {
+function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, revealing = false, waitingForOwner = false): string {
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && !meetingEvent(m.text) && !learnedSkillEvent(m.text) && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
-  const live = turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   if (!messages.length && !(turn.steps?.length) && !live && !revealing) return "";
   const start = state.workStartedAt.get(turn.id) ?? turn.created_at_ms;
   const firstReply = (turn.messages ?? []).find(m => m.kind === "reply" && m.at_ms >= turn.created_at_ms)?.at_ms;
@@ -816,12 +823,12 @@ export function mediaCardHTML(payload: MediaPayload, query: string, seq?: number
 }
 
 /** Renders all ordered items in `turn.messages` (thinking block, progress, media cards, event chips, replies). */
-function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = ""): string {
+function turnMessagesHTML(turn: AgentTurn, state: TimelineState, query: string, regenerate: boolean, revealing: boolean, settled = "", waitingForOwner = false): string {
   const ordered = [...(turn.messages ?? [])].sort((a, b) => a.seq - b.seq);
   const replies = ordered.filter(m => m.kind === "reply");
   const said = new Map(plainReplies(replies.map(m => m.text)).map((text, index) => [replies[index].seq, text.trim()]));
   const lastReply = [...replies].reverse().find(m => said.get(m.seq))?.seq;
-  const work = workSectionHTML(turn, state, query, revealing);
+  const work = workSectionHTML(turn, state, query, revealing, waitingForOwner);
   const settledDraft = isSettledDraftTurn(turn);
   return work + settled + ordered.filter(message => (message.kind === "reply" && !(settledDraft && said.get(message.seq) === turn.text.trim())) || message.kind === "media").map(message => {
     const text = message.kind === "reply" ? said.get(message.seq) ?? "" : message.text.trim();
@@ -870,7 +877,8 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
   const handed = exchangeTurn(turn);
   const said = turn.question.trim() !== "" && !routine && !resumed && !handed;
   const asked = said || (turn.attachments?.length ?? 0) > 0;
-  const live = turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
+  const waitingForOwner = look.waitingForOwner?.(turn.id) ?? false;
+  const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
   const revealing = look.revealing?.(turn.id) ?? false;
   const meta = esc(answerMeta(turn));
   const more = detail
@@ -897,17 +905,17 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     (isBotRename(turn) ? "" : `<span class="ra-face"${meta ? ` title="${meta}"` : ""}>${look.face(live || revealing)}</span>`) + `<div class="ra-body">` +
     // A question already answered came before the answer: it reads in that order, under the work and above the reply.
     (hasMsgs
-      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true)) + (turn.messages!.some(m => m.kind === "reply") ? "" : textAnswer)
-      : workSectionHTML(turn, state, query, revealing) + permissionCardsHTML(turn, look.answerable, true) + textAnswer) +
+      ? turnMessagesHTML(turn, state, query, regenerate, revealing, permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")), waitingForOwner) + (turn.messages!.some(m => m.kind === "reply") ? "" : textAnswer)
+      : workSectionHTML(turn, state, query, revealing, waitingForOwner) + permissionCardsHTML(turn, look.answerable, true, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + textAnswer) +
     (settledDraft ? settledDraftHTML(turn, detailOpen, query) : "") +
     connectorCardsHTML(turn) + mcpProposalsHTML(turn) + secretCardsHTML(turn) + computerCardsHTML(turn) +
     `<div data-desktop-slot="${id}"></div>` +
-    permissionCardsHTML(turn, look.answerable) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
+    permissionCardsHTML(turn, look.answerable, false, turn.member_id ? look.memberName?.(turn.member_id) : t("agent.title")) + mailCardsHTML(turn, look) + pageCardsHTML(turn) +
     ownerQuestionsHTML(turn) +
     (turn.status === "confirm" ? `<div class="turn-question" data-question-turn="${id}"></div>` : "") +
     (detail ? `<div class="tn-detail" id="tn-detail-${id}"${detailOpen ? "" : " hidden"}>${messageHTML(turn.detail, query, true)}</div>` : "") +
     more +
-    taskActionsHTML(turn, state) +
+    (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") + (waitingForOwner ? "" : taskActionsHTML(turn, state)) +
     `</div></div>`) +
     (turn.messages ?? []).filter(m => m.kind === "event").map(m => learnedSkillEvent(m.text)).filter((name): name is string => name !== null)
       .map(name => `<div class="conversation-event-line">${eventLineHTML(t("skills.learnedNotice", { p0: NAME }), ico("check"), name)}</div>`).join("") + `</li>`

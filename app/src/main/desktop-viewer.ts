@@ -7,6 +7,7 @@ import "./desktop-viewer.css";
 import { mountDesktopTimeline, desktopWorkText, type DesktopWork } from "./desktop-timeline";
 import { mountMemberResources } from "./member-profile-resources";
 import { mountCheckpoints } from "./checkpoint-view";
+import { cardFailure } from "./card";
 
 export interface DesktopState {
   state: "absent" | "unavailable" | "missing" | "stopped" | "incompatible" | "running" | "starting" | "building" | "preparing";
@@ -37,7 +38,7 @@ export function preparationHTML(state: DesktopState): string {
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
-  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean; available?(on: boolean): void; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; view(next: "computer" | "details"): void; viewing(): "computer" | "details" } {
+  options: { timeline: HTMLElement; conversation: () => number | undefined; name: () => string; openPanel(): void; panelVisible(): boolean; available?(on: boolean): void; changed?(): void; stop?(turnId: number): Promise<unknown>; trySkill?(text: string): void }): { show(): void; hide(close?: boolean): void; refresh(): void; sync(): void; carry(before: Element): void; takeover(): void; files(): void; view(next: "computer" | "details"): void; viewing(): "computer" | "details"; waitingForOwner(turnId: number): boolean } {
   const panel = document.createElement("section");
   panel.className = "desktop-panel"; panel.hidden = true;
   panel.innerHTML = `<p class="desktop-request" role="status" hidden></p><div class="desktop-shell"><div class="desktop-heading"><h2></h2><div>${iconButton("expand", t("desktop.expand"), ' data-desktop="expand"')}${iconButton("down", t("desktop.collapse"), ' data-desktop="collapse"')}</div></div>` +
@@ -46,6 +47,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     `<button type="button" class="btn desktop-hit" data-desktop="peek" hidden></button><span class="desktop-owner" role="status" hidden></span></div></div>` +
     `<p class="desktop-error" role="alert" hidden></p><p class="desktop-recording" role="status" hidden></p><div class="desktop-teach-missing" hidden></div><div class="desktop-actions">${btn("", "sm", ' data-desktop="revoke" hidden')}${btn("", "sm", ' data-desktop="retry" hidden')}${btn("", "sm", ' data-desktop="take" hidden')}${btn("", "sm", ' data-desktop="discard-teach" hidden')}${btn("", "sm", ' data-desktop="teach"')}${btn("", "sm pri", ' data-desktop="return" hidden')}</div><div class="desktop-review" hidden></div><div class="desktop-try" hidden><input class="mb-fin" data-teach-input maxlength="4000">${btn("", "sm", ' data-desktop="try-teach"')}</div>`;
   const frame = panel.querySelector<HTMLIFrameElement>('iframe')!;
+  frame.dataset.desktopStream = "";
   frame.remove();
   (host.querySelector('.mb-det-scroll') ?? host).prepend(panel);
   const hit = panel.querySelector<HTMLButtonElement>('[data-desktop="peek"]')!;
@@ -78,7 +80,8 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   const setView = (next: "computer" | "details"): void => { viewing = next; host.dataset.detView = next; };
   setView("details");
   const pending = (): DesktopWork | undefined => state?.works?.find(work => work.state === "waiting_control");
-  const active = (): boolean => visible && options.panelVisible();
+  const waitingTurns = (): string => [...new Set((state?.works ?? []).filter(work => work.state === "waiting_control").map(work => work.turn_id))].sort((a,b) => a-b).join(",");
+  const active = (): boolean => visible && (options.panelVisible() || !!options.timeline.querySelector("[data-card-desktop-screen], [data-card-screen]"));
   const send = (held: boolean, pointer?: { x:number; y:number }): void => { if (session) frame.contentWindow?.postMessage({ type:"raphael-desktop-control", held, pointer }, new URL(session.url).origin); };
 
   function draw(): void {
@@ -131,6 +134,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (state?.state === "absent") placeholder.innerHTML = noticeHTML(state.error === "disabled" ? "installation" : "docker", state.error === "disabled" ? null : "computer", "computer");
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { frame.src = session.url; panel.querySelector('.desktop-screen')!.append(frame); }
+    const inline = options.timeline.querySelector<HTMLElement>('[data-card-desktop-screen], [data-card-screen]');
+    if (inline) {
+      inline.toggleAttribute("data-owner-control", !!owner);
+      const cover = inline.querySelector<HTMLButtonElement>(":scope > button"); if (cover) cover.hidden = !!owner;
+    }
+    const destination = inline && !panel.hasAttribute('data-expanded') ? inline : panel.querySelector<HTMLElement>('.desktop-screen')!;
+    if (frame.hasAttribute('src') && frame.parentElement !== destination) {
+      if ('moveBefore' in destination && frame.isConnected) destination.moveBefore(frame, destination.firstChild);
+      else destination.prepend(frame);
+    }
   }
   function closeStream(): void {
     clearTimeout(lingering);
@@ -179,12 +192,21 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     } catch { error.textContent = t('desktop.unavailable'); error.hidden = false; }
     finally { opening = false; if (current === generation) draw(); }
   }
+  function parkFrame(): void {
+    const destination = panel.querySelector<HTMLElement>('.desktop-screen')!;
+    if (frame.parentElement === destination || !frame.hasAttribute('src')) return;
+    if (destination.moveBefore && frame.isConnected) destination.moveBefore(frame, destination.firstChild);
+    else destination.prepend(frame);
+  }
   function update(next: DesktopState): void {
+    const previousWaiting = waitingTurns();
+    if (!next.works?.some(work => work.state === "waiting_control")) parkFrame();
     state = next; timeline.update(next);
+    if (previousWaiting !== waitingTurns()) options.changed?.();
     if (next.teaching && !teachingBusy) demonstration = next.teaching;
     for (const work of next.works ?? []) {
       const key = `${work.id}:${work.request_id ?? ''}:${work.state === 'waiting_control' ? 'help' : 'work'}`;
-      if (visible && ["running", "waiting_control"].includes(work.state) && !revealed.has(key)) { revealed.add(key); setView("computer"); options.openPanel(); }
+      if (visible && work.state === "running" && !work.request_id && !revealed.has(key)) { revealed.add(key); setView("computer"); options.openPanel(); }
     }
     // Looking never starts a computer: only a running one is streamed, and only a press starts one.
     if (active() && next.state === 'running') void openStream();
@@ -214,7 +236,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       update(next); send(held, pointer);
       if (held) frame.focus({ preventScroll:true });
     } catch {
-      if (current === generation) { error.textContent = t('desktop.busy'); error.hidden = false; }
+      if (current === generation) { error.textContent = t('desktop.busy'); error.hidden = false; cardFailure(options.timeline.querySelector('.desktop-takeover-card, .computer-card'), () => { void control(held); }); }
     } finally { changing = false; if (current === generation) draw(); }
   }
   const expand = (on: boolean): void => {
@@ -283,6 +305,16 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   // A small picture is no place to work: the same stream fills the window, under the owner's hands.
   take.addEventListener('click', () => { expand(true); void control(true); });
   action.addEventListener('click', () => { expand(false); void control(false); });
+  options.timeline.addEventListener('click', event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-card-desktop]');
+    if (!button || button.disabled) return;
+    if (button.dataset.cardDesktop === 'take') { void control(true); }
+    else if (button.dataset.cardDesktop === 'return') { expand(false); void control(false); }
+    else {
+      const work = pending();
+      if (work) void options.stop?.(work.turn_id).catch(() => cardFailure(button.closest('.conversation-card'), () => button.click()));
+    }
+  });
   retry.addEventListener('click', () => { closeStream(); void openStream(); });
   revoke.addEventListener('click', () => {
     void api.desktopRevoke(member()).then(() => { if (state) state = { ...state, granted: false }; draw(); })
@@ -307,7 +339,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       closeStream(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = false; state = undefined; revealed.clear(); timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
+    carry(before) { if (before.contains(frame)) parkFrame(); },
+    takeover() { options.openPanel(); setView("computer"); visible = true; expand(true); void poll().then(() => control(true)); },
+    files() { setView("computer"); options.openPanel(); visible = true; void checkpoints.show(); },
     view: setView,
     viewing: () => viewing,
+    waitingForOwner: turnId => !!state?.works?.some(work => work.turn_id === turnId && work.state === "waiting_control"),
   };
 }

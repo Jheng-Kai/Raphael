@@ -25,7 +25,7 @@ const app = resolve(import.meta.dirname, "../..");
 const requireFromApp = createRequire(join(app, "package.json"));
 export const REQUIRED_PUPPETEER = "puppeteer-core@25.13.0";
 
-export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
+export const needsDesktopFixture = selected => selected.some(scene => scene.fixture?.desktop || scene.fixture?.cardDeck || scene.name.startsWith("desktop-") || scene.name === "chat-computer-takeover");
 
 export function browserPath() {
   const candidates = [process.env.LOOK_BROWSER,
@@ -222,11 +222,22 @@ export async function run(options) {
             catch (value) { error("layout", value.message); }
           }
         }
+        if (!scene.entry && await page.evaluate(() => [...document.querySelectorAll('.conversation-card')].some(card => !card.closest('[hidden]')))) {
+          try { (result.assertions ??= []).push(await page.evaluate(checkRendered, "card-shell")); }
+          catch (value) { error("layout", value.message); }
+        }
         const mockErrors = await page.evaluate(() => window.__look?.errors ?? ["Mock boundary was not installed"]);
         for (const message of mockErrors) error("ipc", message);
         const image = `${scene.name}-${theme}-${width}.png`;
         await page.screenshot({ path: join(directory, image), type: "png" });
         result.image = image;
+        if (scene.captureColumn) {
+          const height = await page.evaluate(() => Math.min(6000, Math.ceil(document.querySelector('.thread')?.scrollHeight ?? document.querySelector('.ra-body')?.closest('.thread')?.scrollHeight ?? document.querySelector('.mb-chat')?.scrollHeight ?? 4000) + 300));
+          await page.setViewport({width, height: Math.max(height, 4000)});
+          const columnImage = `${scene.name}-${theme}-${width}-column.png`;
+          await page.screenshot({path: join(directory, columnImage), type: "png"});
+          result.columnImage = columnImage;
+        }
         result.failed = failedChecks(result);
       } catch (value) { error("capture", value.message); }
       finally { await page.close(); }

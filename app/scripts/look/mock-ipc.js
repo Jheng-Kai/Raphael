@@ -250,8 +250,10 @@ export function installMock(fixture, config = {}, target = window) {
   // (`agent_question_open`), answered with `agent_question_answer`; the card follows the answer as the core reports it.
   // `memberDraftFirst` sets whether 小晴 writes mail as a draft first.
   let permission = null;
+  const messagePreview = { workspace: "範例工作室", to: "#規劃", thread: "123.456", body: "請確認範例排程，並回覆方便討論的時間。" };
   if (variant.permissionCard) {
     const made = structuredClone(data.permissionTurns[variant.permissionCard]);
+    if (variant.cardMessagePreview) Object.assign(made.turn.permissions[0], { service: "Slack", tool: "SLACK_SEND_MESSAGE", summary: "透過 Slack 傳送規劃訊息。", message: messagePreview });
     data.turns.push(made.turn);
     permission = { ...made, card: made.turn.permissions[0] };
   }
@@ -274,6 +276,7 @@ export function installMock(fixture, config = {}, target = window) {
   // `mailOffer` has the member ask whether 小森 may send it.
   if (variant.mailDraft) {
     const mail = structuredClone(data.mailTurns[variant.mailDraft]);
+    if (typeof variant.mailCopy === "string") mail.drafts[0].cc = variant.mailCopy;
     if (variant.missingMail) mail.drafts[0].senders = [];
     if (variant.mailOffer) mail.drafts[0].offer = { member_id: 2, name: data.members.find(member => member.id === 2).name };
     data.turns.push(mail);
@@ -289,6 +292,7 @@ export function installMock(fixture, config = {}, target = window) {
     const kind = variant.roomOwnerCard;
     const base = kind === "connect" ? data.connectorTurns.gmail : kind === "secret" ? data.secretTurns.notion : kind === "mail" ? data.mailTurns.draft : data.turns.at(-1);
     const turn = { ...structuredClone(base), id: 950, member_id: 1, scope: "room", room_id: 1, conversation_id: null, steps: [] };
+    if (kind === "result") turn.task = {id:950,state:"done"};
     if (kind === "page") {
       turn.owner_questions = [{ ...structuredClone(data.ownerQuestionCard), id: "room-page-q", task_id: 950, turn_id: turn.id,
         kind: "show_page", card_id: "page-product", question: "請在頁面選擇商品。", options: [] }];
@@ -460,6 +464,27 @@ export function installMock(fixture, config = {}, target = window) {
   }
   // Sidebar and overview use the same ledger rows, including floating-point totals.
   if (!variant.homeEmpty && !variant.homeSparse) data.status.spend.month_usd = usageBill("month").cost_usd;
+  if (variant.cardDeck || variant.cardTaskResult) {
+    const base = structuredClone(data.mailTurns.draft);
+    Object.assign(base, {id: 980, member_id:1, conversation_id:11, question:'整理專案摘要。', text:'專案摘要已備妥，請確認。', steps:[], messages:[], drafts:[], task:{id:980,state:'done'}});
+    if (variant.cardDeck) Object.assign(base, {
+      drafts: structuredClone(data.mailTurns.draft.drafts),
+      connectors: [structuredClone(data.connectorTurns.gmail.connectors[0])],
+      secrets: [structuredClone(data.secretTurns.notion.secrets[0])],
+      permissions: [structuredClone(data.permissionTurns.tool.turn.permissions[0])],
+      owner_questions: [structuredClone(data.ownerQuestionCard)],
+      connection_proposals: [structuredClone(data.mcpProposalCard)],
+      computers: [],
+    });
+    if (variant.cardDeck) {
+      base.drafts[0].cc = "copy@example.invalid";
+      base.permissions.push({...structuredClone(base.permissions[0]), id:"sheet-message", service:"Slack", tool:"SLACK_SEND_MESSAGE", message:messagePreview});
+      adminQuestion = {...structuredClone(data.adminQuestions.draft), member_id:1, conversation_id:11, turn_id:980};
+      data.desktop = {state:"running",ready:true,control:"member",works:[{id:"sheet-computer",request_id:"sheet-request",turn_id:980,state:"waiting_control",reason:"sign_in",tool:"get_desktop_state"}]};
+      base.status = "confirm";
+    }
+    data.turns = [base];
+  }
   const state = { data, calls: [], errors: [], urls: [], sent: [], exported: null, channel: null, emit(event) {
     if (event.type === "AgentTurn" && arrivals.has(event.turn_id)) { data.turns.push(arrivals.get(event.turn_id)); arrivals.delete(event.turn_id); }
     state.channel?.onmessage(event);
@@ -1028,7 +1053,11 @@ export function installMock(fixture, config = {}, target = window) {
           return { draft: copy(draft), saved: true };
         }
         if (method === "integrations.draft_send") {
-          if (p.digest !== draft.digest || draft.state !== "draft") return { draft: copy(draft), sent: false };
+          if (p.retry_version !== undefined && draft.state === 'failed' && p.retry_version === draft.version && p.digest === draft.digest) {
+            draft.version++; draft.digest = 'c'.repeat(63) + draft.version; draft.state = 'draft';
+          }
+          if (p.digest !== draft.digest && p.retry_version === undefined || draft.state !== "draft") return { draft: copy(draft), sent: false };
+          if (variant.cardMailFailure && !variant.cardMailRetried) { variant.cardMailRetried = true; draft.state = 'failed'; draft.error = 'send_failed'; changed(); return {draft:copy(draft),sent:false}; }
           state.sent.push({ id: draft.id, digest: p.digest, via: draft.from.key, to: draft.to, cc: draft.cc, subject: draft.subject, body: draft.body });
           draft.state = "sent";
           changed();
@@ -1094,9 +1123,9 @@ export function installMock(fixture, config = {}, target = window) {
         return {ok:true,status:connected};
       }
       case "computer.checkpoints": {
-        const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:[{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
+        const checkpoint = {id:'1234567890abcdef1234567890abcdef',member:1,turn:variant.roomOwnerCard === 'result' ? 950 : variant.cardTaskResult || variant.cardDeck ? 980 : 7,created:1792807185000,state:'ready',review_token:'a'.repeat(64),partial:!!variant.checkpointPartial,uncovered:variant.checkpointPartial ? ['/home/cua/workspace/video.mp4','/home/cua/workspace'] : [],files:[{path:'/home/cua/team/report.md',diff:'--- before\n+++ after\n@@ -1 +1 @@\n-舊版研究摘要\n+新版研究摘要，附來源與日期。\n'}]};
         if (p.action === 'restore') { variant.checkpointRestored = true; return {restored:[checkpoint.files[0].path],skipped:[]}; }
-        return {checkpoints:variant.checkpoints ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
+        return {checkpoints:variant.checkpoints || variant.cardDeck ? [{...checkpoint,state:variant.checkpointRestored ? 'restored' : 'ready'}] : [],busy:false,confirmation_required:data.settings.action_mode !== 'bypass'};
       }
       case "messaging.telegram.remove_user": data.messaging.allowed = data.messaging.allowed.filter(user => user.user_id !== p.user_id); return data.messaging;
       case "secrets.clear_openrouter_key": keyRemoved = true; return {};
@@ -1154,6 +1183,7 @@ export function installMock(fixture, config = {}, target = window) {
         return;
       }
       if (command === "agent_ask_text") {
+        if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
         if (variant.ownerAddition) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
           if (!active) throw new Error("No running member turn");
@@ -1172,6 +1202,7 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "agent_question_open") return copy(adminQuestion ?? permission?.question ?? null);
       if (command === "agent_question_answer" && permission) {
         if (args.id !== permission.question.id) throw new Error("Unknown permission question");
+        if (variant.cardPermissionFailure && !variant.cardPermissionRetried) { variant.cardPermissionRetried = true; throw new Error("Synthetic approval unavailable"); }
         // The core settles the card once, and the turn with what Raphael says of it.
         const { turn, card } = permission;
         if (card.kind === "local_access" && args.approved && args.always) data.settings.local_commands_mode = "always";
@@ -1257,7 +1288,10 @@ export function installMock(fixture, config = {}, target = window) {
       if (command === "mic_access") return { allowed: true, blocked_by: null };
       if (command === "schedule_keep_awake_get") return data.awake ?? false;
       if (command === "schedule_keep_awake_set") return data.awake = args.enabled;
-      if (["open_external_url", "open_link"].includes(command)) { state.urls.push(args.url); return; }
+      if (["open_external_url", "open_link"].includes(command)) {
+        if (variant.cardLinkFailure && !variant.cardLinkRetried) { variant.cardLinkRetried = true; throw new Error("Unavailable"); }
+        state.urls.push(args.url); return;
+      }
       if (command === "save_usage_csv") { state.exported = args.csv; return true; }
       if (["agent_page_shown", "hotkeys_pause", "hotkeys_practice", "plugin:event|unlisten", "plugin:window|set_focus", "plugin:window|minimize", "plugin:window|close", "plugin:window|start_dragging", "plugin:webview|set_webview_zoom"].includes(command)) return;
       return unsupported(command);

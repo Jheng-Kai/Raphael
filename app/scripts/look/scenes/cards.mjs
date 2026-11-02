@@ -1,0 +1,45 @@
+import chat from "./chat.mjs";
+import questions from "./owner-questions.mjs";
+import mcp from "./mcp-proposals.mjs";
+import pages from "./pages.mjs";
+import { scene, check, click, key, member, room, scroll, type, wait } from "./steps.mjs";
+
+const source = [...chat, ...questions, ...mcp, ...pages];
+const alias = (name, original) => ({...source.find(scene => scene.name === original), name});
+const computer = {running:"fresh",runningMember:1,desktop:{state:"running",ready:true,control:"member",works:[{id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state:"waiting_control",tool:"get_desktop_state",reason:"sign_in"}]}};
+const entry = [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])')];
+export default [
+  ...Object.entries({
+    "card-page-ready":"page-product", "card-page-failed":"page-gone", "card-background":"room-question-card",
+    "card-mail-ready":"email-draft-edit", "card-mail-discarded":"email-draft-discard",
+    "card-question-waiting":"owner-question-asked", "card-question-answered":"owner-question-answered", "card-question-cancelled":"owner-question-cancelled", "card-question-text":"owner-question-text", "card-question-typed":"owner-question-typed",
+    "card-permission-waiting":"local-permission-card", "card-approval":"admin-approval", "card-team":"member-draft", "card-team-done":"member-draft-done",
+    "card-connect-waiting":"connector-slack", "card-connect-authorizing":"connector-authorizing", "card-connect-done":"connector-reconnected", "card-connect-failed":"connector-invalid-request",
+    "card-key-waiting":"connector-key-form", "card-key-done":"connector-key-sent", "card-key-failed":"connector-key-rejected", "card-secret":"chat-secret-masked", "card-secret-failed":"chat-secret-saved-not-resumed",
+    "card-computer-done":"chat-handback", "card-mcp-draft":"mcp-proposal-edit", "card-mcp-tested":"mcp-proposal-tested", "card-mcp-done":"mcp-proposal-enabled", "card-mcp-cancelled":"mcp-proposal-cancelled",
+  }).map(([name, original]) => { const found=alias(name,original); if(!found.steps) throw new Error(`Missing card scene ${original}`); return found; }),
+  ...['once','always','deny'].map(choice=>scene(`card-permission-${choice}`,`The ${choice} answer settles the original permission`,[wait('[data-permission-card]'),click(`[data-act="perm-${choice}"]`),wait('[data-permission-card]:not([data-card-state=pending])'),check('card-permission-settled')],{permissionCard:'tool'})),
+  scene('card-login','Login credentials stay masked in the card',[member(1),wait('[data-login-user]'),type('[data-login-user]','reader@example.invalid'),type('[data-secret-input]','synthetic-password'),check('card-shell')],{loginCard:true}),
+  scene('card-question-key','A focused question takes B, while typing A stays in the answer field', [member(1),wait('[data-owner-question="owner-choice"]'),type('[data-owner-answer-input]','A'),check('card-question-typing'),click('[data-owner-question="owner-choice"] .card-title'),key('b'),wait('[data-card-state="answered"]'),check('card-question-key')],{ownerQuestion:'asked'}),
+  scene('card-computer-waiting','The existing live stream sits inside the waiting card', [...entry,check('card-computer-inline')],computer),
+  scene('card-computer-takeover','Screen click takes the current stream without reconnecting', [...entry,click('[data-card-desktop-screen] button'),wait('[data-card-desktop-screen][data-owner-control]'),check('computer-takeover-owner')],computer),
+  scene('card-computer-handback','The card hands back the same nonce once', [...entry,click('[data-card-desktop="take"].pri'),wait('[data-card-desktop-screen][data-owner-control]'),click('[data-card-desktop="return"]'),wait('.computer-card .card-status.is-done'),check('computer-takeover-done')],computer),
+  scene('card-send-failed','A failed message returns to the composer with a local retry', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('.composer-failure .card-status.is-failed'),check('card-send-failed')],{cardSendFailure:true}),
+  scene('card-send-retry','Retry delivers the restored words once more', [member(1),type('.cmp-input','Please review the project note.'),click('.cmp-send'),wait('[data-card-retry]'),click('[data-card-retry]'),wait('.cmp-input'),check('card-send-retry')],{cardSendFailure:true}),
+  scene('card-mail-failed','Failed mail retains its editable version', [member(1),wait('[data-mail-card]'),click('[data-act="mail-send"]'),wait('[data-mail-state="failed"]'),check('card-mail-failed')],{mailDraft:'draft',cardMailFailure:true}),
+  scene('card-mail-retry','Explicit mail retry creates a new version and sends once', [member(1),wait('[data-mail-card]'),click('[data-act="mail-send"]'),wait('[data-mail-state="failed"]'),click('[data-act="mail-send"]'),wait('[data-mail-state="sent"]'),check('card-mail-retry')],{mailDraft:'draft',cardMailFailure:true}),
+  scene('card-message-waiting','Connected message fields stay folded until reviewed', [wait('[data-permission-card]'),click('[data-card-disclosure]'),check('card-message')],{permissionCard:'tool',cardMessagePreview:true}),
+  ...['once','deny'].map(choice=>scene(`card-message-${choice}`, 'One original approval settles the same connected message draft', [wait('[data-permission-card]'),click(`[data-act="perm-${choice}"]`),wait('[data-permission-card]:not([data-card-state=pending])'),click('[data-card-disclosure]'),check('card-message')],{permissionCard:'tool',cardMessagePreview:true})),
+  scene('card-message-failed','Failed approval keeps the connected message draft', [wait('[data-permission-card]'),click('[data-act="perm-once"]'),wait('[data-card-retry]'),click('[data-card-disclosure]'),check('card-message')],{permissionCard:'tool',cardMessagePreview:true,cardPermissionFailure:true}),
+  scene('card-message-retry','Retry settles the original connected message approval once', [wait('[data-permission-card]'),click('[data-act="perm-once"]'),wait('[data-card-retry]'),click('[data-card-retry]'),wait('[data-permission-card]:not([data-card-state=pending])'),click('[data-card-disclosure]'),check('card-message')],{permissionCard:'tool',cardMessagePreview:true,cardPermissionFailure:true}),
+  scene('card-mail-close','Closing failed mail leaves the draft unsent', [member(1),wait('[data-mail-card]'),click('[data-act="mail-send"]'),wait('[data-mail-state="failed"]'),click('[data-mail-card] [data-card-failed-close]'),check('card-failed-close')],{mailDraft:'draft',cardMailFailure:true}),
+  scene('card-page-close','Closing an unavailable page does not open it again', [member(1),wait('.pg-failed:not([hidden])'),click('.pg-failed [data-card-failed-close]'),check('card-failed-close')],{pageTurn:true,pageGone:true}),
+  (() => { const failed=alias('card-connect-close','connector-invalid-request'); return {...failed, steps:[...failed.steps,click('[data-connector] [data-card-failed-close]'),check('card-failed-close')]}; })(),
+  (() => { const key=alias('card-key-guide-retry','connector-key-form'); return {...key, fixture:{...key.fixture,cardLinkFailure:true}, steps:[...key.steps,click('[data-inline-setup] [data-card-disclosure]'),click('[data-inline-setup] [data-dlg="guide"]'),wait('[data-card-retry]'),click('[data-card-retry]'),check('card-guide-retry')]}; })(),
+  scene('card-task-result','Only checkpoint-backed file changes make a result card', [member(1),wait('[data-task-result="980"]'),check('card-task-result')],{cardTaskResult:true,checkpoints:true}),
+  scene('card-task-room','Room checkpoint cards open the same member file view', [room(1),wait('[data-task-result="950"]'),check('card-task-room'),click('[data-task-files]'),wait('.desktop-checkpoints:not([hidden])'),check('card-task-files')],{roomOwnerCard:'result',checkpoints:true}),
+  scene('card-task-files','Task files open the existing checkpoint view even without a running desktop', [member(1),wait('[data-task-result="980"]'),click('[data-task-files]'),wait('.desktop-checkpoints:not([hidden])'),check('card-task-files')],{cardTaskResult:true,checkpoints:true}),
+  scene('card-task-restored','Restore uses the current checkpoint review token and settles the result', [member(1),wait('[data-task-result="980"]'),click('[data-task-restore]'),wait('.mb-confirm'),click('[data-dlg="restore"]'),wait('[data-task-result="980"]:not(:has([data-task-restore]))'),check('card-task-restored')],{cardTaskResult:true,checkpoints:true}),
+  scene('card-task-prose','A completed task without files stays prose', [member(1),wait('.tn[data-id="980"]'),check('card-task-prose')],{cardTaskResult:true,checkpoints:false}),
+  {...scene('card-sheet','Production cards in one conversation column', [member(1),wait('[data-task-result="980"]'),wait('[data-card-desktop-screen] iframe:not([hidden])'),scroll('.tn[data-id="980"]'),check('card-sheet')],{cardDeck:true}), captureColumn:true},
+].map(scene => scene.name.startsWith('card-message-') ? {...scene, captureColumn:true} : scene);

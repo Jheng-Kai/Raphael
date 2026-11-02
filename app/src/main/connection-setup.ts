@@ -1,12 +1,13 @@
 // The small window that asks for what an app of the store needs before it can be added: the owner's own API
 // key, or the id and secret of a developer app of their own (`connectors.toolkit` says which, field by field,
-// and where the owner finds it). The store's 加入 and a chat's connection card open the same window.
+// and where the owner finds it). Store setup uses a window; conversation setup stays in its originating card.
 //
 // What is typed goes to the core in one call (`hooks.connect`) and to nothing else: the secret fields are
 // emptied the moment they are read, a value is never kept in a variable of this file past that call, and the
 // window says in a plain line that Composio keeps it. Every word of what is needed comes from the core.
 
 import "./connection-setup.css";
+import { cardDisclosureHTML, cardFailure } from "./card";
 import * as api from "./api";
 import { t } from "./i18n";
 import { type Dialog, openDialog } from "./member-dialogs";
@@ -28,6 +29,95 @@ export interface SetupHooks {
   composioKey?(): void;
 }
 
+/** Move an already loaded inline form before its old reply is removed. Its secrets stay in its own fields. */
+export function carryInlineSetup(before: Element, after: Element): () => void {
+  const pairs = [...before.querySelectorAll<HTMLElement>("[data-inline-setup]")].flatMap(old => {
+    const fresh = [...after.querySelectorAll<HTMLElement>("[data-inline-setup]")].find(slot => slot.dataset.inlineSetup === old.dataset.inlineSetup &&
+      slot.dataset.toolkit === old.dataset.toolkit && slot.dataset.needs === old.dataset.needs);
+    return fresh && old.querySelector("[data-setup-field]") ? [{old, fresh}] : [];
+  });
+  return () => { for (const {old, fresh} of pairs) {
+    const parent = fresh.parentElement!;
+    if (parent.moveBefore && old.isConnected) parent.moveBefore(old, fresh); else parent.insertBefore(old, fresh);
+    fresh.remove();
+    const trigger = parent.querySelector<HTMLElement>('[data-act="card-setup"]'); if (trigger) trigger.hidden = true;
+  } };
+}
+
+/** Conversation credentials use the catalog's existing fields inside their originating card. */
+export function mountInlineConnectionSetup(thread: HTMLElement,
+  connect: (id: string, fields: Record<string, string>) => Promise<{ connected: boolean; error?: string }>): { disconnect(): void } {
+  const loaded = new WeakSet<Element>();
+  const plans = new WeakMap<Element, ToolkitPlan>();
+  let active = true;
+  const act = (slot: HTMLElement, action: () => Promise<unknown>): void => {
+    void Promise.resolve(action()).catch(() => cardFailure(slot.closest(".conversation-card"), () => act(slot, action)));
+  };
+  const load = async (slot: HTMLElement): Promise<void> => {
+    if (loaded.has(slot)) return;
+    loaded.add(slot);
+    try {
+      const plan = await api.connectorsToolkit(slot.dataset.toolkit ?? "");
+      if (!active || !slot.isConnected) return;
+      plans.set(slot, plan);
+      slot.classList.add("inline-connection-setup");
+      slot.innerHTML = fieldsHTML(plan) + `<div class="card-actions">${btn(esc(t("card.keySave")), "sm pri", " data-inline-submit")}</div>` +
+        `<p class="card-shield">${ico("lock")}<span>${esc(t(plan.needs === "own_app" ? "setup.keepApp" : "setup.keepKey"))}</span></p>` +
+        cardDisclosureHTML(`setup-${slot.dataset.inlineSetup}`, whereHTML(plan, true) + stepsHTML(plan, true) + redirectHTML(plan), t("setup.where"));
+      const old = slot.closest("[data-connector]")?.querySelector<HTMLElement>('[data-act="card-setup"]');
+      if (old) old.hidden = true;
+    } catch {
+      if (active && slot.isConnected) cardFailure(slot.closest(".conversation-card"), () => { loaded.delete(slot); void load(slot); });
+    }
+  };
+  const guide = async (slot: HTMLElement): Promise<void> => {
+    if (loaded.has(slot)) return;
+    loaded.add(slot);
+    const name = slot.dataset.secretGuide ?? "";
+    try {
+      const direct = /^https:\/\//.test(name) ? name : undefined;
+      const plan = direct ? undefined : await api.connectorsToolkit(name.toLowerCase().replace(/[^a-z0-9_-]/g, ""));
+      if (!active || !slot.isConnected) return;
+      const url = direct ?? plan?.guide_url ?? plan?.app_url;
+      if (url && /^https:\/\//.test(url)) {
+        slot.innerHTML = btn(`${ico("external")}${esc(t("setup.guideOpen", { p0: plan?.name ?? name }))}`, "sm", " data-secret-guide-open");
+        slot.querySelector("button")!.addEventListener("click", () => act(slot, () => api.openExternalUrl(url)));
+      }
+    } catch { /* Some private connections have no catalog entry; their declared field remains visible. */ }
+  };
+  const scan = (): void => {
+    for (const slot of thread.querySelectorAll<HTMLElement>("[data-inline-setup]")) void load(slot);
+    for (const slot of thread.querySelectorAll<HTMLElement>("[data-secret-guide]")) void guide(slot);
+  };
+  const clicked = (event: Event): void => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-inline-submit],[data-dlg]");
+    const slot = button?.closest<HTMLElement>("[data-inline-setup]");
+    const plan = slot && plans.get(slot);
+    if (!button || !slot || !plan || button.disabled) return;
+    if (!button.hasAttribute("data-inline-submit")) {
+      const url = button.dataset.dlg === "guide" ? plan.guide_url : button.dataset.dlg === "home" ? plan.app_url : null;
+      if (url && /^https:\/\//.test(url)) act(slot, () => api.openExternalUrl(url));
+      if (button.dataset.dlg === "copy" && plan.redirect_url) act(slot, () => copyText(plan.redirect_url!));
+      return;
+    }
+    const inputs = [...slot.querySelectorAll<HTMLInputElement>("[data-setup-field]")];
+    const missing = inputs.find(input => plan.fields.find(field => field.name === input.dataset.setupField)?.required && !input.value.trim());
+    if (missing) { missing.focus(); return; }
+    const values = Object.fromEntries(inputs.map(input => [input.dataset.setupField!, input.value]));
+    inputs.forEach(input => { if (input.type === "password") input.value = ""; input.disabled = true; });
+    button.disabled = true;
+    void connect(slot.dataset.inlineSetup!, values).then(result => {
+      if (!result.connected) throw new Error("Connection incomplete");
+    }).catch(() => {
+      inputs.forEach(input => { input.disabled = false; }); button.disabled = false;
+      cardFailure(slot.closest(".conversation-card"), () => { inputs.find(input => input.type === "password")?.focus(); });
+    });
+  };
+  thread.addEventListener("click", clicked);
+  const observer = new MutationObserver(scan); observer.observe(thread, { childList: true, subtree: true }); scan();
+  return { disconnect() { active = false; observer.disconnect(); thread.removeEventListener("click", clicked); } };
+}
+
 /** The words of the one plain line under a form that failed, by what the core called the failure. */
 function failureText(name: string, kind: string): string {
   switch (kind) {
@@ -47,19 +137,19 @@ const linkRow = (label: string, act: string): string =>
   `<p class="cn-link">${btn(`${ico("external")}${esc(label)}`, "sm", ` data-dlg="${act}"`)}</p>`;
 
 /** Where the owner gets what is asked: the guide the catalog gives, else the service's own page, else a plain "look it up". */
-function whereHTML(plan: ToolkitPlan): string {
+function whereHTML(plan: ToolkitPlan, inline = false): string {
   const name = plan.name;
   const body = plan.guide_url ? linkRow(t("setup.guideOpen", { p0: name }), "guide")
     : plan.app_url ? `<p>${esc(t("setup.noGuide", { p0: name }))}</p>${linkRow(t("setup.homeOpen", { p0: name }), "home")}`
     : `<p>${esc(t("setup.noLink", { p0: name }))}</p>`;
-  return `<section class="cn-where"><h3>${esc(t("setup.where"))}</h3>${body}</section>`;
+  return `<section class="cn-where">${inline ? "" : `<h3>${esc(t("setup.where"))}</h3>`}${body}</section>`;
 }
 
-function stepsHTML(plan: ToolkitPlan): string {
+function stepsHTML(plan: ToolkitPlan, inline = false): string {
   const labels = plan.fields.filter(field => field.required).map(field => field.label).join(", ");
   const steps = plan.needs === "own_app"
-    ? [t("setup.appStep1", { p0: plan.name }), t("setup.appStep2"), t("setup.appStep3", { p0: labels })]
-    : [t("setup.keyStep1", { p0: plan.name }), t("setup.keyStep2", { p0: labels }), t("setup.keyStep3")];
+    ? [t("setup.appStep1", { p0: plan.name }), t("setup.appStep2"), t(inline ? "setup.appStepInline" : "setup.appStep3", { p0: labels })]
+    : [t("setup.keyStep1", { p0: plan.name }), t("setup.keyStep2", { p0: labels }), t(inline ? "setup.keyStepInline" : "setup.keyStep3")];
   return `<ol class="cn-steps">${steps.map(step => `<li>${esc(step)}</li>`).join("")}</ol>`;
 }
 
@@ -72,7 +162,7 @@ const redirectHTML = (plan: ToolkitPlan): string => plan.needs === "own_app" && 
 function fieldsHTML(plan: ToolkitPlan): string {
   return `<div class="cn-fields">${plan.fields.map((field, index) =>
     `<label class="cn-field"><span class="cn-label">${esc(field.label)}${field.required ? "" : ` <i>(${esc(t("setup.optional"))})</i>`}</span>` +
-    (field.description ? `<span class="cn-hint">${esc(field.description)}</span>` : "") +
+    (field.description ? `<span class="cn-hint" title="${esc(field.description)}">${esc(field.description)}</span>` : "") +
     `<input class="field" type="${field.secret ? "password" : "text"}" data-setup-field="${esc(field.name)}"` +
     `${field.default ? ` placeholder="${esc(field.default)}"` : ""} autocomplete="${field.secret ? "new-password" : "off"}"` +
     ` spellcheck="false" autocapitalize="off"${index === 0 ? " data-setup-first" : ""}></label>`).join("")}</div>`;

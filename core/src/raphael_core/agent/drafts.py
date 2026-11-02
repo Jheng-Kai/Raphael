@@ -496,6 +496,15 @@ class EmailDrafts:
         digest = params.get("digest")
         if not isinstance(digest, str):
             raise invalid_params("digest must be text")
+        retry_version = params.get("retry_version")
+        if retry_version is not None:
+            if type(retry_version) is not int or retry_version != draft.version or draft.state != "failed" or digest != draft.digest:
+                return {"draft": self._view(draft.id), "sent": False}
+            # Only the owner's explicit retry creates a new attempt. Replayed clicks keep their old version.
+            draft = self.store.revise(draft, send_via=draft.send_via, to=draft.to, cc=draft.cc,
+                                      subject=draft.subject, body=draft.body, by_owner=True, base_digest=digest)
+            if draft is None:
+                return {"draft": self._view(params["id"]), "sent": False}
         if digest != draft.digest or draft.state != "draft":
             return {"draft": self._view(draft.id), "sent": False}
         tool = self.sender(draft.send_via)

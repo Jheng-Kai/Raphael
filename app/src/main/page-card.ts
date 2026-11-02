@@ -3,12 +3,13 @@
 // core: it can only post messages to the frame's parent, and everything it asks for is checked here. A thread redraw
 // moves the live frame to the new card, so a page does not reload and lose what the owner did in it.
 import "./page-card.css";
+import { cardFailure, cardHTML, cardStatusHTML } from "./card";
 import * as api from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
 import { openDialog } from "./member-dialogs";
 import type { AgentTurn, PageCard, PageOpened } from "./types";
-import { btn, esc, iconButton, toaster } from "./ui";
+import { btn, esc, iconButton } from "./ui";
 
 const MIN_HEIGHT = 80, MAX_HEIGHT = 2400;
 const SEND_LIMIT = 4000, SEND_GAP_MS = 1000;
@@ -16,13 +17,11 @@ const MCP_PROTOCOL = "2026-01-26";
 
 /** The cards a turn shows, below what it said. A card holds no frame: `mountPages` brings it. */
 export function pageCardsHTML(turn: AgentTurn): string {
-  return (turn.pages ?? []).map(page =>
-    `<section class="pg-card" data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px" aria-label="${esc(page.title)}">` +
-    `<header class="pg-head"><b>${esc(page.title)}</b>${page.server ? `<small>${esc(page.server)}</small>` : ""}<span class="sp"></span>` +
-    iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand") + `</header>` +
-    `<div class="pg-body" data-state="loading"></div>` +
-    `<div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><button type="button" class="btn sm" data-page-act="retry">${esc(t("page.retry"))}</button></div>` +
-    `</section>`).join("");
+  return (turn.pages ?? []).map(page => cardHTML({ title: page.title, status: "ready",
+    content: `<div class="pg-body" data-state="loading"></div><div class="pg-failed" hidden><p>${esc(page.fallback || t("page.failed"))}</p><div class="card-actions">${btn(esc(t("page.retry")), "sm pri", ' data-page-act="retry"')}${btn(esc(t("common.close")), "sm", " data-card-failed-close")}</div></div>`,
+    actions: iconButton("expand", t("page.expand"), ' data-page-act="expand"', "pg-expand"), cls: "pg-card",
+    attrs: ` data-page="${esc(page.id)}" data-page-rev="${page.rev}" style="--pg-h:${clampHeight(page.height)}px"`,
+  })).join("");
 }
 
 const clampHeight = (height: unknown): number => {
@@ -96,6 +95,9 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
   function setBodyState(live: Live, state: "loading" | "ready" | "failed"): void {
     const card = cardOf(live);
     if (!card) return;
+    const pill = card.querySelector(".card-status")!;
+    const next = state === "failed" ? "failed" : "ready";
+    if (!pill.classList.contains(`is-${next}`)) pill.outerHTML = cardStatusHTML(next);
     card.querySelector<HTMLElement>(".pg-body")!.dataset.state = state;
     card.querySelector<HTMLElement>(".pg-body")!.hidden = state === "failed";
     card.querySelector<HTMLElement>(".pg-failed")!.hidden = state !== "failed";
@@ -191,7 +193,8 @@ export function mountPages(thread: HTMLElement, o: { send(text: string): void; a
     let safe: URL;
     try { safe = new URL(url); } catch { return; }
     if (safe.protocol !== "https:") return;
-    whenPressed(live, "page.askOpen", safe.href, () => { void api.openExternalUrl(safe.href).catch(error => toaster.info(describeError(error))); });
+    const open = (): void => { void api.openExternalUrl(safe.href).catch(() => cardFailure(cardOf(live), open)); };
+    whenPressed(live, "page.askOpen", safe.href, open);
   }
 
   const post = (live: Live, message: object): void => { live.frame.contentWindow?.postMessage(message, "*"); };

@@ -233,7 +233,7 @@ from .policy import (
 )
 from .routing import OpenAnswer, RouteDecision, Router
 from .speaker import RAPHAEL, RAPHAEL_NAMES, Speaker
-from .permissions import AT_A_CHAT, qualifies as permission_cards_for
+from .permissions import AT_A_CHAT, message_preview, permission_identity, qualifies as permission_cards_for
 from .safety import ASK, DENY, PASS, Proposed, Screening, asked_with, forbidden, narrow_scope, needs_yes, rule_lead, summarize
 from .steps import Step, reason_of, step_view as _step_view
 from .targets import OpenTargets
@@ -628,6 +628,7 @@ class _CardSpec:
     summary: str
     reason: str = ""
     always: bool = False
+    message: dict[str, str] | None = None
 
 
 class AgentService:
@@ -3186,8 +3187,10 @@ class AgentService:
                            what=parenthesized(language, preview(call.arguments, CARD_PREVIEW_CHARS)))
             if computer_request:
                 exact = question
-            card = _CardSpec("tool", call.tool.server, call.tool.name, exact, rule_lead(language, screening),
-                             self._always_offered(call, screening))
+            managed = getattr(self._plugins, "managed", None)
+            identity = permission_identity(call.tool, call.arguments, managed.store.connectors.values() if managed else ())
+            card = _CardSpec("tool", *identity, exact, rule_lead(language, screening),
+                             self._always_offered(call, screening), message_preview(call.tool, call.arguments))
             if local:
                 first = not self._settings.get("local_commands_seen")
                 card = _CardSpec("app" if first else "step", ask.speaker.name or "Raphael", call.tool.name,
@@ -3928,7 +3931,7 @@ class AgentService:
                 card_id=pending.id, turn_id=turn_id, member_id=ask.speaker.id, conversation_id=ask.conversation_id,
                 source="ask", kind=card.kind, service=card.service, tool=card.tool, summary=card.summary,
                 reason=card.reason, digest=pending.digest, always=card.always, language=language,
-                wait_ms=0 if local else round(pending.wait_s * 1000))
+                wait_ms=0 if local else round(pending.wait_s * 1000), message=card.message)
             confirm["digest"] = pending.digest
             if card.always:
                 labels = answer_labels(language)

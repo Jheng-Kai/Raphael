@@ -38,20 +38,22 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 describe("the card of a question of the background", () => {
   test("it is Raphael's face and plain question, then 否 outlined and 是 gold, both real buttons", () => {
     const html = backgroundQuestionHTML(QUESTION);
-    expect(html).toMatch(/^<div class="bgq-card" role="group" aria-label="拉斐爾在等你回答" data-bgq-card="q-1">/);
-    expect(visible(html)).toBe("是否讓「Notes」執行「note」（買牛奶）？ 否 是");
-    expect(html).toContain('<button type="button" class="btn bgq-no" data-bgq="no" data-task="7" data-id="q-1">否</button>');
-    expect(html).toContain('<button type="button" class="btn bgq-yes" data-bgq="yes" data-task="7" data-id="q-1">是</button>');
-    expect(html).toContain("/brand/app-emblem-light-64.webp");
+    expect(html).toContain('class="conversation-card connector-card bgq-card"');
+    expect(html).toContain('data-bgq-card="q-1"');
+    expect(visible(html)).toBe("需要你的允許 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次 拒絕");
+    expect(html).toContain('<button type="button" class="btn sm bgq-no" data-bgq="no" data-task="7" data-id="q-1">拒絕</button>');
+    expect(html).toContain('<button type="button" class="btn sm pri bgq-yes" data-bgq="yes" data-task="7" data-id="q-1">允許一次</button>');
+    expect(html).not.toContain("/brand/app-emblem-light-64.webp");
   });
 
   test("in a member's thread it is that member's: their face and name, plain words, no 《》 and no emblem", () => {
     const face = '<span class="av mb-av mb-av-letter bgq-face" aria-hidden="true">小</span>';
     const html = backgroundQuestionHTML({ ...QUESTION, member_id: 3, prefix: "問" }, false, { face, name: "小幫手" });
-    expect(visible(html)).toBe("小 小幫手 是否讓「Notes」執行「note」（買牛奶）？ 否 是");
+    expect(visible(html)).toBe("小幫手 想要執行動作 需要你允許 是否讓「Notes」執行「note」（買牛奶）？ 允許一次 拒絕");
     expect(html).not.toContain("《");
     expect(html).not.toContain("/brand/");
-    expect(html).toContain('<span class="bgq-name">小幫手</span>');
+    expect(html).toContain("小幫手 想要執行動作");
+    expect(html).not.toContain("bgq-face");
     expect(html).toContain('data-bgq="yes" data-task="7" data-id="q-1"');
   });
 
@@ -70,7 +72,7 @@ describe("the card of a question of the background", () => {
   test("one language at a time", () => {
     setLocale("en");
     expect(visible(backgroundQuestionHTML({ ...QUESTION, prefix: "Question", text: "Allow Notes to run note?" }))).toBe(
-      "Allow Notes to run note? No Yes",
+      "Needs your permission Approval needed Allow Notes to run note? Allow once Deny",
     );
   });
 });

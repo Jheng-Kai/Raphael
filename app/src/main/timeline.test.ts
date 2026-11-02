@@ -34,6 +34,38 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("a pending permission card replaces duplicate running and waiting task controls", () => {
+  for (const state of ["running","waiting"] as const) {
+    const item=turn(71,{status:state === "running" ? "running" : "done",task:{id:71,state,waiting_owner:1} as AgentTask,
+      permissions:[{id:"permission",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"pending",expires_at_ms:0}]});
+    document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);
+    expect(document.querySelector(".conversation-card")).not.toBeNull();
+    expect(document.querySelector(".task-actions")).toBeNull();
+    expect(document.querySelector(".work-section.is-live")).toBeNull();
+  }
+});
+
+test("a settled permission card also owns its task's completed state", () => {
+  const item=turn(72,{task:{id:72,state:"done"} as AgentTask,permissions:[{id:"settled",source:"ask",kind:"tool",service:"Sample",tool:"send",summary:"Send a review",reason:null,digest:"digest",always:false,state:"allowed",expires_at_ms:0}]});
+  document.body.innerHTML=turnHTML(item,emptyTimelineState(),false,LOOK);
+  expect(document.querySelector(".conversation-card")).not.toBeNull();
+  expect(document.querySelector(".task-actions")).toBeNull();
+});
+
+test("desktop owner handoff pauses the work line and restores the original clock on return", () => {
+  for (const messages of [[], [{ seq: 1, kind: "thinking", text: "Reviewing the sample plan", at_ms: 200 }]] as AgentTurn["messages"][]) {
+    const item = turn(73, { status: "running", text: "", messages, steps: [], task: { id: 73, state: "running" } as AgentTask });
+    const state = emptyTimelineState();
+    state.workStartedAt.set(73, 100);
+    document.body.innerHTML = turnHTML(item, state, false, { ...LOOK, waitingForOwner: () => true } as TurnLook);
+    expect(document.querySelector(".work-section.is-live,[data-work-start],.task-actions")).toBeNull();
+    expect(document.querySelector("[data-live]")).toBeNull();
+    document.body.innerHTML = turnHTML(item, state, false, { ...LOOK, waitingForOwner: () => false } as TurnLook);
+    expect(document.querySelector(".work-section.is-live")?.getAttribute("data-work-start")).toBe("100");
+    expect(state.workStartedAt.get(73)).toBe(100);
+  }
+});
+
 test("a paid media step shows its model and exact reported cost without a JSON envelope", () => {
   setLocale("zh-TW");
   const paid = step({ server: "media", tool: "image_generate", detail: JSON.stringify({model: "test/image-only", cost_usd: .042}) });

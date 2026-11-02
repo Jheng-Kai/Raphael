@@ -3,6 +3,7 @@
 // as a turn of its own that opens with one centred line naming the apps it waited for.
 // Every state and public catalog logo comes from the core; no authorization URL or token is kept here.
 
+import { cardHTML, cardPromptText } from "./card";
 import { NAME, eventLineHTML } from "./event-line";
 import { getLocale, t } from "./i18n";
 import type { MessageKey } from "./i18n/zh-TW";
@@ -77,16 +78,17 @@ function actionHTML(card: ConnectorCard): string {
 }
 
 export function connectorCardHTML(card: ConnectorCard): string {
-  const busy = card.state === "authorizing" ? `<span class="spin" aria-hidden="true"></span>` : "";
-  const done = card.state === "connected" ? `<span class="cc-done">${ico("check")}</span>` : "";
-  const action = actionHTML(card);
   const state = cardStateText(card);
-  return `<div class="connector-card" data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}" role="group" aria-label="${esc(card.name)}">` +
-    appMarkHTML(card.app, card.logo) +
-    `<div class="cc-meta"><div class="cc-name">${esc(card.name)}</div>` +
-    (card.missing ? missingHTML(card.missing) : state ? `<div class="cc-state" aria-live="polite">${busy}${done}<span>${clausesHTML(state)}</span></div>` : "") + `</div>` +
-    (action ? `<div class="cc-actions">${action}</div>` : "") +
-    `</div>`;
+  const connected = card.state === "connected";
+  return cardHTML({
+    title: asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? t("cards.connect", { p0: card.name }) : card.name, mark: appMarkHTML(card.app, card.logo),
+    status: connected ? "done" : card.state === "failed" ? "failed" : card.state === "expired" || card.state === "cancelled" ? "ready" : "waiting",
+    statusText: connected ? t("cards.connected") : card.state === "authorizing" ? t("card.authorizing") : asksMore(card) && card.state === "pending" ? cardPromptText("key") : card.state === "pending" ? cardPromptText("connect") : undefined,
+    body: state || t("cards.connectWhy"),
+    content: (card.missing ? missingHTML(card.missing) : "") + (asksMore(card) && ["pending", "failed", "cancelled"].includes(card.state) ? `<div data-inline-setup="${esc(card.id)}" data-toolkit="${esc(card.toolkit ?? card.app)}" data-needs="${esc(card.needs ?? "key")}" data-name="${esc(card.name)}"></div>` : ""),
+    actions: connected ? btn(`${ico("check")}${esc(t("cards.connected"))}`, "sm", " disabled") : actionHTML(card),
+    attrs: ` data-connector="${esc(card.id)}" data-card-state="${esc(card.state)}"`,
+  });
 }
 
 /** The cards a turn showed, below what it said. */

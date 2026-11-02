@@ -79,6 +79,14 @@ describe("member draft helpers", () => {
 });
 
 describe("DraftPanelController", () => {
+  test("explains why member settings need review in every language", () => {
+    for (const [locale, words] of [["zh-TW", "建立後就能一起工作"], ["en", "work together after they are created"], ["ja", "作成後に一緒に作業できます"]] as const) {
+      setLocale(locale);
+      const panel=createDraftPanel({groups:()=>[],onConfirm:vi.fn(),onCancel:vi.fn()});
+      panel.sync(sampleQuestion());
+      expect(panel.el.querySelector('.card-body.cc-state')?.textContent).toContain(words);
+    }
+  });
   test("group edits preserve draft membership and reach the shared confirmation", () => {
     const onConfirm = vi.fn();
     const panel = createDraftPanel({ groups: () => [], onConfirm, onCancel: vi.fn() });
@@ -148,7 +156,7 @@ describe("settled draft summary in timeline", () => {
   test("isSettledDraftTurn detects settled batch turns and renders expandable one-line summary without duplicate bubble", () => {
     expect(isSettledDraftTurn(baseTurn)).toBe(true);
     const closed = turnHTML(baseTurn, emptyTimelineState(), false, { face: () => "" });
-    expect(closed).toContain('class="draft-done"');
+    expect(closed).toContain('conversation-card connector-card draft-done');
     expect(closed).toContain('data-act="draft-done" aria-expanded="false"');
     expect(closed).toContain("已建立 COO、PM、RD");
     expect(closed).toContain('id="draft-done-99" hidden');
@@ -156,7 +164,7 @@ describe("settled draft summary in timeline", () => {
     expect(closed).not.toContain("《答。已建立 COO、PM、RD》");
 
     const opened = settledDraftHTML(baseTurn, true);
-    expect(opened).toContain('class="draft-done is-open"');
+    expect(opened).toContain('conversation-card connector-card draft-done is-open');
     expect(opened).toContain('aria-expanded="true"');
     expect(opened).toContain("COO · 首席營運長 · 個人公司");
   });

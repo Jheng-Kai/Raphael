@@ -460,7 +460,7 @@ test("a selected member reply travels separately, renders on the pending bubble,
   const selection = document.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
   document.dispatchEvent(new Event("selectionchange"));
   $(".quote-pill").click();
-  expect($(".cmp-quote .quote-author").textContent).toBe("日文老師");
+  expect($(".cmp-quote .quote-author").textContent).toContain("日文老師");
   const input = $<HTMLTextAreaElement>(".cmp-input");
   expect(document.activeElement).toBe(input);
   input.value = "Explain"; $(".composer").dispatchEvent(new Event("submit", { cancelable: true })); await flush();
@@ -664,7 +664,7 @@ describe("a member's thread", () => {
     await pick(3);
     expect($<HTMLTextAreaElement>(".cmp-input").placeholder).toBe("傳訊息給 日文老師");
     expect($(".cmp-voice").hidden).toBe(false);
-    expect($(".mb-pill-t").textContent).toBe("日文老師");
+    expect($(".mb-pill-t").textContent).toContain("日文老師");
     // 清除全部 and Raphael's settings are his thread's
     expect(document.querySelector('[data-act="clear"]')).toBeNull();
     expect($('[data-act="settings"]').hidden).toBe(true);
@@ -728,12 +728,12 @@ describe("a member's thread", () => {
   test("a restored member voice confirmation stays in its own thread", async () => {
     api.agentQuestionOpen.mockResolvedValue({ id: "voice-confirm", member_id: 3, prefix: "問", text: "Send it?", tier: "T2", timeout_ms: 60_000 });
     const agent = mount(); await flush();
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(3);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     expect($(".ask-q").textContent).toBe("Send it?");
     await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     agent.hide();
   });
 
@@ -827,15 +827,15 @@ describe("a member's thread", () => {
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();
     send({ type: "AgentQuestion", id: "c-1", prefix: "問", text: "寄出這封信？", tier: "T2", timeout_ms: 60_000 });
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     // a member asks in plain words
     expect($(".ask-q").textContent).toBe("寄出這封信？");
     await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(3);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     answered();
     await flush();
   });
@@ -845,9 +845,9 @@ describe("a member's thread", () => {
     await flush();
     await pick(3);
     send({ type: "AgentQuestion", id: "c-2", prefix: "問", text: "要關燈嗎", tier: "T2", timeout_ms: 60_000 });
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     expect($(".ask-q").textContent).toBe("要關燈嗎");
     // what is typed in a member's thread later does not take Raphael's question along
     api.agentAskText.mockImplementation(() => new Promise<void>(() => {}));
@@ -855,9 +855,9 @@ describe("a member's thread", () => {
     $<HTMLTextAreaElement>(".cmp-input").value = "考我";
     $<HTMLFormElement>(".composer").requestSubmit();
     await flush();
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
   });
 
   test("concurrent members keep their own approval cards and closed questions stay closed", async () => {
@@ -868,15 +868,15 @@ describe("a member's thread", () => {
     await pick(3);
     expect($(".ask-q").textContent).toBe("開始練習？");
     await pick(4);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     send({ type: "AgentQuestionClosed", id: "teacher" });
     await pick(0);
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     expect($(".ask-q").textContent).toContain("儲存摘要？");
     agent.hide(); agent.show(); await flush();
-    expect($(".ask-card").hidden).toBe(false);
+    expect($(".ask-card-host").hidden).toBe(false);
     await pick(3);
-    expect($(".ask-card").hidden).toBe(true);
+    expect($(".ask-card-host").hidden).toBe(true);
     agent.hide();
   });
 
@@ -931,13 +931,13 @@ describe("a member's thread", () => {
     expect(slot().querySelector(".bgq-card")!.textContent).toContain("要付款嗎？");
     expect(slot().querySelector(".bgq-card")!.textContent).not.toContain("《");
     expect(slot().querySelector(".bgq-name")).toBeNull();
-    expect(slot().querySelector(".bgq-card img")!.getAttribute("src")).toContain("/brand/");
+    expect(slot().querySelector(".bgq-card img,.bgq-card .av")).toBeNull();
     await pick(3);
     await flush();
     expect(api.core).toHaveBeenCalledWith("background.questions.list", { member_id: 3 });
     const cards = slot().querySelectorAll(".bgq-card");
     expect(cards).toHaveLength(1);
-    expect(cards[0].querySelector(".bgq-name")!.textContent).toBe("日文老師");
+    expect(cards[0].querySelector(".card-title")!.textContent).toContain("日文老師");
     expect(cards[0].textContent).toContain("要寄出信件嗎？");
     expect(cards[0].textContent).not.toContain("《");
     expect(cards[0].querySelector("img")).toBeNull();
@@ -1131,4 +1131,17 @@ test("rooms replace the main conversation pane and member selection returns to i
  window.dispatchEvent(new CustomEvent("raphael:open-room",{detail:{roomId:1}}));await flush();
  expect(original.hidden).toBe(true);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(false);expect(agent.el.querySelector(".au-room-heading")!.textContent).toContain("Launch");expect(document.querySelector('[role="dialog"]')).toBeNull();
  await pick(3);expect(original.hidden).toBe(false);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);expect(agent.el.querySelector(".thread")!.textContent).toContain("10");
+});
+
+
+test("an approval retry never answers a replacement question", async () => {
+ mount(); await flush();
+ const ask=(id:string)=>({type:"AgentQuestion",id,prefix:"",text:"Review the sample note?",tier:"T2",timeout_ms:30000} as const);
+ send(ask("old")); api.agentQuestionAnswer.mockRejectedValueOnce(new Error("synthetic failure"));
+ $(".ask-yes").click(); await flush();
+ const retry=document.querySelector<HTMLButtonElement>('[data-card-retry]')!;expect(retry).not.toBeNull();
+ send({type:"AgentQuestionClosed",id:"old"}); send(ask("replacement"));
+ retry.click(); await flush();
+ expect(api.agentQuestionAnswer).toHaveBeenCalledTimes(1);
+ expect(document.querySelector('.ask-card-host [data-card-retry]')).toBeNull();
 });

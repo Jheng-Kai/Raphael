@@ -1322,6 +1322,13 @@ PRAGMA user_version = 55;
 COMMIT;
 """
 
+_MIGRATIONS[56] = """
+BEGIN;
+ALTER TABLE permission_cards ADD COLUMN message TEXT NOT NULL DEFAULT '{}';
+PRAGMA user_version = 56;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -79,6 +79,28 @@ test("a page that cannot open says what it knows and offers to try again, never 
   expect(api.pagesOpen).toHaveBeenCalledTimes(2);
 });
 
+test("an external link failure retries in its originating page card", async () => {
+  const openLink = vi.spyOn(api, "openExternalUrl").mockRejectedValueOnce(new Error("Unavailable")).mockResolvedValue();
+  const {thread, frame} = mount(); await flush();
+  window.dispatchEvent(new KeyboardEvent("keydown", {key:"Tab"}));
+  fromFrame(frame, {raphaelPage:1, type:"open", url:"https://example.invalid/guide"});
+  await vi.waitFor(() => expect(thread.querySelector("[data-card-retry]")).not.toBeNull());
+  thread.querySelector<HTMLButtonElement>("[data-card-retry]")!.click();
+  await vi.waitFor(() => expect(openLink).toHaveBeenCalledTimes(2));
+  expect(openLink).toHaveBeenLastCalledWith("https://example.invalid/guide");
+});
+
+test("a failed page can be closed without retrying its service", async () => {
+  vi.mocked(api.pagesOpen).mockRejectedValueOnce(new Error("gone"));
+  const { thread } = mount();
+  await flush();
+  const close = thread.querySelector<HTMLButtonElement>(".pg-failed [data-card-failed-close]");
+  expect(close).not.toBeNull();
+  close!.click();
+  expect(thread.querySelector<HTMLElement>(".pg-card")!.hidden).toBe(true);
+  expect(api.pagesOpen).toHaveBeenCalledTimes(1);
+});
+
 test("a page speaks for the owner only right after a press in it, and not without pause", async () => {
   const { frame, send } = mount();
   await flush();

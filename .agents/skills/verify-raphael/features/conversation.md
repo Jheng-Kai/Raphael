@@ -1075,4 +1075,83 @@ The group summary chooses one state in every locale: waiting for the owner, othe
 
 ```powershell
 npm run look -- handoff-group handoff-group-done handoff-group-many handoff-group-long handoff-group-open handoff-group-room menu-wheel-closes menu-resize-closes menu-hide-control menu-settings-redraw menu-pointer-return menu-move-hover menu-move-picked menu-move-keyboard menu-move-flip menu-move-diagonal centred-system-events --theme both --width 1120,720,1920x1080
+
+## Shared conversation card shell (2026-11-02)
+
+Rules R-CARD-01 through R-CARD-04 map to `app/src/main/card.ts` and `card.css`.
+Consumers: mail/offer, durable owner question, main/background approval,
+permission, connector and inline credential setup, MCP proposal, team draft and
+settled decision, page, computer takeover, checkpoint task result and composer
+failure. Rooms reuse the same renderers and services.
+
+Run the `card-*` scenes listed by `npm run look -- --list`, plus existing
+`email-draft-*`, `owner-question-*`, `admin-approval*`, `local-permission-card`,
+`connector-*`, `chat-secret-*`, `mcp-proposal-*`, `member-draft*`, `computer-*`,
+`chat-computer-takeover`, `chat-human-control`, `chat-handback`,
+`room-question-card`, and `owner-card-room-*` at both themes and 1120,720,1920x1080.
+The shared `card-shell` rendered assertion checks every visible production card
+in these consumers. `card-sheet` places production card data in one conversation
+column; focused scenes inspect each card/state and its real mock-boundary flow.
+Question key/text, once/always/deny, inline key isolation, failed-send retry and
+single-stream takeover/handback are explicit journeys. Checkpoint file counts
+must use actual stored diffs; no-files tasks remain prose.
+
+Inspect every contact sheet and relevant full-size images against local card-00
+through card-10 references. This worktree brief prohibits judge, native, network,
+cargo and real providers; these remain unverified, independently of fixture success.
+
+
+`````sh
+npm run look -- card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-task-result card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+```
+
+`````sh
+npm run look -- card-page-ready card-page-failed card-background card-task-files card-task-restored --theme both --width 1120,720,1920x1080
+```
+
+`````sh
+npm run look -- card-task-room --theme both --width 1120,720,1920x1080
+```
+
+Additional failed-card exits use the shared local Close action and preserve saved work.
+
+```sh
+npm run look -- card-mail-close card-page-close card-connect-close --theme both --width 1120,720,1920x1080
+```
+
+```sh
+npm run look -- card-key-guide-retry --theme both --width 1120,720,1920x1080
+```
+
+| One-card local command consent and folded settings | `npm run look -- local-command-consent local-command-later local-command-background local-command-manage room-question-card card-background --theme both --width 1120,720,1920x1080` | Exact command/directory remain in disclosure; named command consent, original answer and settings boundaries remain. |
+| One-card settled local command | `npm run look -- local-command-once --theme both --width 1120,720,1920x1080` | One answer settles the original card and removes decision/settings controls. |
+| Connected message draft rows | `npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080` | Exact delivery fields and body survive settlement/failure; retry answers only the original approval. |
+
+### Owner card review follow-up (2026-11-02)
+
+R-CARD-06: known approval action with localized member name; new visible disclosure content; one state per card; shared per-kind prompt table; one-line inline credential hints with folded guides. Regression tests: card.test.ts, card-behavior.test.ts, inline-connection.test.ts, task-result.test.ts, timeline.test.ts, pages/agent-cards.test.ts, scripts/look/audit.test.mjs. Selected visual consumers: card-sheet, card-approval, admin-approval*, card-mail-ready, email-draft-handed-off, card-mail-discarded/failed, card-task-result/files/restored/prose/room, card-key-waiting/guide-retry, card-login, card-secret/failed, connector-app/key-form/key-sent, chat-secret-saved-not-resumed, card-question-waiting/key, owner-question-background/room, card-permission-waiting/once, local-command-background, card-message-waiting, card-computer-waiting/handback, mcp-proposal-stdio, card-mcp-done, card-team-done.
+```sh
+npm run look -- card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry --theme both --width 1120,720,1920x1080
+```
+
+```sh
+npm run look -- card-sheet card-approval admin-approval admin-approval-batch admin-approval-long card-mail-ready email-draft-handed-off card-mail-discarded card-mail-failed card-task-result card-task-files card-task-restored card-task-prose card-task-room card-key-waiting card-key-guide-retry card-login card-secret card-secret-failed connector-app connector-key-form connector-key-sent chat-secret-saved-not-resumed card-question-waiting card-question-key owner-question-background owner-question-room card-permission-waiting card-permission-once local-command-background card-message-waiting card-computer-waiting card-computer-handback mcp-proposal-stdio card-mcp-done card-team-done --theme both --width 1120,720,1920x1080
+```
+
+### Real Composio approval and question-head review (2026-11-02)
+
+R-CARD-07 and R-CARD-08: the real COMPOSIO_MULTI_EXECUTE_TOOL envelope is projected by the core before drawing the existing permission card. The member is the subject; the app identity and mark come from the inner slug and connector name. The router action, digest, and all execution arguments stay intact. Unknown actions use the localized member/app title without filler body text. Multiple calls keep the general form. An unanswered owner question has no waiting pill (the explicit shared-shell exception); Close is last in its head. Empty and typed answer controls remain visible, and the enabled primary is white on hover. Settled questions retain their decision status.
+
+```powershell
+npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text local-permission-card admin-approval admin-approval-batch admin-approval-long card-page-ready card-page-failed card-background card-mail-ready card-mail-discarded card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-permission-waiting card-approval card-team card-team-done card-connect-waiting card-connect-authorizing card-connect-done card-connect-failed card-key-waiting card-key-done card-key-failed card-secret card-secret-failed card-computer-done card-mcp-draft card-mcp-tested card-mcp-done card-mcp-cancelled card-permission-once card-permission-always card-permission-deny card-login card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-send-failed card-send-retry card-mail-failed card-mail-retry card-message-waiting card-message-once card-message-deny card-message-failed card-message-retry card-mail-close card-page-close card-connect-close card-key-guide-retry card-task-result card-task-room card-task-files card-task-restored card-task-prose card-sheet --theme both --width 1120,720,1920x1080
+```
+
+### Review image regressions
+
+A cancelled question has a neutral decision and no disclosure when it has no answer to reveal. The viewer's waiting_control work belongs to the same turn: it pauses live thinking/ticking and duplicate task controls, including the path that has no ComputerCard in the turn payload. Viewer renewals notify the thread only when the waiting turn set changes. Handback restores the original work clock and keeps the same frame/session. R-CARD-06 applies to both paths.
+
+After fixes, rerun the affected question states, both desktop-card paths and the full-column comparison, using the real app entry:
+
+```powershell
+npm run look -- owner-question-room owner-question-asked owner-question-typed owner-question-answered owner-question-cancelled owner-question-background owner-question-text card-question-waiting card-question-answered card-question-cancelled card-question-text card-question-typed card-computer-done card-question-key card-computer-waiting card-computer-takeover card-computer-handback card-sheet chat-computer-takeover chat-human-control chat-handback --theme both --width 1120,720,1920x1080
 ```

@@ -1,6 +1,6 @@
 import { scene, click, wait, member, settings, scroll, check, type, key } from "./steps.mjs";
 const computer = (state = "running") => ({ running:"fresh", runningMember:1, desktop:{ state:"running", ready:true, control:"member", works:[
-  {id:"private-computer-task",request_id:"private-takeover-request",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
+  {id:"private-computer-task",request_id:state === "waiting_control" ? "private-takeover-request" : "",turn_id:2,state,tool:"get_desktop_state",reason:state === "waiting_control" ? "sign_in" : ""},
 ]} });
 const entry = [member(1), wait('.desktop-panel:not([hidden])'), wait('.desktop-panel[data-desktop-state="member"]'), wait('.desktop-screen iframe:not([hidden])')];
 const take = [...entry, click('[data-desktop="take"]'), wait('.desktop-panel[data-interactive="true"][data-control-latency-ms]')];
@@ -18,9 +18,9 @@ export default [
   scene("desktop-host-invalid", "Invalid SSH aliases stay in the field with a contextual error", [...settings("agent"),scroll('[data-k="computer-host"]'),click('[data-k="computer-host"]'),click('.menu [data-value="remote"]'),type('#computer-ssh-alias','-oBad'),key('Tab'),wait('#computer-ssh-alias[aria-invalid="true"]'),check("host-settings-invalid")]),
   scene("desktop-collapse", "Collapse the member frame without handing back or reconnecting", [...entry,click('[data-desktop="collapse"]'),check("host-panel-collapsed")],computer()),
   scene("desktop-panel", "One live computer in the existing member side panel with only a system event in chat", [...entry,check("computer-panel"),check("desktop-frame")],computer()),
-  scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [...entry,check("computer-takeover")],computer("waiting_control")),
-  scene("desktop-takeover-owner", "Clicking the screen enables input in place with the same frame and stream", [...take,check("computer-takeover-owner"),check("desktop-frame")],computer("waiting_control")),
-  scene("desktop-takeover-done", "One explicit done returns the current request once", [...take,click('[data-desktop="return"]'),wait('.desktop-panel[data-desktop-state="member"]'),check("computer-takeover-done")],computer("waiting_control")),
+  scene("desktop-takeover", "A private sign-in need opens the side panel with its request above the live screen", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),check("computer-takeover")],computer("waiting_control")),
+  scene("desktop-takeover-owner", "Clicking the screen enables input in place with the same frame and stream", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('[data-card-desktop-screen][data-owner-control]'),check("computer-takeover-owner"),check("desktop-frame")],computer("waiting_control")),
+  scene("desktop-takeover-done", "One explicit done returns the current request once", [member(1),wait('[data-card-desktop-screen] iframe:not([hidden])'),click('[data-card-desktop=take].pri'),wait('[data-card-desktop-screen][data-owner-control]'),click('[data-card-desktop="return"]'),wait('.computer-card .card-status.is-done'),check("computer-takeover-done")],computer("waiting_control")),
   scene("desktop-entry", "Computer section opens automatically in a working member conversation", [...entry,check("computer-panel")],computer()),
   scene("desktop-viewer", "Expand the existing stream without a new dialog or session", [...entry,click('[data-desktop="expand"]'),wait('.desktop-panel[data-expanded]'),{action:"settle-motion"},check("desktop-viewer"),check("desktop-frame")],computer()),
   scene("desktop-owner", "A screen click acquires the lease immediately without a reconnect", [...take,check("desktop-owner"),check("desktop-frame")],computer()),

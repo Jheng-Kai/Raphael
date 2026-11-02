@@ -28,6 +28,29 @@ describe("shared look IPC boundary", () => {
     const {routine} = await call('routines.create', {member_id:1,title:'Sample',prompt:'Review',when:picked.when});
     expect((await call('routines.list',{member_id:1})).routines.find(r=>r.id===routine.id).when).toEqual(picked.when);
   });
+  it("keeps both existing-copy and no-copy drafts available to the real mail scenes", () => {
+    for (const copy of ['', 'reviewer@example.com']) {
+      const target = {}, state = installMock(fixture, {fixture:{mailDraft:'draft',mailCopy:copy}}, target);
+      expect(state.data.turns.flatMap(turn => turn.drafts ?? []).find(draft => draft.id === 'mail-1').cc).toBe(copy);
+    }
+  });
+  it("keeps a connected message draft through one failed approval and its original retry", async () => {
+    const target = {}; installMock(fixture, {fixture:{permissionCard:'tool',cardMessagePreview:true,cardPermissionFailure:true}}, target);
+    const invoke = target.__TAURI_INTERNALS__.invoke;
+    const question = await invoke('agent_question_open', {});
+    const read = async () => (await invoke('core_call', {method:'agent.history.list',params:{member_id:0}})).turns.flatMap(turn => turn.permissions ?? []).find(card => card.id === question.id);
+    const before = await read(); expect(before.message).toEqual({workspace:'範例工作室',to:'#規劃',thread:'123.456',body:'請確認範例排程，並回覆方便討論的時間。'});
+    await expect(invoke('agent_question_answer', {id:question.id,approved:true})).rejects.toThrow('Synthetic approval unavailable');
+    expect((await read()).message).toEqual(before.message); expect((await read()).state).toBe('pending');
+    await invoke('agent_question_answer', {id:question.id,approved:true});
+    expect((await read()).message).toEqual(before.message); expect((await read()).state).toBe('allowed');
+  });
+  it("the card sheet exposes the same live desktop work as its conversation turn", async () => {
+    const target = {}, state = installMock(fixture, {fixture: {cardDeck: true}}, target);
+    const desktop = await target.__TAURI_INTERNALS__.invoke("core_call", {method: "computer.viewer_status", params: {member_id: 1}});
+    expect(desktop).toMatchObject({state: "running", works: [{turn_id: 980, state: "waiting_control", request_id: "sheet-request"}]});
+    expect(state.data.turns[0].id).toBe(desktop.works[0].turn_id);
+  });
   it("records caption calls once without changing the fixture conversation", async () => {
     const target = {}, state = installMock(fixture, {}, target);
     for (const action of ['minimize','toggle_maximize','close','start_dragging']) {

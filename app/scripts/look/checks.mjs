@@ -46,6 +46,34 @@ export function checkRendered(name, context = {}) {
     require(window.__look.calls.some(call => call.method === 'members.update' && call.params?.id === 1 && call.params?.group_id === 2), "the choice reaches the existing core boundary");
     return { check: name };
   }
+  const disclosureContent = card => {
+    const words = (root, excluded) => {
+      const walker = document.createTreeWalker(root, 4), parts = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode, parent = node.parentElement;
+        if (!parent || excluded?.contains(parent) || parent.closest('[hidden]') || !visible(parent)) continue;
+        const closed = parent.closest('details:not([open])');
+        if (closed && !parent.closest('summary')) continue;
+        const text = node.textContent.trim().replace(/\s+/g, ' ');
+        if (text) parts.push(text);
+      }
+      return parts;
+    };
+    for (const button of card.querySelectorAll('[data-card-disclosure]')) {
+      if (button.closest('[hidden]')) continue;
+      const detail = button.parentElement.querySelector('.card-detail');
+      require(detail, 'a disclosure has content');
+      const before = words(card, detail).join(' '), hidden = detail.hidden;
+      try {
+        detail.hidden = false;
+        require(words(detail).some(text => !before.includes(text)), 'an opened disclosure adds visible text');
+      } finally { detail.hidden = hidden; }
+    }
+  };
+  if (name === 'card-disclosures') {
+    for (const card of [...document.querySelectorAll('.conversation-card')].filter(visible)) disclosureContent(card);
+    return {check:name};
+  }
   if (name.startsWith("form-")) {
     const scope = document.querySelector('.page-agent:not([hidden]) > .mb-chat:not([hidden])');
     require(scope, 'form checks target the active conversation');
@@ -325,8 +353,8 @@ export function checkRendered(name, context = {}) {
     if (name === "mcp-proposal-edit") require(calls.some(call => call.params.operation === "edit" && call.params.fields.name === "Sample MCP"), "the real save action carries edited fields");
     if (name === "mcp-proposal-tested") require(card.querySelectorAll(".mcp-tools").length === 2 && visible(card.querySelector('[data-mcp-operation="enable"]')), "both groups precede confirmation");
     if (name === "mcp-proposal-stdio") require(card.querySelectorAll("[data-mcp-choice]").length === 4 && !calls.some(call => call.params.local_choice), "local execution waits for the owner's explicit choice");
-    if (name === "mcp-proposal-enabled") require(calls.filter(call => call.params.operation === "enable").length === 1 && !card.querySelector("button"), "the tested revision enables once and settles");
-    if (name === "mcp-proposal-cancelled") require(!calls.some(call => call.params.operation === "enable") && !card.querySelector("button"), "cancellation never enables");
+    if (name === "mcp-proposal-enabled") require(calls.filter(call => call.params.operation === "enable").length === 1 && !card.querySelector("[data-mcp-operation]"), "the tested revision enables once and settles");
+    if (name === "mcp-proposal-cancelled") require(!calls.some(call => call.params.operation === "enable") && !card.querySelector("[data-mcp-operation]"), "cancellation never enables");
     if (name === "mcp-proposal-secret") {
       const secret = document.querySelector('[data-secret-card="card-mcp-key"] input');
       require(secret?.type === "password" && secret.value === "sample-owner-key", "values use the existing masked secret control");
@@ -638,28 +666,145 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, kind };
   }
+  if (['card-question-typing','card-question-key','card-computer-inline','card-send-failed','card-send-retry','card-mail-failed','card-mail-retry','card-task-result','card-task-room','card-task-files','card-task-restored','card-task-prose','card-sheet','card-permission-settled'].includes(name)) {
+    const calls = window.__look.calls;
+    if (name === 'card-question-typing') require(!calls.some(call=>call.method==='owner_questions.answer'), 'typing A never answers the question');
+    if (name === 'card-question-key') {
+      const answers = calls.filter(call=>call.method==='owner_questions.answer');
+      require(answers.length===1 && answers[0].params.answer==='星期二', 'B answers the second choice once');
+    }
+    if (name === 'card-computer-inline') {
+      const frame = document.querySelector('[data-card-desktop-screen] iframe');
+      require(visible(frame) && frame.contentDocument.defaultView.__desktopConnections===1, 'the existing single live stream is inside the card');
+      require(calls.filter(call=>call.method==='computer.viewer_open' && call.params.member_id===1).length===1, 'one session is opened');
+    }
+    if (name.startsWith('card-send-')) {
+      const sends=calls.filter(call=>call.command==='agent_ask_text');
+      require(sends.length===(name.endsWith('retry')?2:1) && sends.every(call=>call.text==='Please review the project note.'), 'the exact restored words cross only the send boundary');
+      if (name.endsWith('failed')) require(document.querySelector('.cmp-input').value==='Please review the project note.' && visible(document.querySelector('.composer-failure .card-status.is-failed')), 'failure keeps the draft and retry beside the composer');
+      else require(document.querySelector('.cmp-input').value==='' && !document.querySelector('.composer-failure'), 'successful retry clears the draft and failure');
+    }
+    if (name.startsWith('card-mail-')) {
+      const card=document.querySelector('[data-mail-card]'), sends=calls.filter(call=>call.method==='integrations.draft_send');
+      if(name.endsWith('failed')) require(card.dataset.mailState==='failed' && card.querySelector('[data-mail-field=body]') && !card.querySelector('[data-act=mail-send]').disabled && window.__look.sent.length===0, 'failed mail is still editable with a usable retry');
+      else require(card.dataset.mailState==='sent' && sends.length===2 && sends[1].params.retry_version===1 && window.__look.sent.length===1, 'an explicit version-bound retry sends once');
+    }
+    if (name === 'card-task-result') require(document.querySelector('[data-task-result="980"]').textContent.includes('+1 −1'), 'counts come from the actual checkpoint diff');
+    if (name === 'card-task-room') require(document.querySelector('[data-task-result="950"]')?.textContent.includes('+1 \u22121'), 'room counts use the same actual checkpoint');
+    if (name === 'card-task-files') require(visible(document.querySelector('.desktop-checkpoints')) && calls.some(call => call.method === 'computer.checkpoints'), 'the existing file view opens independently of a running computer');
+    if (name === 'card-task-restored') {
+      const restores = calls.filter(call => call.method === 'computer.checkpoints' && call.params.action === 'restore');
+      require(restores.length === 1 && restores[0].params.review_token === 'a'.repeat(64) && !document.querySelector('[data-task-restore]'), 'one confirmed restore uses the exact reviewed checkpoint token');
+    }
+    if (name === 'card-task-prose') require(!document.querySelector('.task-result'), 'no files means no result card');
+    if (name === 'card-sheet') require(document.querySelectorAll('.conversation-card').length >= 9 && document.querySelector('[data-card-desktop-screen] iframe'), 'the sheet uses real production consumers, team rows and one live screen in one column');
+    if (name === 'card-permission-settled') require(calls.filter(call=>call.command==='agent_question_answer').length===1 && !document.querySelector('[data-act=perm-once]'), 'one answer settles the card and removes controls');
+    return {check:name};
+  }
+  if (name === 'card-message') {
+    const card = document.querySelector('[data-permission-card]'), calls = window.__look.calls.filter(call => call.command === 'agent_question_answer');
+    require(visible(card.querySelector('.card-detail')) && card.querySelectorAll('.card-field').length === 3, 'workspace, recipient and thread use real field rows');
+    require(card.textContent.includes('#規劃') && card.textContent.includes('123.456') && card.textContent.includes('請確認範例排程，並回覆方便討論的時間。'), 'the exact connected message remains available');
+    require(!card.querySelector('pre') && !card.textContent.includes('"body":'), 'draft fields never become raw JSON');
+    if (card.querySelector('[data-card-retry]')) require(calls.length === 1 && card.dataset.cardState === 'pending' && visible(card.querySelector('.card-status.is-failed')), 'failed approval retains the unanswered original draft');
+    else if (card.dataset.cardState !== 'pending') require(calls.length >= 1 && calls.length <= 2 && calls.every(call => call.id === card.dataset.permissionCard) && !card.querySelector('[data-act=perm-once]'), 'only the original approval is answered and settled');
+    else require(calls.length === 0, 'reviewing a draft never approves it');
+    return {check:name};
+  }
+  if (name === 'card-guide-retry') {
+    const calls = window.__look.calls.filter(call => call.command === 'open_external_url');
+    const field = document.querySelector('[data-inline-setup] [data-setup-field]');
+    require(calls.length === 2 && window.__look.urls.length === 1, 'guide retry opens its URL once after a failed attempt');
+    require(field?.value && !JSON.stringify(calls).includes(field.value), 'the guide never carries the unsent secret');
+    require(!window.__look.calls.some(call => call.method === 'integrations.card_connect'), 'guide retry never submits the credential form');
+    return {check:name};
+  }
+  if (name === 'card-failed-close') {
+    const card = document.querySelector('.conversation-card[hidden]');
+    require(card && !visible(card), 'the failed card closes locally');
+    require(window.__look.sent.length === 0, 'closing never sends a message or mail');
+    require(!window.__look.calls.some(call => /(?:discard|delete|cancel)$/.test(call.method)), 'closing keeps saved work');
+    return {check:name};
+  }
+  if (name === "card-shell") {
+    const cards = [...document.querySelectorAll('.conversation-card')].filter(visible);
+    require(cards.length, 'a production conversation card is present');
+    for (const card of cards) {
+      disclosureContent(card);
+      const box = card.getBoundingClientRect(), style = getComputedStyle(card), pill = card.querySelector('.card-status');
+      require(box.width <= 480.5, `card width is at most 480px: ${box.width}`);
+      const draftHost = card.closest('.draft-panel');
+      if (draftHost) require(parseFloat(getComputedStyle(draftHost).borderTopWidth) === 0 && parseFloat(getComputedStyle(draftHost).paddingLeft) === 0, 'the draft host adds no second card frame');
+      if (card.matches('[data-owner-question][data-card-state="asked"]')) {
+        const close = card.querySelector('[data-owner-answer="cancel"]');
+        require(!pill, 'a waiting question uses its title without a redundant status pill');
+        require(close?.parentElement?.matches('.card-head') && close === close.parentElement.lastElementChild, 'question close follows the heading at the far right');
+        require(Math.abs(close.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'question close aligns with the right padding');
+      } else {
+        require(pill && pill.textContent.trim(), 'status always has a word');
+        require(Math.abs(pill.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'pill aligns with the right padding');
+      }
+      require(!card.querySelector('.av,.slime,.ask-face,.bgq-face,.draft-face'), 'no face is inside a card');
+      require(!card.querySelector('select'), 'no native select is inside a card');
+      if (card.matches('[data-desktop-work][data-work-state="waiting_control"]')) {
+        const turn = card.closest('.tn');
+        require(turn && !turn.querySelector('.work-section.is-live,[data-work-start],.task-actions'), 'a computer handoff owns the waiting state without thinking, ticking or duplicate task controls');
+        require(!turn?.hasAttribute('data-live'), 'the member is paused while waiting for computer handoff');
+      }
+      const taskLine = card.closest('.ra-body')?.querySelector(':scope > .task-actions');
+      if (card.matches('.task-result,[data-owner-question],[data-permission-card],[data-secret-card],[data-connector]')) require(!taskLine || taskLine.hidden || !visible(taskLine), 'the card replaces a duplicate task state line');
+      for (const hint of [...card.querySelectorAll('.cn-hint')].filter(visible)) require(getComputedStyle(hint).whiteSpace === 'nowrap' && hint.getBoundingClientRect().height <= parseFloat(getComputedStyle(hint).lineHeight) + 1, 'field hints stay on one line');
+        for (const well of [...card.querySelectorAll('.card-well')].filter(visible)) {
+          const shade = value => value.match(/[\d.]+/g).slice(0, 3).reduce((sum, part) => sum + Number(part), 0);
+          require(shade(getComputedStyle(well).backgroundColor) < shade(style.backgroundColor), 'the well is darker than its card');
+        }
+      for (const node of [card, ...card.querySelectorAll('*')].filter(visible)) {
+        const css = getComputedStyle(node);
+        require(!(['auto','scroll'].includes(css.overflowY) && node.scrollHeight > node.clientHeight + 2), `no inner scrollbar: ${node.className}`);
+      }
+      const primary = [...card.querySelectorAll('.card-actions,.sc-form,.question-submit')].filter(visible);
+      for (const row of primary) {
+        const buttons = [...row.querySelectorAll('button')].filter(visible), pri = buttons.find(button => button.classList.contains('pri'));
+        if (pri) {
+          require(buttons[0] === pri, 'primary button is first');
+          require(getComputedStyle(pri).backgroundColor === 'rgb(255, 255, 255)', 'primary button is white in both themes');
+        }
+      }
+      require(card.scrollWidth <= card.clientWidth + 1, 'card never scrolls sideways');
+    }
+    return {check:name,cards:cards.length};
+  }
   if (name.startsWith("owner-question-")) {
     const card = document.querySelector('[data-owner-question="owner-choice"]');
     require(visible(card) && card.classList.contains("permission-card"), "the shared card is visible");
-    const waiting = ["owner-question-asked", "owner-question-background", "owner-question-room"].includes(name);
+    const waiting = ["owner-question-asked", "owner-question-typed", "owner-question-background", "owner-question-room"].includes(name);
     require(card.dataset.cardState === (waiting ? "asked" : name === "owner-question-cancelled" ? "cancelled" : "answered"), "the persisted state is shown");
+    if (name === "owner-question-cancelled") require(card.querySelector('.card-status.is-ready') && !card.querySelector('[data-card-disclosure]'), 'a cancelled question has a neutral decision and no redundant disclosure');
     require(card.querySelectorAll("[data-owner-option]").length === (waiting ? 4 : 0), "choices are real buttons only while waiting");
     require(!card.querySelector("select"), "a short list needs no dropdown");
     const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "the question fits its reply column");
-    for (const control of card.querySelectorAll("button,textarea")) {
+    for (const control of card.querySelectorAll("button,input")) {
       const bounds = control.getBoundingClientRect();
       require(bounds.left >= box.left && bounds.right <= box.right + 1 && bounds.bottom <= box.bottom + 1, "every answer control fits the card");
     }
-    const field = card.querySelector("textarea");
+    const field = card.querySelector("[data-owner-answer-input]");
     if (field) {
-      require(field.classList.contains("mb-fin") && field.classList.contains("mb-ta"), "the answer uses the shared form field");
+      require(field.classList.contains("mb-fin") && field.tagName === "INPUT", "the answer uses the shared form field");
       require(field.scrollHeight <= field.clientHeight + 2, "the answer field has no inner scroll");
+      const submit = card.querySelector('[data-owner-answer="text"]');
+      require(visible(submit), 'the answer primary stays visible while empty or typed');
+      require(submit.disabled === !field.value.trim(), 'only a nonempty answer enables submit');
+      if (name === "owner-question-typed") {
+        require(field.value === "請先確認下週的範例排程。" && !submit.disabled, 'typed text remains in the card before sending');
+        require(getComputedStyle(submit).backgroundColor === 'rgb(255, 255, 255)', 'the enabled answer primary stays white while hovered');
+        require(window.__look.calls.filter(call => call.method === 'owner_questions.answer').length === 0, 'typing never submits an answer');
+      }
     }
     if (!waiting) require(window.__look.calls.filter(call => call.method === "owner_questions.answer").length === 1, "the original card was answered exactly once");
     if (name === "owner-question-background") {
       const summary = document.querySelector(".task-actions");
-      require(visible(summary) && summary.textContent.includes("等待你回答 · 1 項"), "the visible task summary reports the waiting count");
+      require(!visible(summary), "the question replaces the redundant waiting/Stop line");
       require(!card.closest(".tn").querySelector(".work-section.is-live,[data-work-start]"), "waiting for the owner never keeps thinking or ticking");
     }
     return { check: name, state: card.dataset.cardState };
@@ -685,12 +830,13 @@ export function checkRendered(name, context = {}) {
     const command = card.querySelector('.local-command');
     require(command.textContent.includes('Get-Process | Sort-Object CPU') && command.textContent.includes('LoadPercentage'), 'the exact multiline command survives escaping');
     require(command.scrollWidth <= command.clientWidth + 1, 'long command lines wrap inside the card');
-    require(visible(card.querySelector('[data-act="local-settings"]')), 'command access can be managed from the card');
+    if (card.dataset.cardState === 'pending') require(visible(card.querySelector('[data-act="local-settings"]')), 'command access can be managed from the opened details');
+    else require(!card.querySelector('[data-act="local-settings"]'), 'settled commands remove their settings action');
     const answers = [...card.querySelectorAll('.cc-actions button')];
     if (name === "local-command-card") {
       require(answers.length === (card.dataset.kind === 'local_access' ? 4 : 2), 'first consent has four real answers; later commands have two');
       require(answers.every(button => !button.disabled), 'the card is answerable');
-      require(answers.at(-1).classList.contains('pri'), 'the primary answer comes last');
+      require(answers[0].classList.contains('pri'), 'the primary answer comes first');
     } else {
       require(card.dataset.cardState !== 'pending' && !answers.length, 'the answer settles the same card');
       require(window.__look.calls.some(call => call.command === 'agent_question_answer'), 'the answer reaches the native question boundary');
@@ -945,19 +1091,18 @@ export function checkRendered(name, context = {}) {
     return {check:name, faces:faces.length};
   }
   if (name.startsWith("computer-") || ['desktop-owner','desktop-handback','desktop-viewer','desktop-offline','desktop-absent'].includes(name)) {
-    const panel=document.querySelector('.desktop-panel'), frame=panel?.querySelector('iframe'), calls=window.__look.calls;
+    const panel=document.querySelector('.desktop-panel'), frame=document.querySelector('iframe[data-desktop-stream]'), calls=window.__look.calls;
     if(name==='desktop-absent'){
       require(visible(panel)&&visible(panel.querySelector('.missing-note')),'absent Docker says what is missing in the existing panel');
       require(visible(panel.querySelector('[data-missing-repair="computer"]')),'absent Docker offers its installation settings');
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }
-    require(visible(panel)&&panel.closest('.mb-det')&&![...document.querySelectorAll('.desktop-viewer, [role="dialog"]')].some(visible),'computer uses the existing side panel without a dialog');
-    require(!document.querySelector('.thread iframe, .desktop-card, [data-desktop-card-open]'),'timeline has no screen card or control buttons');
+    require(panel.closest('.mb-det') && (visible(panel) || visible(frame) || name==='computer-takeover-done') && ![...document.querySelectorAll('[role="dialog"]')].some(visible), 'computer uses the existing viewer in its panel or card');
     const screenHit=panel.querySelector('[data-desktop="peek"]');
     if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
     const events=document.querySelectorAll('[data-desktop-work]');
-    if(name.startsWith('computer-'))require(events.length===1&&events[0].matches('.conversation-event-line')&&events[0].closest('.tn')?.dataset.id==='2','one centered metadata-only event belongs to the private turn');
+    if(name.startsWith('computer-'))require(events.length===1&&events[0].matches(name==='computer-panel'?'.conversation-event-line':'.conversation-card')&&events[0].closest('.tn')?.dataset.id==='2','one work presentation belongs to the private turn');
     if(name==='computer-takeover')require(panel.querySelector('.desktop-request').textContent.includes('登入'),'request sits above the live screen');
     if(name==='computer-takeover-owner')require(panel.querySelector('[data-desktop="return"]').textContent==='我完成了','one explicit done action');
     if(name==='computer-takeover-done')require(calls.filter(call=>call.method==='computer.viewer_control'&&!call.params.held&&call.params.takeover==='private-takeover-request').length===1,'one explicit handback with the current nonce');
@@ -978,7 +1123,7 @@ export function checkRendered(name, context = {}) {
       require(!frame,'offline screen has no blank frame');
       if(['starting','building','preparing'].includes(panel.dataset.desktopState))require(panel.querySelectorAll('.desktop-preparation li').length===3&&visible(panel.querySelector('progress')),'preparation has all steps and progress');
       else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
-    }else require(visible(frame),'side panel streams the live screen');
+    }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen or retains its settled card');
     return {check:name};
   }
   if (name === "host-settings-remote") {
@@ -1007,16 +1152,20 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "desktop-frame") {
-    const shell = document.querySelector('.desktop-shell'), heading = shell?.querySelector('.desktop-heading');
+    const shell = document.querySelector('.desktop-shell');
+    const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
+    const frame = inline ?? document.querySelector('.desktop-panel iframe');
+    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : shell?.querySelector('.desktop-heading');
     // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
     const embedded = !!document.querySelector('#noVNC_container');
     if (!embedded) {
-      require(visible(shell) && visible(heading), "the member computer has one frame and heading");
+      require(visible(inline?.parentElement ?? shell) && visible(heading), "the member computer has one frame and heading");
+      require(document.querySelectorAll('.desktop-panel iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe').length === 1, "the existing viewer has one iframe");
       const channels = getComputedStyle(shell).backgroundColor.match(/[\d.]+/g).map(Number);
       require(channels.slice(0, 3).every(value => value <= 40), "the frame stays dark in both themes");
-      require(visible(shell.querySelector('[data-desktop="collapse"]')), "collapse is present in the frame header");
+      if (!inline) require(visible(shell.querySelector('[data-desktop="collapse"]')), "collapse is present in the frame header");
     }
-    const doc = document.querySelector('.desktop-panel iframe')?.contentDocument ?? document;
+    const doc = frame?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
     require(win.getComputedStyle(doc.body).backgroundColor === (embedded ? 'rgb(23, 23, 23)' : getComputedStyle(shell).backgroundColor), "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
@@ -2736,10 +2885,11 @@ export function checkRendered(name, context = {}) {
     require(card, "approval card is visible");
     const details = card.querySelector('.ask-q'), yes = card.querySelector('.ask-yes'), no = card.querySelector('.ask-no');
     const box = card.getBoundingClientRect();
-    require(box.top >= 0 && box.bottom <= innerHeight, "complete card fits the viewport");
+    require(box.width <= 480.5, "approval uses the shared card width");
     require(visible(yes) && visible(no), "both approval actions remain visible");
+    require(yes.textContent.trim() === "允許" && no.textContent.trim() === "拒絕", "approval uses explicit allow and deny words");
     require(yes.getBoundingClientRect().right <= box.right && yes.getBoundingClientRect().bottom <= innerHeight, "approval action fits the card");
-    require(no.getBoundingClientRect().right <= yes.getBoundingClientRect().left, "primary action stays rightmost");
+    require(yes.getBoundingClientRect().right <= no.getBoundingClientRect().left, "primary action comes first");
     if (name === "admin-approval-batch") {
       const text = details.textContent;
       for (const member of ["COO", "PM", "RD", "CEO", "CTO", "Marketing", "Finance", "Design"]) {
@@ -2747,33 +2897,32 @@ export function checkRendered(name, context = {}) {
       }
       require((text.match(/職責：/g) || []).length === 8 && (text.match(/簡介：/g) || []).length === 8 && (text.match(/群組：/g) || []).length === 8, "every member includes role, blurb and group");
       require(!text.includes(": "), "Chinese field labels use full-width colons");
-      require(document.querySelectorAll('.ask-card:not([hidden])').length === 1, "one card covers the whole batch");
+      require([...document.querySelectorAll('.ask-card')].filter(visible).length === 1, "one card covers the whole batch");
     }
     if (name.endsWith("long") || name.endsWith("batch")) {
       if (name.endsWith("long")) require(details.textContent.includes("最後一項指示：保留完整決策紀錄。"), "full instructions are preserved");
-      require(["auto", "scroll"].includes(getComputedStyle(details).overflowY), "long details can scroll");
-      require(getComputedStyle(details).whiteSpace === "pre-wrap", "field line breaks remain readable");
-      require(details.tabIndex === 0, "details can receive keyboard focus for scrolling");
-      require(details.scrollTop > 0 && details.scrollTop + details.clientHeight >= details.scrollHeight - 1, "End key reveals the final instructions");
-      require(yes.getBoundingClientRect().top >= details.getBoundingClientRect().bottom, "actions remain below the full-width details");
+      require(card.querySelector('[data-card-disclosure]').getAttribute('aria-expanded') === 'false', 'long approval details start folded');
+      require(getComputedStyle(details).overflowY === 'visible', 'details use document scrolling');
     }
     return { check: name, height: box.height, detailsHeight: details.clientHeight, contentHeight: details.scrollHeight };
   }
   if (name === "member-draft" || name === "member-draft-edit") {
     const panel = [...document.querySelectorAll('.draft-panel')].find(visible);
     require(panel, "draft panel is visible");
-    require(!document.querySelector('.ask-card:not([hidden])'), "plain ask card is hidden when draft panel is shown");
+    require(![...document.querySelectorAll('.ask-card')].some(visible), "plain ask card is hidden when draft panel is shown");
     const box = panel.getBoundingClientRect();
     require(box.top >= 0 && box.bottom <= innerHeight, "draft panel fits the viewport");
     const cards = [...panel.querySelectorAll('.draft-card')].filter(visible);
     const confirmBtn = panel.querySelector('[data-draft-act="confirm"]');
     const cancelBtn = panel.querySelector('[data-draft-act="cancel"]');
     require(visible(confirmBtn) && visible(cancelBtn), "confirm and cancel buttons are visible");
-    require(cancelBtn.getBoundingClientRect().right <= confirmBtn.getBoundingClientRect().left, "primary action stays rightmost");
+    require(confirmBtn.getBoundingClientRect().right <= cancelBtn.getBoundingClientRect().left, "primary action comes first");
     for (const card of cards) {
       const roleInput = card.querySelector('[data-draft-field="role"]');
       const nameInput = card.querySelector('[data-draft-field="name"]');
       const groupBtn = card.querySelector('[data-draft-act="group"]');
+      require(nameInput.clientWidth >= 100, "the editable name stays readable");
+      if (!visible(roleInput)) continue;
       const roleStyle = getComputedStyle(roleInput);
       const roleContentWidth = roleInput.clientWidth - parseFloat(roleStyle.paddingLeft) - parseFloat(roleStyle.paddingRight);
       const roleFontSize = parseFloat(roleStyle.fontSize);
@@ -2806,7 +2955,7 @@ export function checkRendered(name, context = {}) {
     require(done, "settled one-line summary is visible");
     require(!document.querySelector('.draft-panel:not([hidden])'), "draft panel is closed after confirmation");
     const sumBtn = done.querySelector('[data-act="draft-done"]');
-    require(visible(sumBtn) && sumBtn.textContent.includes("已建立 COO、PM、RD"), "settled summary lists created members");
+    require(visible(sumBtn) && done.querySelector(".card-title").textContent.includes("已建立 COO、PM、RD"), "settled summary lists created members");
     const list = done.querySelector('.draft-done-list');
     require(visible(list) && list.querySelectorAll('.draft-done-item').length === 3, "expanded summary shows created member details");
     const members = window.__look.data.members;
@@ -3684,7 +3833,15 @@ export function checkRendered(name, context = {}) {
     require(visible(document.querySelector('[data-conn="open"][data-id="composio:acme-ledger"]')), "the app is among the connected ones");
     return { check: name };
   }
-  if (name.startsWith("setup-") || name === "card-setup-form") {
+  if (name === "card-setup-form") {
+    const slot = document.querySelector('[data-inline-setup]'), field = slot?.querySelector('[data-setup-field]');
+    require(visible(slot) && field?.type === 'password' && field.value === 'zk-look-0123456789', 'the masked form lives in its conversation card');
+    require(!document.querySelector('.cn-setup-dialog'), 'conversation setup has no modal');
+    require(slot.querySelector('.card-detail').hidden && visible(slot.querySelector('.card-shield')), 'guide starts folded and storage is explained');
+    require(!JSON.stringify(window.__look.calls).includes(field.value), 'typing sent no credential');
+    return {check:name};
+  }
+  if (name.startsWith("setup-")) {
     // The form that asks for an app's own key, or its own developer app (connection-setup.ts).
     const key = "zk-look-0123456789", calls = window.__look.calls;
     const dialog = document.querySelector('.cn-setup-dialog'), frame = dialog.getBoundingClientRect();
@@ -3744,7 +3901,7 @@ export function checkRendered(name, context = {}) {
     require(!document.body.textContent.includes(key), "the key is on no page text");
     if (name === "card-composio-missing") {
       require(card.dataset.cardState === "failed" && state.includes("還沒有 Composio 金鑰"), `the card says what is missing (${state})`);
-      require(action.length === 1 && action[0].dataset.act === "card-settings" && action[0].textContent.trim() === "開啟連接設定", "the card offers the place to add it");
+      require(action.length === 2 && action[0].dataset.act === "card-settings" && action[0].textContent.trim() === "開啟連接設定" && action[1].hasAttribute("data-card-failed-close"), "the card offers the place to add it and a local close");
       return { check: name, state };
     }
     const sent = calls.filter(call => call.method === "integrations.card_connect");
@@ -3754,7 +3911,7 @@ export function checkRendered(name, context = {}) {
     if (name === "card-setup-sent") require(card.dataset.cardState === "connected", "the card follows the core to connected");
     else {
       require(card.dataset.cardState === "failed" && state === "這把金鑰沒有被接受，請再填一次", `the card says the key was not accepted (${state})`);
-      require(action.length === 1 && action[0].dataset.act === "card-setup" && action[0].textContent.trim() === "填入金鑰", "the card offers the form again");
+      require(visible(card.querySelector("[data-inline-submit]")) && card.querySelector("input[type=password]").value === "", "the inline form returns with its secret cleared");
       const reply = [...document.querySelectorAll('.tn .ra .chat-message')].filter(visible).at(-1);
       require(reply.textContent.includes("沒有接受這把金鑰") && reply.textContent.includes("設定 › 連接 › 商店"), "the member names what to do and where");
     }
@@ -3768,10 +3925,10 @@ export function checkRendered(name, context = {}) {
     const [card] = cards, box = card.getBoundingClientRect(), column = card.closest('.ra-body').getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
-    const mark = card.querySelector('.mono'), markStyle = getComputedStyle(mark);
+    const mark = card.querySelector('.mono'), markStyle = mark && getComputedStyle(mark);
     require(visible(mark) && mark.querySelector('svg.logo path, img.logo'), "R-UI-34: the app's own catalog or bundled mark");
     if (name.startsWith('connector-slack')) require(mark.querySelector('img.logo')?.getAttribute('src') === window.__look.data.pluginCatalog.find(app => app.slug === 'slack').logo, "the card uses exactly the store's catalog logo");
-    require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
+    if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");
     const buttons = [...card.querySelectorAll('button')].filter(visible);
@@ -3792,14 +3949,14 @@ export function checkRendered(name, context = {}) {
     }[name];
     require(expected, `no expectation for ${name}`);
     const [state, words, action, primary] = expected;
-    if (!words) require(!status, "R-UI-02: a pending card has no helper line or empty status row");
-    require(card.dataset.cardState === state && said === words, `${app}'s card reads "${words}" (${card.dataset.cardState}: "${said}")`);
-    require(action === null ? buttons.length === 0 : buttons.length === 1 && buttons[0].textContent.trim() === action
-      && buttons[0].classList.contains('pri') === primary, `the card's one action is ${action ?? "none"}`);
+    if (!words) require(status?.textContent.trim(), "a pending card explains why connecting helps");
+    require(card.dataset.cardState === state && (!words || said === words), `${app}'s card reads "${words}" (${card.dataset.cardState}: "${said}")`);
+    const connectButton = card.querySelector('[data-act="card-connect"],[data-act="card-cancel"]');
+    if (action === null) require(card.querySelector('.card-actions button:disabled'), 'connected card keeps its checked disabled button');
+    else if (['connector-key','connector-app'].includes(name)) require(card.querySelector('[data-inline-setup]'), 'setup fields belong to the card');
+    else require(connectButton?.textContent.trim() === action && connectButton.classList.contains('pri') === primary, 'the connection action matches the state');
     if (name === "connector-authorizing" || name === "connector-slack-authorizing") {
-      const text = status.querySelector('span:last-child'), actionBox = buttons[0].getBoundingClientRect();
-      require(text.scrollWidth <= text.clientWidth + 1 && text.getBoundingClientRect().right <= actionBox.left - 4 && !/…|\.{3}/.test(text.textContent), "authorizing status uses its available width without truncation");
-      require(visible(card.querySelector('.spin')), "the card shows the sign-in under way");
+      require(visible(card.querySelector('.card-status.is-waiting i')), 'the card shows sign-in under way');
       require(window.__look.calls.some(call => call.method === "integrations.card_connect" && call.params?.id === card.dataset.connector),
         "Connect reached the core with the card's id");
     }
@@ -3811,7 +3968,7 @@ export function checkRendered(name, context = {}) {
       require(line.getBoundingClientRect().top >= box.bottom, "the resumed task comes after the card");
       require(!resumed.querySelector('.owner-message'), "the owner's request is not repeated as a new bubble");
       require([...resumed.querySelectorAll('.message-text')].some(text => visible(text) && text.textContent.includes("MC-4F2A")), "the resumed task's answer is shown");
-      require(visible(card.querySelector('.cc-done')), "the connected card carries its check");
+      require(visible(card.querySelector('.card-status.is-done')), "the connected card carries its check");
       plainWords();
     }
     return { check: name, app, state: card.dataset.cardState, words: said };
@@ -3825,9 +3982,9 @@ export function checkRendered(name, context = {}) {
     const [card] = cards, box = card.getBoundingClientRect(), column = card.closest('.ra-body').getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
-    const mark = card.querySelector('.mono'), markStyle = getComputedStyle(mark);
-    require(visible(mark) && mark.querySelector('svg'), "the card has its mark");
-    require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
+    const mark = card.querySelector('.mono'), markStyle = mark && getComputedStyle(mark);
+    if (secret) require(visible(mark) && mark.querySelector('svg'), "the secret card has its app mark");
+    if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     if (secret) require(mark.querySelector('svg.logo path'), "R-UI-34: the connection's own drawn mark, not a letter");
     const reply = [...card.closest('.tn').querySelectorAll('.ra .chat-message')].filter(visible).at(-1);
     require(reply && reply.getBoundingClientRect().bottom <= box.top + 1, "the card sits below the reply that asked for it");
@@ -3835,25 +3992,25 @@ export function checkRendered(name, context = {}) {
     for (const button of buttons) {
       const inside = button.getBoundingClientRect();
       require(inside.left >= box.left && inside.right <= box.right && inside.bottom <= box.bottom + 1, "R-UI-25: the action is inside its card");
-      require(button.classList.contains('btn') && parseFloat(getComputedStyle(button).borderTopWidth) > 0, "R-UI-17/18: a text action is a framed button");
+      require(button.tagName === "BUTTON", "R-UI-17/18: a text action is a framed button");
     }
-    const state = card.querySelector('.cc-state').textContent.trim(), calls = window.__look.calls;
+    const state = (card.querySelector('.cc-state') ?? card.querySelector('.card-status')).textContent.trim(), calls = window.__look.calls;
     const carrying = call => JSON.stringify(call.params ?? {}).includes(key);
     require(!document.documentElement.outerHTML.includes("開啟電腦") && !document.body.innerText.includes("開啟電腦"), "there is no 開啟電腦 step on the owner's own computer");
     if (name === "secret-masked") {
-      const field = card.querySelector('input'), save = buttons[0];
-      require(card.dataset.cardState === "pending" && state === "NOTION_TOKEN", `the card names the secret it fills (${state})`);
+      const field = card.querySelector('input'), save = card.querySelector('[data-act="card-save"]');
+      require(card.dataset.cardState === "pending" && card.textContent.includes("NOTION_TOKEN"), `the card names the secret it fills (${state})`);
       require(field.type === "password" && field.autocomplete === "off" && visible(field) && field.getBoundingClientRect().width >= 100, "the field is a masked field a key fits in");
       require(field.value === key && !field.hasAttribute('value'), "the characters live in the field only, never in its markup");
       require(!document.body.innerText.includes(key) && !document.documentElement.outerHTML.includes(key), "no characters of the key are drawn or in the page");
-      require(buttons.length === 1 && save.textContent.trim() === "安全儲存" && save.classList.contains('pri') && !save.disabled, "one primary 安全儲存, ready");
+      require(save.textContent.trim() === "安全儲存" && save.classList.contains('pri') && !save.disabled, "one primary 安全儲存, ready");
       require(visible(card.querySelector('.field svg')), "the field carries its lock");
       require(!calls.some(carrying), "nothing was sent before the owner saved it");
     }
     if (name === "secret-saved-not-resumed") {
       require(card.dataset.cardState === "saved" && card.dataset.cardError === "resume_failed", `saved, and the task did not continue (${card.dataset.cardState}/${card.dataset.cardError})`);
       require(state === "金鑰已儲存，這項工作沒有繼續", `the card says both things: "${state}"`);
-      require(!card.querySelector('input') && buttons.length === 1 && buttons[0].textContent.trim() === "再試一次" && buttons[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
+      require(!card.querySelector('input') && buttons.some(button => button.dataset.act === "card-resume" && button.textContent.trim() === "再試一次") && buttons[0].classList.contains('pri'), "no field is asked again: one primary 再試一次");
       require(visible(card.querySelector('.cc-name')) && !card.querySelector('.cc-done'), "the check is the resumed task's, not the saved key's");
       const sent = calls.filter(carrying);
       require(sent.length === 1 && sent[0].method === "integrations.card_save", "the key crossed one call, integrations.card_save, and no other");
@@ -3863,27 +4020,26 @@ export function checkRendered(name, context = {}) {
       plainWords();
     }
     if (name.startsWith("pc-")) {
-      const live = card.querySelector('.cc-live');
+      const live = card.querySelector('.card-status');
       if (name !== "pc-handback") {
         require(card.dataset.cardState === "control", `the owner has the computer (${card.dataset.cardState})`);
-        require(visible(live) && live.textContent.trim() === "你正在控制" && visible(live.querySelector('.dot')), "it says the owner is in control, with a dot and a word");
-        require(buttons.map(button => button.textContent.trim()).join("|") === "停止|我完成了" && buttons[1].classList.contains('pri') && !buttons[0].classList.contains('pri'),
-          "停止 then the primary 我完成了, the primary last");
-        require(state.startsWith("請在「Google Chrome」登入你的帳號，完成後交還控制"), `it names the window to use: "${state}"`);
-        require(card.querySelector('.mono svg.i') && card.querySelector('.cc-name span').textContent === "電腦", "the card is the computer's, with its icon");
+        require(visible(live) && live.textContent.includes("需要你") && visible(live.querySelector('i')), "it says the owner is in control, with a dot and a word");
+        require(visible(card.querySelector('[data-act="card-takeover"]')) && visible(card.querySelector('[data-act="card-done"]')) && visible(card.querySelector('[data-act="card-stop"]')), 'takeover, done and skip remain available');
+        require(state.startsWith('請在「Google Chrome」登入你的帳號，完成後交還控制'), 'the card names the app to use');
+
       }
       if (name === "pc-takeover") {
-        require(!card.dataset.cardNote && !card.querySelector('.cc-hint'), "a first hand-over has no hint");
+        require(!card.dataset.cardNote && !card.querySelector('[data-card-note]'), "a first hand-over has no hint");
         require(!calls.some(call => String(call.method ?? "").startsWith("integrations.card_")), "nothing was pressed");
       }
       if (name === "pc-human-control") {
-        require(card.dataset.cardNote === "still" && card.querySelector('.cc-hint')?.textContent === "看起來還沒完成，請再試一次", "the card says the sign-in does not look done");
+        require(card.dataset.cardNote === "still" && card.textContent.includes("看起來還沒完成，請再試一次"), "the card says the sign-in does not look done");
         require(calls.filter(call => call.method === "integrations.card_done").length === 1 && !calls.some(call => call.method === "integrations.card_stop"), "我完成了 was pressed once, 停止 never");
         require(!document.querySelector('[data-resumed]'), "the task did not resume");
       }
       if (name === "pc-handback") {
-        require(card.dataset.cardState === "done" && state === "已交還控制 · 工作已繼續" && visible(card.querySelector('.cc-done')), `the card says control went back and the task continued: "${state}"`);
-        require(buttons.length === 0 && !live, "no action is left, and the owner no longer controls");
+        require(card.dataset.cardState === "done" && card.querySelector(".card-detail[hidden]")?.textContent.includes("已交還控制 · 工作已繼續") && visible(card.querySelector('.card-status.is-done')), `the card says control went back and the task continued: "${state}"`);
+        require(!card.querySelector("[data-act^=card-]"), "no action is left, and the owner no longer controls");
         const [line] = eventLines(1), resumed = document.querySelector('.tn[data-id="141"]');
         require(line.textContent === "電腦 已交還控制，繼續原本的工作", `the resumed task opens with one line: ${line.textContent}`);
         const markBox = line.querySelector('svg.i').getBoundingClientRect();
@@ -3906,33 +4062,19 @@ export function checkRendered(name, context = {}) {
     const [card] = cards, box = card.getBoundingClientRect(), column = card.closest('.ra-body').getBoundingClientRect();
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(300, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
-    const mark = card.querySelector('.mono'), markStyle = getComputedStyle(mark);
+    const mark = card.querySelector('.mono'), markStyle = mark && getComputedStyle(mark);
     require(visible(mark) && mark.querySelector('svg.logo path'), "R-UI-34: the service's own drawn mark");
-    require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
-    const buttons = [...card.querySelectorAll('button')].filter(visible);
-    for (const button of buttons) {
-      const inside = button.getBoundingClientRect();
-      require(inside.left >= box.left && inside.right <= box.right && inside.bottom <= box.bottom + 1, "R-UI-25: the answer is inside its card");
-      require(button.classList.contains('btn') && parseFloat(getComputedStyle(button).borderTopWidth) > 0, "R-UI-17/18: a text answer is a framed button");
-      require(!button.disabled, "the answers can be pressed");
-    }
-    const answers = buttons.map(button => button.textContent.trim()).join("|");
-    require(answers === (waiting ? "拒絕|一律允許|允許一次" : "拒絕|允許一次"), `the card answers ${waiting ? "three ways" : "two ways, with no 一律允許 where a rule asks first"}: ${answers}`);
-    require(buttons.at(-1).classList.contains('pri') && buttons.slice(0, -1).every(button => !button.classList.contains('pri')), "R-UI-27: the primary answer is the last");
-    require(card.querySelector('.cc-name').textContent === "Gmail", "it names the service that asks");
-    require(card.dataset.cardState === "pending" && card.querySelector('.cc-ask').textContent.trim() === "是否讓「Gmail」執行「send_email」（to: mei@example.com, subject: 週四下午三點的會議）？",
-      "it says the exact action in plain words");
-    const gold = document.querySelector('.ask-card');
-    require(!gold || !visible(gold), "the question is answered by the card, once: the gold card stays away");
-    require(!window.__look.calls.some(call => call.command === "agent_question_answer"), "nothing was answered yet");
-    if (waiting) require(!card.querySelector('.cc-hint'), "no rule had it asked: there is no hint");
-    else {
-      const hint = card.querySelector('.cc-hint');
-      require(visible(hint) && hint.textContent.trim() === "此操作符合安全規則「寄信前先問」。", "it says which of the owner's rules had it asked");
-      require(![...document.querySelectorAll('.mail-card')].some(visible), "a member that writes no draft first asks the owner: there is no draft card");
-    }
+    if (mark) require(markStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(markStyle.borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
+    const buttons = [...card.querySelectorAll('.card-actions > button')].filter(visible);
+    require(buttons.map(button => button.textContent.trim()).join('|') === (waiting ? '允許一次|一律允許|拒絕' : '允許一次|拒絕'), 'permission actions keep once/always/deny semantics with primary first');
+    require(buttons[0].classList.contains('pri') && buttons.every(button => !button.disabled), 'answers are available');
+    require(card.querySelector('.card-title').textContent.includes('Gmail'), 'the title names who wants to act');
+    require(card.querySelector('.card-detail').hidden && card.querySelector('.card-detail').textContent.includes('send_email'), 'the exact action remains in a folded disclosure');
+    require(![...document.querySelectorAll('.ask-card')].some(visible), 'the permission is answered in one place');
+    require(!window.__look.calls.some(call => call.command === 'agent_question_answer'), 'nothing was answered yet');
+    if (!waiting) require(card.textContent.includes('寄信前先問'), 'the owner rule remains visible');
     plainWords();
-    return { check: name, answers };
+    return { check: name, answers: buttons.map(button => button.textContent.trim()) };
   }
   if (name === "member-draft-switch") {
     // The preference to write mail as a draft first is a switch beside the one that asks before contacting colleagues.
@@ -3964,8 +4106,8 @@ export function checkRendered(name, context = {}) {
     if (name === "email-draft-discard") {
       const done = [...document.querySelectorAll('.mail-done')].filter(visible);
       require(done.length === 1 && done[0].dataset.mailState === "discarded", "the discarded draft is one quiet line");
-      require(done[0].querySelector('.cc-state').textContent.trim() === "已捨棄，沒有寄出任何東西", "it says nothing was sent");
-      require(!document.querySelector('.mail-card') && ![...done[0].querySelectorAll('input, textarea, button')].length, "no field or action is left");
+      require(done[0].querySelector('.card-status').textContent.trim() === "已捨棄" && done[0].querySelector('.card-detail').textContent.includes("已捨棄，沒有寄出任何東西"), "the short status keeps the full explanation that nothing was sent in details");
+      require(!done[0].querySelector('input, textarea, [data-act^=mail-]') && done[0].querySelector('.card-detail').hidden, "no field or action is left");
       require(draftCalls.length === 1 && draftCalls[0].method === "integrations.draft_discard" && draftCalls[0].params.id === "mail-1", "捨棄 reached the core once and nothing else did");
       const box = done[0].getBoundingClientRect(), column = done[0].closest('.ra-body').getBoundingClientRect();
       require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the line fits the reply column");
@@ -3977,7 +4119,7 @@ export function checkRendered(name, context = {}) {
     require(box.left >= column.left - 1 && box.right <= column.right + 1, "R-UI-29: the card fits the reply column");
     require(box.width >= Math.min(360, column.width) - 1, `the card keeps a card's width, not a chip's (${Math.round(box.width)}px)`);
     require(card.scrollWidth <= card.clientWidth + 1 && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, "nothing scrolls sideways");
-    const head = card.querySelector('.mail-head .mono');
+    const head = card.querySelector('.card-head .mono');
     require(visible(head) && head.querySelector('svg.logo path'), "R-UI-34: the sending app's own drawn mark");
     require(getComputedStyle(head).backgroundColor === 'rgba(0, 0, 0, 0)' && parseFloat(getComputedStyle(head).borderTopWidth) === 0, "R-UI-34: the mark is bare, on no tile");
     require(!card.querySelector('select'), "no native select: the sender is a dropdown");
@@ -3989,19 +4131,20 @@ export function checkRendered(name, context = {}) {
     require(labels.every(label => Math.abs(label.getBoundingClientRect().left - labels[0].getBoundingClientRect().left) <= 1), "the labels line up");
     const body = card.querySelector('.mail-body');
     require(visible(body) && body.getBoundingClientRect().height >= 100 && body.getBoundingClientRect().right <= box.right, "the body is a field that can be read");
-    const buttons = [...card.querySelectorAll('.mail-actions button')].filter(visible);
+    const buttons = [...card.querySelectorAll('.card-actions > button')].filter(visible);
     for (const button of buttons) {
       const inside = button.getBoundingClientRect();
       require(inside.left >= box.left && inside.right <= box.right && inside.bottom <= box.bottom + 1, "R-UI-25: the action is inside its card");
-      require(button.classList.contains('btn') && parseFloat(getComputedStyle(button).borderTopWidth) > 0 && !button.disabled, "R-UI-17/18: a text action is a framed button that can be pressed");
+      require(button.tagName === "BUTTON" && !button.disabled, "R-UI-17/18: a text action is a framed button that can be pressed");
     }
-    require(buttons.map(button => button.textContent.trim()).join("|") === "捨棄|傳送" && buttons[1].classList.contains('pri') && !buttons[0].classList.contains('pri'), "R-UI-27: 捨棄 then the primary 傳送");
+    require(buttons.map(button => button.textContent.trim()).join("|") === "傳送|捨棄" && buttons[0].classList.contains('pri') && !buttons[1].classList.contains('pri'), "R-UI-27: 捨棄 then the primary 傳送");
     require(!card.closest('.tn').querySelector('.event-line, .mail-offer'), "no other line or choice is in this turn");
     if (name === "email-draft-edit") {
       const value = field => card.querySelector(`[data-mail-field="${field}"]`).value;
       require(value("to") === "mei@example.com" && value("cc") === "boss@example.com", "the recipients are what the owner typed");
       require(value("subject") === "回覆：週四下午三點的會議（改期確認）" && value("body").startsWith("小美，您好："), "the subject is what the owner typed and the body is kept");
-      require(card.querySelector('.mail-ver').textContent === "第 3 版" && card.dataset.version === "3" && card.dataset.digest === third, "each edit made a new version with a new digest");
+      require(card.dataset.version === "3" && card.dataset.digest === third, "each edit made a new version with a new digest");
+      require(!card.querySelector('[data-card-disclosure]'), 'editable draft fields do not have a redundant disclosure');
       const saves = draftCalls.filter(call => call.method === "integrations.draft_save");
       require(saves.length === 2 && draftCalls.length === 2, "two edits made two saves and nothing else");
       require(saves[0].params.digest === first && saves[1].params.digest === second, "each save is on the digest the version before came back with");
@@ -4011,7 +4154,8 @@ export function checkRendered(name, context = {}) {
     // email-draft-handed-off: the colleague's chat holds the same version, editable, and says whose draft it is.
     require(name === "email-draft-handed-off", `no expectation for ${name}`);
     require(card.dataset.mailState === "draft" && card.dataset.version === "1" && card.dataset.digest === first, "it is the same version, with the same digest");
-    require(card.querySelector('.mail-by').textContent === "來自 小晴 的草稿", "it says whose draft it is");
+    require(card.querySelector('.card-body.cc-state')?.textContent.includes("來自 小晴 的草稿"), "it says whose draft it is");
+    require(!card.querySelector('[data-card-disclosure]'), 'the author is visible without a redundant disclosure');
     require(![...card.querySelectorAll('input, textarea')].some(field => field.disabled) && !document.querySelector('.mail-offer, .event-line'), "it is editable, and asks nothing more");
     require(!document.body.innerText.includes("交給你") && !card.closest('.tn').querySelector('.owner-message'), "what the carrier turn is told is not shown, and no bubble is made of it");
     const handed = draftCalls.filter(call => call.method === "integrations.draft_handover");

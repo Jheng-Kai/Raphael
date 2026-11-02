@@ -413,6 +413,8 @@ export interface PermissionCard {
   summary: string;
   /** Which of the owner's rules had it asked, in words; null when the switch or the tier asked. */
   reason: string | null;
+  /** Declared delivery fields of a connected app's message, never its other tool arguments. */
+  message?: { workspace?: string; to?: string; cc?: string; subject?: string; thread?: string; body: string };
   /** The digest of the action: a yes is for this one only. */
   digest: string;
   /** Whether 一律允許 can take effect (never where a rule of the owner's asks first). */

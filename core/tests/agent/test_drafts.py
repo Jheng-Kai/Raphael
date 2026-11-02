@@ -445,6 +445,24 @@ async def test_unknown_drafts_and_bad_params_are_refused(desk):
         await desk.call("draft_save", id=draft.id, digest=draft.digest, subject="x" * 400)
 
 
+async def test_explicit_retry_of_a_failed_card_creates_one_new_attempt_and_rejects_replays(desk):
+    draft, _, _ = desk.write(subject="Project note", body="Please review the note.")
+    FAILING.append(True)
+    try:
+        failed = await desk.call("draft_send", id=draft.id, digest=draft.digest)
+        assert failed["draft"]["state"] == "failed"
+        retry = await desk.call("draft_send", id=draft.id, digest=draft.digest, retry_version=1)
+        assert retry["draft"]["version"] == 2
+        assert retry["draft"]["state"] == "failed"
+    finally:
+        FAILING.clear()
+    replay = await desk.call("draft_send", id=draft.id, digest=draft.digest, retry_version=1)
+    assert not replay["sent"] and SENT == []
+    sent = await desk.call("draft_send", id=draft.id, digest=draft.digest, retry_version=2)
+    assert sent["sent"] and len(SENT) == 1
+    assert not (await desk.call("draft_send", id=draft.id, digest=draft.digest, retry_version=2))["sent"]
+
+
 async def test_a_revision_by_the_member_is_a_new_version_on_the_card_in_the_newest_turn(desk):
     first, _, turn = desk.write(subject="回信")
     second, _, newer = desk.write(subject="回信（更短）", revise=True)

@@ -27,11 +27,23 @@ const visible = (html: string): string => html.replace(/<[^>]+>/g, " ").replace(
 const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)"/g)].map(match => match[1]);
 
 describe("a secret card", () => {
+  test("a saved key with a resume error explains it once without a repeated disclosure", () => {
+    const host = document.createElement("div");
+    host.innerHTML = secretCardHTML(card({ state: "saved", error: "resume_failed" }));
+    expect(host.querySelector(".card-body.cc-state")?.textContent).toContain(t("card.keyNotResumed"));
+    expect(host.querySelector("[data-card-disclosure]")).toBeNull();
+    expect(host.querySelector('[data-act="card-resume"]')).not.toBeNull();
+    const footer = host.querySelector("footer.card-actions");
+    expect(footer?.querySelector('[data-act="card-resume"]')).not.toBeNull();
+    expect(footer?.querySelector("[data-card-failed-close]")).not.toBeNull();
+    expect(host.querySelector("input")).toBeNull();
+  });
   test("shows the connection's own mark, bare, its secret's name, a masked field and a disabled framed Save", () => {
     const html = secretCardHTML(card());
     expect(html).toContain(SERVICE_ICONS.notion.path);
     expect(html).not.toContain("tile");
-    expect(visible(html)).toBe("Notion NOTION_TOKEN 安全儲存");
+    expect(visible(html)).toContain("連結 Notion 等你填入 安全儲存憑證後，就能繼續這項工作。 安全儲存");
+    expect(visible(html)).toContain("NOTION_TOKEN");
     expect(html).toContain('type="password"');
     expect(html).toContain('autocomplete="off"');
     expect(html).toContain('class="btn sm pri" data-act="card-save" data-card="k1" disabled');
@@ -66,7 +78,7 @@ describe("a secret card", () => {
     expect(visible(secretCardHTML(card({ state: "resuming" })))).toContain("已儲存 · 繼續這項工作…");
     expect(visible(secretCardHTML(card({ state: "resumed", resumed: true })))).toContain("已儲存 · 工作已繼續");
     const notResumed = secretCardHTML(card({ state: "saved", error: "resume_failed" }));
-    expect(visible(notResumed)).toBe("Notion 金鑰已儲存，這項工作沒有繼續 再試一次");
+    expect(visible(notResumed)).toContain(t("card.keyNotResumed"));
     expect(notResumed).not.toContain("<input");
     expect(visible(secretCardHTML(card({ state: "failed", error: "too_long" })))).toContain(t("card.keyTooLong"));
     expect(visible(secretCardHTML(card({ state: "failed", error: "unheard-of" })))).toContain(t("card.keyVault"));
@@ -76,10 +88,10 @@ describe("a secret card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(secretCardHTML(card()))).toBe("Notion NOTION_TOKEN Save securely");
-    expect(visible(secretCardHTML(card({ state: "saved", error: "resume_failed" })))).toBe("Notion The key is saved; the task did not continue Try again");
+    expect(visible(secretCardHTML(card()))).toContain("Connect Notion Waiting for input Save your credentials securely to continue the task. Save securely");
+    expect(visible(secretCardHTML(card({ state: "saved", error: "resume_failed" })))).toContain(t("card.keyNotResumed"));
     setLocale("ja");
-    expect(visible(secretCardHTML(card()))).toBe("Notion NOTION_TOKEN 安全に保存");
+    expect(visible(secretCardHTML(card()))).toContain("Notion に接続 入力待ち 認証情報を安全に保存すると作業を続けられます。 安全に保存");
     expect(visible(secretCardHTML(card({ state: "resumed" })))).toContain("保存済み · 作業を続けました");
   });
 
@@ -175,4 +187,11 @@ describe("a card drawn again", () => {
     expect(after.innerHTML).not.toContain("sample-owner");
     expect(after.innerHTML).not.toContain("sample-private-value");
   });
+});
+
+
+test("settled secrets have a short pill and keep the saved/resumed decision folded", () => {
+ document.body.innerHTML=secretCardHTML(card({state:"resumed",resumed:true}));
+ expect(document.querySelector('.card-status')?.textContent).toBe(t("cards.done"));
+ expect(document.querySelector('.card-detail[hidden]')?.textContent).toContain(t("card.keyResumed"));
 });

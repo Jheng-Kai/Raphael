@@ -9,6 +9,23 @@ const proposal = (extra: Partial<ConnectionProposal> = {}): ConnectionProposal =
 });
 
 describe("conversation MCP proposals", () => {
+  it("explains what reviewing a connection enables in each language", () => {
+    for (const [locale, words] of [["zh-TW", "測試通過後就能啟用工具"], ["en", "enable its tools after a successful test"], ["ja", "テストに成功したらツールを有効にできます"]] as const) {
+      setLocale(locale);
+      expect(mcpProposalHTML(proposal())).toContain(words);
+    }
+    setLocale("zh-TW");
+  });
+  it("keeps the permission explanation out of its short pill and cancellation settled", () => {
+    for (const locale of ["zh-TW", "en", "ja"] as const) {
+      setLocale(locale);
+      const html = mcpProposalHTML(proposal({ state: "approval" }));
+      expect(html).toContain(`data-card-status-text>${locale === "zh-TW" ? "需要你允許" : locale === "en" ? "Approval needed" : "承認が必要"}</span>`);
+      expect(html).toContain('<p class="card-body cc-state">');
+      expect(mcpProposalHTML(proposal({ state: "cancelled" }))).toContain('card-status is-ready');
+    }
+    setLocale("zh-TW");
+  });
   it("shows editable public fields and real actions without a raw JSON editor or secret values", () => {
     setLocale("zh-TW");
     const html = mcpProposalHTML(proposal());

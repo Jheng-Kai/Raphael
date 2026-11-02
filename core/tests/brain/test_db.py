@@ -10,6 +10,21 @@ from raphael_core.brain.settings import SettingsStore
 
 from .conftest import item
 
+
+def test_message_preview_migration_preserves_existing_permission_rows(monkeypatch):
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 54)
+        conn = db.connect(":memory:")
+    with conn:
+        conn.execute("INSERT INTO permission_cards(id,turn_id,member_id,source,kind,summary,digest,language,state,created_at_ms,updated_at_ms,expires_at_ms) VALUES ('sample',1,0,'ask','tool','Sample action','sample-digest','en','allowed',1,1,0)")
+    db.migrate(conn)
+    row = conn.execute("SELECT summary,digest,state,message FROM permission_cards WHERE id='sample'").fetchone()
+    assert tuple(row) == ("Sample action", "sample-digest", "allowed", "{}")
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
+    db.migrate(conn)
+    assert conn.execute("SELECT COUNT(*) FROM permission_cards").fetchone()[0] == 1
+    conn.close()
+
 # Schema v1 as it was made: every column with its type, NOT NULL, DEFAULT and primary key.
 SCHEMA_V1 = {
     "history": [
@@ -327,7 +342,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 55
+LATEST = 56
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -511,8 +526,10 @@ SCHEMA_V53 = {**SCHEMA_V52, "connection_proposals": [
     "done TEXT NOT NULL DEFAULT '[]'",
 ]}
 
-
 SCHEMA_V55 = {**SCHEMA_V53, "routine_runs": [*SCHEMA_V53["routine_runs"], "trigger_json TEXT NOT NULL DEFAULT '{}'"]}
+
+
+SCHEMA_V56 = {**SCHEMA_V55, "permission_cards": [*SCHEMA_V55["permission_cards"], "message TEXT NOT NULL DEFAULT '{}'"]}
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -669,7 +686,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V55) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V56) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -687,7 +704,7 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V55.items():
+    for table, columns in SCHEMA_V56.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

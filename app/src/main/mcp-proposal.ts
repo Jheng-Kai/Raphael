@@ -1,3 +1,4 @@
+import { cardDisclosureHTML, cardFailure, cardHTML } from "./card";
 import { connectionProposal } from "./api";
 import { describeError } from "./format";
 import { t } from "./i18n";
@@ -5,7 +6,7 @@ import { connectionMarkHTML } from "./secret-card";
 import type { AgentTurn, ConnectionProposal } from "./types";
 import { btn, esc } from "./ui";
 
-const stateKeys = { draft: "mcp.draft", approval: "mcp.approval", testing: "mcp.testing", tested: "mcp.tested", enabled: "mcp.enabled", cancelled: "mcp.cancelled" } as const;
+const stateKeys = { draft: "mcp.draft", approval: "cards.waiting", testing: "mcp.testing", tested: "mcp.tested", enabled: "mcp.enabled", cancelled: "mcp.cancelled" } as const;
 
 export function mcpProposalHTML(card: ConnectionProposal): string {
   const active = !["enabled", "cancelled", "testing", "approval"].includes(card.state);
@@ -19,18 +20,19 @@ export function mcpProposalHTML(card: ConnectionProposal): string {
       field("command", t("conn.form.command"), card.fields.command) + `<label class="mcp-field"><span>${esc(t("mcp.argLines"))}</span><textarea class="field" data-mcp-field="args" rows="${Math.max(1, card.fields.args.length)}"${active ? "" : " readonly"}>${esc(card.fields.args.join("\n"))}</textarea></label>`) +
     field(card.fields.transport === "http" ? "headers" : "env", t("mcp.secretNames"), (card.fields.transport === "http" ? card.fields.headers : card.fields.env).join(", "));
   let actions = "";
-  if (active) actions = action("cancel", t("conn.cancel")) + action("edit", t("mem.save")) +
-    (card.state === "tested" ? action("enable", t("mcp.enable"), true) : action("test", t("mcp.test"), true));
-  if (card.state === "approval") actions = (card.first_local ? action("test", t("local.never"), false, "never") : "") +
-    action("test", t(card.first_local ? "local.deny" : "local.skip"), false, "deny") +
+  if (active) actions = (card.state === "tested" ? action("enable", t("mcp.enable"), true) : action("test", t("mcp.test"), true)) + action("edit", t("mem.save")) + action("cancel", t("conn.cancel"));
+  if (card.state === "approval") actions = action("test", t(card.first_local ? "perm.once" : "local.allow"), true, "once") +
     (card.first_local ? action("test", t("perm.always"), false, "always") : "") +
-    action("test", t(card.first_local ? "perm.once" : "local.allow"), true, "once");
+    action("test", t(card.first_local ? "local.deny" : "local.skip"), false, "deny") +
+    (card.first_local ? action("test", t("local.never"), false, "never") : "");
   const groups = card.groups.map(group => `<section class="mcp-tools"><h4>${esc(t(group.kind === "read" ? "conn.group.read" : "conn.group.write"))}</h4><ul>${group.tools.map(name => `<li>${esc(name)}</li>`).join("")}</ul></section>`).join("");
-  return `<div class="connector-card has-form mcp-proposal" data-mcp-proposal="${esc(card.id)}" data-mcp-revision="${card.revision}" data-mcp-fields="${esc(JSON.stringify(card.fields))}" data-card-state="${card.state}" role="group" aria-label="${esc(card.fields.name)}">` +
-    connectionMarkHTML(card.fields.name) + `<div class="cc-meta"><div class="cc-name">${esc(card.fields.name)}</div><div class="cc-state" role="status">${esc(t(stateKeys[card.state]))}</div></div>` +
-    `<div class="mcp-fields" data-mcp-transport="${card.fields.transport}">${form}</div>${groups}` +
-    `<div class="mcp-error" role="alert"${card.error ? "" : " hidden"}>${card.error ? esc(t(card.error === "missing_secret" ? "mcp.missingSecret" : card.error === "local_disabled" ? "mcp.localDisabled" : "mcp.failed")) : ""}</div>` +
-    `<div class="cc-actions">${actions}</div></div>`;
+  const settled = card.state === "enabled" || card.state === "cancelled";
+  const content = `<div class="card-well mcp-fields" data-mcp-transport="${card.fields.transport}">${form}</div>${groups}`;
+  return cardHTML({ title: card.fields.name, mark: connectionMarkHTML(card.fields.name), status: card.error ? "failed" : card.state === "enabled" ? "done" : card.state === "tested" || card.state === "cancelled" ? "ready" : "waiting",
+    statusText: card.error ? t("cards.failed") : t(stateKeys[card.state]), body: card.error ? t("cards.retained") : card.state === "approval" ? t("mcp.approval") : settled ? undefined : t("cards.mcpReview"),
+    content: (settled ? cardDisclosureHTML(card.id, content) : content) + `<div class="mcp-error" role="alert"${card.error ? "" : " hidden"}>${card.error ? esc(t(card.error === "missing_secret" ? "mcp.missingSecret" : card.error === "local_disabled" ? "mcp.localDisabled" : "mcp.failed")) : ""}</div>`,
+    actions, cls: "mcp-proposal", attrs: ` data-mcp-proposal="${esc(card.id)}" data-mcp-revision="${card.revision}" data-mcp-fields="${esc(JSON.stringify(card.fields))}" data-card-state="${card.state}"`,
+  });
 }
 
 export const mcpProposalsHTML = (turn: AgentTurn): string => (turn.connection_proposals ?? []).map(mcpProposalHTML).join("");
@@ -69,6 +71,7 @@ export function mountMcpProposals(thread: HTMLElement, changed: () => void): voi
       const notice = card.querySelector<HTMLElement>('[role="alert"]')!;
       notice.textContent = describeError(error); notice.hidden = false;
       card.querySelectorAll<HTMLButtonElement>("button").forEach(control => { control.disabled = false; });
+      cardFailure(card, () => button.click());
     }).finally(() => busy.delete(id));
   });
 }

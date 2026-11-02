@@ -1,3 +1,4 @@
+import cards from "./cards.mjs";
 import polish from "./polish.mjs";
 import handoffGroup from "./handoff-group.mjs";
 import menus from "./menus.mjs";
@@ -33,5 +34,6 @@ export const scenes = withOwnerRound4([...polish, ...mcpProposals, ...workBatch,
 scenes.push(...mediaData);
 scenes.push(...handoffGroup);
 scenes.push(...menus);
+scenes.push(...cards);
 scenes.push(...answerForms);
 if (new Set(scenes.map(scene => scene.name)).size !== scenes.length) throw new Error("Duplicate look scene name");

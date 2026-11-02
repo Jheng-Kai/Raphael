@@ -1,8 +1,6 @@
 // The questions of the background: a task that needs the owner's yes pauses and waits, at most a day,
-// for an answer here (the core's `background/service.py`). Each is a gold card, like the card of
-// Raphael's YES/NO question, with an outlined 「否」 and a gold 「是」. In Raphael's thread it is his:
-// his bare emblem. In a member's thread it is that member's: their face and name. The question is
-// plain words either way; his 《問。…》 belongs to the desktop overlay.
+// for an answer here (the core's `background/service.py`). The shared permission card names the
+// member and action in plain words, with Allow once first and Deny beside it.
 // It is answered here only, never from a chat app (`background.answer`, which the core refuses from
 // anywhere else).
 //
@@ -13,6 +11,7 @@
 // `backgroundQuestionHTML` draws one card from a question (pure, so it can be tested without a
 // browser). Nothing here logs a question.
 
+import { cardHTML, cardFailure } from "./card";
 import { core } from "./api";
 import { avatarHTML, onAvatarChange } from "./avatar";
 import { describeError } from "./format";
@@ -54,24 +53,16 @@ const RAPHAEL: Asker = {
   name: null,
 };
 
-/**
- * One card, then 「否」 (outlined) and 「是」 (gold), the buttons off while it is being answered. By
- * Raphael it carries his emblem; by a member, that member's face and name. The question's words are
- * as they are.
- */
+/** One shared card, scoped to its originating member, with controls disabled during the answer. */
 export function backgroundQuestionHTML(q: BackgroundQuestion, busy = false, asker: Asker = RAPHAEL): string {
-  if (q.permission) return `<div data-bgq-card="${esc(q.id)}" data-task="${q.task_id}">${permissionCardHTML(q.permission, !busy)}</div>`;
+  if (q.permission) return `<div data-bgq-card="${esc(q.id)}" data-task="${q.task_id}">${permissionCardHTML(q.permission, !busy, asker.name || t("agent.title"))}</div>`;
   const off = busy ? " disabled" : "";
   const ids = ` data-task="${q.task_id}" data-id="${esc(q.id)}"`;
-  const head = asker.name === null ? "" : `<span class="bgq-name">${esc(asker.name)}</span>`;
-  return (
-    `<div class="bgq-card${asker.name === null ? "" : " is-member"}" role="group" aria-label="${esc(t("agent.asking"))}" data-bgq-card="${esc(q.id)}">` +
-    `<div class="bgq-q">${asker.face}<span class="bgq-t">${head}<span class="bgq-line">${esc(q.text)}</span></span></div>` +
-    `<div class="bgq-row">` +
-    `<button type="button" class="btn bgq-no" data-bgq="no"${ids}${off}>${esc(t("agent.no"))}</button>` +
-    `<button type="button" class="btn bgq-yes" data-bgq="yes"${ids}${off}>${esc(t("agent.yes"))}</button>` +
-    `</div></div>`
-  );
+  return cardHTML({ title: asker.name ? t("cards.permission", { p0: asker.name }) : t("perm.title"), status: "waiting", body: q.text,
+    actions: `<button type="button" class="btn sm pri bgq-yes" data-bgq="yes"${ids}${off}>${esc(t("perm.once"))}</button>` +
+      `<button type="button" class="btn sm bgq-no" data-bgq="no"${ids}${off}>${esc(t("perm.deny"))}</button>`,
+    cls: "bgq-card", attrs: ` data-bgq-card="${esc(q.id)}"`,
+  });
 }
 
 export interface BackgroundQuestionsHost {
@@ -165,7 +156,11 @@ export function createBackgroundQuestions(host: BackgroundQuestionsHost): Backgr
         ...(permission ? { digest: permission.digest, always: choice === "perm-always", never: choice === "perm-never" } : {}) });
       if (reply.status !== "approved" && reply.status !== "denied") toaster.info(t("bgq.gone"));
     } catch (err) {
-      toaster.info(describeError(err));
+      const card = [...element.querySelectorAll<HTMLElement>("[data-bgq-card]")].find(card => card.dataset.bgqCard === id);
+      if (!cardFailure(card ?? null, () => { void answer(taskId, id, approved, choice); })) toaster.info(describeError(err));
+      answering.delete(id);
+      card?.querySelectorAll<HTMLButtonElement>("button").forEach(button => { button.disabled = false; });
+      return;
     }
     answering.delete(id);
     await load();

@@ -120,14 +120,14 @@ test("two conversations of one member retain independent approval cards", async 
   const page = createAgent({ go() {}, device: () => ({}), onEvent(handler: typeof emit) { emit = handler; return () => {}; }, undo: { begin() {} }, cleared: new Cleared() } as unknown as AppContext);
   document.body.append(page.el); page.show(); await flush();
   for (const id of [1, 2]) emit({ type: "AgentQuestion", id: `q-${id}`, member_id: 0, conversation_id: id, text: `儲存摘要 ${id}？`, prefix: "問", tier: "T2", timeout_ms: 60_000 });
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-1");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-1");
   if (page.el.querySelector(".conversation-trigger")!.getAttribute("aria-expanded") !== "true") page.el.querySelector<HTMLButtonElement>(".conversation-trigger")!.click(); await flush();
   document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="2"]')!.click(); await flush();
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-2");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
   emit({ type: "AgentQuestionClosed", id: "q-1" });
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.dataset.id).toBe("q-2");
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.dataset.id).toBe("q-2");
   document.querySelector<HTMLButtonElement>('.mb-det [data-conversation-open="1"]')!.click(); await flush();
-  expect(page.el.querySelector<HTMLElement>(".ask-card")!.hidden).toBe(true);
+  expect(page.el.querySelector<HTMLElement>(".ask-card-host")!.hidden).toBe(true);
   page.hide();
 });
 

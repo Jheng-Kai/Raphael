@@ -23,12 +23,12 @@ const actions = (html: string): string[] => [...html.matchAll(/data-act="([^"]+)
 describe("a computer card", () => {
   test("names the window to use, says the computer is the owner's and offers 停止 then 我完成了", () => {
     const html = computerCardHTML(card());
-    expect(visible(html)).toBe("電腦 你正在控制 請在「Google Chrome」登入你的帳號，完成後交還控制 停止 我完成了");
-    expect(actions(html)).toEqual(["card-stop", "card-done"]);
+    expect(visible(html)).toBe("電腦 需要你 請在「Google Chrome」登入你的帳號，完成後交還控制 接手 我完成了 略過");
+    expect(actions(html)).toEqual(["card-takeover", "card-takeover", "card-done", "card-stop"]);
     // Real framed buttons, the primary last; no 開啟電腦 step on the owner's own computer.
-    expect(html).toContain('class="btn sm" data-act="card-stop" data-card="p1"');
-    expect(html).toContain('class="btn sm pri" data-act="card-done" data-card="p1"');
-    expect(html.indexOf("card-stop")).toBeLessThan(html.indexOf("card-done"));
+    expect(html).toContain('class="btn sm card-quiet" data-act="card-stop" data-card="p1"');
+    expect(html).toContain('class="btn sm pri" data-act="card-takeover" data-card="p1"');
+    expect(html.indexOf("card-done")).toBeLessThan(html.indexOf("card-stop"));
     expect(html).not.toContain("開啟電腦");
     expect(html).toContain("<svg");
     expect(html).not.toContain("tile");
@@ -51,12 +51,12 @@ describe("a computer card", () => {
     }
     const still = computerCardHTML(card({ note: "still" }));
     expect(visible(still)).toContain("看起來還沒完成，請再試一次");
-    expect(actions(still)).toEqual(["card-stop", "card-done"]);
+    expect(actions(still)).toEqual(["card-takeover", "card-takeover", "card-done", "card-stop"]);
     expect(visible(computerCardHTML(card({ state: "returning" })))).toContain("已交還控制，繼續中…");
     expect(visible(computerCardHTML(card({ state: "returning" })))).not.toContain("你正在控制");
     expect(visible(computerCardHTML(card({ state: "done" })))).toContain("已交還控制 · 工作已繼續");
     // The clauses stay whole when the line wraps, in the words of Chinese and Japanese; English wraps at its spaces.
-    expect(computerCardHTML(card())).toContain('<span class="cc-clause">請在「Google Chrome」登入你的帳號，</span><span class="cc-clause">完成後交還控制</span>');
+    expect(computerCardHTML(card())).toContain('請在「Google Chrome」登入你的帳號，完成後交還控制');
     setLocale("en");
     expect(computerCardHTML(card())).not.toContain("cc-clause");
     setLocale("zh-TW");
@@ -67,9 +67,9 @@ describe("a computer card", () => {
 
   test("speaks only the window's language", () => {
     setLocale("en");
-    expect(visible(computerCardHTML(card()))).toBe("Computer You are in control Sign in to your account in Google Chrome, then hand control back Stop I'm done");
+    expect(visible(computerCardHTML(card()))).toBe("Computer Action needed Sign in to your account in Google Chrome, then hand control back Take over I'm done Skip");
     setLocale("ja");
-    expect(visible(computerCardHTML(card()))).toBe("コンピューター 操作はあなたの手元です Google Chrome でアカウントにサインインし、完了したら操作を返してください 停止 完了しました");
+    expect(visible(computerCardHTML(card()))).toBe("コンピューター 操作が必要 Google Chrome でアカウントにサインインし、完了したら操作を返してください 引き継ぐ 完了しました スキップ");
   });
 
   test("escapes the app's name", () => {
