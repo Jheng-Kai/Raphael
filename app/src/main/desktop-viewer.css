@@ -1,12 +1,12 @@
 /* The panel previews the member's workspace; takeover carries that same stream. */
 .mb-det:not([data-details-tab="details"]) .desktop-panel:not([data-expanded]) { display: none; }
 .is-computer-active.btn.icon { color: var(--computer-active); }
-.desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.desktop-wallpaper { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
 .desktop-last { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .desktop-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
 .desktop-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--sp-2); min-height: 0; }
 .desktop-caption { margin: 0; color: var(--text-3); font-size: var(--fs-sm); font-weight: 400; text-align: center; }
-.desktop-screen { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
+.desktop-screen, [data-card-desktop-screen], [data-card-screen] { --text: var(--desktop-frame-text); --text-2: var(--desktop-frame-text); --text-3: color-mix(in srgb, var(--desktop-frame-text) 70%, transparent); --panel: var(--desktop-frame-bg); --content: var(--desktop-frame-bg); }
 .desktop-takeover-bar { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); }
 .desktop-identity { display: flex; align-items: center; gap: var(--sp-2); flex: 1; min-width: 0; }
 .desktop-identity > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -22,11 +22,11 @@
 .desktop-heading h2 { margin: 0; overflow: hidden; color: inherit; font-size: var(--fs-sm); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .desktop-request { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-screen { position: relative; width: 100%; aspect-ratio: 1280 / 900; min-height: 160px; overflow: hidden; background: var(--content); border: 1px solid var(--line); border-radius: var(--r-sm); }
-.desktop-screen iframe { display: block; width: 100%; height: 100%; border: 0; }
-.btn.desktop-hit { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
+.desktop-screen iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe { position: relative; z-index: 1; display: block; width: 100%; height: 100%; border: 0; }
+.btn.desktop-hit { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: transparent; cursor: pointer; }
 .btn.desktop-hit:is(:hover, :active):not(:disabled) { background: transparent; box-shadow: inset 0 0 0 1px var(--hover-edge); }
 .desktop-hit:disabled { cursor: progress; }
-.desktop-owner { position: absolute; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
+.desktop-owner { position: absolute; z-index: 2; left: var(--sp-2); bottom: var(--sp-2); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--text); font-size: var(--fs-2xs); pointer-events: none; }
 .desktop-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 .desktop-recording { margin: 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .desktop-try { display: flex; gap: var(--sp-2); }
@@ -44,18 +44,25 @@
 .checkpoint-uncovered { margin: 0; padding-left: var(--sp-5); overflow-wrap: anywhere; }
 .desktop-panel:has(.desktop-review:not([hidden])) .desktop-shell { display: none; }
 .desktop-actions:has(> [hidden]:only-child), .desktop-actions:not(:has(> :not([hidden]))) { display: none; }
-.desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-4) var(--sp-4) 56px; white-space: pre-line; overflow-wrap: anywhere; text-align: center; color: var(--text-2); background: color-mix(in srgb, var(--desktop-frame-bg) 70%, transparent); }
-.desktop-screen:has(.desktop-preparation, .missing-note) { aspect-ratio: auto; }
-.desktop-screen:has(.desktop-preparation, .missing-note) .desktop-placeholder { position: relative; min-height: 160px; padding: var(--sp-4); }
+.desktop-placeholder { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--sp-3); overflow-wrap: anywhere; text-align: center; color: var(--text-2); pointer-events: none; }
+.desktop-placeholder > * { pointer-events: auto; }
+.desktop-message, .desktop-placeholder .missing-note, .desktop-preparation { padding: var(--sp-3) var(--sp-4); border-radius: var(--r-lg); background: color-mix(in srgb, var(--desktop-frame-bg) 82%, transparent); }
 .desktop-placeholder .missing-note { --btn: var(--desktop-frame-bg); --hover: color-mix(in srgb, var(--desktop-frame-text) 10%, var(--desktop-frame-bg)); --pressed: color-mix(in srgb, var(--desktop-frame-text) 18%, var(--desktop-frame-bg)); }
 .desktop-error { margin: 0; color: var(--err); }
-.desktop-preparation { width: min(100%, var(--layout-card-max)); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-4); }
-.desktop-preparation ol { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); margin: 0; padding-left: var(--sp-5); text-align: start; }
-.desktop-preparation li[data-stage="current"] { color: var(--text); font-weight: 600; }
-.desktop-preparation li[data-stage="next"] { color: var(--text-3); }
-.desktop-preparation p { margin: 0; font-size: var(--fs-sm); }
-.desktop-preparation progress { width: 100%; height: var(--sp-2); accent-color: var(--desktop-frame-text); }
-.desktop-build-progress { max-width: 100%; overflow-wrap: anywhere; }
+.desktop-preparation { width: fit-content; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); }
+.desktop-boot-face > .av { --av: 64px; }
+.card-computer-screen:has(.desktop-preparation) > button .i { visibility: hidden; }
+.desktop-preparation p { margin: 0; font-size: var(--fs-sm); line-height: 1.4; color: var(--text-3); }
+.desktop-preparation .desktop-first-build { max-width: 28ch; font-size: var(--fs-xs); color: var(--text-3); }
+.desktop-preparation progress { width: 100%; height: 2px; border: 0; border-radius: var(--r-pill); overflow: hidden; appearance: none; background: color-mix(in srgb, var(--desktop-frame-text) 15%, transparent); }
+.desktop-preparation progress::-webkit-progress-bar { background: transparent; }
+.desktop-preparation progress::-webkit-progress-value { background: var(--desktop-frame-text); }
+.desktop-preparation progress::-moz-progress-bar { background: var(--desktop-frame-text); }
+.desktop-panel[data-expanded] .desktop-boot-face > .av { --av: 96px; }
+@media (prefers-reduced-motion: no-preference) {
+  [data-desktop-stream]:not([hidden]) { animation: desktop-stream-in 240ms ease-out both; }
+  @keyframes desktop-stream-in { from { opacity: 0; } to { opacity: 1; } }
+}
 
 :root[data-desktop-expanded] .page-agent .mb-det { position: fixed; inset: var(--window-controls-height) 0 0; width: 100%; max-width: none; padding-top: 0; z-index: 80; transform: none; }
 :root[data-window-layout][data-desktop-expanded]:not([data-window-modal="true"]):not(:has(.mb-scrim:not(.cr-scrim))) .window-chrome { left: 0; border-top-left-radius: 0; background: var(--side); }

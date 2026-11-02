@@ -565,6 +565,34 @@ export async function perform(page, step, evidenceDirectory) {
       if (writes.length) throw new Error(`An unchanged desktop refresh wrote to the panel: ${writes.join(', ')}`);
       return { check: 'desktop-refresh-still', mutations: writes.length };
     }
+    case "desktop-boot-connect": {
+      const before = await page.evaluate(() => {
+        const box = document.querySelector('.desktop-screen').getBoundingClientRect();
+        const source = document.querySelector('.desktop-wallpaper').getAttribute('src');
+        Object.assign(window.__look.data.desktop, {state:'running',ready:true});
+        return {width:box.width,height:box.height,source};
+      });
+      await page.waitForSelector('.desktop-screen iframe:not([hidden])', {visible:true});
+      const after = await page.evaluate(() => {
+        const screen = document.querySelector('.desktop-screen'), frame = screen.querySelector('iframe');
+        const box = screen.getBoundingClientRect();
+        return {width:box.width,height:box.height,source:screen.querySelector('.desktop-wallpaper').getAttribute('src'),animation:getComputedStyle(frame).animationName};
+      });
+      if (Math.abs(before.width-after.width) > 1 || Math.abs(before.height-after.height) > 1 || before.source !== after.source) throw new Error('Boot readiness changed the screen geometry or wallpaper period');
+      if (after.animation !== 'none') throw new Error('Reduced motion must not fade the stream');
+      await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
+      const fade = await page.evaluate(() => {
+        const frame = document.querySelector('.desktop-screen iframe');
+        const animation = frame.getAnimations().find(item => item.animationName === 'desktop-stream-in');
+        if (!animation) throw new Error('The connected stream has no fade');
+        animation.pause();
+        const opacity = [0,120,240].map(time => { animation.currentTime=time; return Number(getComputedStyle(frame).opacity); });
+        return {duration:animation.effect.getTiming().duration,opacity};
+      });
+      if (fade.duration !== 240 || fade.opacity[0] !== 0 || fade.opacity[1] <= 0 || fade.opacity[1] >= 1 || fade.opacity[2] !== 1) throw new Error(`Unexpected stream fade: ${JSON.stringify(fade)}`);
+      await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+      return {check:'desktop-boot-connect',before,after,fade};
+    }
     case "wait": { const element = await visible(step.selector); await element.dispose(); break; }
     case "wait-text":
       try {

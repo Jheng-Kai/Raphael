@@ -585,3 +585,11 @@ R-CARD-05..77: conversation.md also maps exact connected-message previews and th
 Conversation review: R-CARD-07 covers single-call Composio draft projection and localized member/app identity while preserving approval semantics. R-CARD-08 exempts unanswered owner questions from the waiting pill and covers the rightmost Close plus visible empty/typed submit states. See conversation.md for the selected card, question and approval matrix.
 
 R-CARD-06 review coverage also includes neutral cancelled questions without redundant disclosures and viewer-driven computer waits without a second live work line. conversation.md records the selected 21-scene recheck and the unchanged-renewal/same-stream regression tests.
+
+## Slime town and computer preparation (2026-11-03)
+
+See [Member computer](member-computer.md#slime-town-and-computer-preparation-2026-11-03)
+for R-UI-92/86/87, deterministic period fixtures, preparation in all three viewing
+locations, retained motion and wallpaper-to-stream continuity. Protected map and
+rule additions are staged under `.fold/.agents/` for coordinator promotion.
+

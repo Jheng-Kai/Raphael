@@ -1,5 +1,15 @@
 # Raphael product rules
 
+## Slime town and computer preparation (2026-11-03)
+
+R-UI-93 supersedes R-CARD-01's no-face rule only inside the booting computer screen's desktop-boot-face. Card headings, bodies and other card kinds retain the no-face contract.
+
+| ID | Date | Rule | Check | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-UI-92 | 2026-11-03 | The guest and every computer preview share the original deterministic slime town through five local-hour periods. Every period has the crowned blue slime; night closes all six pairs of eyes. SVGs contain only local vector primitives and gradients, without images or text. | pytest, look | hard | core/tests/computer/test_wallpaper.py::test_original_slime_town_is_self_contained_and_sleeps_at_night; desktop-wallpaper-morning/noon/dusk/evening/night |
+| R-UI-93 | 2026-11-03 | Computer preparation keeps the running screen geometry and full-strength bottom-aligned wallpaper. A small translucent frame-token pill holds the member's own working character and one localized current stage; Raphael keeps his emblem. Only a real percent draws a thin progress line, and only building adds the first-build explanation. No spinner, stage list or raw build log. Panel, expanded view and both conversation-card screens share this rendering. | vitest, look | hard | app/src/main/desktop-viewer.test.ts::%s shows preparation without a blank stream; desktop-starting/building/preparing; desktop-boot-inline/card/expanded/raphael |
+| R-UI-94 | 2026-11-03 | The connected stream fades over the retained wallpaper in 240ms, with no fade under reduced motion. Preparation updates preserve the character node and its motion; unchanged renewals write nothing (R-UI-71). Expanding preparation never opens an unready stream. | vitest, look | hard | app/src/main/desktop-viewer.test.ts::real build percent updates preserve the working character and unchanged refresh writes nothing; desktop-boot-connect; desktop-boot-expanded; desktop-panel; desktop-viewer |
+
 ## Owner polish (2026-11-01)
 
 These rows supersede R-UI-56 only for Settings > Data. Other overflow-menu rules remain in force.

@@ -26,16 +26,23 @@ export interface DesktopState {
 export interface DesktopSession { session: string; url: string }
 const STATUS_KEY = { stopped: "desktop.stopped", unavailable: "desktop.unavailable", connecting: "desktop.connecting", starting: "desktop.starting", building: "desktop.building", preparing: "desktop.preparing", owner: "desktop.owner", member: "desktop.member" } as const;
 
-export function preparationHTML(state: DesktopState): string {
+export function preparationHTML(state: DesktopState, face = ""): string {
   const stages = ["starting", "building", "preparing"] as const;
   const at = stages.indexOf(state.state as typeof stages[number]);
   const percent = state.progress?.match(/\b(\d{1,3}(?:\.\d+)?)%/);
   const value = percent ? Math.min(100, Number(percent[1])) : undefined;
-  return `<div class="desktop-preparation"><span class="spin" aria-hidden="true"></span>` +
-    `<ol>${stages.map((stage, index) => `<li data-stage="${index < at ? "done" : index === at ? "current" : "next"}"${index === at ? ' aria-current="step"' : ""}>${esc(t(STATUS_KEY[stage]))}</li>`).join("")}</ol>` +
-    `<progress aria-label="${esc(t(STATUS_KEY[stages[Math.max(0, at)]]))}" max="100"${value === undefined ? "" : ` value="${value}"`}></progress>` +
-    (state.progress ? `<p class="desktop-build-progress">${esc(state.progress)}</p>` : "") +
-    (state.state === "building" ? `<p>${esc(t("desktop.firstBuild"))}</p>` : "") + `</div>`;
+  const character = document.createElement('template');
+  character.innerHTML = face;
+  const identity = character.content.querySelector('[data-presence-member]')?.getAttribute('data-presence-member') ?? '';
+  for (const node of character.content.querySelectorAll<HTMLElement>('.av')) node.style.removeProperty('--av');
+  for (const node of character.content.querySelectorAll('[data-presence-member], [data-tooltip]')) { node.removeAttribute('data-presence-member'); node.removeAttribute('data-tooltip'); }
+  // Boot has its own working motion, independent of the member's conversation activity.
+  for (const node of character.content.querySelectorAll('.slime-surface, svg.slime')) { node.setAttribute('data-state', 'working'); node.removeAttribute('data-slime-member'); }
+  const label = esc(t(STATUS_KEY[stages[Math.max(0, at)]]));
+  return `<div class="desktop-preparation" role="status"><div class="desktop-boot-face" data-k="desktop-face-${esc(identity)}" aria-hidden="true">${character.innerHTML}</div>` +
+    `<p class="desktop-stage">${label}</p>` +
+    (value === undefined ? "" : `<progress aria-label="${label}" max="100" value="${value}"></progress>`) +
+    (state.state === "building" ? `<p class="desktop-first-build">${esc(t("desktop.firstBuild"))}</p>` : "") + `</div>`;
 }
 
 export function mountDesktopViewer(host: HTMLElement, member: () => number,
@@ -141,7 +148,6 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(retry, "textContent", t(asleep ? "computer.open" : "desktop.retry")); paint(retry, "hidden", !!running || !!preparing || state?.state === "absent"); paint(retry, "disabled", opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
     const wallpaper = panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!;
-    paint(wallpaper, "hidden", !!running && connected && (!inline || expanded));
     const source = `/wallpapers/${period}.svg`;
     if (wallpaper.getAttribute('src') !== source) wallpaper.setAttribute('src', source);
     const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
@@ -149,12 +155,19 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     paint(last, "hidden", !picture);
     if (picture && last.src !== picture) paint(last, "src", picture);
     paint(placeholder, "hidden", (!!running && connected) || !!picture);
-    patchHTML(placeholder, preparing ? preparationHTML(state!) : esc(t(!running && state?.error ? state.error === "build_failed" || state.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed" : STATUS_KEY[label])));
-    if (state?.state === "incompatible") patchHTML(placeholder, esc(t("desktop.incompatible")));
+    patchHTML(placeholder, preparing ? preparationHTML(state!, face) : `<span class="desktop-message">${esc(t(!running && state?.error ? state.error === "build_failed" || state.error === "pull_failed" ? "desktop.buildFailed" : "desktop.startFailed" : STATUS_KEY[label]))}</span>`);
+    if (state?.state === "incompatible") patchHTML(placeholder, `<span class="desktop-message">${esc(t("desktop.incompatible"))}</span>`);
     if (state?.state === "absent") patchHTML(placeholder, noticeHTML(state.error === "disabled" ? "installation" : "docker", state.error === "disabled" ? null : "computer", "computer"));
     if (!running && frame.hasAttribute('src')) { frame.remove(); frame.removeAttribute('src'); connected = interactive = false; }
     if (running && session && !frame.hasAttribute('src') && active()) { paint(frame, "src", session.url); panel.querySelector('.desktop-screen')!.append(frame); }
     if (inline) {
+      let background = inline.querySelector<HTMLImageElement>(':scope > .desktop-wallpaper');
+      if (!background) { background = document.createElement('img'); background.className = 'desktop-wallpaper'; background.alt = ''; inline.prepend(background); }
+      if (background.getAttribute('src') !== source) background.setAttribute('src', source);
+      let waiting = inline.querySelector<HTMLElement>(':scope > .desktop-placeholder');
+      if (!waiting) { waiting = document.createElement('div'); waiting.className = 'desktop-placeholder'; inline.append(waiting); }
+      paint(waiting, 'hidden', !!running && connected);
+      patchHTML(waiting, placeholder.innerHTML);
       inline.toggleAttribute("data-owner-control", !!owner);
       const cover = inline.querySelector<HTMLButtonElement>(":scope > button"); if (cover) paint(cover, "hidden", !!owner);
     }
@@ -328,7 +341,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   });
   function acquire(): void {
     suspended = false; takeOnConnect = true; expand(true);
-    if (connected) { takeOnConnect = false; void control(true); } else void openStream();
+    if (connected) { takeOnConnect = false; void control(true); } else if (state?.state === 'running') void openStream();
   }
   hit.addEventListener('click', acquire);
   // A small picture is no place to work: the same stream fills the window, under the owner's hands.

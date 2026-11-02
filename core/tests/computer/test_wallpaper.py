@@ -1,5 +1,6 @@
 import runpy
 import ast
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,30 @@ def test_wallpaper_assets_are_deterministic_and_shared_with_the_panel():
     for name, content in assets.items():
         assert (DESKTOP / "wallpapers" / name).read_text(encoding="utf-8") == content
         assert (DESKTOP.parents[5] / "app/public/wallpapers" / name).read_text(encoding="utf-8") == content
-        assert len(content.encode()) < 3000
+        assert len(content.encode()) < 20000
+
+
+@pytest.mark.parametrize("period", ["morning", "noon", "dusk", "evening", "night"])
+def test_original_slime_town_is_self_contained_and_sleeps_at_night(period):
+    module = runpy.run_path(str(DESKTOP / "wallpaper.py"))
+    content = module["wallpapers"]()[f"{period}.svg"]
+    root = ET.fromstring(content)
+    elements = list(root.iter())
+    paths = [element.get("d") for element in elements if element.tag.endswith("}path")]
+    assert module.get("CROWN") in paths and module.get("CROWN") is not None
+    eyes = module["SHUT_EYES"] if period == "night" else module["OPEN_EYES"]
+    assert paths.count(eyes) == 6
+    stars = [element for element in elements if element.tag.endswith("}circle") and element.get("fill") == "#fff"]
+    assert bool(stars) == (period in {"dusk", "evening", "night"})
+    allowed = {"svg", "defs", "linearGradient", "radialGradient", "stop", "path", "g", "circle", "ellipse", "rect"}
+    for element in elements:
+        assert element.tag.split("}")[-1] in allowed
+        assert not element.text or not element.text.strip()
+        assert not element.tail or not element.tail.strip()
+        for key, value in element.attrib.items():
+            assert "href" not in key
+            assert "url(" not in value or value.startswith("url(#") and value.endswith(")")
+    assert "random" not in module
 
 
 def test_startup_sets_the_wallpaper_even_before_xfce_has_a_last_image(monkeypatch):

@@ -133,7 +133,7 @@ export async function run(options) {
             static now() { return window.__look.now ?? now; }
           };
           window.addEventListener("unhandledrejection", event => { window.__look.errors.push(`Unhandled rejection: ${String(event.reason)}`); });
-        }, fixture.now);
+        }, scene.fixture?.desktopHour === undefined ? fixture.now : Date.UTC(2026, 10, 3, scene.fixture.desktopHour - 8));
         // One browser profile serves the whole run: a scene starts from the storage its own steps make, never from
         // what an earlier scene left there (a collapsed member column hid the rooms of the scene after it).
         const storage = await page.createCDPSession();

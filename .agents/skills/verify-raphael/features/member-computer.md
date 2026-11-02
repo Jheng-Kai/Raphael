@@ -1,5 +1,58 @@
 # Member computer (Phases A and B)
 
+## Slime town and computer preparation (2026-11-03)
+
+R-UI-92/86/87 replace the monochrome artwork and preparation stage-list assertions
+only. The existing hour boundaries, five filenames, XFCE watcher, start/repair
+controls, leases and single carried iframe remain authoritative. The approved
+original town drawing uses paths, groups, ellipses, circles, rounded rectangles
+and SVG 1.1 gradients. A fixed 32-bit LCG replaces Python random; generate both
+asset folders through wallpaper.py --generate. The byte ceiling is 20,000, with
+the largest current SVG approximately 15,000 bytes. No embedded/external images,
+text, scripts, CSS or modern SVG features are shipped.
+
+Preparation keeps the running preview's aspect ratio and bottom-aligned picture.
+The member's shared face has local working motion at 64px (96px expanded), with
+Raphael's emblem retained. The frame-token translucent pill holds only the
+current localized stage, a real percent when supplied and the first-build line
+while building. Existing stopped/error/install words and controls stay on small
+legible surfaces. The retained wallpaper remains behind the connected iframe;
+CSS fades the stream for 240ms only without reduced motion. patchHTML retains
+the working face and unchanged renewals touch nothing.
+
+The existing desktop-starting/building/preparing scenes retain the no-blank-stream
+and content-containment checks, replacing three numbered steps/indeterminate
+progress with the current stage and real-percent assertions. desktopHour fixes
+the local fixture date independently of the host time zone. The synthetic RFB
+uses that same parent date for its wallpaper. Desktop-viewer tests cover both
+data-card-desktop-screen and data-card-screen consumers.
+
+The shared card-shell look check retains its no-face contract everywhere except
+the computer screen's explicit desktop-preparation > desktop-boot-face (R-UI-93).
+The ordinary card.test.ts shell fixtures remain unchanged and face-free. The first
+capture caught first-build pill overflow at 1120/720; shorter three-language build
+and first-build words plus tighter pill spacing retain the 64px face and ratio.
+desktop-boot-card covers the tool-card data-card-screen consumer; desktop-boot-inline
+covers the timeline data-card-desktop-screen consumer. desktop-boot-connect changes
+only the mock native readiness, then waits for the real poll/iframe connection. It
+compares screen dimensions and period before/after, verifies no reduced-motion
+animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
+
+Selected matrix, both themes at 1120,720,1920x1080:
+
+```powershell
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+```
+
+Compare the full-size preparation images with the owner's local 79.png, the town
+periods with 80.png through 84.png and the approved .fold/wall-preview SVGs, and
+the preview/emblem with hero-0.png and the shared member-header face. The reference
+uses abstract monochrome curves and a spinner; this owner-approved unit instead
+uses our own colourful town and working slime. All reference assets remain outside
+the repository. Judge, real guest, native, network/provider, cargo and Docker work
+are explicitly prohibited by the unit. Offline look evidence does not prove the
+XFCE loader or guest timezone; the owner verifies the guest later.
+
 ## Three computer levels (2026-11-02)
 
 The monitor is always an icon entry and turns purple only for a running computer.

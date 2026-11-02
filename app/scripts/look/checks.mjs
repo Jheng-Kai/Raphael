@@ -2,6 +2,30 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith('desktop-boot') || name.startsWith('desktop-period-')) {
+    const panel = document.querySelector('.desktop-panel');
+    const screen = name === 'desktop-boot-inline' ? document.querySelector('[data-card-desktop-screen], [data-card-screen]') : panel.querySelector('.desktop-screen');
+    const preparation = screen.querySelector('.desktop-preparation');
+    const wallpaper = screen.querySelector('.desktop-wallpaper');
+    require(visible(preparation) && visible(wallpaper), 'the current stage stands on the full wallpaper');
+    require(getComputedStyle(wallpaper).objectPosition === '50% 100%', 'the slimes at the bottom stay in view');
+    require(getComputedStyle(wallpaper).opacity === '1' && getComputedStyle(screen.querySelector('.desktop-placeholder')).backgroundColor === 'rgba(0, 0, 0, 0)', 'only the small status pill dims the picture');
+    const box = screen.getBoundingClientRect(), pill = preparation.getBoundingClientRect();
+    require(pill.top >= box.top && pill.bottom <= box.bottom && pill.left >= box.left && pill.right <= box.right, 'the entire status pill fits inside the screen');
+    require(!preparation.querySelector('ol, li, .spin, .desktop-build-progress'), 'one current stage replaces console details');
+    require(visible(preparation.querySelector('.desktop-stage')), 'the current stage is readable');
+    const face = preparation.querySelector('.av');
+    require(visible(face), 'the member character is visible');
+    require(Math.abs(face.getBoundingClientRect().width - (panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline' ? 96 : 64)) < 1, 'the character has its panel or expanded size');
+    if (face.querySelector('img')) require([...face.querySelectorAll('img')].some(visible) && !face.querySelector('svg.slime'), 'Raphael keeps his emblem');
+    else require(!!face.querySelector('svg.slime[data-state="working"]'), 'the member uses the shared working motion');
+    require(!!preparation.querySelector('.desktop-first-build') === (panel.dataset.desktopState === 'building'), 'only a first build adds its quiet explanation');
+    require(!preparation.querySelector('progress:not([value])'), 'no indeterminate progress line');
+    if (!panel.hasAttribute('data-expanded') && name !== 'desktop-boot-inline') require(Math.abs(box.width / box.height - 1280 / 900) < .02, 'boot retains the running desktop aspect ratio');
+    if (name.startsWith('desktop-period-')) require(wallpaper.getAttribute('src') === `/wallpapers/${name.slice('desktop-period-'.length)}.svg`, 'the fixed fixture hour selects its expected period');
+    if (name === 'desktop-boot-expanded') require(!window.__look.calls.some(call => call.method === 'computer.viewer_open'), 'expanding preparation never opens an unready stream');
+    return {check:name};
+  }
   if (name === "group-live-line") {
     const row = document.querySelector('.au-room-thinking');
     require(visible(row?.querySelector('.live-action')), 'the working member has a visible action');
@@ -909,7 +933,7 @@ export function checkRendered(name, context = {}) {
         require(pill && pill.textContent.trim(), 'status always has a word');
         require(Math.abs(pill.getBoundingClientRect().right - (box.right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth))) < 1.5, 'pill aligns with the right padding');
       }
-      require(!card.querySelector('.av,.slime,.ask-face,.bgq-face,.draft-face'), 'no face is inside a card');
+      require(![...card.querySelectorAll('.av,.slime,.ask-face,.bgq-face,.draft-face')].some(face => !face.closest('[data-card-desktop-screen] .desktop-preparation > .desktop-boot-face, [data-card-screen] .desktop-preparation > .desktop-boot-face')), 'no face is inside a card outside its booting computer screen');
       require(!card.querySelector('select'), 'no native select is inside a card');
       if (card.matches('[data-desktop-work][data-work-state="waiting_control"]')) {
         const turn = card.closest('.tn');
@@ -1373,7 +1397,10 @@ export function checkRendered(name, context = {}) {
       }
     if(name==='desktop-offline'){
       require(!frame,'offline screen has no blank frame');
-      if(['starting','building','preparing'].includes(panel.dataset.desktopState))require(panel.querySelectorAll('.desktop-preparation li').length===3&&visible(panel.querySelector('progress')),'preparation has all steps and progress');
+      if(['starting','building','preparing'].includes(panel.dataset.desktopState)) {
+        require(visible(panel.querySelector('.desktop-stage')) && !panel.querySelector('.desktop-preparation li'), 'preparation names only the current stage');
+        require(!!panel.querySelector('progress[value]') === (panel.dataset.desktopState === 'building'), 'only a real fixture percent draws progress');
+      }
       else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
       const bounds = panel.querySelector('.desktop-screen').getBoundingClientRect();
       for (const content of panel.querySelectorAll('.desktop-preparation > *')) {

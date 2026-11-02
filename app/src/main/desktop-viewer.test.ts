@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const api = vi.hoisted(() => ({ desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
-import { mountDesktopViewer, type DesktopState } from "./desktop-viewer";
-import { setLocale } from "./i18n";
+import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
+import { setLocale, t } from "./i18n";
 import { faceHTML } from "./members";
 const running: DesktopState = { state:"running", ready:true, control:"member" };
 const work = { id:"task", request_id:"nonce", turn_id:42, state:"waiting_control", reason:"sign_in", tool:"get_desktop_state" } as const;
@@ -256,7 +256,58 @@ test('disconnection closes the lease without completing the pending request',asy
 });
 test.each(['starting','building','preparing'] as const)('%s shows preparation without a blank stream',async state=>{
   panelOpen=true;api.desktopStatus.mockResolvedValue({state,ready:false,control:'member',progress:'#3 [2/4] Installing tools'});mounted.show();await flush();
-  expect(host.querySelector('iframe')).toBeNull();expect(host.querySelectorAll('.desktop-preparation li')).toHaveLength(3);expect(take().hidden).toBe(true);
+  expect(host.querySelector('iframe')).toBeNull();expect(take().hidden).toBe(true);
+  const preparation = host.querySelector('.desktop-preparation')!;
+  expect(preparation.querySelector('ol, li, .spin, progress')).toBeNull();
+  expect(preparation.querySelector('.desktop-stage')?.textContent).toBe(t(`desktop.${state}`));
+  expect(preparation.textContent).not.toContain('#3');
+  expect(preparation.querySelector('svg.slime[data-state="working"]')).not.toBeNull();
+  expect(preparation.textContent?.includes(t('desktop.firstBuild'))).toBe(state === 'building');
+});
+
+test('real build percent updates preserve the working character and unchanged refresh writes nothing',async()=>{
+ panelOpen=true; api.desktopStatus.mockResolvedValue({state:'building',ready:false,control:'member',progress:'Downloading 12%'}); mounted.show(); await flush();
+ const face=panel().querySelector('.desktop-preparation svg.slime');
+ const phase=face?.getAttribute('style');
+ expect(panel().querySelector('progress')?.getAttribute('value')).toBe('12');
+ api.desktopStatus.mockResolvedValue({state:'preparing',ready:false,control:'member',progress:'Starting 74%'}); await vi.advanceTimersByTimeAsync(2000); await flush();
+ expect(panel().querySelector('.desktop-preparation svg.slime')).toBe(face);
+ expect(face?.getAttribute('style')).toBe(phase);
+ expect(face?.getAttribute('data-state')).toBe('working');
+ expect(panel().querySelector('progress')?.getAttribute('value')).toBe('74');
+ const observer=new MutationObserver(()=>{}); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
+ await vi.advanceTimersByTimeAsync(2000); await flush(); expect(observer.takeRecords()).toHaveLength(0); observer.disconnect();
+});
+
+test.each(['data-card-desktop-screen','data-card-screen'])('the %s card shares the boot wallpaper and current stage',async attribute=>{
+ panelOpen=true;
+ const inline=document.createElement('div'); inline.setAttribute(attribute,''); host.querySelector('ol')!.append(inline);
+ api.desktopStatus.mockResolvedValue({state:'starting',ready:false,control:'member'}); mounted.show(); await flush();
+ expect(inline.querySelector('.desktop-wallpaper')?.getAttribute('src')).toBe(panel().querySelector('.desktop-wallpaper')?.getAttribute('src'));
+ expect(inline.querySelector('.desktop-stage')?.textContent).toBe(t('desktop.starting'));
+ expect(inline.querySelector('svg.slime[data-state="working"]')).not.toBeNull();
+});
+
+test('expanding a booting card waits for readiness and keeps its working face until the stream connects',async()=>{
+ api.desktopStatus.mockResolvedValue({state:'building',ready:false,control:'member',works:[work]}); mounted.show(); await flush();
+ host.querySelector<HTMLButtonElement>('[data-card-desktop="take"]')!.click(); await flush();
+ expect(panel().hasAttribute('data-expanded')).toBe(true); expect(api.desktopOpen).not.toHaveBeenCalled();
+ const face=panel().querySelector('.desktop-preparation svg.slime');
+ api.desktopStatus.mockResolvedValue({state:'preparing',ready:false,control:'member',works:[work]}); await vi.advanceTimersByTimeAsync(2000);
+ expect(panel().querySelector('.desktop-preparation svg.slime')).toBe(face);
+ api.desktopStatus.mockResolvedValue({...running,works:[work]}); await vi.advanceTimersByTimeAsync(2000); await flush();
+ expect(api.desktopOpen).toHaveBeenCalledTimes(1); message('connected');
+ expect(panel().querySelector<HTMLImageElement>('.desktop-wallpaper')!.hidden).toBe(false);
+ expect(frame().hidden).toBe(false);
+});
+
+test.each(['zh-TW','en','ja'] as const)('%s uses the existing stage words and hides raw build output',locale=>{
+ setLocale(locale);
+ const stage=document.createElement('div'); stage.innerHTML=preparationHTML({state:'building',ready:false,control:'member',progress:'Synthetic step 37%'},faceHTML({id:1,name:'Sample'},22));
+ expect(stage.querySelector('.desktop-stage')?.textContent).toBe(t('desktop.building'));
+ expect(stage.querySelector('.desktop-first-build')?.textContent).toBe(t('desktop.firstBuild'));
+ expect(stage.querySelector('progress')?.getAttribute('value')).toBe('37');
+ expect(stage.textContent).not.toContain('Synthetic');
 });
 test('absent Docker keeps a visible reason and the exact installation entry without starting a computer',async()=>{
   api.desktopStatus.mockResolvedValue({...running,state:'absent'});mounted.show();await flush();expect(panel().hidden).toBe(false);expect(api.desktopOpen).not.toHaveBeenCalled();
