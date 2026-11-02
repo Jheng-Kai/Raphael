@@ -37,7 +37,7 @@ def test_six_daily_rows_merge_without_losing_history_and_migration_is_idempotent
     conn.row_factory = None
     db.migrate(conn)
     conn.row_factory = sqlite3.Row
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 54
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.LATEST_VERSION
     assert {"computer_logins", "connection_proposals"} <= {
         row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
