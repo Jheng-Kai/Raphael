@@ -564,6 +564,8 @@ export interface AgentStep {
 
 /** A background task as the conversations show it: how it stands, without what was said. */
 export interface AgentTask {
+  /** Ephemeral public narration, retained only while the task runs. */
+  progress?: string;
   waiting_owner?: number;
   id: number;
   /** `queued`, `running`, `done`, `failed`, `limit`, `cancelled` or `interrupted`. */

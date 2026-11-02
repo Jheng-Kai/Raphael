@@ -54,6 +54,7 @@ from .steps import Step, work_summary
 from .quotes import quote_from_wire
 from .conversations import Conversations
 from .public_events import event_text
+from .actions import is_action
 
 # Where a turn came from when nobody says: the hotkey and the overlay.
 VOICE = "voice"
@@ -304,7 +305,7 @@ class AgentHistory:
         saved = self._conn.execute(
             "SELECT kind, text FROM agent_messages WHERE turn_id = ? ORDER BY seq", (turn_id,)
         ).fetchall()
-        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved))
+        terms = index_terms(question, text, (detail or "") + "\n" + "\n".join(event_text(row["text"]) if row["kind"] == "event" else row["text"] for row in saved if not (row["kind"] == "event" and is_action(row["text"]))))
         self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid = ?", (turn_id,))
         self._conn.execute(
             "INSERT INTO agent_turns_fts (rowid, pairs, chars) VALUES (?, ?, ?)",
@@ -380,7 +381,7 @@ class AgentHistory:
     def _with_messages(self, turns: list[Turn]) -> list[Turn]:
         saved = self.messages(turn.id for turn in turns if turn.id is not None)
         for turn in turns:
-            turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, [])]
+            turn.messages = [event_text(m["text"]) if m["kind"] == "event" else m["text"] for m in saved.get(turn.id, []) if not (m["kind"] == "event" and is_action(m["text"]))]
         return turns
 
     def messages(self, turn_ids: Iterable[int]) -> dict[int, list[dict]]:

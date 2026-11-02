@@ -1437,7 +1437,7 @@ class App(Router):
     def _agent_notice(self, method: str, params: dict) -> None:
         """The assistant's notifications go to the app; a turn written or completed is news in its
         thread, unless that thread is on screen (`MembersService.turn_arrived`)."""
-        if method == "agent.turn" and type(params.get("turn_id")) is int:
+        if method == "agent.turn" and type(params.get("turn_id")) is int and not params.get("activity_only"):
             if hasattr(self, "agent"):
                 asyncio.get_running_loop().call_soon(self.agent.sync_owner_cards)
             self.members.turn_arrived(params["turn_id"])

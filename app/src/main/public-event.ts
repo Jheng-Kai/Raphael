@@ -5,6 +5,7 @@ export function publicEventText(text: string): string {
   if (!/^[\s]*[\[{]/.test(text)) return text;
   try {
     const event = JSON.parse(text);
+    if (event?.type === "action") return "";
     if (!["routine", "calendar", "meeting", "skill_learned"].includes(event?.type)) return text;
     if (typeof event?.text === "string") return event.text;
     if (typeof event?.name === "string") {

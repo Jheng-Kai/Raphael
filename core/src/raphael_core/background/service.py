@@ -1056,7 +1056,7 @@ class BackgroundService:
             found = self._store.for_turns(turn_ids)
             return {
                 turn_id: (
-                    {**self._brief(task), **({"waiting_owner": count} if (count := sum(q["state"] == "asked" for q in self.owner_questions.for_turn(turn_id))) else {})},
+                    {**self._brief(task), **({"progress": run.public_progress} if (run := self._runs.get(task.id)) and run.public_progress else {}), **({"waiting_owner": count} if (count := sum(q["state"] == "asked" for q in self.owner_questions.for_turn(turn_id))) else {})},
                     [_step_view(s) for s in self._store.steps(task.id) if s.outcome != "in_progress"],
                 )
                 for turn_id, task in found.items()
@@ -1275,6 +1275,11 @@ class BackgroundService:
             attachment_store=self._attachment_store,
             artifact=lambda payload: self._artifact(task, payload),
         )
+        from ..agent.actions import action_scope
+        run.action = lambda name, arguments: action_scope(self._history, task.turn_id, language,
+            snapshot.refs[name].name if name in snapshot.refs else name, arguments,
+            server=snapshot.refs[name].server if name in snapshot.refs else None,
+            changed=lambda: self._changed(task.id, RUNNING))
         if task.routine_id is not None and task.session_id.startswith(f"routine:{task.routine_id}:event:"):
             run._memory_untrusted = True
         from ..computer.vm_tools import vm_scope
@@ -1994,6 +1999,9 @@ class BackgroundService:
     def _progress(self, task: Task, text: str) -> None:
         if task.id in self._discarded or not self._has_linked_turn(task):
             return
+        if run := self._runs.get(task.id):
+            run.public_progress = text[:400]
+            self._changed(task.id, RUNNING)
         self._notify('worker.progress', {'task_id':task.id,'turn_id':task.turn_id,'room_id':task.room_id,'text':text,'kind':'progress'})
 
     def _conclude_run(self, task: Task, run: TaskRun, reply: dict) -> None:

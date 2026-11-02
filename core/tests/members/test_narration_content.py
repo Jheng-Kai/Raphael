@@ -5,6 +5,7 @@ import json
 import pytest
 
 from agent.test_narration import chat
+from raphael_core.agent.actions import is_action
 from .test_answering import client, setup, member, typed  # noqa: F401
 
 
@@ -66,7 +67,7 @@ async def test_each_pre_tool_object_is_published_in_order_without_duplicate_pros
 
     async def finish(**kwargs):
         [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-        assert [(m["kind"], m["text"]) for m in turn["messages"]] == [
+        assert [(m["kind"], m["text"]) for m in turn["messages"] if not is_action(m["text"])] == [
             ("thinking", "The date chooses the lesson."), ("progress", "Checking the date."),
             ("thinking", "Then I can choose the example."), ("progress", "Choosing the example."),
         ]

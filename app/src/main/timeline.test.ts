@@ -60,7 +60,7 @@ test("a settled permission card also owns its task's completed state", () => {
   expect(document.querySelector(".task-actions")).toBeNull();
 });
 
-test("desktop owner handoff pauses the work line and restores the original clock on return", () => {
+test("desktop owner handoff keeps the current line and never restores a ticking clock", () => {
   for (const messages of [[], [{ seq: 1, kind: "thinking", text: "Reviewing the sample plan", at_ms: 200 }]] as AgentTurn["messages"][]) {
     const item = turn(73, { status: "running", text: "", messages, steps: [], task: { id: 73, state: "running" } as AgentTask });
     const state = emptyTimelineState();
@@ -69,7 +69,8 @@ test("desktop owner handoff pauses the work line and restores the original clock
     expect(document.querySelector(".work-section.is-live,[data-work-start],.task-actions")).toBeNull();
     expect(document.querySelector("[data-live]")).toBeNull();
     document.body.innerHTML = turnHTML(item, state, false, { ...LOOK, waitingForOwner: () => false } as TurnLook);
-    expect(document.querySelector(".work-section.is-live")?.getAttribute("data-work-start")).toBe("100");
+    expect(document.querySelector(".live-action")).not.toBeNull();
+    expect(document.querySelector("[data-work-start],.work-time")).toBeNull();
     expect(state.workStartedAt.get(73)).toBe(100);
   }
 });
@@ -154,11 +155,11 @@ test("a live turn renders ordered public bubbles and event chips without raw ste
   expect(html).toContain('data-tooltip="I will check the examples."');
   expect(html.indexOf("Example saved")).toBeLessThan(html.indexOf("Your turn?"));
   expect(html).toContain('class="sys event-line"');
-  expect(html).toContain('class="work-progress"');
+  expect(html).not.toContain('class="work-sentences"');
   expect(html).not.toContain('class="work-time"');
   expect(html).toContain('class="live-presence"');
   expect(html).not.toContain("steps-line");
-  expect(html).toContain("Google Calendar");
+  expect(html).not.toContain("Google Calendar");
 });
 
 test("an old turn without messages still renders its answer once", () => {
@@ -534,7 +535,8 @@ describe("a turn", () => {
     expect(html).toContain('data-act="edit-message"');
     expect(html).toContain('<div class="bubble"><div class="message-text">台北天氣如何，順便記到行事曆</div><button');
     expect(html).not.toContain('class="ra-face"');
-    expect(html).toContain('data-tooltip="gpt-6-luna · US$0.0012"');
+    expect(html).toContain('data-tooltip="查看過程 ·');
+    expect(html).toContain('class="work-meta">gpt-6-luna · US$0.0012');
     expect(html).toContain('<div class="ans"><div class="message-text"><p>台北現在 24 度。</p>');
     expect(html).not.toContain("tn-foot"); // nothing more to open
   });
@@ -632,18 +634,18 @@ describe("a turn", () => {
       { seq: 7, kind: "reply" as const, text: "以上是今天 NHK 的頭條新聞與解說影片。", at_ms: T0 + 6_000 },
       { seq: 8, kind: "reply" as const, text: "我也幫你設好每天早上 08:00 的早安新聞例行任務了，想考哪一段單字隨時跟我說！", at_ms: T0 + 6_500 },
     ];
-    // While running: thinking block is open with a live shimmer
+    // While running, only the current public action is exposed beside the avatar.
     const runningHtml = turnHTML(
       turn(20, { model, status: "running", text: "不該重複出現的文字", detail: "不該出現的詳細", messages }),
       emptyTimelineState(),
       false,
       LOOK,
     );
-    expect(runningHtml.match(/class="work-section think-box/g)).toHaveLength(1);
-    expect(runningHtml).toContain('data-act="thinking" aria-expanded="false"');
+    expect(runningHtml).not.toContain('class="work-section think-box');
+    expect(runningHtml).not.toContain('data-act="thinking"');
     expect(runningHtml).not.toContain("work-toggle");
-    expect(runningHtml).toContain("主人想看今天的 NHK 新聞與相關影片");
-    expect(runningHtml).toContain("已找到新聞頁面與 YouTube 報導影片");
+    expect(runningHtml).toContain('class="live-action"');
+    expect(runningHtml).toContain("先幫你找今天的 NHK 重點新聞。");
 
     // When done: thinking block auto-collapses to 思考了 N 秒, and turn.text / turn.detail are not duplicated
     const doneHtml = turnHTML(

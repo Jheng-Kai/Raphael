@@ -13,6 +13,7 @@ import logging
 import pytest
 
 from raphael_core.agent.persona import phrase
+from raphael_core.agent.actions import is_action
 
 from .conftest import completion, decision
 from .test_narration import chat
@@ -392,10 +393,10 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
     announced = []
 
     def notify(method, params):
-        if method == "agent.turn":
+        if method == "agent.turn" and not params.get("activity_only"):
             turn = rig.history.get(params["turn_id"])
             messages = rig.history.messages([turn.id]).get(turn.id, [])
-            announced.append((turn.status, [m["kind"] for m in messages]))
+            announced.append((turn.status, [m["kind"] for m in messages if not is_action(m["text"])]))
 
     rig = make_rig(speaker=speaker, notify=notify)
     speaker.gate = asyncio.Event()
@@ -429,7 +430,7 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
     assert '"say_ja"' in first[0]["content"]
     assert first[1]["content"].rstrip().endswith('except the field "say_ja", which is Japanese.')
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "reply"]
     assert japanese not in repr(result) + repr(turn) + caplog.text
     assert japanese not in repr([tuple(row) for row in rig.conn.execute("SELECT * FROM agent_messages")])
 

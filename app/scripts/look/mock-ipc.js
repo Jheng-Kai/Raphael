@@ -5,7 +5,7 @@ export function installMock(fixture, config = {}, target = window) {
   if (variant.presence) {
     const sample = data.presenceSample;
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4));
-    const working = variant.presence === "working";
+    const working = ["working", "action-long", "action-group"].includes(variant.presence);
     const turn = {...base, id: 651, question: sample.question, text: working ? "" : sample.answer, status: working ? "running" : "done", task: null, steps: [], handoffs: [],
       model: "sample/model", cost_usd: .001, messages: [{seq: 1, kind: "progress", text: sample.progress, at_ms: base.created_at_ms + 1000}, ...working ? [] : [{seq: 2, kind: "reply", text: sample.answer, at_ms: base.created_at_ms + 3000}]]};
     data.turns = [turn];
@@ -27,6 +27,20 @@ export function installMock(fixture, config = {}, target = window) {
       {kind: "reply", text: sample.answer},
     ].map((message, index) => ({...message, seq: index + 1, at_ms: turn.created_at_ms + index}));
     if (variant.presence === "detail") turn.messages.push({seq: 3, kind: "reply", text: sample.secondAnswer, at_ms: turn.created_at_ms + 3000});
+    if (["action-long", "action-group", "actions"].includes(variant.presence)) {
+      const present = variant.presence === "action-long" ? "正在搜尋範例文件中的畫面配置、工作行文字省略、閱讀位置保持、群組成員即時狀態更新、對話視窗縮放與深淺主題切換的相關說明與所有設計規範" : "正在讀取 sample.md";
+      const actions = [{id:"sample-read", present, past:"讀取了 sample.md", state:working?"running":"done", outcome:"ok"},
+        ...working ? [] : [{id:"sample-test", present:"正在執行 npm test", past:"執行了 npm test", state:"done", outcome:"error", reason:"timeout"}]];
+      turn.messages.push(...actions.map((action,index)=>({seq:10+index,kind:"event",text:JSON.stringify({type:"action",...action}),at_ms:turn.created_at_ms+2000+index})));
+    }
+    if (variant.presence === "old-actions") turn.steps = [
+      {kind:"tool",tool:"read_file",server:"Raphael",outcome:"ok",ms:18,at_ms:turn.created_at_ms},
+      {kind:"tool",tool:"local_exec",server:"local",outcome:"ok",ms:22,at_ms:turn.created_at_ms},
+      {kind:"tool",tool:"NOTION_UPDATE_PAGE",server:"Composio",outcome:"error",reason:"network",ms:20,at_ms:turn.created_at_ms},
+    ];
+    if (variant.presence === "action-group") {
+      data.messages = [{...structuredClone(data.roomThinkingMessages[0]), id:701,room_id:1,member_id:1,text:"",status:"running",turn_id:651,turn:structuredClone(turn)}];
+    }
     if (variant.presence === "gap") data.turns.push(...[5,35].map((minutes, i) => ({...structuredClone(turn), id: 652 + i, created_at_ms: turn.created_at_ms + minutes * 60000})));
     data.rooms.forEach(room => { room.preview = sample.answer; room.preview_member_id = 1; });
   }

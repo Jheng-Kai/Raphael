@@ -11,6 +11,8 @@ import logging
 import pytest
 
 from raphael_core.agent.safety import ALLOW, ASK, DENY, SafetyGuard, SafetyRules
+from raphael_core.agent.actions import is_action
+from raphael_core.agent.history import AgentHistory
 from raphael_core.agent.speaker import Speaker
 from raphael_core.agent.tools import ToolResult
 from raphael_core.background.run import OWNER_SAID_NO, OWNER_SAID_NO_BEFORE
@@ -165,7 +167,10 @@ async def test_a_no_leaves_the_call_unmade_and_the_task_reports(make_rig, plugin
     rig = make_rig(clock=clock)
     await plugins.connect(note="T2")
     note_then_report(rig, "Did not note it.")
+    history = AgentHistory(rig.conn)
+    turn_id = history.add(session_id="s1", question="Sample task", route="delegate", prefix="", text="", status="running")
     task_id = rig.submit()
+    rig.service.attach_turn(task_id, turn_id)
     asked = await paused(rig, task_id)
     answer = {"task_id": task_id, "question_id": asked["question_id"], "approved": False}
     assert await rig.rpc.call("background.answer", answer) == {"status": "denied"}
@@ -176,6 +181,10 @@ async def test_a_no_leaves_the_call_unmade_and_the_task_reports(make_rig, plugin
     assert ("Notes", "note", None, "none", "denied", task_id) in plugins.audit()
     steps = [(s.tool, s.outcome, s.reason) for s in rig.steps(task_id) if s.kind == "tool"]
     assert steps == [("note", "blocked", "denied")]
+    messages = history.messages([turn_id])[turn_id]
+    actions = [json.loads(message["text"]) for message in messages if is_action(message["text"])]
+    assert actions[-1]["state"] == "done"
+    assert (actions[-1]["outcome"], actions[-1]["reason"]) == ("blocked", "denied")
 
 
 async def test_after_a_no_the_task_gets_round_it_with_no_other_tool_and_asks_nothing_more(make_rig, plugins, calls, clock):

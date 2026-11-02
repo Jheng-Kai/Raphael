@@ -318,6 +318,8 @@ class TaskRun:
         self._city = city
         self._changed = changed
         self._progress = progress
+        self.public_progress = ""
+        self.action = lambda name, arguments: nullcontext()
         self._clock = clock
         self.deadline = clock() + limits.seconds
         self._live: set[asyncio.Task[Any]] = set()
@@ -645,7 +647,11 @@ class TaskRun:
         call_id = params.get("call_id")
         async with self._turn:
             try:
-                return await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+                with self.action(name, arguments) as status:
+                    reply = await self._tool(name, arguments, call_id if isinstance(call_id, str) else "")
+                    if status is not None:
+                        status.update(outcome="ok" if reply.get("ok") else "error", reason=reason_of("ok" if reply.get("ok") else "error", reply.get("kind")))
+                    return reply
             finally:
                 self.touch()
 
@@ -848,12 +854,18 @@ class TaskRun:
                scope=lambda self, *args, **kwargs: self.activity)
     @command_context(lambda self, *args, **kwargs: run_context(self))
     async def answer_call(self, waiting: Waiting, approval: Approval | None, action: Action | None) -> str:
+        with self.action(waiting.alias, waiting.arguments) as status:
+            return await self._answered_call(waiting, approval, action, status)
+
+    async def _answered_call(self, waiting: Waiting, approval: Approval | None, action: Action | None, status) -> str:
         """The call the task paused on, now that the owner answered: made with the yes (`approval`,
         for `action`, the very action the question was asked about), or not made after a no
         (`action` None). Either way it is a step of the task, and the audit says what came of it.
         Returns what the model is shown of it, as the worker shows a result."""
         ref = waiting.ref
         if action is None:
+            if status is not None:
+                status.update(outcome="blocked", reason="denied")
             if ref.kind == MCP:
                 self._declined.add(ref.key)
             self._gate.record_unrun(ref.key, outcome="denied", task_id=self.task_id)
@@ -877,6 +889,8 @@ class TaskRun:
                 outcome=outcome, ms=_ms(began), reason=reason_of(outcome, result.error),
             )  # fmt: skip
             content = json.dumps(result.data, ensure_ascii=False) if result.ok else ""
+            if status is not None:
+                status.update(outcome=outcome, reason=reason_of(outcome, result.error))
             return result_text(waiting.alias, ToolOutcome(result.ok, result.error, content))
         now = self._gate.tier_now(ref.key, waiting.arguments)
         # The yes is for the tier the question was asked at: a tool that has none now, or a higher
@@ -919,6 +933,8 @@ class TaskRun:
         if result.ok:
             self.seen_urls.add_from(text)
         shown = ToolOutcome(result.ok, result.kind, text, cut or result.truncated)
+        if status is not None:
+            status.update(outcome=outcome, reason=reason_of(outcome, result.kind))
         return result_text(waiting.alias, shown)
 
     def _find(self, arguments: dict) -> tuple[dict, str, str | None]:

@@ -257,11 +257,11 @@ test("a streamed room table stays provisional and becomes a rich card only after
  expect(document.querySelector('.ans .message-table')).toBeNull();
 });
 
-test("multiple queued replies show one speaking row which disappears when completed",async()=>{
+test("each working member has a live action row which disappears when completed",async()=>{
  const replies=[{id:1,member_id:1,text:'',created:1,status:'running'},{id:2,member_id:0,text:'',created:2,status:'running'}];
  api.roomMessages.mockResolvedValue({messages:replies});await pane();
- expect(document.querySelectorAll('.au-room-thinking')).toHaveLength(1);
- expect(document.querySelector('.au-room-thinking')!.textContent).toBe('Alice is speaking…');
+ expect(document.querySelectorAll('.au-room-thinking')).toHaveLength(2);
+ expect(document.querySelector('.au-room-thinking')!.textContent).toBe('AliceThinking');
  expect(document.querySelector('.au-room-thinking .av')).not.toBeNull();
  expect(document.querySelectorAll('.au-room-message')).toHaveLength(0);
  api.roomMessages.mockResolvedValue({messages:replies.map(m=>({...m,status:'done',text:'Finished'}))});

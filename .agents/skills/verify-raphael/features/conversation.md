@@ -1,5 +1,45 @@
 # Conversation
 
+## Visible work sentences (2026-11-02)
+
+R-UI-75 and R-WORK-01/02 use one 28px avatar and one muted action line in private
+threads and below each working group member. The current tool wins over public
+progress, then the activity label and localized thinking. Long text ellipsizes;
+the shared hover holds the whole sentence. Only that text and its tooltip change.
+Live work has no list, dots or clock. A plain steps icon opens completed sentences;
+old steps receive readable generic past phrases, errors use existing reason words,
+and model/cost (including separate media billing) stay in the small footer.
+
+Core `agent/actions.py` is a deterministic three-language table. Sanitized action
+records are `event` messages with type `action` inside agent_messages, never step
+metadata. API tools and CLI MCP use AgentService's shared execute boundary;
+fast planned calls use _make_call; background tools and resumed approvals use
+TaskRun. History/model and search readers discard these records. Activity-only
+turn notifications refresh the window without unread/room delivery. Background
+public narration stays on the active TaskRun, projected through the existing task
+view and discarded with it. No RPC, migration, provider call or setting is added.
+
+Selected matrix (both themes, 1120,720,1920x1080):
+
+```powershell
+npm run look -- running running-motion transcript-working transcript-hover-detail transcript-clean generated-video-running busy-team-thread busy-team-typing busy-team-room presence-hover-action transcript-action-long group-live-line transcript-action-list transcript-old-list work-member-builtin room-thinking generated-image-bill --theme both --width 1120,720,1920x1080
+```
+
+`busy-team-typing` changes the live progress text during real keyboard input and
+requires zero replaced lines/faces/cards. Compare the shared live line in
+transcript-working and group-live-line, and steps buttons in transcript-action-list
+and transcript-old-list with adjacent reply/copy icons at the same size/theme.
+`work-steps-own-words`, `room-thinking` and `generated-media-bill` retain their old
+coverage with the new sentence/footer markup. Core privacy/path regressions live
+in test_action_sentences.py, test_harness.py and background/test_service.py;
+work-line.test.ts covers precedence, text-only patches, escaping and detail.
+
+Native/provider/network/cargo/judge are prohibited by this task. The offline
+fixtures prove rendered behavior only. Native CLI operations that bypass Raphael
+MCP, and legacy quick-voice computer runs before a conversation turn exists,
+cannot supply argument-aware sentences through these boundaries; their existing
+activity labels remain the fallback. The owner runs any required native checks.
+
 ## Member media (2026-11-01)
 
 The shared image_generate/video_generate tools use only the owner's explicit image_model

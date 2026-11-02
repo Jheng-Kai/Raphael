@@ -22,7 +22,8 @@ test("completed work is one closed section above the answer; opening retains pub
     { seq: 4, kind: "reply" as const, text: "Done", at_ms: 27000 },
   ] };
   const host = document.createElement("div"); host.innerHTML = turnHTML(turn, state, false, { face: () => "" });
-  expect(host.querySelector(".message-actions .message-work")?.textContent).toContain("Worked for 26s");
+  expect(host.querySelector(".message-actions .message-work")?.textContent).toBe("");
+  expect(host.querySelector(".message-actions .message-work")?.getAttribute("data-tooltip")).toBe("View process · 26s");
   expect(host.querySelector(".work-body")?.hasAttribute("hidden")).toBe(true);
   expect(host.querySelector(".work-body")?.textContent).toContain("Found the report");
   expect(host.querySelectorAll(".work-section")).toHaveLength(1);
@@ -50,5 +51,5 @@ test("running work keeps public progress on the avatar and no live clock writes"
   expect(host.querySelector(".live-presence")).toBe(label);
   expect(host.querySelectorAll(".think")).toHaveLength(0);
   expect(host.querySelectorAll(".work-toggle")).toHaveLength(0);
-  expect(host.querySelector(".work-body")?.hasAttribute("hidden")).toBe(true);
+  expect(host.querySelector(".work-body")).toBeNull();
 });

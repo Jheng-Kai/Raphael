@@ -8,6 +8,8 @@ def event_text(text):
     except (ValueError, TypeError):
         return text
     if not isinstance(event, dict) or event.get("type") not in ("routine", "calendar", "meeting", "skill_learned"):
+        if isinstance(event, dict) and event.get("type") == "action":
+            return ""
         return text
     if isinstance(event.get("text"), str):
         return event["text"]

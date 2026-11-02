@@ -7,6 +7,7 @@ import pytest
 
 from agent.test_narration import chat
 from raphael_core.agent.harness_tools import DEFINITIONS
+from raphael_core.agent.actions import is_action
 from raphael_core.agent.tools import ToolResult
 from raphael_core.members.schedule import KINDS, Schedule
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
@@ -57,8 +58,9 @@ async def test_a_member_with_an_old_empty_tool_list_can_search_and_create_a_rout
     assert routine.title == "日文練習"
     assert team.members.store.routines(0) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    assert [m["kind"] for m in turn["messages"]] == ["thinking", "progress", "progress", "event", "reply"]
-    receipt = json.loads(turn["messages"][-2]["text"])
+    messages = [m for m in turn["messages"] if not is_action(m["text"])]
+    assert [m["kind"] for m in messages] == ["thinking", "progress", "progress", "event", "reply"]
+    receipt = json.loads(messages[-2]["text"])
     assert receipt["text"] == "已建立例行任務 · 每天 08:00 日文練習"
     assert receipt["type"] == "routine" and receipt["id"] == routine.id and receipt["name"] == routine.title
     offered = {t["function"]["name"] for t in client.chat_calls[0]["tools"]}
@@ -117,7 +119,7 @@ async def test_chat_shows_the_saved_schedule_in_its_confirmation(setup, client, 
     [saved] = team.members.store.routines(teacher.id)
     assert saved.schedule.to_json() == schedule
     [turn] = (await rig.call("agent.history.list", {"member_id": teacher.id}))["turns"]
-    [event] = [message for message in turn["messages"] if message["kind"] == "event"]
+    [event] = [message for message in turn["messages"] if message["kind"] == "event" and not is_action(message["text"])]
     receipt = json.loads(event["text"])
     assert receipt["text"].endswith(f" · {expected[index]} Review")
     assert receipt["id"] == saved.id and receipt["action"] == "created"

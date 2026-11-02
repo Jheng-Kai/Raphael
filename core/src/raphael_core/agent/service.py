@@ -168,6 +168,7 @@ from .answers import Reply, Voice, build_user_message
 from .attribution import labelled_lines, owner_lines, relayed_answer
 from .narration import NarratedLoop
 from ..members.activity import Activity, member_turn, step as activity_step, tool_step
+from .actions import action_call
 from .cli.discovery import CliBrains, brain_ref
 from .cli.loop import COMPUTER_CHANGED, TOOLS_FOUND, CliLoop, Sessions as CliSessions
 from .persona import cli_system_prompt
@@ -2008,6 +2009,10 @@ class AgentService:
                 return self._loop_result(result)
 
             @tool_step(lambda call_id, name, args: name)
+            @action_call(lambda call_id, name, args: dict(history=self._history, turn_id=ask.turn_id,
+                language=ask.language, tool=snapshot.refs[name].name if name in snapshot.refs else name,
+                arguments=args, server=snapshot.refs[name].server if name in snapshot.refs else None,
+                changed=lambda: self._action_changed(ask)))
             async def observed_execute(call_id: str, name: str, args: dict) -> ToolOutcome:
                 waiting = "apps" if ask.waiting_apps else "secrets" if ask.waiting_secrets else "computer" if ask.waiting_computer else None
                 if waiting is not None and {CONNECT_APP: "apps", REQUEST_SECRET: "secrets"}.get(name) != waiting:
@@ -2504,6 +2509,9 @@ class AgentService:
         return await self._gate.screen(proposed, language=ask.language, ledger=ledger)
 
     @tool_step(lambda self, ask, call, *args, **kwargs: call.tool.key)
+    @action_call(lambda self, ask, call, *args, **kwargs: dict(history=self._history, turn_id=ask.turn_id,
+        language=ask.language, tool=call.tool.name, arguments=call.arguments, server=call.tool.server,
+        changed=lambda: self._action_changed(ask)))
     @command_context(lambda self, ask, *args, **kwargs: ask_context(ask))
     async def _make_call(
         self,
@@ -5007,6 +5015,10 @@ class AgentService:
             except Exception as exc:  # the memory must not cost the turn
                 logger.warning("The memory could not follow the turn: %s", type(exc).__name__)
         return turn_id
+
+    def _action_changed(self, ask: _Ask) -> None:
+        if self._notify and ask.turn_id:
+            self._notify("agent.turn", {"turn_id": ask.turn_id, "member_id": ask.speaker.id, "activity_only": True})
 
     def _turn_changed(self, turn_id: int, member_id: int | None = None, *, hold: bool = False) -> None:
         """Tell the app a turn was written or completed, so that a conversation on screen follows:

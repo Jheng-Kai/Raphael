@@ -91,7 +91,7 @@ test("private bubbles have no faces and completed work opens from the message ho
   expect(root.querySelector(".ra-face, .me > .owner-face, .me > .av")).toBeNull();
   expect(root.querySelector(".work-section > .work-toggle")).toBeNull();
   expect(root.querySelector('.message-actions [data-act="thinking"]')).not.toBeNull();
-  expect(root.querySelector('.message-actions [data-act="thinking"]')?.getAttribute("data-tooltip")).toContain("model");
+  expect(root.querySelector('.message-actions [data-act="thinking"]')?.getAttribute("data-tooltip")).toContain("查看過程");
 });
 
 test("live and pending private work shows only a 28px avatar with the public progress tooltip", () => {

@@ -11,6 +11,16 @@ function handoffSkeleton(html: string): string {
   return template.innerHTML;
 }
 
+function liveSkeleton(html: string): string {
+  const template = document.createElement("template"); template.innerHTML = html;
+  for (const presence of template.content.querySelectorAll(".live-presence")) {
+    presence.removeAttribute("data-tooltip");
+    const label = presence.querySelector(".live-action");
+    if (label) label.textContent = "";
+  }
+  return template.innerHTML;
+}
+
 function updateEvent(node: HTMLDetailsElement, made: HTMLDetailsElement): void {
   for (const attr of [...made.attributes]) if (attr.name !== "open" && node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value);
   const summary = node.querySelector(":scope > summary")!, nextSummary = made.querySelector(":scope > summary")!;
@@ -69,6 +79,20 @@ export function patchThread(thread: HTMLElement, wanted: readonly ThreadLine[], 
       if (!node && options.arrives?.(line)) made.classList.add("is-new");
       if (node) {
         const previous = drawn.get(node);
+        if (previous && node.querySelector(".live-action") && liveSkeleton(previous) === liveSkeleton(identity)) {
+          const oldLines = node.querySelectorAll<HTMLElement>(".live-action"), nextLines = made.querySelectorAll<HTMLElement>(".live-action");
+          oldLines.forEach((label, index) => {
+            const text = nextLines[index].textContent ?? "";
+            const presence = label.closest<HTMLElement>(".live-presence")!;
+            if (label.textContent !== text) label.textContent = text;
+            if (presence.dataset.tooltip !== text) presence.dataset.tooltip = text;
+          });
+          drawn.set(node, identity);
+          keep.add(node);
+          const here = thread.children[at++];
+          if (here !== node) thread.insertBefore(node, here ?? null);
+          continue;
+        }
         if (previous && /class="(?:handoff-event|conversation-event-line timeline-event)/.test(previous) && handoffSkeleton(previous) === handoffSkeleton(identity)) {
           const old = new Map(outerEvents(node).map(event => [eventKey(event), event]));
           for (const event of outerEvents(made)) updateEvent(old.get(eventKey(event))!, event);

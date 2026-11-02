@@ -20,7 +20,7 @@ import { createAttachmentMedia } from "./attachment-media";
 import { mountStageDrop } from "./attachments";
 import { openMediaLightbox } from "./media-lightbox";
 import { createBackgroundQuestions } from "./background-questions";
-import { conversationCardsHTML, filesHTML, messageActionsHTML, updateLiveTimes } from "./timeline";
+import { conversationCardsHTML, filesHTML, latestProgress, livePresenceHTML, messageActionsHTML, updateLiveTimes, waitsAtCard } from "./timeline";
 import { mountConversationCardActions } from "./conversation-card-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "./owner-questions";
 import { mountTaskResults } from "./task-result";
@@ -280,7 +280,6 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     if (exchange?.routing?.fallback) statusHTML += `<span role="status">${esc(t("rooms.routingFallback"))}</span>`;
     patchHTML(status, statusHTML);
     patchHTML(older, canOlder?btn(esc(t("rooms.older")),"sm",` data-room-act="older"${loadingOlder?" disabled":""}`):"");
-    const thinking=messages.find(m=>m.member_id!==null&&m.status==="running");
     const faceOf=(id:number,name:string)=>faceHTML(person(id)??{id,name},20);
     // A reply that never came stands where its exchange stopped: after its last message, before its wrap-up.
     const blocked=(exchange?.reply_intents??[]).filter(intent=>intent.state==="blocked").flatMap(intent=>{
@@ -313,10 +312,9 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
         }))}</li>`;
       }
       const m=entry.message;
-      if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&!m.turn?.owner_questions?.length) {
-        if(m!==thinking)return "";
+      if(m.member_id!==null&&m.status==="running"&&!m.text.trim()&&(!m.turn||!waitsAtCard(m.turn))) {
         const member=person(m.member_id);
-        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><span class="ra-face">${member?faceHTML(member,30):""}</span><span>${esc(t("rooms.speaking",{p0:member?.name??t("members.title")}))}</span></li>`;
+        return `<li class="tn au-room-thinking" data-room-message="${m.id}" role="status"><div class="ra-body"><b class="au-room-author">${esc(member?.name??t("members.title"))}</b>${livePresenceHTML({face:()=>member?faceHTML(member,28):"",activityLabel:member?.activity_label},m.turn?latestProgress(m.turn):undefined)}</div></li>`;
       }
       const member=person(m.member_id),owner=m.member_id===null,parts=owner?[m.text]:plainReplies(replyMessages(m.text)),words=parts.join("\n\n")||(owner?"":t(m.status==="error"?"auto.error":"auto.running"));
       const source=m.reply_reference;

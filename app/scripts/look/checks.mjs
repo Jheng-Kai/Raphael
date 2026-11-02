@@ -2,6 +2,13 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name === "group-live-line") {
+    const row = document.querySelector('.au-room-thinking');
+    require(visible(row?.querySelector('.live-action')), 'the working member has a visible action');
+    require(row.querySelector('.live-action').textContent === '正在讀取 sample.md', 'tool words beat public progress in a group');
+    require(row.querySelector('.av').getBoundingClientRect().width === 28, 'the group shares the 28px live face');
+    return {check:name};
+  }
   if (name.startsWith("presence-") || name.startsWith("transcript-") || name.startsWith("event-routine-") || name.startsWith("event-calendar-") || name === "event-lines-collapse" || name === "sidebar-row-time" || name === "sidebar-group-author") {
     const turn = document.querySelector('[data-id="651"]');
     if (name.startsWith("transcript-")) {
@@ -33,7 +40,8 @@ export function checkRendered(name, context = {}) {
     if (name === "presence-waiting-colleague") require(document.querySelector('.mb-pill-face .slime')?.dataset.state === "waiting", "a colleague wait keeps its own silhouette");
     if (name === "transcript-working") {
       const live = turn.querySelector('.live-presence');
-      require(visible(live) && live.getBoundingClientRect().width === 28, "the live avatar is 28px");
+      require(visible(live) && live.querySelector('.av, .avatar').getBoundingClientRect().width === 28, "the live avatar is 28px");
+      require(visible(live.querySelector('.live-action')), "the current action is visible beside the avatar");
       require(!turn.querySelector('.think, .work-time, .work-latest'), "no text dots or ticking line");
       require(live.dataset.tooltip === window.__look.data.presenceSample.progress, "public progress is the hover");
     }
@@ -41,6 +49,21 @@ export function checkRendered(name, context = {}) {
       require(visible(turn.querySelector('.work-body')) && turn.querySelector('.work-body').textContent.includes("sample"), "hover action opens the same work detail");
       const controls = [...turn.querySelectorAll('.message-work')];
       require(controls.length === 2 && controls.every(control => control.getAttribute('aria-expanded') === 'true'), "both reply controls reflect the same expanded work detail");
+    }
+    if (name === "transcript-action-long") {
+      const line = turn.querySelector('.live-action'), live = line.closest('.live-presence');
+      require(visible(line) && getComputedStyle(line).whiteSpace === 'nowrap' && getComputedStyle(line).textOverflow === 'ellipsis', 'one action stays on one line');
+      require(live.dataset.tooltip === line.textContent && line.textContent.startsWith('正在搜尋範例'), 'hover keeps the whole action');
+      if (innerWidth <= 720) require(line.scrollWidth > line.clientWidth, 'a long line really ellipsizes at 720px');
+      require(!turn.querySelector('.work-time, .work-latest, .think'), 'the action has no timer or text dots');
+    }
+    if (["transcript-action-list", "transcript-old-list"].includes(name)) {
+      const body = turn.querySelector('.work-body');
+      require(visible(body) && body.querySelectorAll('.work-sentences > li').length >= 2, 'the icon opens past action sentences');
+      require(!body.querySelector('.step-mark, .step-ms'), 'rows have no ticks or per-row duration');
+      require(!/local|NOTION_|COMPOSIO_/.test(body.textContent), 'old and new turns hide tool identifiers');
+      require([...turn.querySelectorAll('.message-work')].every(button=>button.textContent === '' && button.dataset.tooltip.startsWith('查看過程')), 'process controls match adjacent icon buttons');
+      require(body.lastElementChild.classList.contains('work-meta'), 'model and cost stay at the bottom');
     }
     if (name === "transcript-time-gap") require(document.querySelectorAll('.tns > .day, .thread > .day, .ra-thread > .day').length === 2 || [...turn.parentElement.children].filter(line => line.classList.contains('day')).length === 2, "thirty-minute gaps have two centred separators");
     if (name === "event-routine-line") {
@@ -644,9 +667,9 @@ export function checkRendered(name, context = {}) {
     return {check:name};
   }
   if (name === 'generated-media-bill') {
-    const step = document.querySelector('.step-list');
+    const step = document.querySelector('.work-meta');
     require(visible(step) && /google\/gemini-image/.test(step.textContent) && /API 費用.*0.042/.test(step.textContent), 'the visible work step names the model and actual bill');
-    require(visible(step.querySelector('.step-detail')) && !step.querySelector('.step-why') && step.querySelector('.step-t')?.textContent === '畫圖', 'a successful drawing bill uses neutral detail and its own action title');
+    require(visible(step.querySelector('.step-detail')) && !document.querySelector('.work-sentences .step-why'), 'a successful drawing bill stays in the neutral footer');
     return {check:name};
   }
   if (name === 'generated-image' || name === 'generated-video') {
@@ -2554,7 +2577,7 @@ export function checkRendered(name, context = {}) {
     require(rows.length === 1 && visible(rows[0]), "only one member is shown speaking");
     require(getComputedStyle(rows[0]).flexDirection === 'row', "speaker face and status share one row");
     require(visible(rows[0].querySelector('.av')), "the speaker's face is visible");
-    require(rows[0].textContent === "小晴 正在發言…", "the speaking row names the member");
+    require(rows[0].textContent.startsWith("小晴") && visible(rows[0].querySelector('.live-action')), "the speaking row names the member and current action");
     return { check: name, speakingRows: rows.length };
   }
   if (name === "p03-handoff" || name === "p03-handoff-expanded") {
@@ -3992,15 +4015,14 @@ export function checkRendered(name, context = {}) {
     return { check: name, chips: chips.length };
   }
   if (name === "work-steps-own-words") {
-    // A member's own tools say what was done in a word and never whose; only a connected service names itself.
+    // Old turns name actions in sentences, without reconstructing private arguments.
     const body = document.querySelector('.page-agent:not([hidden]) .work-body');
-    const rows = [...body.querySelectorAll('.step-list .step')].filter(visible);
-    const words = rows.map(row => row.querySelector('.step-t').textContent);
-    require(visible(body) && words.join("|") === "讀取|Notion：讀取|修改|讀取|詢問同事|Notion：讀取", `each row says what was done: ${words.join("|")}`);
+    const rows = [...body.querySelectorAll('.work-sentences li')].filter(visible);
+    const words = rows.map(row => row.textContent);
+    require(visible(body) && rows.length === 6 && words.filter(word=>word === '查看了 Notion').length === 2, `each old step remains readable: ${words.join("|")}`);
+    require(!words.some(word=>/^(讀取|修改)$|local/.test(word)), 'old steps never expose bare verbs or local');
     require(!rows.some(row => row.textContent.includes("拉斐爾") || row.querySelector('[title*="拉斐爾"], [aria-label*="拉斐爾"]')), "no row or picture names Raphael");
-    const named = rows.filter(row => row.querySelector('.step-ic[aria-label]'));
-    require(named.length === 2 && named.every(row => row.querySelector('.step-ic').getAttribute('aria-label') === "Notion"), "a connected service keeps its name on its picture");
-    require(rows.length - named.length === 4 && rows.filter(row => !named.includes(row)).every(row => row.querySelector('.step-ic').getAttribute('aria-hidden') === 'true'), "the app's own tools have a plain picture without a name");
+    require(!body.querySelector('.step-mark,.step-ms'), 'the list has no per-row ticks or milliseconds');
     return { check: name, words };
   }
   if (name === "bot-ask-centred" || name === "bot-ask-expanded") {

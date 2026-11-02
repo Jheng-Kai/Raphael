@@ -3,6 +3,7 @@ import sqlite3
 
 from raphael_core.agent.conversations import Conversations
 from raphael_core.agent.history import AgentHistory
+from raphael_core.agent.actions import action_scope
 from raphael_core.brain import db
 from raphael_core.background.tasks import TaskStore
 from raphael_core.members.store import MemberStore
@@ -66,6 +67,8 @@ async def test_quick_clear_removes_turns_summary_cards_and_cli_but_preserves_ide
     rig.seed("Keep this", "Formal answer", conversation_id=formal)
     turn = rig.history.add(session_id="quick", question="Quick question", route="answer", prefix="", text="Answer", status="done", conversation_id=quick)
     rig.history.add_message(turn, "reply", "Saved answer")
+    with action_scope(rig.history, turn, "en", "read_file", {"path": "/sample/cleared-note.md"}):
+        pass
     blank_exchange = exchange(rig.history, conversation_id=quick, peer_id=None, question="", text="")
     rig.conn.execute("INSERT INTO conversation_context_summaries VALUES(?, 'Old summary', ?, 1)", (quick, turn))
     rig.service._cli_sessions.put(0, "cli:codex", "old-native-thread", quick)

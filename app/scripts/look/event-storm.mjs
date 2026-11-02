@@ -8,7 +8,7 @@ export function keyLatency(samples) {
 /** Drive the real wheel and keyboard while the fake core publishes team work. */
 export async function eventStorm(page, options) {
   const { selector, seconds = 4, every = 200, wheelEvery = 100, wheelBy = 720, type = null,
-    quiet = false, compareQuiet = false, position = "top", progress = false, arrival = false, hover = false, home = false, roster = false, limits = {} } = options;
+    quiet = false, compareQuiet = false, position = "top", progress = false, liveText = false, arrival = false, hover = false, home = false, roster = false, limits = {} } = options;
   let control;
   if (compareQuiet) control = await eventStorm(page, { ...options, compareQuiet: false, quiet: true, limits: { fromBottom: 80 } });
   await page.evaluate(({ selector, position }) => {
@@ -76,7 +76,7 @@ export async function eventStorm(page, options) {
   const began = Date.now(), ends = began + seconds * 1000;
   const ticking = (async () => {
     while (Date.now() < ends) {
-      if (!quiet) await page.evaluate(({ elapsed, progress, arrival, home, roster }) => {
+      if (!quiet) await page.evaluate(({ elapsed, progress, liveText, arrival, home, roster }) => {
         const seen = window.__storm, data = window.__look.data;
         window.__look.now = seen.clock + elapsed;
         const turn = data.turns.find(turn => turn.id === 200000);
@@ -89,6 +89,10 @@ export async function eventStorm(page, options) {
           seen.step = Math.floor(elapsed / 1000);
           turn.steps.push({ kind: "tool", tool: "web_search", server: "Raphael", outcome: "ok", ms: 120, at_ms: Date.now() });
         }
+        if (liveText && turn && Math.floor(elapsed / 1000) > (seen.textStep ?? 0)) {
+          seen.textStep = Math.floor(elapsed / 1000);
+          turn.messages.push({seq:1000 + seen.textStep,kind:"progress",text:`Checking sample ${seen.textStep}`,at_ms:Date.now()});
+        }
         if (arrival && !seen.arrived && elapsed >= 1000) {
           seen.arrived = true;
           const fresh = { ...structuredClone(turn), id: 200001, task: null, steps: [], session_id: "storm-arrival", question: "New question", created_at_ms: Date.now() };
@@ -96,7 +100,7 @@ export async function eventStorm(page, options) {
           window.__look.emit({ type: "AgentTurn", turn_id: fresh.id, member_id: 0 });
         }
         window.__look.emit(home ? { type: "AgentTurn", turn_id: 500, member_id: 1 } : { type: "WorkerChanged", task_id: 71, state: "running", running: true });
-      }, { elapsed: Date.now() - began, progress, arrival, home, roster });
+      }, { elapsed: Date.now() - began, progress, liveText, arrival, home, roster });
       await new Promise(resolve => setTimeout(resolve, every));
     }
   })();
@@ -117,7 +121,7 @@ export async function eventStorm(page, options) {
   })();
   await Promise.all([ticking, rolling, typing]);
   await new Promise(resolve => setTimeout(resolve, 600));
-  const result = await page.evaluate(({ selector, type, hover, arrival, position }) => {
+  const result = await page.evaluate(({ selector, type, hover, arrival, position, liveText }) => {
     const scroller = document.querySelector(selector), seen = window.__storm;
     seen.observer.disconnect(); seen.performance.disconnect(); document.removeEventListener("keydown", seen.keydown, true); delete scroller.scrollTop;
     const calls = window.__look.calls.slice(seen.calls).map(call => call.method ?? call.command);
@@ -134,13 +138,15 @@ export async function eventStorm(page, options) {
       motionIntact: !seen.animations || (seen.animations.length > 0 && seen.animations.every(({ animation, start, delay }) => animation.playState === 'running' && animation.startTime === start && animation.effect.getTiming().delay === delay)),
       anchorMovement: arrival && position === "middle" ? Math.abs(scroller.scrollTop - seen.top) : 0,
       arrivalShown: !arrival || !!scroller.querySelector('[data-id="200001"].is-new'),
+      liveTextUpdated: !liveText || scroller.querySelector('[data-id="200000"] .live-action')?.textContent === `Checking sample ${seen.textStep}`,
     };
-  }, { selector, type, hover, arrival, position });
+  }, { selector, type, hover, arrival, position, liveText });
   Object.assign(result, keyLatency(result.keyMs));
   if (control) result.quiet = control;
   const over = Object.entries(limits).filter(([name, limit]) => result[name] > limit).map(([name, limit]) => `${name} ${result[name]} > ${limit}`);
   if (!result.typingIntact || !result.hoverIntact || !result.arrivalShown || !result.motionIntact) over.push("typing, hover, arrival or animation lost");
   if (progress && result.changedKeys.some(key => key !== "turn:200000")) over.push("an unchanged line was replaced");
+  if (result.liveTextUpdated === false) over.push("the current public action did not update");
   if (over.length) { const error = new Error(`A busy team disturbs the reader: ${over.join(", ")} | ${JSON.stringify(result)}`); error.assertion = result; throw error; }
   return result;
 }

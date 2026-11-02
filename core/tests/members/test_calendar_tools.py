@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from agent.test_narration import chat
+from raphael_core.agent.actions import is_action
 from raphael_core.home import HomeOverview
 from raphael_core.protocol import RpcError
 from .test_answering import client, setup, member, typed, live_said  # noqa: F401
@@ -63,7 +64,7 @@ async def test_a_request_to_add_to_todays_schedule_lands_in_the_store_and_on_hom
     # Home's inbox is what needs the owner; an event on the calendar is not.
     assert value["today"] == []
     [turn] = (await rig.call("agent.history.list", {"member_id": secretary.id}))["turns"]
-    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event"] == [{
+    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event" and not is_action(m["text"])] == [{
         "type": "calendar", "action": "created", "id": item["event_id"], "name": "牙醫", "date": TODAY,
         "text": "已加入行程 · 10/21 15:00 牙醫",
     }]
@@ -116,7 +117,7 @@ async def test_calendar_list_answers_from_everything_the_calendar_shows(setup, c
     # The list changes nothing, so nothing asks about it.
     [turn] = (await rig.call("agent.history.list", {"member_id": secretary.id}))["turns"]
     assert [step["tool"] for step in turn["steps"]] == ["calendar_list"]
-    assert not [m for m in turn["messages"] if m["kind"] == "event"]
+    assert not [m for m in turn["messages"] if m["kind"] == "event" and not is_action(m["text"])]
 
 
 async def test_any_member_changes_and_removes_what_any_other_added(setup, client, home):
@@ -132,7 +133,7 @@ async def test_any_member_changes_and_removes_what_any_other_added(setup, client
     await typed(rig, "取消牙醫", second.id)
     assert await own_items(rig) == []
     [turn] = (await rig.call("agent.history.list", {"member_id": second.id}))["turns"]
-    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event"] == [{
+    assert [json.loads(m["text"]) for m in turn["messages"] if m["kind"] == "event" and not is_action(m["text"])] == [{
         "type": "calendar", "action": "deleted", "id": added["id"], "name": "牙醫", "date": TODAY,
         "text": "已刪除行程 · 10/21 17:00 牙醫",
     }]

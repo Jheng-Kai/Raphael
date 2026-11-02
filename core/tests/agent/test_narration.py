@@ -6,6 +6,7 @@ import json
 import pytest
 
 from raphael_core.brain.openrouter import ChatToolCall, ChatTurn
+from raphael_core.agent.actions import is_action
 from .conftest import decision
 from .test_service import make_rig  # noqa: F401
 from .test_plugins import plugins, calls  # noqa: F401
@@ -27,7 +28,7 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
     async def second(**kwargs):
         [turn] = await rig.turns()
         assert turn["status"] == "running"
-        assert [m["kind"] for m in turn["messages"]] == ["progress"]
+        assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress"]
         assert turn["messages"][0]["text"] == "《Notice. I will check the current time.》"
         assert kwargs["messages"][-1]["role"] == "tool"
         assert any(m.get("content") == "I will check the current time." for m in kwargs["messages"])
@@ -40,7 +41,7 @@ async def test_progress_is_persisted_and_notified_before_each_tool_round(make_ri
     result = await typed(rig)
     assert result["text"] == "It is Friday."
     [turn] = await rig.turns()
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "progress", "reply"]
     assert turn["messages"][-1]["text"] == "《Answer. It is Friday.》"
     assert len({data["turn_id"] for method, data in notes if method == "agent.turn"}) == 1
     assert turn["cost_usd"] == pytest.approx(0.9)
@@ -61,7 +62,7 @@ async def test_a_permission_pauses_the_sequence_and_yes_continues_the_same_turn(
     assert calls == ["look", "note"]
     [turn] = await rig.turns()
     assert turn["status"] == "done"
-    assert [m["kind"] for m in turn["messages"]] == ["progress", "progress", "reply"]
+    assert [m["kind"] for m in turn["messages"] if not is_action(m["text"])] == ["progress", "progress", "reply"]
     assert turn["cost_usd"] == pytest.approx(0.9)  # typed turns do not pay for routing
     assert [m["role"] for m in client.chat_calls[1]["messages"]][-2:] == ["tool", "tool"]
 

@@ -24,7 +24,7 @@ def heard():
 
 @pytest.fixture
 def rig(make_rig, plugins, heard):
-    return make_rig(plugins=plugins.hub, notify=lambda method, params: heard.append((method, params)) if method == "agent.turn" else None)
+    return make_rig(plugins=plugins.hub, notify=lambda method, params: heard.append((method, params)) if method == "agent.turn" and not params.get("activity_only") else None)
 
 
 def brief(steps):

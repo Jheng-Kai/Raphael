@@ -9,6 +9,7 @@ import { pageCardsHTML } from "./page-card";
 import { ownerQuestionsHTML, permissionCardsHTML } from "./permission-card";
 import { secretCardsHTML, secretResumedLineHTML } from "./secret-card";
 import { mcpProposalsHTML } from "./mcp-proposal";
+import { liveAction, pastStep, workActions } from "./work-actions";
 // A turn of the conversation as the 拉斐爾 page shows it: the person's words on the right, with a
 // their actions below each bubble; Raphael on the left, with his face and each public message
 // in order. Events are small chips, questions mount inline, and pending work shares the live work line.
@@ -588,7 +589,7 @@ export function filesHTML(files: readonly TurnAttachment[] | undefined): string 
 }
 
 /** Background task controls without raw tool labels or a collapsed steps box. */
-function waitsAtCard(turn: AgentTurn): boolean {
+export function waitsAtCard(turn: AgentTurn): boolean {
   return !!(turn.permissions?.some(card => card.state === "pending") || turn.secrets?.some(card => card.state === "pending" || card.state === "failed") || turn.connectors?.some(card => card.state === "pending" || card.state === "authorizing") || turn.computers?.some(card => card.state === "control") || turn.owner_questions?.some(question => question.state === "asked"));
 }
 
@@ -631,16 +632,19 @@ function messageBlockHTML(turn: AgentTurn, key: string, text: string, time: numb
 }
 
 function workActionHTML(turn: AgentTurn, state: TimelineState): string {
-  if (!(turn.steps?.length || turn.messages?.some(m => m.kind === "progress" || m.kind === "thinking") || turn.model)) return "";
-  const end = turn.task?.finished_at_ms ?? turn.messages?.find(m => m.kind === "reply")?.at_ms ?? Math.max(turn.created_at_ms, ...(turn.steps ?? []).map(s => s.at_ms + s.ms));
-  const label = t("chat.workedFor", { p0: Math.max(0, Math.round((end - turn.created_at_ms) / 1000)) });
-  return btn(`${ico("check")}<span>${esc(label)}</span>`, "sm message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" data-tooltip="${esc(answerMeta(turn) || label)}"`);
+  if (turn.status === "running" || isLive(turn.task)) return "";
+  if (!(shownSteps(turn).length || workActions(turn).length || turn.messages?.some(m => m.kind === "progress" || m.kind === "thinking") || turn.model)) return "";
+  const end = turn.task?.finished_at_ms ?? Math.max(turn.created_at_ms, ...(turn.messages ?? []).filter(message => message.kind === "reply").map(message => message.at_ms), ...(turn.steps ?? []).map(step => step.at_ms || turn.created_at_ms));
+  const label = t("work.inspect") + ` · ${formatDuration(Math.max(0, end - turn.created_at_ms))}`;
+  return btn(ico("steps"), "sm icon message-work", ` data-act="thinking" aria-expanded="${state.thinkingOpen.get(turn.id) ?? false}" aria-controls="work-${turn.id}" aria-label="${esc(label)}" data-tooltip="${esc(label)}"`);
 }
 
-function livePresenceHTML(look: TurnLook, progress?: string): string {
+export function livePresenceHTML(look: TurnLook, progress?: string, showAction = true): string {
   const face = look.liveFace?.() ?? look.face(true);
-  const current = progress ? face.replace(/\sdata-(?:tooltip|presence-member)="[^"]*"/g, "") : face;
-  return `<div class="live-presence" role="status"${progress || look.activityLabel ? ` data-tooltip="${esc(progress || look.activityLabel || "")}"` : ""}>${current}</div>`;
+  const current = face.replace(/\sdata-(?:tooltip|presence-member)="[^"]*"/g, "");
+  if (!showAction) return `<div class="live-presence" role="status">${face}</div>`;
+  const text = progress?.trim() || look.activityLabel?.trim() || t("work.thinking");
+  return `<div class="live-presence" role="status" data-tooltip="${esc(text)}">${current}<span class="live-action">${esc(text)}</span></div>`;
 }
 
 /** Validates an http(s) URL; returns null for any other scheme or invalid URL. */
@@ -743,9 +747,11 @@ function meetingEvent(text: string): { room_id: number; name: string } | null {
 /** One public line of Raphael's work (《告。…》 on the desktop) as the window shows it: plain. */
 const plainLine = (text: string): string => plainReplies([text])[0];
 
-function latestProgress(turn: AgentTurn): string | undefined {
+export function latestProgress(turn: AgentTurn): string | undefined {
+  const action = liveAction(turn);
+  if (action) return action;
   const text = [...(turn.messages ?? [])].reverse().find(m => m.kind === "progress")?.text;
-  return text && plainLine(text);
+  return turn.task?.progress ? plainLine(turn.task.progress) : text && plainLine(text);
 }
 
 /** Work detail opens from the reply action; events stay in the ordered timeline. */
@@ -753,13 +759,16 @@ function workSectionHTML(turn: AgentTurn, state: TimelineState, query: string, r
   const messages = (turn.messages ?? []).filter(m => m.kind !== "reply" && m.kind !== "media" && m.kind !== "event" && m.text.trim())
     .map(m => ({ ...m, text: plainLine(m.text) }));
   const live = !waitingForOwner && !waitsAtCard(turn) && turn.task?.state !== "waiting" && (turn.status === "running" || isLive(turn.task));
-  if (!messages.length && !(turn.steps?.length) && !turn.model && !live && !revealing) return "";
-  const start = state.workStartedAt.get(turn.id) ?? turn.created_at_ms;
+  if (live) return "";
+  if (!messages.length && !workActions(turn).length && !(turn.steps?.length) && !turn.model && !revealing) return "";
   const open = state.thinkingOpen.get(turn.id) ?? false;
-  const body = (answerMeta(turn) ? `<p class="work-meta">${esc(answerMeta(turn))}</p>` : "") + messages.map(m => `<div class="chat-message" data-message="${m.seq}"><div class="work-progress">${messageHTML(m.text, query)}</div></div>`).join("") +
-    ((turn.steps?.length ?? 0) > 0 ? `<ol class="step-list">${shownSteps(turn).map(step => stepHTML(step, false)).join("")}</ol>` : "");
+  const actions = workActions(turn).filter(action => action.state === "done");
+  const steps = shownSteps(turn).filter(step => step.kind !== "model");
+  const rows = actions.length ? actions.map(action => `<li>${esc(action.past)}${action.outcome && action.outcome !== "ok" ? ` · ${esc(reasonText({kind:"tool", tool:"", server:null, ms:0, at_ms:0, outcome:action.outcome, reason:action.reason ?? null}))}` : ""}</li>`).join("") : steps.length ? steps.map(step => `<li>${esc(pastStep(step))}${step.outcome !== "ok" ? ` · ${esc(reasonText(step))}` : ""}</li>`).join("") : messages.map(message => `<li class="work-progress">${messageHTML(message.text, query)}</li>`).join("");
+  const meta = [esc(answerMeta(turn)), ...shownSteps(turn).map(mediaBillHTML)].filter(Boolean).join(" · ");
+  const body = (rows ? `<ol class="work-sentences">${rows}</ol>` : "") + (meta ? `<p class="work-meta">${meta}</p>` : "");
   if (!body) return "";
-  return `<div class="work-section think-box${open ? " is-open" : ""}${live ? " is-live" : ""}" data-thinking-turn="${turn.id}"${live ? ` data-work-start="${start}"` : ""}>` +
+  return `<div class="work-section think-box${open ? " is-open" : ""}" data-thinking-turn="${turn.id}">` +
     `<div class="work-body think-body" id="work-${turn.id}"${open ? "" : " hidden"}>${body}</div></div>`;
 }
 
@@ -882,6 +891,7 @@ function publicEventsHTML(turn: AgentTurn): Map<number, string> {
     if (message.kind !== "event") { groups.push({kind: "break", lines: [], names: new Map(), seq: message.seq}); continue; }
     let event: {type?: string; action?: string; id?: number; name?: string; date?: string; member_id?: number} = {};
     try { event = JSON.parse(message.text); } catch { /* Historical events remain readable without a guessed target. */ }
+    if (event?.type === "action") continue;
     const known = ["routine", "calendar"].includes(event?.type ?? "") && ["created", "updated", "deleted"].includes(event?.action ?? "") && typeof event.name === "string" && Number.isSafeInteger(event.id) && event.id! > 0;
     const meeting = meetingEvent(message.text), skill = learnedSkillEvent(message.text);
     const kind = known ? `${event.type}.${event.action}` : meeting ? "meeting" : skill ? "skill" : `notice:${plainLine(message.text)}`;
@@ -959,7 +969,7 @@ export function turnHTML(turn: AgentTurn, state: TimelineState, detailOpen: bool
     more +
     (turn.task?.state === "done" ? `<div data-task-result-slot="${id}" data-task-member="${turn.member_id ?? 0}"></div>` : "") +
     (waitingForOwner || live || turn.task?.state === "waiting" ? "" : taskActionsHTML(turn, state)) +
-    (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm" ? livePresenceHTML(look, latestProgress(turn)) : "") +
+    (live || waitingForOwner || waitsAtCard(turn) || revealing || turn.task?.state === "waiting" || turn.status === "confirm" ? livePresenceHTML(look, latestProgress(turn), live || revealing) : "") +
     `</div></div>`) + `</li>`
   );
 }
