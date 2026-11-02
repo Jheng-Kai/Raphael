@@ -50,6 +50,8 @@ for (const [theme, palette] of Object.entries({ light, dark })) {
   if (usageColors.some(token => ratio(palette[token], palette.panel) < 3)) process.exitCode = 1;
   contrast.sendIcon = Object.fromEntries(["panel", "hover", "pressed"].map(surface => [surface, +ratio(palette["accent-icon"], palette[surface]).toFixed(2)]));
   if (Object.values(contrast.sendIcon).some(value => value < 3)) process.exitCode = 1;
+  contrast.computerActive = Object.fromEntries(["side", "content", "hover", "pressed"].map(surface => [surface, +ratio(palette["computer-active"], palette[surface]).toFixed(2)]));
+  if (Object.values(contrast.computerActive).some(value => value < 3)) process.exitCode = 1;
   report[theme] = { tokens: palette, contrast };
 }
 // Overlay confirmations reuse the app's opaque panel and button palette in both themes.

@@ -107,7 +107,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
         if (Math.abs(rect.left + rect.width / 2 - box.left - box.width / 2) > 1 || Math.abs(rect.top + rect.height / 2 - box.top - box.height / 2) > 1) violation('R-UI-19', 'Action glyph is not centered');
       }
     }
-    if (element.matches('.au-month-grid .btn[aria-pressed="true"]')) {
+    if (element.matches('.au-month-grid .btn[aria-pressed="true"], .desktop-screen [data-desktop="retry"]')) {
       const luminance = value => {
         const rgb = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
         if (rgb?.length !== 3) return null;
@@ -115,7 +115,7 @@ export function auditDocument(doc = document, viewport = { width: innerWidth, he
       };
       const foreground = luminance(style.color), background = luminance(style.backgroundColor);
       if (foreground !== null && background !== null && (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05) < 4.5)
-        violation('R-UI-22', 'Selected date has insufficient text contrast');
+        violation('R-UI-22', element.matches('[data-desktop="retry"]') ? 'Screen action has insufficient text contrast' : 'Selected date has insufficient text contrast');
     }
     if (element.matches('.mp-add')) {
       const controls = [...element.children].filter(child => visible(child) && child.matches('input, .btn'));

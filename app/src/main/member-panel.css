@@ -24,3 +24,10 @@
 
 .mb-det .mb-rsched { display: grid; grid-template-columns: minmax(0, 1fr); }
 .mb-det .mb-time { width: 100%; }
+
+.mb-panel-routines { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+.mb-tab-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
+.mb-det .mb-rt.btn { display: flex; width: 100%; gap: var(--sp-3); padding: var(--sp-2); text-align: left; background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm); }
+.mb-rt-state { display: flex; color: var(--text-3); flex: none; }
+.mb-rt-state.is-on { color: var(--ok); }
+.mb-rt-main { flex: 1; }

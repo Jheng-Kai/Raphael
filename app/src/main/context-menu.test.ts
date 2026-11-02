@@ -65,6 +65,13 @@ function clicked(event: Event): void {
 }
 
 describe("a right click is the ⋯ of its row", () => {
+  test("the takeover bar exposes its shared menu from a right click", () => {
+    const bar = document.createElement('div'); bar.className = 'desktop-takeover-bar';
+    bar.innerHTML = `<span>Sample member</span>${iconButton('more', 'More', ' data-desktop="menu"')}`;
+    document.body.append(bar);
+    expect(overflowAt(bar)?.button).toBe(bar.querySelector('[data-desktop="menu"]'));
+    expect(uncoveredOverflows(bar)).toHaveLength(0);
+  });
   test("a right click anywhere on a row opens the menu of its ⋯, the same one a click on the ⋯ opens", () => {
     for (const target of [document.getElementById("open-a")!, document.querySelector("#a [data-conversation-more]")!, document.getElementById("a")!]) {
       closeMenu();

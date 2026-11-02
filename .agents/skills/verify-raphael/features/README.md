@@ -1,5 +1,10 @@
 # Raphael feature map
 
+## Three computer levels (2026-11-02)
+
+See [Member computer](member-computer.md#three-computer-levels-2026-11-02) for
+R-COMP-3-01 through R-COMP-3-04, the selected matrix and replaced scene contracts.
+
 ## Owner polish (2026-11-01)
 
 See [owner-polish.md](owner-polish.md) for R-MP-01 through R-MP-06 and their selected matrix.

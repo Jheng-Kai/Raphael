@@ -17,7 +17,7 @@ export const navZh = {
   "nav.dictation": "聽寫", "dictation.overview": "總覽", "nav.help": "說明與意見回饋", "nav.automations": "自動化", "nav.pagePending": "頁面尚未載入",
   "owner.profile": "個人資料", "owner.name": "你的名字", "owner.about": "關於我",
   "skin.title": "外觀", "skin.about": "即時套用並記住你的選擇",
-  "chat.modeAsk": "手動", "chat.modeAskHint": "每次動手前都先問你", "chat.modeDirect": "自動", "chat.modeDirectHint": "一般操作直接做，有風險才問你", "chat.modePlan": "計畫", "chat.modePlanHint": "先給你看計畫，同意後才動手", "chat.modeBypass": "全部允許", "chat.modeBypassHint": "不再問你允許，做完才回來；真的有問題才問", "desktop.start": "啟動電腦", "desktop.revoke": "收回使用權限", "desktop.screenOf": "{p0} 的畫面", "nav.collapseSidebar": "收合側欄", "nav.expandSidebar": "展開側欄",
+  "chat.modeAsk": "手動", "chat.modeAskHint": "每次動手前都先問你", "chat.modeDirect": "自動", "chat.modeDirectHint": "一般操作直接做，有風險才問你", "chat.modePlan": "計畫", "chat.modePlanHint": "先給你看計畫，同意後才動手", "chat.modeBypass": "全部允許", "chat.modeBypassHint": "不再問你允許，做完才回來；真的有問題才問", "desktop.start": "啟動電腦", "desktop.revoke": "收回使用權限", "desktop.screenOf": "{p0}的畫面", "nav.collapseSidebar": "收合側欄", "nav.expandSidebar": "展開側欄",
   "brains.chatgptSignIn": "使用 ChatGPT 繼續", "brains.chatgptSigning": "請在瀏覽器完成登入", "brains.chatgptWaiting": "等待登入", "brains.chatgptNoPlan": "已登入，但未允許使用方案額度", "brains.chatgptNoPlanShort": "未允許方案", "brains.chatgptFailed": "ChatGPT 登入沒有完成，請再試一次。",
   "brains.chatgptNote": "登入後就能選用 ChatGPT 方案裡的模型。", "brains.chatgptPrivate": "拉斐爾看不到你的密碼，也看不到你的 ChatGPT 對話。", "brains.usingPlan": "使用 ChatGPT 方案", "brains.manageUsage": "管理用量",
   "brains.welcomeTitle": "你正在使用 ChatGPT 方案", "brains.welcomeBody": "符合條件的要求會用你的 ChatGPT 方案額度，用量可以在 ChatGPT 設定管理。", "brains.welcomeDone": "知道了",

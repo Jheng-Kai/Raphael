@@ -83,6 +83,51 @@ export function checkRendered(name, context = {}) {
       require(getComputedStyle(row.querySelector('time')).opacity === '0' && visible(row.parentElement.querySelector('.mb-more')), "overflow replaces time in its reserved slot");
     }
     if (name === "sidebar-group-author") require([...document.querySelectorAll('.au-room-row .mb-row-p')].some(line => line.textContent.startsWith(`${window.__look.data.members.find(m => m.id === 1).name}：`)), "group preview starts with its author");
+  }
+  if (name.startsWith('level-')) {
+    const panel = document.querySelector('.mb-det'), desktop = panel.querySelector('.desktop-panel');
+    const calls = window.__look.calls;
+    if (name === 'level-start-before' || name === 'level-start-after') {
+      const widths = [panel.getBoundingClientRect().width, desktop.querySelector('.desktop-screen').getBoundingClientRect().width];
+      if (name === 'level-start-before') window.__look.desktopWidths = widths;
+      else require(widths.every((width, index) => Math.abs(width - window.__look.desktopWidths[index]) < 1), 'starting the computer preserves panel and screen widths');
+    } else if (name.startsWith('level-status-')) {
+      const monitor = document.querySelector('[data-act="computer"]'), active = name.endsWith('active');
+      require(visible(monitor) && monitor.classList.contains('is-computer-active') === active, 'the monitor reflects running status without a label');
+      require(!monitor.textContent.trim() && getComputedStyle(monitor).animationName === 'none', 'the monitor remains one still icon');
+      if (active) require(getComputedStyle(monitor).color !== getComputedStyle(document.querySelector('.conversation-trigger')).color, 'active status uses the purple token');
+    } else if (name === 'level-panel' || name === 'level-off' || name === 'level-no-computer') {
+      require(visible(panel.querySelector('.mb-panel-routines')) && !visible(panel.querySelector('.mb-who')), 'routines live on the landing view, identity lives behind the gear');
+      require(!panel.querySelector('[data-tab="routines"], .mb-rt [role="switch"], [data-desktop="expand"], [data-desktop="collapse"]'), 'there is no routines page, row switch or window control');
+      if (name === 'level-no-computer') require(!visible(desktop), 'a member without a computer has no screen block');
+      else {
+        require(visible(desktop) && visible(desktop.querySelector('.desktop-caption')), 'the screen has its centered member caption');
+        require(desktop.getBoundingClientRect().bottom <= panel.querySelector('.mb-panel-routines').getBoundingClientRect().top, 'the screen precedes routines');
+      }
+      if (name === 'level-off') require(visible(desktop.querySelector('.desktop-wallpaper')) && visible(desktop.querySelector('.desktop-screen [data-desktop="retry"]')) && !desktop.querySelector('iframe'), 'wallpaper and Start share the quiet screen');
+    } else if (name === 'level-gear') {
+      require(visible(panel.querySelector('.mb-who')) && visible(panel.querySelector('#mb-det-name')) && visible(panel.querySelector('[data-det="back"]')), 'identity and Back are available through the gear');
+      require(!visible(desktop) && !panel.querySelector('[data-tab="routines"]'), 'settings has no separate computer or routines page');
+    } else if (name === 'level-routine') {
+      require(visible(document.querySelector('.au-routine-dialog [data-dlg="enabled"]')), 'pausing belongs inside the routine');
+    } else if (name === 'level-takeover' || name === 'level-menu') {
+      const frame = desktop.querySelector('iframe'), bar = desktop.querySelector('.desktop-takeover-bar');
+      require(desktop.hasAttribute('data-expanded') && visible(frame) && visible(bar), 'the same stream fills the window below its thin bar');
+      require(visible(bar.querySelector('.av')) && visible(bar.querySelector('[data-desktop="return"]')), 'the bar identifies the member and offers handback');
+      require(frame.getBoundingClientRect().width > innerWidth * .9 && bar.getBoundingClientRect().height <= 64, 'the screen has window width and a thin bar');
+      require(!document.querySelector('[data-sidebar="open"]')?.checkVisibility({visibilityProperty:true}), 'takeover leaves no sidebar entry above its bar');
+      const current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
+      require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 1 && frame.contentWindow.__desktopConnections === 1, 'takeover opens no additional stream');
+      if (name === 'level-menu') require(visible(document.querySelector('#app-popover [data-pick="files"]')) && visible(document.querySelector('#app-popover [data-pick="teach"]')), 'the shared menu holds files and teaching');
+    } else if (name === 'level-reopen') {
+      const frame = desktop.querySelector('iframe'), current = calls.findLast(call => call.method === 'computer.viewer_open').params.member_id;
+      require(desktop.hasAttribute('data-expanded') && desktop.dataset.interactive === 'true' && frame.contentWindow.__desktopConnections === 1, 'a fresh connected stream accepts the new takeover');
+      require(calls.filter(call => call.method === 'computer.viewer_open' && call.params.member_id === current).length === 2, 'reopening creates exactly one fresh member stream');
+    } else if (name.startsWith('level-handback')) {
+      require(!desktop.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'handback returns to the conversation');
+      if (innerWidth < 1440) require(document.querySelector('.conversation-trigger').getAttribute('aria-expanded') === 'false', 'handback closes the compact preview');
+      require(calls.filter(call => call.method === 'computer.viewer_control' && !call.params.held).length === (name.endsWith('second') ? 2 : 1) && calls.some(call => call.method === 'computer.viewer_close'), 'each handback releases once and closes the stream');
+    }
     return {check: name};
   }
   if (name === "menu-scroll-closed") {
@@ -632,7 +677,7 @@ export function checkRendered(name, context = {}) {
     const calls = window.__look.calls.filter(c => c.method === 'computer.teach');
     const actions = calls.map(c => c.params.action);
     const panel = document.querySelector('.desktop-panel');
-    require(visible(panel), 'the demonstration belongs to the member computer panel');
+    require(panel && (['teach-try','teach-discard'].includes(name) || visible(panel)), 'the demonstration belongs to the member computer panel');
     if (name === 'teach-shared') {
       require(visible(panel.querySelector('.desktop-teach-missing .missing-note')), 'the separate computer requirement is visible');
       require(panel.querySelector('[data-desktop="teach"]').disabled && visible(panel.querySelector('[data-missing-repair="computer"]')), 'repair uses the existing computer settings entry');
@@ -648,12 +693,15 @@ export function checkRendered(name, context = {}) {
       const editor = panel.querySelector('#mp-skill-text');
       require(visible(editor) && editor.value.includes('## Inputs') && editor.value.includes('## Verification'), 'the existing editor holds an editable skill with inputs and final checks');
       require(actions.includes('stop') && !actions.includes('save'), 'the draft is not saved automatically');
+      require(editor.value.includes('Unsaved sample procedure') && !actions.includes('read'), 'Back preserves the unsaved editor without fetching over it');
     } else if (name === 'teach-discard') {
       require(actions.includes('discard') && !actions.includes('save') && panel.querySelector('.desktop-recording').hidden, 'discard clears the recording without publication');
+      require(!panel.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'discard returns to the conversation');
     } else {
       require(actions.includes('save') && calls.find(c=>c.params.action==='save').params.text.includes('## Procedure'), 'the owner explicitly saved the document');
       if (name === 'teach-saved') require(visible(panel.querySelector('[data-teach-input]')), 'the owner can enter a fresh input');
       if (name === 'teach-try') {
+        require(!panel.hasAttribute('data-expanded') && visible(document.querySelector('.composer')), 'trying the skill returns to the conversation');
         const call = window.__look.calls.find(c=>c.command==='agent_ask_text');
         require(call && JSON.stringify(call).includes('checked-report') && JSON.stringify(call).includes('第二季報告'), 'the existing conversation receives the saved skill and new input');
         const saved = calls.find(c=>c.params.action==='save');
@@ -674,7 +722,7 @@ export function checkRendered(name, context = {}) {
     const row = document.querySelector('[data-routine="90"]');
     require(visible(row), 'the event uses the existing routine list');
     require(row.textContent.includes('Gmail') && row.textContent.includes('上次檢查') && row.textContent.includes('上次觸發'), 'the row names the app, filter and both times');
-    require(visible(row.querySelector('[role="switch"]')), 'the event has the existing routine switch');
+    require(row.matches('button[data-det="routine-open"]') && !row.querySelector('[role="switch"]'), 'the routine opens directly, with pausing inside its editor');
     require([...row.querySelectorAll('.mb-rt-main span')].every(text => text.scrollWidth <= text.clientWidth + 1 && text.scrollHeight <= text.clientHeight + 1), 'the exact filter and both times remain readable without truncation');
     const status = row.querySelector('.mb-rt-main > span:last-child');
     const timeLabels = ['上次檢查', '上次觸發'].map(label => {
@@ -686,7 +734,7 @@ export function checkRendered(name, context = {}) {
     });
     require(timeLabels[1].top > timeLabels[0].top, 'checked and fired times begin on separate lines');
     if (name === "routine-event-menu") {
-      require(visible(row.querySelector('[data-det="routine-menu"]')), 'hover reveals the real routine menu before editing');
+      require(visible(row) && row.matches('button[data-det="routine-open"]'), 'the row itself opens the routine');
       return { check: name };
     }
     if (name === "routine-event-saved") {
@@ -1181,7 +1229,7 @@ export function checkRendered(name, context = {}) {
       require(!calls.some(call=>call.method==='computer.viewer_open'),'reading the missing state never starts a computer');
       return {check:name};
     }
-    require(panel.closest('.mb-det') && (visible(panel) || visible(frame) || name==='computer-takeover-done') && ![...document.querySelectorAll('[role="dialog"]')].some(visible), 'computer uses the existing viewer in its panel or card');
+    require(panel.closest('.mb-det') && (visible(panel) || visible(frame) || name==='computer-takeover-done' || name==='desktop-handback') && ![...document.querySelectorAll('[role="dialog"]')].some(visible), 'computer uses the existing viewer in its panel or card');
     const screenHit=panel.querySelector('[data-desktop="peek"]');
     if(frame&&!screenHit.hidden)require(getComputedStyle(screenHit).backgroundColor==='rgba(0, 0, 0, 0)','screen click target stays transparent including hover');
     const events=document.querySelectorAll('[data-desktop-work]');
@@ -1197,7 +1245,10 @@ export function checkRendered(name, context = {}) {
       require(!panel.dataset.acceptedInputLatencyMs,'the press on the button is not replayed into the computer');
       return {check:name,clickToInteractiveMs:latency,connections:1};
     }
-    if(name==='desktop-handback')require(panel.dataset.interactive==='false'&&frame.contentDocument.defaultView.__desktopConnections===1,'handback keeps the stream view-only');
+    if(name==='desktop-handback') {
+      require(panel.dataset.interactive==='false' && !frame && calls.some(call=>call.method==='computer.viewer_close'), 'handback closes the stream and returns to the conversation');
+      return {check:name};
+    }
       if(name==='desktop-viewer'){
         require(panel.hasAttribute('data-expanded')&&calls.filter(call=>call.method==='computer.viewer_open'&&call.params.member_id===1).length===1,'expansion uses the same member frame/session');
         require(frame.getBoundingClientRect().width>innerWidth*0.9,'expanded screen uses the window width');
@@ -1206,6 +1257,11 @@ export function checkRendered(name, context = {}) {
       require(!frame,'offline screen has no blank frame');
       if(['starting','building','preparing'].includes(panel.dataset.desktopState))require(panel.querySelectorAll('.desktop-preparation li').length===3&&visible(panel.querySelector('progress')),'preparation has all steps and progress');
       else require(visible(panel.querySelector('[data-desktop="retry"]')),'failure offers contextual retry');
+      const bounds = panel.querySelector('.desktop-screen').getBoundingClientRect();
+      for (const content of panel.querySelectorAll('.desktop-preparation > *')) {
+        const box = content.getBoundingClientRect();
+        require(box.top >= bounds.top && box.bottom <= bounds.bottom, 'preparation words and progress stay inside the screen');
+      }
     }else require(visible(frame)||name==='computer-takeover-done','the active view streams the live screen or retains its settled card');
     return {check:name};
   }
@@ -1218,7 +1274,7 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "host-panel-collapsed") {
-    require(document.querySelector('.mb-det')?.dataset.detView === 'details', "collapse returns to member details");
+    require(document.querySelector('.conversation-trigger')?.getAttribute('aria-expanded') === 'false', "closing the preview keeps its conversation");
     require(!document.documentElement.hasAttribute('data-desktop-expanded'), "collapse clears expansion");
     return { check: name };
   }
@@ -1238,19 +1294,19 @@ export function checkRendered(name, context = {}) {
     const shell = document.querySelector('.desktop-shell');
     const inline = document.querySelector('[data-card-desktop-screen] iframe:not([hidden]), [data-card-screen] iframe:not([hidden])');
     const frame = inline ?? document.querySelector('.desktop-panel iframe');
-    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : shell?.querySelector('.desktop-heading');
+    const heading = inline ? inline.closest('.conversation-card')?.querySelector('.card-head') : document.querySelector('.desktop-panel[data-expanded] .desktop-takeover-bar') ?? shell?.querySelector('.desktop-caption');
     // Native WebView checks enter the cross-origin viewer itself; look can inspect both documents.
     const embedded = !!document.querySelector('#noVNC_container');
     if (!embedded) {
       require(visible(inline?.parentElement ?? shell) && visible(heading), "the member computer has one frame and heading");
       require(document.querySelectorAll('.desktop-panel iframe, [data-card-desktop-screen] iframe, [data-card-screen] iframe').length === 1, "the existing viewer has one iframe");
-      const channels = getComputedStyle(shell).backgroundColor.match(/[\d.]+/g).map(Number);
+      const channels = getComputedStyle(document.querySelector('.desktop-screen') ?? shell).backgroundColor.match(/[\d.]+/g).map(Number);
       require(channels.slice(0, 3).every(value => value <= 40), "the frame stays dark in both themes");
-      if (!inline) require(visible(shell.querySelector('[data-desktop="collapse"]')), "collapse is present in the frame header");
+      if (!inline) require(!shell.querySelector('[data-desktop="collapse"]'), "preview has no fold control");
     }
     const doc = frame?.contentDocument ?? document;
     const win = doc.defaultView, canvas = doc.querySelector('#noVNC_container canvas');
-    require(win.getComputedStyle(doc.body).backgroundColor === (embedded ? 'rgb(23, 23, 23)' : getComputedStyle(shell).backgroundColor), "viewer gutters share the dark frame surface");
+    require(win.getComputedStyle(doc.body).backgroundColor === 'rgb(23, 23, 23)', "viewer gutters share the dark frame surface");
     require(visible(canvas) && canvas.width > 100, "the noVNC framebuffer is rendered");
     const box = canvas.getBoundingClientRect(), width = win.innerWidth, height = win.innerHeight;
     require(Math.min(Math.abs(box.width - width), Math.abs(box.height - height)) <= 2, "the canvas fills the frame on its limiting axis");

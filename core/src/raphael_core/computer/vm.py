@@ -33,6 +33,7 @@ MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.gua
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
 BACKGROUND_S = 21_600
+WALLPAPER_SETUP_S = 3
 
 
 class VmError(Exception):
@@ -217,6 +218,7 @@ class LocalVm:
         self.capacity_lock = asyncio.Lock()
         self.tunnels = {}
         self.preparation, self.preparing = {}, {}
+        self.wallpaper_attempted = set()
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
         self.work = ComputerWork(self)
@@ -445,6 +447,8 @@ class LocalVm:
             raise VmError(state["state"])
         zone = timezone_name(self.timezone())
         state = await self._reconcile_timezone(target, state, zone)
+        if state["state"] != "running":
+            self.wallpaper_attempted.discard((target.remote, target.name))
         if state["state"] == "missing":
             if not state.get("image"):
                 raise VmError("image_missing")
@@ -462,9 +466,46 @@ class LocalVm:
         for _ in range(45):
             state = await self.status(target)
             if state["ready"]:
+                await self._wallpaper(target)
                 return state
             await asyncio.sleep(1)
         raise VmError("health_timeout")
+
+    async def _wallpaper(self, target):
+        key = (target.remote, target.name)
+        if key in self.wallpaper_attempted:
+            return
+        self.wallpaper_attempted.add(key)
+        script = r'''command -v pgrep >/dev/null 2>&1 || exit 0
+watcher='^/opt/venv/bin/python /opt/raphael-desktop/wallpaper[.]py( |$)'
+pgrep -f "$watcher" >/dev/null 2>&1
+[ "$?" = 1 ] || exit 0
+attempt=0
+while [ "$attempt" -lt 60 ]; do
+    pid=$(pgrep -x xfce4-session | head -n 1)
+    [ -n "$pid" ] && break
+    sleep 1
+    attempt=$((attempt + 1))
+done
+[ -n "$pid" ] || exit 0
+address=$(tr '\000' '\n' < "/proc/$pid/environ" | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p' | head -n 1)
+[ -n "$address" ] || exit 0
+pgrep -f "$watcher" >/dev/null 2>&1
+[ "$?" = 1 ] || exit 0
+export DBUS_SESSION_BUS_ADDRESS="$address"
+exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch
+'''
+        try:
+            # Decoration cannot delay a ready desktop or change a tool's result.
+            async with asyncio.timeout(WALLPAPER_SETUP_S):
+                desktop = Path(__file__).parent / "image" / "desktop"
+                for source, destination in ((desktop / "wallpaper.py", "wallpaper.py"), (desktop / "wallpapers", "")):
+                    result = await self.run_for(target, ["cp", str(source), f"{target.name}:/opt/raphael-desktop/{destination}"], timeout=2)
+                    if result.code:
+                        return
+                await self.run_for(target, exec_args(target, ["sh", "-c", script], detached=True), timeout=2)
+        except Exception:
+            pass
 
     async def _reconcile_timezone(self, target, state, zone, *, keep_stopped=False):
         if state["state"] in ("running", "stopped") and self.timezone():
@@ -518,6 +559,7 @@ class LocalVm:
                 raise VmError("busy")
             state = await self.status(target, probe=False)
             if state["state"] == "missing":
+                self.wallpaper_attempted.discard((target.remote, target.name))
                 return
             if state["state"] not in ("running", "stopped"):
                 raise VmError(state["state"])
@@ -526,6 +568,7 @@ class LocalVm:
             result = await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)
             if result.code:
                 raise VmError("stop_failed")
+            self.wallpaper_attempted.discard((target.remote, target.name))
             if remove and (await self.run_for(target, ["rm", target.name])).code:
                 raise VmError("remove_failed")
             await self.close_viewer(target)

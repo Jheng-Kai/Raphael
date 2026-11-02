@@ -242,7 +242,7 @@ export async function perform(page, step, evidenceDirectory) {
       await page.waitForFunction(el => !el.isConnected || !!el.closest('[hidden]'), {timeout:2000}, dialog);
       await dialog.dispose();
       if (step.kind === 'settings') await click('#nav [data-go="settings"]');
-      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="edit"]'); }
+      else if (step.kind === 'member') { await perform(page, {action:'open-details'}, evidenceDirectory); await click('[data-det="gear"]'); await click('[data-det="edit"]'); }
       else await click('[data-act="data-clear"][data-what="dictation"]');
       await page.evaluate(() => { window.__polishCaptionOutside = true; });
       break;
@@ -547,6 +547,24 @@ export async function perform(page, step, evidenceDirectory) {
     }
     case "type": await fill(step.selector, step.text); break;
     case "hover": { const element = await visible(step.selector); await element.hover(); await element.dispose(); break; }
+    case "desktop-refresh-still": {
+      const before = await page.evaluate(() => {
+        const panel = document.querySelector('.mb-det');
+        window.__desktopWrites = [];
+        window.__desktopObserver = new MutationObserver(records => window.__desktopWrites.push(...records));
+        window.__desktopObserver.observe(panel, { subtree: true, childList: true, attributes: true, characterData: true });
+        return window.__look.calls.filter(call => ['computer.viewer_status', 'computer.viewer_renew'].includes(call.method)).length;
+      });
+      await page.waitForFunction(count => window.__look.calls.filter(call => ['computer.viewer_status', 'computer.viewer_renew'].includes(call.method)).length > count, { timeout: 6000 }, before);
+      const writes = await page.evaluate(async () => {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const records = [...window.__desktopWrites, ...window.__desktopObserver.takeRecords()];
+        window.__desktopObserver.disconnect();
+        return records.map(record => `${record.type}: ${record.target.className}`);
+      });
+      if (writes.length) throw new Error(`An unchanged desktop refresh wrote to the panel: ${writes.join(', ')}`);
+      return { check: 'desktop-refresh-still', mutations: writes.length };
+    }
     case "wait": { const element = await visible(step.selector); await element.dispose(); break; }
     case "wait-text":
       try {

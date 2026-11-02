@@ -21,7 +21,7 @@ export const OVERFLOW_ROWS: readonly OverflowRow[] = [
   { more: "[data-conversation-more]", row: ".conversation-row" },
   { more: "[data-room-more]", row: ".au-room-row" },
   { more: "[data-room-menu]", row: ".au-room-pane > .page-head" },
-  { more: '[data-det="routine-menu"]', row: ".mb-rt" },
+  { more: '[data-desktop="menu"]', row: ".desktop-takeover-bar" },
   { more: '[data-dlg="routine-menu"]', row: ".mp-resource" },
   { more: '[data-res="skill-menu"]', row: ".mp-resource" },
   { more: '[data-res="command-menu"]', row: ".mp-resource" },

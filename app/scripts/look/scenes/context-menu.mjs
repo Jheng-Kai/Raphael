@@ -11,7 +11,7 @@ const keyed = [{ action: "focus", selector: '.mb-col [data-member="2"]' }, { act
 const item = '#app-popover [data-confirm-item]';
 const asked = more => [click(more), wait(item), check("confirm-menu-label"), click(item), check("confirm-menu-asks")];
 const confirmed = more => [...asked(more), click(item), waitGone("#app-popover")];
-const memoryTab = [...details, click('[data-det="tab"][data-tab="memory"]'), wait('.mb-det [data-mem-space="own"] [data-mem="section-more"]')];
+const memoryTab = [...details, click('[data-det="gear"]'),click('[data-det="tab"][data-tab="memory"]'), wait('.mb-det [data-mem-space="own"] [data-mem="section-more"]')];
 const ownTitleMore = '.mb-det [data-mem-space="own"] [data-mem="section-more"]';
 const ownSummaryMore = '.mb-det [data-mem-space="own"] [data-mem="summary-more"]';
 const withSummary = { memorySummary: { text: "進行中：規劃週末", updated_at_ms: 1792807200000 } };
@@ -23,7 +23,7 @@ const pairedUser = [...settings("messaging"), click('[data-msg="expand"]'), wait
 export default [
   scene("context-menu-member", "A right click on a member's row opens the menu of its ⋯ at the pointer", rightClicked('.mb-col [data-member-item="2"]', [column])),
   scene("context-menu-conversation", "A right click on a conversation in the member's details opens its rename and delete menu", rightClicked(".mb-det .conversation-row", details)),
-  scene("context-menu-routine", "A right click on a routine in the member's details opens the menu of its ⋯", rightClicked(".mb-det .mb-rt", [...details, click('[data-det="tab"][data-tab="routines"]'), wait(".mb-det .mb-rt")])),
+  scene("context-menu-routine", "A direct routine row opens its editor without another menu", [...details, click(".mb-det .mb-rt"), wait(".au-routine-dialog"), check("level-routine")]),
   scene("context-menu-connection", "A right click on a custom server's header opens the menu of its ⋯: test, edit and delete", rightClicked(".cs-dlg-head", [
     ...settings("connections"), click('[data-conn="open"][data-id="notes"]'), wait(".cs-dlg-head"),
   ])),

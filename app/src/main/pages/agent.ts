@@ -232,7 +232,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `<div class="page-head mb-head"><h1 class="mb-h1">${esc(t("agent.title"))}</h1><span class="mb-head-l">` +
     iconButton("search", t("agent.search"), ' data-act="search" aria-expanded="false" hidden', "ra-tool") +
     `</span><span class="mb-head-c"></span><div class="ra-tools">` +
-    iconButton("monitor", t("card.pcTitle"), ' data-act="computer" hidden', "ra-tool") +
+    iconButton("monitor", t("card.pcTitle"), ' data-act="computer"', "ra-tool") +
     iconButton("gear", t("agent.settings"), ' data-act="settings"', "ra-tool") +
     `</div></div>` +
     `<div class="ra-find" hidden></div>` +
@@ -276,7 +276,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
-    onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => desktop.sync()); },
+    onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
       app.go("agent");
       if (sameThread) { roomPane.close(); void load(false); focusComposer(); }
@@ -298,8 +298,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const desktop = mountDesktopViewer(members.details, () => members.current(), {
     timeline: el.querySelector<HTMLElement>(".thread")!, conversation: () => conversationId(),
     name: () => members.nameOf(members.current()),
+    face: () => members.faceOf(members.current(), 22),
+    closePanel: () => members.setDetails(false),
     openPanel: () => members.setDetails(true), panelVisible: () => members.detailsOpen(),
-    available: on => { el.querySelector<HTMLElement>('[data-act="computer"]')!.hidden = !on; },
+    status: active => el.querySelector('[data-act="computer"]')!.classList.toggle('is-computer-active', active),
     changed: () => { if (visible && !scroller.hidden) drawThread(); },
     trySkill: text => sendFromPage(text),
     stop: turnId => { const turn = turns.find(turn => turn.id === turnId); return turn?.task ? api.workerCancel(turn.task.id) : turn?.session_id ? api.agentStop(turn.session_id, memberId()) : Promise.resolve(); },
@@ -383,14 +385,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if(visible&&member===memberId())switchThread();
   });
   conversationButton.addEventListener("click", () => {
-    if (members.detailsOpen() && desktop.viewing() === "computer") { desktop.view("details"); return; }
-    desktop.view("details");
     members.setDetails(!members.detailsOpen());
   });
   el.querySelector('[data-act="computer"]')!.addEventListener("click", () => {
-    if (members.detailsOpen() && desktop.viewing() === "computer") { members.setDetails(false); return; }
-    desktop.view("computer");
-    members.setDetails(true);
+    members.setDetails(!members.detailsOpen());
   });
   window.addEventListener("conversations-changed", (event) => {
     const member = (event as CustomEvent<number>).detail;

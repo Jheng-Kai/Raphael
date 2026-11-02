@@ -42,7 +42,7 @@ export function confirmRestore(): Promise<boolean> {
   });
 }
 
-export function mountCheckpoints(panel: HTMLElement, member: () => number): { update(available: boolean): void; show(): Promise<void> } {
+export function mountCheckpoints(panel: HTMLElement, member: () => number): { update(available: boolean): void; show(): Promise<void>; hide(): void } {
   const button = document.createElement("span");
   button.innerHTML = btn(esc(t("files.changes")), "sm", ' data-checkpoint-open');
   panel.querySelector(".desktop-actions")!.prepend(button.firstElementChild!);
@@ -88,7 +88,7 @@ export function mountCheckpoints(panel: HTMLElement, member: () => number): { up
     } catch (error) { toaster.info(describeError(error)); }
     finally { busy = restore.disabled = false; }
   });
-  return { show, update(available) {
+  return { show, hide() { requested = false; review.hidden = true; }, update(available) {
     if (current !== member()) { current = member(); generation++; requested = false; kept = []; review.hidden = true; review.innerHTML = ""; }
     open.textContent = t("files.changes"); open.hidden = !available && !requested;
     if (!available && !requested) review.hidden = true;

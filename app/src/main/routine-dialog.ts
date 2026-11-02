@@ -6,7 +6,7 @@ import { openDialog, confirmDelete, type Dialog } from "./member-dialogs";
 import { dayName, faceHTML, HOUR_STEPS, isTime, ROUTINE_TITLE_MAX, ROUTINE_PROMPT_MAX, routineSentenceHTML, routineStatus } from "./members";
 import { dateKey, openDatePicker, windowTimes } from "./schedule-picker";
 import type { Member, Routine, RoutineSchedule, RoutineWhen } from "./types";
-import { btn, copyText, esc, ico, openMenu, sel, toaster } from "./ui";
+import { btn, copyText, esc, ico, openMenu, sel, tg, toaster } from "./ui";
 import "./automations.css";
 
 export interface RoutineDialogOptions {
@@ -48,6 +48,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   let until = plan?.until ?? date;
   let count = String(plan?.max_runs ?? 10);
   let title = routine?.title ?? "", prompt = routine?.prompt ?? "";
+  let enabled = routine?.enabled ?? true;
   let more = !!(plan?.max_runs || plan?.until), saving = false;
   let dialog: Dialog;
   function currentSchedule(): RoutineSchedule {
@@ -71,6 +72,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
   function body(): string {
     const kinds: [RoutineSchedule["kind"], string][] = [["once", t("auto.once")], ["daily", t("members.daily")], ["weekdays", t("auto.weekdays")], ["weekly", t("members.weekly")], ["monthly", t("trigger.monthly")], ["every", t("trigger.every")]];
     return `<input class="mb-fin au-title" id="au-title" maxlength="${ROUTINE_TITLE_MAX}" placeholder="${esc(t("auto.what"))}" aria-label="${esc(t("auto.what"))}" value="${esc(title)}">` +
+      (routine ? `<div class="mp-resource"><span>${esc(t(enabled ? "computer.routineOn" : "computer.routinePaused"))}</span>${tg(enabled, t("members.routineSwitch", {p0: routine.title}), ' data-dlg="enabled"')}</div>` : "") +
       `<section class="au-field"><h3>${esc(t("auto.when"))}</h3>${sel(triggerChoices(),trigger,t("trigger.trigger"),' data-dlg="trigger"')}</section>` +
       (trigger === "webhook" ? `<section class="au-field au-webhook"><p>${routineSentenceHTML({schedule:null,when:{webhook:true}})}</p><p class="note">${esc(t("trigger.hookHelp"))}</p>${routine && routine.when?.webhook ? `<code class="au-hook-address">${esc(address)}</code><label class="field sc-field">${ico("lock")}<input class="au-hook-secret" readonly type="${secret ? "text" : "password"}" value="${esc(secret || "********")}" aria-label="${esc(t("trigger.secret"))}" autocomplete="off" spellcheck="false"></label><div class="au-chips">${btn(esc(t(secret ? "trigger.hideSecret" : "trigger.showSecret")),"sm",' data-dlg="hook-show"')}${btn(esc(t("trigger.copySecret")),"sm",' data-dlg="hook-copy"')}</div>${addressChanged ? `<p role="status">${esc(t("trigger.addressChanged"))}</p>` : ""}${hookError ? `<p role="alert">${esc(hookError)}</p>` : ""}` : `<p class="note">${esc(t("trigger.hookSaved"))}</p>`}</section>` :
       trigger === "event" && (!when || eventId) ? eventBody() :
@@ -154,7 +156,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
     dialog.el.querySelector<HTMLButtonElement>('[data-dlg="save"]')!.disabled = true;
     try {
       const fields = { member_id: memberId, title: title.trim(), prompt: prompt.trim(), schedule: when ? null : schedule, ...(when ? { when } : {}) };
-      const result = o.save ? { routine: await o.save(fields) } : routine ? await api.routinesUpdate(routine.id, { title: fields.title, prompt: fields.prompt, ...(when ? { when } : { schedule }) }) : await api.routinesCreate(fields);
+      const result = o.save ? { routine: await o.save(fields) } : routine ? await api.routinesUpdate(routine.id, { title: fields.title, prompt: fields.prompt, ...(enabled !== routine.enabled ? {enabled} : {}), ...(when ? { when } : { schedule }) }) : await api.routinesCreate(fields);
       dialog.close(); o.onSaved?.(result.routine);
     } catch (error) { toaster.info(describeError(error)); }
     finally { saving = false; const save = dialog.el.querySelector<HTMLButtonElement>('[data-dlg="save"]'); if (save) save.disabled = false; }
@@ -167,6 +169,7 @@ export function openRoutineDialog(o: RoutineDialogOptions): Dialog {
       if (act === "save") void save();
       else if (act === "connections") dialog.close();
       else if (act === "cancel") dialog.close();
+      else if (act === "enabled") { enabled = !enabled; draw(); }
       else if (act === "trigger") openMenu(target, triggerChoices(),trigger,value=>{
         generation++; checking=false; eventId=""; eventValue=""; eventError=""; trigger=value; when=value === "webhook" ? {webhook:true} : value === "event" ? routine?.when && !routine.when.webhook ? structuredClone(routine.when) : null : null; secret=""; draw();
         if (value === "event" && !when) void loadEvents();

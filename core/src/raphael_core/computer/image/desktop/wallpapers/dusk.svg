@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900">
+<defs><linearGradient id="sky" x2="1" y2="1"><stop stop-color="#969696"/><stop offset="1" stop-color="#464646"/></linearGradient><linearGradient id="wave" x2="0.8" y2="1"><stop stop-color="#cccccc" stop-opacity=".8"/><stop offset="1" stop-color="#464646" stop-opacity=".15"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="24"/></filter></defs>
+<path fill="url(#sky)" d="M0 0h1280v900H0z"/>
+<g filter="url(#soft)"><path fill="url(#wave)" d="M-120 840C120 170 540 850 790 130S1200-70 1430 190V1000H-120z"/><path fill="none" stroke="#cccccc" stroke-opacity=".45" stroke-width="18" d="M-80 730C210 80 490 890 850 180S1190 20 1370 100"/></g>
+</svg>

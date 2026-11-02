@@ -603,6 +603,7 @@ export function installMock(fixture, config = {}, target = window) {
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
+        if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
         const session = `look-desktop-${++desktopSequence}`;
         desktopSessions.set(session, { preview: p.preview, held: false, member:p.member_id, conversation:p.conversation_id });
         return { session, url: `${location.origin}/scripts/look/fixtures/desktop.html` };

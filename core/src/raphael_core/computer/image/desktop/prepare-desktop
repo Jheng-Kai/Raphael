@@ -2,10 +2,4 @@
 set -eu
 # Run inside the XFCE session, on its own bus, after the display is ready.
 xfconf-query -c xfce4-session -p /general/SaveOnExit -n -t bool -s false
-xfconf-query -c xfce4-desktop -l | while IFS= read -r property; do
-    case "$property" in
-        /backdrop/*/image-style) xfconf-query -c xfce4-desktop -p "$property" -s 0 ;;
-        /backdrop/*/color-style) xfconf-query -c xfce4-desktop -p "$property" -s 0 ;;
-        /backdrop/*/rgba1) xfconf-query -c xfce4-desktop -p "$property" -s 0.76 -s 0.76 -s 0.76 -s 1 ;;
-    esac
-done
+exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch

@@ -44,6 +44,7 @@
   /* the owner's own bubble */
   --bubble: #efefef; --on-bubble: #0a0a0a;
   --ok: #15703f; --warn: #80560f; --err: #b3261e; --warn-soft: #f7f7f7; --warn-edge: #d4d4d4;
+  --computer-active: #7138bd;
   --btn: #ffffff; --btn-edge: #d4d4d4; --key: #f7f7f7; --key-edge: #d4d4d4;
   --track: #e5e5e5; --menu: #ffffff; --scrim: rgba(0, 0, 0, 0.3);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.14), 0 3px 10px rgba(0, 0, 0, 0.07);
@@ -74,6 +75,7 @@
   --selected: #282828; --selection: #454545; --on-selection: #ffffff;
   --bubble: #262626; --on-bubble: #f5f5f5;
   --ok: #9fd7b5; --warn: #edc677; --err: #ff9aa9; --warn-soft: #2a251c; --warn-edge: #5b4e32;
+  --computer-active: #b98aff;
   --btn: #1f1f1f; --btn-edge: #555555; --key: #1f1f1f; --key-edge: #555555;
   --track: #333333; --menu: #161616; --scrim: rgba(0, 0, 0, 0.65);
   --pop: 0 20px 64px rgba(0, 0, 0, 0.5), 0 3px 10px rgba(0, 0, 0, 0.3);

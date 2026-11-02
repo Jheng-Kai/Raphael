@@ -301,7 +301,7 @@ export function createMembers(host: MembersHost): MembersShell {
       details.el.classList.remove("is-in");
       void details.el.offsetWidth;
       details.el.classList.add("is-in");
-      details.draw();
+      details.overview();
       details.refreshRoutines();
       details.refreshMemory(current);
       if (document.documentElement.hasAttribute("data-keys")) details.el.querySelector<HTMLElement>('[data-det="close"]')?.focus({ preventScroll: true });

@@ -1,5 +1,73 @@
 # Member computer (Phases A and B)
 
+## Three computer levels (2026-11-02)
+
+The monitor is always an icon entry and turns purple only for a running computer.
+Details opens on the screen/caption, direct routine rows and conversations. The
+gear leads to existing identity, fields and resources; Back returns through that
+hierarchy. Skills and slash-command templates retain their distinct editors.
+Routine pausing is saved inside the ordinary editor, never on the landing row.
+An unprovisioned/ungranted computer is omitted; unavailable/install/preparation
+states retain their existing localized words and repair/start actions.
+
+Screen and conversation-card takeover carry the existing iframe into a full-window
+view. Its thin bar uses the member face/name, explicit handback and shared action
+menu for files and teaching. Existing restore confirmation/review token and
+teaching privacy/draft/save/discard/try flows remain authoritative. Handback closes
+the owned stream, releases its current nonce once and retains the conversation
+position. Refreshes with unchanged data preserve nodes, animation, focus, menus
+and scroll (R-UI-71); action menus use ui.ts dismissal/anchor behavior (R-UI-73).
+
+The original generated monochrome wallpapers are shared by the guest, off preview
+and fixture RFB transport. wallpaper.py proves each hour's selection and generated
+asset bytes; prepare-desktop runs its 30-second timer under the existing guest TZ.
+Unchanged workspaces get no writes; late monitors are initialized on the next tick.
+No image build or real guest acceptance is performed in this unit.
+
+desktop-return-stopped leaves through Home and returns through the real member
+entry: the unchanged off screen and Start action must remain visible. Failed opens
+clear takeover intent; only a new request nonce resumes watching after handback.
+Packaged data includes the Python watcher. Existing computers receive the same
+script/art once per start through local/remote transport, with a three-second
+best-effort bound and a detached XFCE/DBus watcher guard. Image labels stay fixed.
+
+The handback scene also reopens a fresh stream and takes control only after it
+connects. The draft scene returns to the screen and reopens the same unsaved
+editor. Stopped renewals after a running stream preserve the no-write contract.
+Additional consumers cover context-menu-routine, automation-event-pick,
+automation-webhook, routine-event-missing/profile, missing-routines,
+memory-editing/saved and polish-caption-member.
+
+Selected scene matrix, both themes at 1120,720,1920x1080:
+
+```powershell
+npm run look -- computer-status-active computer-status-idle panel-screen-routines panel-off desktop-start desktop-return-stopped panel-no-computer panel-gear panel-routine-row panel-raphael takeover-bar takeover-menu takeover-handback --theme both --width 1120,720,1920x1080
+```
+
+- computer-status-active, computer-status-idle, panel-screen-routines, panel-off,
+  panel-no-computer, panel-gear, panel-routine-row, panel-raphael, takeover-bar,
+  takeover-menu, takeover-handback.
+- Every desktop-*, computer-*, details*, member-edit* and member-avatar scene;
+  chat-computer-takeover, chat-human-control, chat-handback and card-computer-*.
+- Representative changed consumers: routine-event-row, routine-event-edit,
+  routine-event-saved, menu-hide-control and menu-move-hover.
+
+Existing desktop-collapse now closes the preview; desktop-entry explicitly opens
+the landing preview; desktop-viewer/owner and card-computer takeover use its screen
+press and thin bar. desktop-handback now checks closed transport. Teaching enters
+through the shared menu. File scenes enter the same menu and retain all restore
+assertions. details-routines keeps its name as the landing routine regression,
+without a routines subpage. details-resource, member-edit and member-avatar scenes
+enter through the gear. The earlier collapse/separate-computer-page and inline
+owner-control assertions are superseded; single-stream and nonce assertions stay.
+
+Compare full-size panel-screen-routines with the owner's local hero-0 reference,
+takeover views with view-009, and off/live wallpapers with view-010. Compare menu
+controls to existing shared menus and routine controls to automation editors at the
+same theme/width. Keep reference artwork outside the public repository.
+Network, judge, Docker, cargo, native/provider and real guest work are prohibited
+by this brief and must remain explicitly unverified in CODEX_REPORT.md.
+
 ## Named datasets (2026-11-01)
 
 The independent computer offers dataset import/query/list/chart. A dataset name

@@ -36,6 +36,7 @@ const api = vi.hoisted(() => ({ statusGet: vi.fn(async () => ({ openrouter: { st
   core: vi.fn(),
   roomsList: vi.fn(),
   roomMessages: vi.fn(),
+  desktopStatus: vi.fn(), desktopOpen: vi.fn(), desktopRenew: vi.fn(), desktopClose: vi.fn(),
 }));
 vi.mock("../api", () => api);
 
@@ -518,14 +519,12 @@ test("routine notifications refresh the open panel immediately and keep the rout
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  $('[data-tab="routines"]').click();
   const routine: Routine = { id: 9, member_id: 3, title: "Daily review", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
   send({ type: "RoutinesChanged", member_id: 3 });
   await flush();
   expect($(".mb-rts").textContent).toContain("Daily review");
-  $('[data-det="routine-menu"]').click();
-  document.querySelector<HTMLElement>('#app-popover [data-pick="edit"]')!.click();
+  $('[data-det="routine-open"]').click();
   const title = document.querySelector<HTMLInputElement>("#au-title")!;
   title.focus();
   title.value = "My unsaved title";
@@ -548,7 +547,6 @@ test("a chat event refreshes routines even when its explicit change notification
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
-  $('[data-tab="routines"]').click();
   const routine = { id: 9, member_id: 3, title: "Created from chat", prompt: "Review", schedule: { kind: "daily", time: "09:00" }, enabled: true, next_run: null, last_run: null };
   api.routinesList.mockResolvedValue({ routines: [routine] });
   api.agentHistoryList.mockResolvedValue({ turns: [turn(99, { member_id: 3, messages: [{ seq: 1, kind: "event", text: "Routine created", at_ms: 1 }] })] });
@@ -583,6 +581,7 @@ test("memory notifications refresh the visible own and shared lists with correct
   await flush();
   await pick(3);
   $(".conversation-trigger").click();
+  $('[data-det="gear"]').click();
   $('[data-tab="memory"]').click();
   await flush();
   api.core.mockClear();
@@ -1132,6 +1131,19 @@ test("rooms replace the main conversation pane and member selection returns to i
  window.dispatchEvent(new CustomEvent("raphael:open-room",{detail:{roomId:1}}));await flush();
  expect(original.hidden).toBe(true);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(false);expect(agent.el.querySelector(".au-room-heading")!.textContent).toContain("Launch");expect(document.querySelector('[role="dialog"]')).toBeNull();
  await pick(3);expect(original.hidden).toBe(false);expect(agent.el.querySelector<HTMLElement>(".au-room-pane")!.hidden).toBe(true);expect(agent.el.querySelector(".thread")!.textContent).toContain("10");
+});
+
+test.each(['room','hidden'])("opening member details in a %s page never polls or opens a computer stream", async scope=>{
+ api.desktopStatus.mockResolvedValue({state:'running',ready:true,control:'member'});
+ api.desktopOpen.mockResolvedValue({session:'sample',url:'http://127.0.0.1:9/sample'});
+ const agent=mount(); await flush();
+ if(scope==='room') window.dispatchEvent(new CustomEvent('raphael:open-room',{detail:{roomId:1}}));
+ else agent.hide();
+ await flush();
+ api.desktopOpen.mockClear(); api.desktopStatus.mockClear();
+ agent.el.querySelector<HTMLButtonElement>('[data-act="computer"]')!.click(); await flush();
+ expect(api.desktopStatus).not.toHaveBeenCalled(); expect(api.desktopOpen).not.toHaveBeenCalled();
+ agent.hide();
 });
 
 

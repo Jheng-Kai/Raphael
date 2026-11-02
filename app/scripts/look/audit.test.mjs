@@ -120,10 +120,15 @@ describe("rendered look checks", () => {
       }
     }
   });
+  it("waits for the conversation after handing back and hiding the compact panel", () => {
+    const handback = scenes.find(scene => scene.name === 'desktop-handback');
+    expect(handback.steps.at(-2)).toEqual({action:'wait',selector:'.page-agent:not(:has(.desktop-panel[data-expanded])) .composer'});
+  });
   it("checks a teaching trial against its member conversation after an earlier viewer opened", () => {
     const browser = new Window();
-    browser.document.body.innerHTML = '<section class="desktop-panel"></section>';
+    browser.document.body.innerHTML = '<section class="desktop-panel"></section><div class="composer"></div>';
     browser.document.querySelector('.desktop-panel').getBoundingClientRect = () => ({width:300,height:300});
+    browser.document.querySelector('.composer').getBoundingClientRect = () => ({width:300,height:100});
     browser.__look = {calls:[
       {method:'computer.viewer_open',params:{member_id:0,conversation_id:1}},
       {method:'computer.viewer_open',params:{member_id:1,conversation_id:11}},
@@ -136,9 +141,27 @@ describe("rendered look checks", () => {
     globalThis.document = browser.document; globalThis.window = browser;
     try {
       expect(checkRendered('teach-try').actions).toEqual(['start','stop','save']);
+      browser.document.querySelector('.desktop-panel').hidden = true;
+      browser.document.querySelector('.desktop-panel').getBoundingClientRect = () => ({width:0,height:0});
+      expect(checkRendered('teach-try').actions).toEqual(['start','stop','save']);
       browser.__look.calls.at(-1).conversationId = 12;
       expect(() => checkRendered('teach-try')).toThrow('the trial stays in the demonstrated member conversation');
     } finally { globalThis.document = previous.document; globalThis.window = previous.window; browser.happyDOM.abort(); }
+  });
+  it("checks the takeover sidebar's CSS visibility rather than its reserved box", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<button data-sidebar="open" style="visibility:hidden">Sidebar</button><aside class="mb-det"><section class="desktop-panel" data-expanded><div class="desktop-takeover-bar"><span class="av"></span><button data-desktop="return">Return</button></div><iframe></iframe></section></aside>';
+    for (const element of browser.document.querySelectorAll('*')) element.getBoundingClientRect = () => ({width:720,height:40});
+    const frame = browser.document.querySelector('iframe');
+    Object.defineProperty(frame, 'contentWindow', {value:{__desktopConnections:1}});
+    browser.__look = {calls:[{method:'computer.viewer_open',params:{member_id:1}}]};
+    const previous = {document:globalThis.document,window:globalThis.window,innerWidth:globalThis.innerWidth};
+    globalThis.document = browser.document; globalThis.window = browser; globalThis.innerWidth = 720;
+    try {
+      expect(checkRendered('level-takeover').check).toBe('level-takeover');
+      browser.document.querySelector('[data-sidebar]').style.visibility = 'visible';
+      expect(() => checkRendered('level-takeover')).toThrow('takeover leaves no sidebar entry');
+    } finally { Object.assign(globalThis, previous); browser.happyDOM.abort(); }
   });
   it("keeps the WAV format name while still rejecting an English interface word", () => {
     const window = new Window();
@@ -485,6 +508,12 @@ describe("rendered look checks", () => {
     glyph.getBoundingClientRect = () => ({ left: 52, top: 17, right: 68, bottom: 33, width: 16, height: 16 });
     expect(audit().productRules).toEqual([]);
   });
+  it("rejects screen actions that inherit light text on a light button (R-UI-22)", () => {
+    const { window, audit } = productAudit('<div class="desktop-screen"><button class="btn" data-desktop="retry" style="border:1px solid gray;color:rgb(240,240,240);background:rgb(255,255,255)">Open</button></div>');
+    expect(audit().productRules.some(rule => rule.rule === 'R-UI-22')).toBe(true);
+    window.document.querySelector('button').style.backgroundColor = 'rgb(23,23,23)';
+    expect(audit().productRules.some(rule => rule.rule === 'R-UI-22')).toBe(false);
+  });
   it("rejects low-contrast selected dates, including hover overrides (R-UI-22)", () => {
     const { window, audit } = productAudit('<div class="au-month-grid"><button class="btn" aria-pressed="true" style="border:0;color:rgb(30,30,30);background:rgb(40,40,40)">28</button></div>');
     expect(audit().productRules.map(item => item.rule)).toEqual(['R-UI-22']);
@@ -749,11 +778,11 @@ it("allows only the shared card quiet exit to be frameless while rejecting ordin
  const frames=result.productRules.filter(rule=>rule.rule==='R-UI-18'); expect(frames.map(rule=>rule.text)).toEqual(['Delete']); browser.happyDOM.abort();
 });
 
-it("waits for takeover on the visible inline screen rather than its hidden panel", () => {
+it("waits for card takeover on the expanded existing stream", () => {
   for (const name of ['desktop-takeover-owner', 'desktop-takeover-done']) {
     const scene = scenes.find(scene => scene.name === name);
-    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '[data-card-desktop-screen][data-owner-control]')).toBe(true);
-    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '.desktop-panel[data-interactive="true"]')).toBe(false);
+    expect(scene.steps.some(step => step.action === 'wait' && step.selector === '.desktop-panel[data-expanded][data-interactive="true"]')).toBe(true);
+    expect(scene.steps.some(step => step.selector?.includes('data-desktop="expand"'))).toBe(false);
   }
 });
 

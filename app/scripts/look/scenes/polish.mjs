@@ -11,7 +11,7 @@ export default [
   scene("polish-data-conversations", "Raphael conversations have a counted direct confirmation and immediate empty state", [...settings('data'), scroll('[data-act="data-clear"][data-what="conversation"]'), check('polish-data-conversations'), click('[data-act="data-clear"][data-what="conversation"]'), check('polish-conversations-confirm'), click('.mb-confirm [data-dlg="delete"]'), scroll('.data-section:last-of-type .note'), check('polish-conversations-empty')], { polishData: true }),
   scene("polish-scroll", "Reopening and changing panes reset the long Settings content", [...settings('models'), scroll('[data-pv="directory"]'), check('polish-scrolled'), click('.modal-x'), ...settings('models'), check('polish-scroll'), scroll('[data-pv="directory"]'), check('polish-scrolled'), click('[data-pane="data"]'), click('[data-pane="models"]'), check('polish-scroll')]),
   ...['settings', 'member', 'confirm'].map(kind => scene(`polish-caption-${kind}`, "Window actions work once through the shared dialog dismissal", [
-    ...(kind === 'settings' ? settings('models') : kind === 'member' ? [member(1), { action: 'open-details' }, click('[data-det="edit"]')] : [...settings('data'), click('[data-act="data-clear"][data-what="dictation"]')]),
+    ...(kind === 'settings' ? settings('models') : kind === 'member' ? [member(1), { action: 'open-details' }, click('[data-det="gear"]'),click('[data-det="edit"]')] : [...settings('data'), click('[data-act="data-clear"][data-what="dictation"]')]),
     { action: 'polish-caption', kind }, check('polish-caption'),
   ], { polishData: true })),
   ...['chief', 'member', 'room'].map(kind => scene(`polish-search-${kind}`, "Search navigates exact words across unloaded history without losing the conversation", [

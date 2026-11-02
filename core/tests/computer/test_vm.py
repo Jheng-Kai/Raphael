@@ -103,6 +103,78 @@ def test_args_are_hardened_loopback_only_and_host_agnostic(tmp_path):
     assert exec_args(target, [DRIVER, "mcp"], interactive=True)[:3] == ["exec", "-i", "-u"]
 
 
+@pytest.mark.parametrize('remote', [False, True])
+async def test_start_installs_the_decorative_wallpaper_once_per_start_and_target(desktop, remote):
+    vm, target, runtime = desktop
+    if remote:
+        vm.settings.set('computer_ssh_alias', 'sample-host')
+        target = vm.target()
+        runtime.raw = container(vm, target, runtime)
+    sent = []
+    original = vm.run
+
+    async def run(args, **kwargs):
+        sent.append((args, kwargs))
+        return await original(args, **kwargs)
+
+    vm.run = run
+    for _ in range(3):
+        assert (await vm.start(target))['ready']
+    copies = [args for args, _ in runtime.calls if args[0] == 'cp']
+    assert len(copies) == 2
+    assert any(Path(args[1]).name == 'wallpaper.py' and args[-1] == target.name + ':/opt/raphael-desktop/wallpaper.py' for args in copies)
+    assert any(Path(args[1]).name == 'wallpapers' and args[-1] == target.name + ':/opt/raphael-desktop/' for args in copies)
+    watcher = [(args, options) for args, options in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args]
+    assert len(watcher) == 1
+    script = watcher[0][0][-1]
+    assert 'pgrep' in script and 'xfce4-session' in script and '/proc/' in script and 'DBUS_SESSION_BUS_ADDRESS' in script
+    assert '--watch' in script and '60' in script
+    assert all(options['timeout'] <= 3 for args, options in runtime.calls if args[0] == 'cp' or args == watcher[0][0])
+    if remote:
+        assert all(args[:2] == ['--host', 'ssh://sample-host'] for args, _ in sent)
+    await vm.stop(target)
+    assert (await vm.start(target))['ready']
+    assert len([args for args, _ in runtime.calls if args[0] == 'cp']) == 4
+
+
+@pytest.mark.parametrize('failure', ['exit', 'exception'])
+async def test_wallpaper_copy_failure_leaves_the_start_result_and_once_mark_alone(desktop, failure):
+    vm, target, runtime = desktop
+    original = vm.run
+
+    async def run(args, **kwargs):
+        if args[0] == 'cp':
+            runtime.calls.append((args, kwargs))
+            if failure == 'exception':
+                raise OSError('Synthetic copy failure')
+            return Result(1, '', 'Synthetic copy failure')
+        return await original(args, **kwargs)
+
+    vm.run = run
+    for _ in range(2):
+        result = await vm.start(target)
+        assert result['state'] == 'running' and result['ready']
+    assert len([args for args, _ in runtime.calls if args[0] == 'cp']) == 1
+    assert not any(args[0] == 'exec' and '-d' in args for args, _ in runtime.calls)
+
+
+async def test_a_stalled_wallpaper_copy_cannot_hold_the_ready_computer(desktop, monkeypatch):
+    from raphael_core.computer import vm as module
+    vm, target, runtime = desktop
+    monkeypatch.setattr(module, 'WALLPAPER_SETUP_S', .01, raising=False)
+    original = vm.run
+
+    async def run(args, **kwargs):
+        if args[0] == 'cp':
+            runtime.calls.append((args, kwargs))
+            await asyncio.sleep(10)
+        return await original(args, **kwargs)
+
+    vm.run = run
+    assert (await asyncio.wait_for(vm.start(target), timeout=.5))['ready']
+    assert len([args for args, _ in runtime.calls if args[0] == 'cp']) == 1
+
+
 @pytest.mark.parametrize("zone,expected", [
     ("Asia/Taipei", "Asia/Taipei"), ("Europe/Paris", "Europe/Paris"),
     (None, "UTC"), ("", "UTC"), ("invalid/timezone", "UTC"), (8, "UTC"),
