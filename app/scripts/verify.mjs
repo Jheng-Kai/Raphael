@@ -37,7 +37,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   console.error(unknown ? `Unknown option: ${unknown}` : "--quick cannot be combined with --core or --rust");
   process.exitCode = 1;
 } else if (args.includes("--help")) {
-  console.log("npm run verify -- [--quick] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast. --quick: tsc + vitest only.\n--core: also run offline core pytest.\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
+  console.log("npm run verify -- [--quick] [--core] [--rust] [--live] [--judge run] [--out dir]\nDefault: tsc, vitest, contrast. --quick: tsc + vitest only.\n--core: also run offline core pytest with warnings as errors, as CI does.\n--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied, as CI does.\n--live: paid brain/tool matrix. --judge run: subscription CLI design review after look (720,1120,1920, both themes).\nLogs and summary: app/.look/verify-*/ (override with --out). Default checks use no network; --live and --judge explicitly opt in. No installs.");
 } else {
   await mkdir(output, { recursive: true });
   const directory = await mkdtemp(join(output, "verify-"));
@@ -48,7 +48,7 @@ if (unknown || (args.includes("--quick") && (args.includes("--core") || args.inc
   if (!args.includes("--quick")) checks.push({ name: "contrast", command: process.execPath, args: [join(app, "scripts/check-palette.mjs")], cwd: app });
   if (args.includes("--core")) {
     const core = join(root, "core"), python = process.env.RAPHAEL_CORE_PYTHON || join(core, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-    checks.push(existsSync(python) ? { name: "pytest", command: python, args: ["-m", "pytest", "-p", "no:cacheprovider"], cwd: core } : { name: "pytest", command: "uv", args: ["run", "--offline", "--frozen", "--no-sync", "python", "-m", "pytest", "-p", "no:cacheprovider"], cwd: core });
+    checks.push(existsSync(python) ? { name: "pytest", command: python, args: ["-m", "pytest", "-p", "no:cacheprovider", "-W", "error"], cwd: core } : { name: "pytest", command: "uv", args: ["run", "--offline", "--frozen", "--no-sync", "python", "-m", "pytest", "-p", "no:cacheprovider", "-W", "error"], cwd: core });
   }
   if (args.includes("--rust")) {
     const tauri = join(app, "src-tauri");

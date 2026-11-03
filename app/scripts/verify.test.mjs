@@ -17,6 +17,7 @@ describe("verify CLI", () => {
   it("runs the Rust checks CI runs, so a formatting or Clippy failure shows up before a push", () => {
     const result = spawnSync(process.execPath, ["scripts/verify.mjs", "--help"], { cwd: app, encoding: "utf8" });
     expect(result.stdout).toContain("--rust: also run cargo fmt --check, offline cargo test for the app and the vendored listener, and Clippy with warnings denied");
+    expect(result.stdout).toContain("--core: also run offline core pytest with warnings as errors");
   });
   it("rejects an output flag without a directory", () => {
     for (const args of [["--out"], ["--out", "--quick"]]) {
