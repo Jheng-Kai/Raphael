@@ -7,6 +7,7 @@ or model loop is created here. All calls are serialized and refused during a hol
 import asyncio
 import json
 
+from .. import __version__
 from .vm import DRIVER, SOCKET, VmError, exec_args
 from .desktop_host import NO_WINDOW
 
@@ -60,7 +61,7 @@ class CuaBridge:
         )
         try:
             await self.request("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
-                "clientInfo": {"name": "Raphael", "version": "0.3.0"}})
+                "clientInfo": {"name": "Raphael", "version": __version__}})
             await self._write({"jsonrpc": "2.0", "method": "notifications/initialized"})
             return self
         except BaseException:

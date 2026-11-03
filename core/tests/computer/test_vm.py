@@ -1058,6 +1058,7 @@ async def test_real_stdio_bridge_handles_driver_ping_schema_and_control(desktop,
 for line in sys.stdin:
     packet=json.loads(line)
     if packet.get('method')=='initialize':
+        assert packet['params']['clientInfo'] == {'name':'Raphael','version':sys.argv[1]}
         print(json.dumps({'jsonrpc':'2.0','id':'driver-ping','method':'ping'}),flush=True)
         print(json.dumps({'jsonrpc':'2.0','id':packet['id'],'result':{}}),flush=True)
     elif packet.get('method')=='tools/list':
@@ -1069,7 +1070,8 @@ for line in sys.stdin:
     commands = []
     async def spawn(command, *args, **kwargs):
         commands.append((command, args))
-        return await original(sys.executable, str(script), **kwargs)
+        from raphael_core import __version__
+        return await original(sys.executable, str(script), __version__, **kwargs)
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     async with CuaBridge(vm, target) as bridge:
         listed = await bridge.request("tools/list")
