@@ -74,6 +74,12 @@ SEARCH_MAX_TOKENS = 500
 SEARCH_PLUGINS = [{"id": "web", "max_results": 3}]
 # Reading a page: the built-in reader has ten seconds of its own, a service that reads it longer.
 READ_TIMEOUT_S = 30.0
+# A reader fetches a page without a browser, so a page that shows its text only after a consent button or
+# its scripts comes back cut short; a member then said the page could not be read while its browser could.
+READ_WITHOUT_BROWSER = (
+    "This page was fetched without a browser. If its text stops short, asks for a consent or a click, or needs "
+    "scripts, and you have a computer, open the page in its browser and read it there before saying it cannot be read."
+)
 # Reading a file the owner handed over: the vision model, or the PDF service.
 ATTACHMENT_TIMEOUT_S = 70.0
 _SEARCH_SYSTEM = (
@@ -364,7 +370,7 @@ class Tools:
             return self._failed("web_read", "timeout", service)
         except ServiceError as error:
             return self._failed("web_read", error.kind, service)
-        return ToolResult("web_read", True, {"url": url, **page}, untrusted=True, detail=service)
+        return ToolResult("web_read", True, {"url": url, **page, "if_incomplete": READ_WITHOUT_BROWSER}, untrusted=True, detail=service)
 
     async def read_attachment(
         self, attachment: Attachment, question: str, ledger: Ledger, *, number: int = 1
