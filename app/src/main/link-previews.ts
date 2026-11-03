@@ -13,7 +13,7 @@ function contents(url: string, preview: LinkPreview | null = null): string {
   // Core supplies bounded raster data only. Never load a remote image from a chat message.
   const thumbnail = preview?.thumbnail;
   const image = typeof thumbnail === "string" && /^data:image\/(?:png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/=]+$/.test(thumbnail)
-    ? `<img class="preview-image" src="${esc(thumbnail)}" alt="" width="80" height="80">` : "";
+    ? `<img class="preview-image" src="${esc(thumbnail)}" alt="" width="64" height="64">` : "";
   // A page with no title of its own (an internal address, say) is its address, once.
   return image + `<span class="preview-meta">` + (preview?.title ? `<span class="preview-site">${esc(preview.site || new URL(url).host)}</span>` : "") +
     `<span class="preview-title">${esc(preview?.title || urlLabel(url))}</span>` +
@@ -26,6 +26,18 @@ function isLocalAddress(url: string): boolean {
   return !host.includes(".") || /\.(?:local|internal|lan)$/.test(host) || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
 }
 
+/** A link that needs its owner's account (a mail, a drive) lands on a sign-in page, the same for every such link:
+ * its card shows the link's own address instead of that page. */
+function signInDetour(url: string, preview: LinkPreview): boolean {
+  try {
+    const from = new URL(url), to = new URL(preview.url || url);
+    return from.hostname !== to.hostname && (/^(?:accounts|login|auth|signin|sso)\./.test(to.hostname) || /sign-?in|log-?in|oauth|servicelogin/i.test(to.pathname));
+  } catch { return false; }
+}
+
+/** Links that differ only after `#` are one page to its server, so they share one card. */
+const pageOf = (url: string): string => url.split("#")[0]!;
+
 /** Pages that gave nothing to show. The markup never carries this (R-UI-71); a later draw paints it from the cache before the frame. */
 const unreadable = new Set<string>();
 function noteUnreadable(url: string): void {
@@ -34,7 +46,7 @@ function noteUnreadable(url: string): void {
 }
 
 export function previewCardsHTML(text: string): string {
-  const urls = rememberedUrls(text).slice(0, 3);
+  const urls = rememberedUrls(text).filter((url, index, all) => all.findIndex(other => pageOf(other) === pageOf(url)) === index).slice(0, 3);
   return urls.length ? `<div class="preview-cards">${urls.map(url =>
     `<button type="button" class="btn preview-card${isLocalAddress(url) ? " is-local" : ""}" data-act="open-url" data-url="${esc(url)}" data-preview-url="${esc(url)}" title="${esc(url)}">${contents(url)}</button>`).join("")}</div>` : "";
 }
@@ -59,8 +71,8 @@ export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Pr
     }
     const paint = (result: LinkPreview | null): void => {
       if (active && root.contains(card)) {
-        // A page with no title and no picture leaves only its address, which needs no more room than an address on this machine.
-        const shown = result && (result.title || result.thumbnail) ? result : null;
+        // A page with no title and no picture, or a sign-in page, leaves only the link's own address.
+        const shown = result && (result.title || result.thumbnail) && !signInDetour(url, result) ? result : null;
         card.innerHTML = contents(url, shown); card.dataset.previewState = shown ? "ready" : "unavailable";
         if (!shown) { noteUnreadable(url); card.classList.add("is-short"); }
       }

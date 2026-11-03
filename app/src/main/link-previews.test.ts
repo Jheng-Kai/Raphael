@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import { createLinkPreviews, previewCardsHTML } from "./link-previews";
 
@@ -96,4 +97,32 @@ test("preview cache expires after one day and keeps bounded raster thumbnails", 
   vi.setSystemTime(86399_000); await draw(); expect(fetch).toHaveBeenCalledTimes(1);
   vi.setSystemTime(86401_000); await draw(); expect(fetch).toHaveBeenCalledTimes(2);
   previews.pause();
+});
+
+test("links to one page that differ only after # share one card", () => {
+  const root = document.createElement("div");
+  root.innerHTML = previewCardsHTML("https://mail.google.com/mail/u/0/#inbox/FMfcgzQ1 https://mail.google.com/mail/u/0/#inbox/FMfcgzQ2 https://example.com/a");
+  expect([...root.querySelectorAll<HTMLElement>(".preview-card")].map(card => card.dataset.previewUrl)).toEqual(["https://mail.google.com/mail/u/0/#inbox/FMfcgzQ1", "https://example.com/a"]);
+});
+
+test("a link that lands on a sign-in page shows its own address, not the sign-in page", async () => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  const root = document.createElement("div"); document.body.append(root);
+  root.getBoundingClientRect = () => ({ top: 0, bottom: 800 }) as DOMRect;
+  const url = "https://mail.google.com/mail/u/0/";
+  root.innerHTML = previewCardsHTML(url);
+  const card = root.querySelector<HTMLElement>(".preview-card")!;
+  card.getBoundingClientRect = () => ({ top: 10, bottom: 100 }) as DOMRect;
+  const previews = createLinkPreviews(root, vi.fn().mockResolvedValue({ url: "https://accounts.google.com/v3/signin/identifier", site: "accounts.google.com", title: "Gmail", description: "Sign in to continue", thumbnail: null }));
+  previews.sync(); for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(card.dataset.previewState).toBe("unavailable");
+  expect(card.textContent).not.toContain("accounts.google.com");
+  expect([...card.querySelectorAll(".preview-meta > span")].map(line => line.textContent)).toEqual(["mail.google.com/mail/u/0/"]);
+  previews.pause();
+});
+
+test("every link card has one height, whatever its page gave", () => {
+  const css = readFileSync("src/main/agent.css", "utf8");
+  expect(css).toMatch(/\.page-agent \.btn\.preview-card \{[^}]*height: 88px; min-height: 88px;/);
+  expect(css).not.toMatch(/\.preview-card:is\([^)]*\) \{[^}]*height/);
 });
