@@ -101,7 +101,7 @@ def test_an_id_number_and_an_iban_are_secrets():
         "手機 0912-345-678",
         "11/8 去東京，2026-11-09 回來",
         "Notion 的工作區叫 Raphael Notes",
-        "D:\\Documentation\\github_repos\\Raphael",
+        "C:\\Projects\\Sample",
         "Amy 是主人的同事，負責設計",
     ],
 )

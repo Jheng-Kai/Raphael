@@ -87,7 +87,7 @@ Motion is CSS keyed on `data-state`; JavaScript runs only at creation, state cha
 
 `slime-sizes` compares actual sizes with the shared search glyph at 20/40px. `slime-gallery` shows every state at sidebar and large sizes. `slime-motion-idle`, `slime-motion-busy`, `slime-motion-moments` and `slime-motion-change` retain timed strips. `slime-pointer` drives real pointer hover/down/up and checks a stationary control. `slime-cost` measures the same twelve-slime sidebar for 12 seconds per variant, original commit then working tree, preserving colours, hats and layout; it records main-thread/style/layout/script and whole-browser CPU as percent of one core, without a machine-dependent pass threshold. R-UI-54 permits an explicit full-box clip margin; the maker additionally checks the visible paths against ancestor clipping bounds.
 
-The selected consumer matrix is sidebar, sidebar-many, sidebar-rail, sidebar-group-avatar-four, details, member-text, member-avatar, member-maker-chosen, member-maker-made and home, plus the eleven slime scenes above, at both themes and 1120/720/1920x1080. Inspect every contact sheet, the state strips and full-size consumers. The native `slime-sharp` journey is implemented for a maintainer's later isolated WebView2 check; its existence is not a passed native result. This task explicitly forbids native, network and judge runs.
+The selected consumer matrix is sidebar, sidebar-many, sidebar-rail, sidebar-group-avatar-four, details, member-text, member-avatar, member-maker-chosen, member-maker-made and home, plus the eleven slime scenes above, at both themes and 1120/720/1920x1080. Inspect every contact sheet, the state strips and full-size consumers. The native `slime-sharp` journey is implemented for a later isolated WebView2 check; its existence is not a passed native result.
 
 ## Sidebar administration
 
@@ -528,10 +528,8 @@ slime-motion-moments, slime-motion-change, slime-gallery, slime-parts,
 slime-sharp, slime-cost, slime-liquid-sheet, slime-liquid-still,
 presence-states-sidebar, presence-blocked-stays, presence-waiting-colleague,
 transcript-working and sidebar-group-author, both themes at 1120,720,1920x1080.
-Compare the sidebar/header/live-thread consumers at matching theme/width and
-compare the liquid sheet beside the external Grok reference without copying it.
-The task forbids judge, network, native, cargo and real providers; these remain
-unverified. Product strings and navigation are unchanged.
+Compare the sidebar/header/live-thread consumers at matching theme/width.
+Product strings and navigation are unchanged.
 
 Liquid fades animate registered --slime-liquid-alpha into SVG fill-opacity;
 direct opacity animation can promote and resample the whole moving SVG.
@@ -583,9 +581,8 @@ The existing event-storm checks assert no work-triggered rooms/skills/commands
 reads, preserved faces/scroll/input and bounded total reads.
 
 No new RPC, migration, product text, preference or navigation is introduced.
-Judge, native, cargo, real providers and network are explicitly prohibited.
 
-Final selection is recorded in .fold/motion-selected.txt: 33 scenes, both themes,
+The final selection is 33 scenes, both themes,
 1120,720,1920x1080. This includes the six additional busy-team variants, recovery, picker,
 sizes and pending composer. Benchmarks repeat two 2.5-second windows after
 6.5 seconds of warmup, explicitly loading eight visible small working avatars
@@ -605,7 +602,7 @@ Generated surfaces with unchanged identity, colour, member, tempo and state are 
 The glyph mask clips the moving gradient's layout overflow. R-UI-55 audits the
 painted pseudo-element gradient and requires its glyph mask; its original flat
 gradient rejection remains. The native recognising-light check reads that same
-painted element, but no native journey is authorized for this unit. Home's
+painted element. Home's
 four-second event storm is bounded to 27 total reads. After the 33-scene matrix,
 the local shimmer/limit corrections are rechecked in composer-stop-voice,
 composer-stop-pending, running and busy-team-home at both themes and all three sizes.

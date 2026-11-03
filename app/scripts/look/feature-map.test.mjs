@@ -5,13 +5,10 @@ import { scenes } from "./scenes/index.mjs";
 import { parseOptions } from "./options.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
-const deployed = resolve(root, ".agents/skills/verify-raphael");
-// Protected instruction paths can be staged at the brief's explicit fallback.
-const skill = existsSync(deployed) ? deployed : resolve(root, ".fold/.agents/skills/verify-raphael");
-const readMap = file => {
-  const staged = resolve(root, ".fold/.agents/skills/verify-raphael", file);
-  return readFileSync(existsSync(staged) ? staged : resolve(skill, file), "utf8");
-};
+const skill = resolve(root, ".agents/skills/verify-raphael");
+// RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet.
+const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS, ".agents/skills/verify-raphael") : null;
+const readMap = file => readFileSync(staged && existsSync(resolve(staged, file)) ? resolve(staged, file) : resolve(skill, file), "utf8");
 const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery"];
 
 describe("maintained verification feature map", () => {
@@ -42,8 +39,8 @@ describe("maintained verification feature map", () => {
         if (options.widths.includes(1280)) expect(options.heights[1280], `${name}: ${command}`).toBe(800);
       }
     }
-    const staged = resolve(root, ".fold/.agents/skills/verify-raphael/features");
-    const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(existsSync(staged) ? readdirSync(staged) : [])])];
+    const stagedFeatures = staged && resolve(staged, "features");
+    const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(stagedFeatures && existsSync(stagedFeatures) ? readdirSync(stagedFeatures) : [])])];
     expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer"].map(name => `${name}.md`).sort());
   });
   it("maps the Docker-only foundation and live viewer through look and the native journey", () => {

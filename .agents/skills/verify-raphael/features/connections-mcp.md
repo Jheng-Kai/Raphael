@@ -29,9 +29,7 @@ an actionable next step; successful history records the actual answering model.
 Focused evidence: core/tests/agent/test_composio.py (21), test_persona.py (121),
 test_model_choice.py (11), test_service.py (174), test_routing.py (111),
 core/tests/test_connectors.py (91), core/tests/brain/test_provider_registry.py (26),
-test_providers_more.py (48). All use fakes or mock transports. No live owner
-Composio, Gmail, OpenRouter, judge or live verification was exercised. Full verify,
-look, native tests and builds await maintainer authorization.
+test_providers_more.py (48). All use fakes or mock transports.
 
 
 ## Owner round 10 contracts (supersedes round 9 message previews)
@@ -67,11 +65,9 @@ Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
 `stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
-Run both themes at 1120,720,1920x1080 only after maintainer authorization. One heavy
+Run both themes at 1120,720,1920x1080. One heavy
 process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
-CARGO_TARGET_DIR apply. Full verify, look and builds are currently deferred at the
-maintainer's request; only focused single-file tests are authorized. Judge and all
-OpenRouter/live owner Composio requests are prohibited.
+CARGO_TARGET_DIR apply.
 
 
 ## Sub-features
@@ -256,10 +252,10 @@ A chat's secret card (see [Conversation](conversation.md)) fills a secret a conn
 vault slot `integrations.add` and `integrations.update` do (`<server>:header:<name>` or `<server>:env:<name>`), never any
 other name, so Composio's project key, Google's client and the model keys are out of its reach.
 
-## Native acceptance owned by the maintainer
+## Native acceptance
 
 Run the full look matrix, judge with external ChatGPT/Codex reference images and
-verify --live in the authorized environment, as reserved in .brief-plugins.md.
+verify --live in the authorized environment.
 Use an isolated data directory and a scoped Composio test key. Save/reopen, search
 and change categories, Add through browser sign-in, cancel/deny/expire and retry,
 disable a tool/service, verify the next API and CLI turns for Raphael and a member,
@@ -429,8 +425,7 @@ search and fully visible chips while results scroll independently.
 npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion --theme both --width 1120,720,1920x1080
 ```
 
-This round's design judge is explicitly reserved for the maintainer's Codex shell;
-do not run it from this task. Fixture/browser results do not establish native,
+Fixture/browser results do not establish native,
 live-provider or design-judge acceptance.
 
 
@@ -477,7 +472,7 @@ plugins-store-search, plugins-store-all, plugins-store-empty, plugins-store-moti
 connect-apps-categories and neighbouring connections, connections-empty,
 plugins-installed, plugins-detail, plugins-store-key and plugins-connecting.
 Run both themes at 1120,720,1920x1080. Fixture timing does not prove native/provider
-timing. Judge is intentionally skipped under this acceptance brief.
+timing.
 
 Focus-in on the Settings Connections pane reveals the entire category button
 before selection, reserving the existing right fade padding. The focus helper is
@@ -604,4 +599,4 @@ Selected matrix (both themes, 1120,720,1920x1080): mcp-proposal-edit, mcp-propos
 npm run look -- mcp-proposal-edit mcp-proposal-tested mcp-proposal-enabled mcp-proposal-stdio mcp-proposal-cancelled mcp-proposal-room mcp-proposal-secret connector-slack chat-secret-masked local-command-consent --theme both --width 1120,720,1920x1080
 ```
 
-Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks. The current brief prohibits them.
+Offline contracts: core/tests/integrations/test_chat_connections.py, core/tests/agent/test_connection_management.py, core/tests/background/test_connection_offers.py, core/tests/test_connect_cards.py, core/tests/test_secret_cards.py, core/tests/brain/test_db.py, app/src/main/mcp-proposal.test.ts. Native provider/OAuth/stdio processes, Rust, live and judge remain separately authorized checks.

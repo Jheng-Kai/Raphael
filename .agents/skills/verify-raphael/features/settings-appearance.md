@@ -175,7 +175,7 @@ conversation radial gradient is removed. theme-clarity records computed root/con
 opacity, filter, backdrop and background; appearance-settings checks the shared row card.
 check-palette covers default/light, default/dark and black/dark, including chart marks.
 
-Run the full two-theme, three-size look matrix once after both briefs, plus the black
-representatives above. Judge and OpenRouter are explicitly prohibited for this work.
+Run the full two-theme, three-size look matrix once, plus the black
+representatives above.
 
 Native `appearance` drives all three theme choices at 1120,720,1920x1080, checks the real shared dropdown and confirms black in the production settings store.

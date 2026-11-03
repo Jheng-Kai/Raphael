@@ -33,11 +33,9 @@ Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
 `stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
-Run both themes at 1120,720,1920x1080 only after maintainer authorization. One heavy
+Run both themes at 1120,720,1920x1080. One heavy
 process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
-CARGO_TARGET_DIR apply. Full verify, look and builds are currently deferred at the
-maintainer's request; only focused single-file tests are authorized. Judge and all
-OpenRouter/live owner Composio requests are prohibited.
+CARGO_TARGET_DIR apply.
 
 
 Global questions use Raphael's persistent quick conversation. Public progress/thinking
@@ -132,7 +130,7 @@ native event boundary, visits that member, then returns to Raphael and requires 
 approval card. Window cards retain independent ids across members and conversations.
 
 Controller regressions live beside the existing fake-core/overlay Rust tests in
-`app/src-tauri/src/dictation.rs`. Native steps and evidence are in `DICTATION-NOTES.md`.
+`app/src-tauri/src/dictation.rs`.
 
 The fixture's populated history day is 2026-10-24; the first heatmap cell may have no
 history. Mock devices/status do not prove permissions, STT or global hotkeys. Silence
@@ -294,6 +292,5 @@ themes at 1120,720,1920x1080. The actual desktop viewport remains native-sized.
 Frontend regressions: app/src/overlay/mouse-regions.test.ts; Rust geometry, hold,
 hide, scale and caller gates: overlay/mouse.rs, overlay.rs and commands.rs tests.
 Fixture evidence proves rendered controls and geometry reporting, not OS hit-testing,
-focus continuity, cross-app clicks or mixed-monitor DPI. Cargo, native journeys,
-provider calls and automated judge are prohibited by this task brief; the maintainer
-must run cargo test and native click-through/focus/DPI acceptance separately.
+focus continuity, cross-app clicks or mixed-monitor DPI. Cargo test and native
+click-through/focus/DPI acceptance are separate checks.

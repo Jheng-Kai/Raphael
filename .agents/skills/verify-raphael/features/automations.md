@@ -80,8 +80,6 @@ Core contracts: core/tests/members/test_events.py,
 core/tests/members/test_event_harness.py (API and CLI create/list/update),
 core/tests/brain/test_db.py (migration 49 schema parity). Frontend edit contract:
 app/src/main/member-profile.test.ts::an event routine edits a readable filter without losing its read tool arguments.
-This brief prohibits network, native journeys, cargo and npm run judge. Report
-those boundaries as SKIP/unverified, not live or design acceptance.
 
 ## Sub-features
 
@@ -196,15 +194,15 @@ Webhook details show a loopback address, a masked vault secret and explicit show
 
 The catalogue offers only ACTIVE connected toolkits from the supplied slug inventory, never preconfigured result paths. One ordinary gated read at pick time detects the first object list with a common identity breadth first, continuing past unidentified arrays such as Calendar defaultReminders before items. Each entry carries verified small arguments. Owner and member share routine_list detection and create the identical ordinary when; first poll remains baseline-only. Empty/wholly unidentified/failing reads retain the selected event with a visible localized retry. GitHub repository and Slack channel are plain inputs, validated by the read call. Calendar and Gmail observed wrappers use synthetic items; other toolkit upstream fixtures are explicitly unobserved. No provider acceptance is claimed; dictionary order is not normalized or guessed.
 
-Selected matrix: every automation-*, routine-event-*, calendar-rhythm-*, plus routine-sentence and details-routines, both themes at 1120,720,1920x1080. New scenes: automation-monthly, automation-minutes, automation-event-pick, automation-event-none-connected, automation-webhook, automation-webhook-reveal, routine-sentence. Inspect all contact sheets and full-size monthly/minute editors, empty states, both masked/revealed hook cards and transcript. Compare editor controls with automation-edit, switches and sentences with details-routines, and secret controls with the existing masked secret card. External reference: view-015.png and view-016.png in the owner's external Grok design folder; copy none of their art or prose.
+Selected matrix: every automation-*, routine-event-*, calendar-rhythm-*, plus routine-sentence and details-routines, both themes at 1120,720,1920x1080. New scenes: automation-monthly, automation-minutes, automation-event-pick, automation-event-none-connected, automation-webhook, automation-webhook-reveal, routine-sentence. Inspect all contact sheets and full-size monthly/minute editors, empty states, both masked/revealed hook cards and transcript. Compare editor controls with automation-edit, switches and sentences with details-routines, and secret controls with the existing masked secret card.
 
-Existing pins updated: member-profile.test.ts recurrence count grows from five to six; test_db.py latest version/schema includes the appended trigger snapshot. Existing event, window and rhythm protections remain. Targeted core and UI tests fail before their changes. This unit explicitly prohibits network/provider, native, cargo and judge; report them as SKIP/unverified.
+Existing pins updated: member-profile.test.ts recurrence count grows from five to six; test_db.py latest version/schema includes the appended trigger snapshot. Existing event, window and rhythm protections remain. Targeted core and UI tests fail before their changes.
 
 This extension supersedes the earlier centered event-editor placement: all routine editors share a top-aligned, horizontally centered dialog. The outer scrim scrolls as one page; the form and member choices have no inner scroll panel. This prevents flex shrink or vertical recentering from moving the clicked recurrence control as its fields change.
 
 Additional affected consumers: automation-offer shares the same sentence in a suggested routine; automation-monthly-calendar proves November 31 clamps to November 30; automation-minutes-calendar proves the five-minute minimum stays one rhythm bar. routine-sentence-event retains the existing waiting owner-question card and routine-sentence-webhook retains a failed run. Each transcript scene opens and closes its exact routine before capturing the transcript. Compare automation-webhook with mcp-proposal-secret at matching theme/width: both use the existing field/sc-field, lock icon, masked input and shared small buttons. The generated secret is read-only and has Show/Hide/Copy instead of the provider card's owner-entered key and Save. Copying an unchanged value preserves the existing form DOM. The rhythm popover renders the shared trigger once, without repeating a plain timing line; compact rhythm bars keep the existing title-priority timing text.
 
-The automation-offer scene uses the existing Ctrl+N new-member shortcut. Its narrow plus-menu route failed twice before reaching the offer; retain run-Nd0014 and run-UWm65k as explicit unaccepted navigation evidence. The successful offer matrix does not prove the narrow sidebar plus route. The shared key driver releases Control even if dispatch fails (driver.test.mjs).
+The automation-offer scene uses the existing Ctrl+N new-member shortcut. The offer matrix does not prove the narrow sidebar plus route. The shared key driver releases Control even if dispatch fails (driver.test.mjs).
 
 ```powershell
 npm run look -- automation-monthly automation-minutes automation-event-pick automation-event-none-connected automation-webhook automation-webhook-reveal routine-sentence routine-sentence-event routine-sentence-webhook automation-monthly-calendar automation-minutes-calendar automation-offer --theme both --width 1120,720,1920x1080
@@ -213,7 +211,7 @@ npm run look -- automation-monthly automation-minutes automation-event-pick auto
 
 ## Review fixes (2026-11-02)
 
-The event-pick scene now selects, reads, creates once, and reopens the saved condition; it no longer pins an empty catalogue. event-undetectable retries without saving. Repository/channel scenes exercise the shared plain-input row. webhook-address-changed explains the working replacement port. The existing no-connected, manual filter, masked/revealed secret and transcript scenes remain representative consumers. No native, judge or provider call is authorized.
+The event-pick scene now selects, reads, creates once, and reopens the saved condition; it no longer pins an empty catalogue. event-undetectable retries without saving. Repository/channel scenes exercise the shared plain-input row. webhook-address-changed explains the working replacement port. The existing no-connected, manual filter, masked/revealed secret and transcript scenes remain representative consumers.
 
 ```powershell
 npm run look -- automation-event-pick automation-event-undetectable automation-event-none-connected automation-event-repository automation-event-channel automation-webhook automation-webhook-address-changed automation-webhook-reveal routine-event-edit routine-event-saved routine-sentence-event --theme both --width 1120,720,1920x1080
@@ -233,4 +231,4 @@ npm run look -- automation-event-pick automation-event-calendar automation-event
 
 R-RT-06: event discovery and polling ensure the connected Composio toolkit's cached catalogue before classifying its read. The fake HTTP integration uses GOOGLECALENDAR_EVENTS_LIST with readOnlyHint from a cold cache and after clearing process caches to model restart. Startup catalogue failures back off without disabling or adding error turns, then recover. Loaded createHint and missing tools still stop with the existing localized message. A shared deadline includes catalogue loading and reading; other connection kinds never fetch a toolkit catalogue. The separate fixed Calendar reader's exception remains limited to its own slug and async context.
 
-Rerun the six automation-event-* scenes in the Real-account review fixes matrix above. These UI fixtures prove the shared pick/create/reopen and retry presentation; only the production-gate core tests prove cold-catalogue ordering. Real Gmail was accepted by the maintainer; real Calendar acceptance remains with the maintainer. No native, provider, live or judge call is authorized.
+Rerun the six automation-event-* scenes in the Real-account review fixes matrix above. These UI fixtures prove the shared pick/create/reopen and retry presentation; only the production-gate core tests prove cold-catalogue ordering.

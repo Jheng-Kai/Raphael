@@ -22,13 +22,13 @@ calendar-rhythm-popover, calendar-rhythm-hidden, home-calendar-rhythm,
 automations-google-composio, automation-window, automation-window-menu,
 automation-window-saved, automations-calendar, automations-all-day,
 automation-edit, details-routines and home-own-events. Run both themes at
-1120,720,1920x1080. The brief prohibits network, live/provider, cargo,
-native journeys and judge; fixtures do not prove those boundaries.
+1120,720,1920x1080. Fixtures do not prove network, live/provider, cargo,
+native-journey or judge boundaries.
 ## Work channels, file restore and private login (2026-11-01)
 
 See [Member computer](member-computer.md#work-channels-file-restore-and-private-page-login-2026-11-01) for the selected
-13-scene matrix, shared-component comparisons, privacy/gate tests and explicit
-prohibited acceptance boundaries.
+13-scene matrix, shared-component comparisons, privacy/gate tests and acceptance
+boundaries.
 ## Member media and datasets (2026-11-01)
 
 See [Conversation](conversation.md#member-media-2026-11-01) for explicit paid model
@@ -44,7 +44,7 @@ routine rows/editors show the condition, check/fire times and existing switch.
 Selected scenes: routine-event-row, routine-event-edit, routine-event-saved,
 routine-event-missing, routine-event-reconnect, routine-event-profile,
 details-routines and automation-edit. Use both themes at
-1120,720,1920x1080. Network, cargo, native and judge are prohibited by the brief.
+1120,720,1920x1080.
 
 ## Owner-PC commands (2026-11-01)
 
@@ -55,8 +55,7 @@ local-command-background, local-command-once, local-command-always,
 local-command-never, local-command-deny, local-command-manage,
 local-command-settings, local-command-setting-always, local-command-setting-never
 and the existing local-permission-card consumer. Run both themes at
-1120,720,1920x1080. Judge, Docker, cargo, network and native/live journeys are
-explicitly prohibited by this implementation brief; report them as unverified.
+1120,720,1920x1080.
 
 ## Mascots and the composer (2026-10-31)
 
@@ -106,7 +105,7 @@ unclosed fences, cut tables and escaped cells. Diagram tests enforce strict sett
 and fail-quietly behavior. The shared doctrine advertises blocks to every brain;
 offline core verification does not establish live provider acceptance. One heavy
 process at a time, Vitest maxWorkers=2, explicit process checks, and shared Python
-apply. Judge and all OpenRouter requests are prohibited by this task: SKIP.
+apply.
 
 ## Sidebar redesign (2026-10-30)
 
@@ -196,8 +195,7 @@ Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
 Run both themes at 1120,720,1920x1080. One heavy
 process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
-CARGO_TARGET_DIR apply. Judge and all
-OpenRouter/live owner Composio requests are prohibited.
+CARGO_TARGET_DIR apply.
 
 
 ## Owner round 9 contracts
@@ -216,8 +214,7 @@ and permission/question actions remain. See [Dictation](dictation.md).
 Native readable-layout includes Home, compact week/day and long owner expansion;
 home-timing measures stored allowance first paint before a two-second offline CLI
 transport. Run these with self-diagnosis and memory-growth after an offline debug
-build, one heavy process at a time. The owner prohibits judge and paid/live requests
-for this round; report those as SKIP, not design or provider acceptance.
+build, one heavy process at a time.
 
 ## Owner round 8 contracts
 
@@ -246,12 +243,11 @@ No brain, tool, core or Rust behavior changed.
 npm run verify
 npm run look -- details member-conversation-sections connector-reconnected home-empty home-many dictation-overview quick-cleared member-text details-skills raphael-skills details-memory global-private-memory centred-system-events composer-learn conversation-delete-main member-delete --theme both --width 1120,720,1920x1080
 npm run look -- home-many quick-cleared --theme both --width 1280x800
-$env:RAPHAEL_MODELS_DIR = 'D:/Documentation/github_repos/Raphael/.worktrees/.test-models'
+$env:RAPHAEL_MODELS_DIR = '<a folder holding the local speech models>'
 npm run native -- skill-growth readable-layout locale-sweep voice-conversation delete-conversation
 ```
 
-Keep one heavy process at a time and Vitest at --maxWorkers=2. The owner explicitly
-prohibited design judge for round 8; record SKIP instead of design acceptance.
+Keep one heavy process at a time and Vitest at --maxWorkers=2.
 
 Use [the verification workflow](../SKILL.md) first. Commands run from `app/` and
 request both themes; local UI handoffs select affected scenes at 720/1120/1920x1080.
@@ -288,9 +284,8 @@ not verification proof: a run's report and images are.
 All feature scenes participate in the three-size, two-theme look matrix. Each scene's
 entry above is included with judge rules in the design review prompt. Product and
 architecture rule references run through normal Vitest/pytest. Brain/tool changes
-also need the maintainer live matrix; API-only nightly coverage cannot establish CLI
-subscription acceptance. See the parent skill's Guardian hand-off gates and
-GUARDIAN-NOTES.md for commands, evidence, budgets and explicit SKIP states.
+also need the live matrix; API-only nightly coverage cannot establish CLI
+subscription acceptance. See the parent skill's Guardian hand-off gates.
 
 ## Content width
 
@@ -396,14 +391,6 @@ checks extend the ordinary scenes. Details checks pointer focus before separatel
 exercising keyboard focus. The retired first-bot scenarios are replaced by no-naming.
 This is local acceptance; the full CI matrix remains 330 scenes x six combinations.
 
-Evidence for this owner round: main pages run-mIz8sb (280/280), corrected settings/
-dictation edges run-vpwfKi (40/40), interactions run-W6Lm8f (78/90, twelve spatial
-wrapper audit false positives) superseded by run-TPWObt (12/12). All contacts and
-relevant full-size images were inspected, including mockup and component pairs.
-Final verify-uDt0V9 passes 2412 tests. Final native run-ux8wg1 passes locale-sweep,
-voice-conversation and delete-conversation with the worktree debug build; WAV/local
-ASR and fake brain only. Judge was not run under the owner's explicit instruction.
-The complete command/evidence record is OWNER-ROUND-4-NOTES.md in the worktree.
 
 ## Owner round 5 acceptance
 
@@ -414,24 +401,10 @@ flex-shrink. Shared checks cover these contracts in browser and native WebView.
 The owner's specific 1920 half-line clipping was not reproduced on the baseline;
 the full-line guard passes before and after and is preventive coverage only.
 
-Main-page run-KddPl2 passes 296/296 cells: 37 scenes, both themes, widths
-1120,720,1920x1080,1280x800. All 19 contact sheets and relevant full-size images
-were inspected. verify-KjxZq8 passes tsc, 2413 tests and contrast. Native
-readable-layout fails on the previous debug binary (run-Z7BaV5) and passes after
-an offline worktree-local debug build; run-TtwBye passes readable-layout,
-locale-sweep, voice-conversation and delete-conversation (4/4).
-
-The requested npm judge command exits 2 because this branch does not support
---brain. A read-only invocation of the existing native-worktree subscription
-judge, explicitly rooted at this worktree with both supplied references, exits 1
-in judge-r7fb_vri: Claude reports ECONNREFUSED, no design feedback is returned,
-and OpenRouter requests remain zero. Design acceptance remains unverified.
-There are no received findings to accept or reject. Exact commands, inspected
-images and the replay script are recorded in OWNER-ROUND-5-NOTES.md.
 
 ## Owner round 6 contracts
 
-Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column. See OWNER-ROUND-6-NOTES.md for commands, evidence and native/judge limits.
+Owner round 6 keeps the existing 330 scenes. Affected-scene acceptance adds 1280x800 to both themes at 1120,720,1920x1080. The shared checks below extend existing journeys; they do not introduce another harness. Details overlays have a click-to-dismiss scrim; model/source labels wrap fully; explicit Fit restores one automatic group column.
 
 
 ## Memory growth native acceptance (phase 2, 2026-10-29)
@@ -442,14 +415,13 @@ checks turn-one recall on turn 25 and an entry in only that member's MEMORY.md. 
 
 ## Owner round 7 contracts
 
-Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800. Judge is intentionally left to the owner for this handoff.
-
+Owner round 7 extended the affected journeys with home-lead-width, onboarding-abilities-hero, details-quick-once and conversation-scroll-edge. The sidebar decision replaces sidebar-count-alignment and team-card-lines with sidebar-shell and group-avatar checks. calendar-chips requires two title lines and a visible fixed 20px avatar without time overlap. Run the selected scenes in both themes at 1120,720,1920x1080,1280x800.
 
 ## Connect and Docker acceptance (2026-10-30)
 
 The current matrix has 351 scenes and 2106 combinations. CI groups three images
-per judge request, with an admission limit of 702. This local brief prohibits judge
-and OpenRouter; it selects only the affected connections and member-computer scenes.
+per judge request, with an admission limit of 702. This acceptance selects only
+the affected connections and member-computer scenes.
 See member-computer.md and connections-mcp.md for the lifecycle and native steps.
 The host adapter is the sole OS-specific Docker launch boundary. Native catalog
 journeys disable the computer adapter, so they cannot start Docker incidentally.
@@ -466,10 +438,10 @@ evidence. See member-computer.md for the persistent
 side-panel noVNC stream, click-to-input timing, nonce handback and Docker journey.
 This global-token change authorizes one final --all two-theme/three-size look matrix,
 plus black Home/sidebar/chat/settings/calendar/dictionary representatives. Use
-RAPHAEL_CORE_PYTHON=D:/Documentation/github_repos/Raphael/core/.venv/Scripts/python.exe.
+RAPHAEL_CORE_PYTHON set to the core virtual environment's python.
 One heavy process at a time; check other worktrees with Get-CimInstance Win32_Process
 before every heavy step. Vitest uses --maxWorkers=2, native CARGO_BUILD_JOBS=2 and the
-shared .worktrees/.target. Judge/OpenRouter are explicitly SKIP by owner instruction.
+shared .worktrees/.target.
 
 ## Backend: Sign in with ChatGPT
 
@@ -544,11 +516,10 @@ This is a core-only contract change; no rendered scene or frontend is changed.
 
 See [Dictation](dictation.md#passive-control-hit-regions-2026-11-01) for R-UI-70,
 physical hit rectangles, held-button release, revision invalidation and the selected
-existing overlay/learned scene matrix. Cargo, native and automated judge are
-explicitly prohibited by this brief; fixture acceptance does not prove OS clicks.
+existing overlay/learned scene matrix. Fixture acceptance does not prove OS clicks.
 # Composer discovery (2026-11-01)
 
-[Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths. This updated map is staged under `.fold` because `.agents` is protected.
+[Composer discovery](composer-discovery.md) covers grouped @ and / completion in conversations and team rooms, including enabled skill invocation on API, CLI and background paths.
 
 ## Conversation connection management (2026-11-01)
 
@@ -568,7 +539,7 @@ The still-thread review follow-up adds conversation-midnight to the conversation
 
 R-UI-72: [conversation.md](conversation.md#folded-colleague-exchanges-2026-11-02) and [team-and-rooms.md](team-and-rooms.md#folded-room-receipts-2026-11-02) cover folded colleague receipts. handoff-group-long adds long and unbroken names to the selected matrix.
 
-R-UI-73: [members.md](members.md#menus-beside-their-rows-2026-11-02) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080; no look --all, judge, native, cargo or provider requests are authorized.
+R-UI-73: [members.md](members.md#menus-beside-their-rows-2026-11-02) covers shared submenu hover, keyboard, diagonal travel, flipping and anchored redraw. Run the selected scenes in both themes at 1120,720,1920x1080.
 
 Review follow-up (2026-11-02): conversation.md and members.md map the single highest-priority group state, CSS list-join spacing, outside scroll-intent dismissal, frozen programmatic placement and resize dismissal. The selected matrix includes all handoff-group and menu scenes plus centred-system-events.
 
@@ -577,8 +548,7 @@ Review follow-up (2026-11-02): conversation.md and members.md map the single hig
 R-CARD-01..75: see the appended shared-card section in `conversation.md` and
 `app/scripts/look/scenes/cards.mjs`. The common `card-shell` assertion applies to
 new and existing card consumers. Run only the mapped card matrix, both themes,
-1120,720,1920x1080; inspect sheets and full-size controls. This task's explicit
-no-judge/no-native/no-network restrictions override integration acceptance steps.
+1120,720,1920x1080; inspect sheets and full-size controls.
 
 R-CARD-05..77: conversation.md also maps exact connected-message previews and the owner review follow-up (localized action titles, meaningful disclosures, one state, per-kind prompt words and one-line credential hints).
 
@@ -590,8 +560,7 @@ R-CARD-06 review coverage also includes neutral cancelled questions without redu
 
 See [Member computer](member-computer.md#slime-town-and-computer-preparation-2026-11-03)
 for R-UI-92/93/94, deterministic period fixtures, preparation in all three viewing
-locations, retained motion and wallpaper-to-stream continuity. Protected map and
-rule additions are staged under `.fold/.agents/` for coordinator promotion.
+locations, retained motion and wallpaper-to-stream continuity.
 
 ## Daily delegation polish (2026-11-03)
 
@@ -628,8 +597,7 @@ state. Representative consumers include the sidebar, composer, Home, connections
 calendar, model sources, event receipts, conversation cards and desktop preview. Button surfaces
 that delegate painting to their parent are measured with that parent too.
 
-Run npm.cmd run verify and the targeted attachment core tests. The unit prohibits
-network, judge, native journeys, cargo and real providers; those are explicit SKIP.
+Run npm.cmd run verify and the targeted attachment core tests.
 Read local reference images outside the repository; never copy owner art or words.
 
 Long draft profiling also covers idempotent drawer close: closing a closed
@@ -637,4 +605,4 @@ drawer never steals the destination focus. Unchanged member controls keep focus
 without another layout, and newest-page reads skip the earlier-page scroll anchor.
 ## Motion cost (2026-11-03)
 
-[Members](members.md#motion-cost-2026-11-03) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget. The task forbids judge, native, cargo, network and real providers.
+[Members](members.md#motion-cost-2026-11-03) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget.

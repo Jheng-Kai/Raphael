@@ -134,8 +134,8 @@ test("room identity uses the participants' own faces and caps the cluster at fou
 
 test("owner profile updates the existing outgoing face as well as the footer identity", () => {
   document.body.innerHTML = `<div class="me">${ownerFaceHTML()}</div>`;
-  setOwnerProfile({ owner_name: "Jack", owner_photo: "data:image/webp;base64,YQ==" } as never);
-  expect(ownerName()).toBe("Jack");
+  setOwnerProfile({ owner_name: "Sam", owner_photo: "data:image/webp;base64,YQ==" } as never);
+  expect(ownerName()).toBe("Sam");
   expect(document.querySelector(".me .owner-face img")?.getAttribute("src")).toBe("data:image/webp;base64,YQ==");
   setOwnerProfile({ owner_name: "", owner_photo: "" } as never);
   expect(document.querySelector(".me .owner-face svg")).not.toBeNull();

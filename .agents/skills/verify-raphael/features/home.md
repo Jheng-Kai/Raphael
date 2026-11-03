@@ -122,7 +122,7 @@ core read path; the direct Google sign-in wins when readable.
 
 Offline pytest covers projection and HTTP doubles. Browser fixtures prove UI;
 isolated fake-brain native journeys prove the desktop path. Neither proves live
-calendar/OAuth/provider scheduling. Judge is excluded by this task's explicit brief.
+calendar/OAuth/provider scheduling.
 Follow the shared [content-width contract](README.md#content-width).
 
 Native `sidebar-home` checks the emblem/report/date and in-place sidebar search at 1120,720,1920x1080, using the real WebView and isolated data.

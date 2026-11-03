@@ -112,7 +112,7 @@ def test_the_task_is_shown_the_files_as_data():
     from raphael_core.memory.store import MemorySnapshot
 
     moment = {"date": "2026-10-23", "time": "09:00", "weekday": "Friday", "utc_offset": "UTC+08:00"}
-    files = MemorySnapshot(shared="主人叫 Jack", own="Amy 負責設計。", shared_usage="1% — 7/1,375 chars", own_usage="1% — 7/2,200 chars")
+    files = MemorySnapshot(shared="主人叫 Sam", own="Amy 負責設計。", shared_usage="1% — 7/1,375 chars", own_usage="1% — 7/2,200 chars")
     _, user = _prompts("en", "整理 Amy 的設計稿", moment, [], RunLimits(), memory_snapshot=files)
     assert '<own_memory file="MEMORY.md" usage="1% — 7/2,200 chars">\nAmy 負責設計。\n</own_memory>' in user
     assert user.index("<shared_memory") < user.index("<own_memory") < user.index("<task>")

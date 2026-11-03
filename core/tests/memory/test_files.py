@@ -116,15 +116,15 @@ def test_a_fact_that_says_more_takes_the_place_of_the_shorter_one(memory, tmp_pa
 
 
 def test_one_fact_keeps_one_line_across_the_two_files(memory, tmp_path):
-    assert edit(memory, 1, add("使用者的名字是 Jack")).ok
+    assert edit(memory, 1, add("使用者的名字是 Sam")).ok
     # Learned as who the owner is: the shared file holds it now, and the own file no longer repeats it.
-    assert edit(memory, 1, add("使用者的名字是 Jack"), target="user").ok
-    assert "使用者的名字是 Jack" in shared_file(tmp_path) and "Jack" not in own_file(tmp_path, 1)
+    assert edit(memory, 1, add("使用者的名字是 Sam"), target="user").ok
+    assert "使用者的名字是 Sam" in shared_file(tmp_path) and "Sam" not in own_file(tmp_path, 1)
     # Said again to any member, as its own note: it is known already.
-    again = edit(memory, 2, add("使用者的名字是 Jack"))
+    again = edit(memory, 2, add("使用者的名字是 Sam"))
     assert again.ok and again.data["changed"] is False
-    assert not (tmp_path / "bots/2/MEMORY.md").exists() or "Jack" not in own_file(tmp_path, 2)
-    assert str(memory.snapshot(1)).count("使用者的名字是 Jack") == 1
+    assert not (tmp_path / "bots/2/MEMORY.md").exists() or "Sam" not in own_file(tmp_path, 2)
+    assert str(memory.snapshot(1)).count("使用者的名字是 Sam") == 1
 
 
 def test_a_changed_fact_replaces_the_old_one(memory, tmp_path):
@@ -208,20 +208,20 @@ def test_a_members_file_never_reaches_another_member(memory, members, tmp_path):
 
 
 def test_what_one_member_learns_of_the_owner_every_member_knows(memory, members, tmp_path):
-    assert edit(memory, A, add("使用者的名字是 Jack"), target="user").ok
+    assert edit(memory, A, add("使用者的名字是 Sam"), target="user").ok
     for member in (0, A, B):
-        assert "使用者的名字是 Jack" in str(memory.snapshot(member))
-    assert "使用者的名字是 Jack" in str(memory.shared_reader().snapshot())
-    assert "使用者的名字是 Jack" in shared_file(tmp_path)
-    assert "Jack" not in own_file(tmp_path, A) if (tmp_path / "bots" / str(A) / "MEMORY.md").exists() else True
+        assert "使用者的名字是 Sam" in str(memory.snapshot(member))
+    assert "使用者的名字是 Sam" in str(memory.shared_reader().snapshot())
+    assert "使用者的名字是 Sam" in shared_file(tmp_path)
+    assert "Sam" not in own_file(tmp_path, A) if (tmp_path / "bots" / str(A) / "MEMORY.md").exists() else True
 
 
 def test_the_shared_entry_says_whom_the_owner_told_and_when(memory, members):
-    assert edit(memory, A, add("使用者的名字是 Jack"), target="user").ok
-    assert "使用者的名字是 Jack — 小行程 · 2026-10-22" in str(memory.snapshot(B))
+    assert edit(memory, A, add("使用者的名字是 Sam"), target="user").ok
+    assert "使用者的名字是 Sam — 小行程 · 2026-10-22" in str(memory.snapshot(B))
     # The name of who was told is no part of the fact: the same fact told to another stays one line.
-    assert edit(memory, B, add("使用者的名字是 Jack"), target="user").ok
-    assert str(memory.snapshot(B)).count("使用者的名字是 Jack") == 1
+    assert edit(memory, B, add("使用者的名字是 Sam"), target="user").ok
+    assert str(memory.snapshot(B)).count("使用者的名字是 Sam") == 1
 
 
 @pytest.mark.parametrize("words", ["別告訴其他人，我週五要去看房子", "這件事不要跟大家說", "Don't tell the others about this"])
@@ -259,10 +259,10 @@ def test_a_turn_reads_a_snapshot_while_the_tools_see_the_live_file(memory, tmp_p
 def test_a_restart_keeps_the_files(make, tmp_path):
     first = make()
     assert edit(first, 1, add("使用者住在台北")).ok
-    assert edit(first, 1, add("使用者的名字是 Jack"), target="user").ok
+    assert edit(first, 1, add("使用者的名字是 Sam"), target="user").ok
     again = make()
     text = str(again.snapshot(1))
-    assert "使用者住在台北" in text and "使用者的名字是 Jack" in text
+    assert "使用者住在台北" in text and "使用者的名字是 Sam" in text
     assert edit(again, 1, add("使用者住在台北")).ok
     assert own_file(tmp_path, 1).count("使用者住在台北") == 1
 
@@ -510,10 +510,10 @@ async def test_the_owners_edit_is_scanned_only_for_what_is_new(rpc, memory, tmp_
 
 async def test_clear_empties_the_file_and_leaves_the_other_space(rpc, memory, members):
     assert edit(memory, A, add("使用者住在台北")).ok
-    assert edit(memory, A, add("使用者的名字是 Jack"), target="user").ok
+    assert edit(memory, A, add("使用者的名字是 Sam"), target="user").ok
     await rpc.call("memory.clear", {"member_id": A, "space": "own"})
     assert (await rpc.call("memory.get", {"member_id": A, "space": "own"}))["text"] == ""
-    assert "Jack" in (await rpc.call("memory.get", {"member_id": A, "space": "shared"}))["text"]
+    assert "Sam" in (await rpc.call("memory.get", {"member_id": A, "space": "shared"}))["text"]
 
 
 async def test_the_old_note_methods_are_gone(rpc):
@@ -527,7 +527,7 @@ async def test_the_change_is_announced_and_a_read_is_silent(conn, tmp_path, keys
     assert events == []
     assert edit(memory, 2, add("Review uses amber.")).ok
     assert events == [("memory.changed", {"member_id": 2, "space": "own"})]
-    assert edit(memory, 2, add("The owner is called Jack"), target="user").ok
+    assert edit(memory, 2, add("The owner is called Sam"), target="user").ok
     assert events[-1] == ("memory.changed", {"member_id": 0, "space": "shared"})
     events.clear()
     memory.snapshot(2)
@@ -594,10 +594,10 @@ def legacy_home(root):
     log.mkdir()
     (log / "2026-10-20.md").write_text("\nfinished the review\n", encoding="utf-8")
     shared = root / "shared/memory"
-    note_file(shared, "user-name", "主人叫 Jack", "主人的名字是 Jack。", member=0)
+    note_file(shared, "user-name", "主人叫 Sam", "主人的名字是 Sam。", member=0)
     note_file(shared, "user-city", "主人住在台北", "主人住在台北市。")
     (shared / "MEMORY.md").write_text("derived", encoding="utf-8")
-    (root / "shared/USER.md").write_text("## user-name\n主人叫 Jack\n\n主人的名字是 Jack。\n", encoding="utf-8")
+    (root / "shared/USER.md").write_text("## user-name\n主人叫 Sam\n\n主人的名字是 Sam。\n", encoding="utf-8")
     (root / "shared/team.md").write_text("", encoding="utf-8")
     note_file(root / "bots/0/memory", "user-city", "主人住在台北", "主人住在台北市。")  # also in the shared file
     pending_file(root, 0, "a" * 24, "add", "reference-typeless", "使用者用 Typeless 在 Mac mini 上語音輸入")
@@ -619,11 +619,11 @@ def test_migration_loses_nothing_merges_duplicates_and_runs_twice_harmlessly(mak
     assert "回答保持兩三句" in own and "Why: 主人說太長了" in own
     assert "主人下週要去東京出差" in own and "2026-11-01" in own
     assert "主人要去大阪" in own  # past its date, and still not lost
-    assert "主人的名字是 Jack" in shared and "主人住在台北市" in shared
+    assert "主人的名字是 Sam" in shared and "主人住在台北市" in shared
     assert "主人住在台北" not in own_file(tmp_path, 0)  # what the shared file says is said once
     assert "## reference-mic" not in own and "→" not in own and "## user-name" not in shared  # no derived text
     # Who was told a shared note stays with it.
-    assert "主人的名字是 Jack。 — 拉斐爾 · 2026-10-20" in shared or "主人的名字是 Jack。 — Raphael · 2026-10-20" in shared
+    assert "主人的名字是 Sam。 — 拉斐爾 · 2026-10-20" in shared or "主人的名字是 Sam。 — Raphael · 2026-10-20" in shared
     # What waited for the owner enters visibly unconfirmed; it is in the document he reads.
     assert "（待確認）使用者用 Typeless 在 Mac mini 上語音輸入" in own_file(tmp_path, 0)
     assert "（待確認）使用者已購買綠聯有線 USB 桌面麥克風" in own
@@ -640,7 +640,7 @@ def test_migration_loses_nothing_merges_duplicates_and_runs_twice_harmlessly(mak
     assert any(path.name.endswith(".json") for path in backups)
 
     # It answers from the files, and a second start changes nothing, though the living file moved on.
-    assert "主人的名字是 Jack" in str(memory.snapshot(5))
+    assert "主人的名字是 Sam" in str(memory.snapshot(5))
     assert edit(memory, 1, add("使用者後來養了一隻狗")).ok
     state = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file() and "journal" not in path.parts}
     make()

@@ -136,7 +136,7 @@ def test_a_turn_whose_background_task_has_not_reported_is_protected(conversation
 
 
 def test_corrections_and_requests_to_remember_are_told_by_their_words():
-    for text in ("不對，是三點", "我是說下週", "That's wrong, I meant Tuesday", "違う、火曜日です", "叫我 Jack 就好"):
+    for text in ("不對，是三點", "我是說下週", "That's wrong, I meant Tuesday", "違う、火曜日です", "叫我 Sam 就好"):
         assert is_correction(text), text
     for text in ("今天天氣如何", "Tell me the time", "明日の予定は"):
         assert not is_correction(text), text

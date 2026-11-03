@@ -527,12 +527,12 @@ for line in sys.stdin:
     assert write("The owner studies Japanese.").ok
     await typed(rig, "What do you know?", teacher.id, language="en")
     assert team.memory.update_memory(teacher.id, {"target": "memory", "operations": [{"action": "replace", "old_text": "Japanese", "content": "Korean"}]}).ok
-    assert team.memory.update_memory(0, {"target": "user", "operations": [{"action": "add", "content": "The owner is called Jack"}]}).ok
+    assert team.memory.update_memory(0, {"target": "user", "operations": [{"action": "add", "content": "The owner is called Sam"}]}).ok
     await typed(rig, "And now?", teacher.id, language="en")
     start, first, resume, second = [json.loads(line) for line in inputs.read_text(encoding="utf-8").splitlines()]
     assert start["method"] == "thread/start" and resume["method"] == "thread/resume"
     assert "Japanese" in first["user"] and "Korean" not in first["user"]
-    assert "Korean" in second["user"] and "The owner studies Japanese" not in second["user"] and "The owner is called Jack" in second["user"]
+    assert "Korean" in second["user"] and "The owner studies Japanese" not in second["user"] and "The owner is called Sam" in second["user"]
     assert "/2,200 chars" in second["user"]
     # The rules are the instructions'; the files themselves are never there, where a resumed thread would keep them.
     assert "memory_update" in start["system"] and "The owner studies" not in start["system"]

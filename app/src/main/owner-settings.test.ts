@@ -7,8 +7,8 @@ import type { BrainSettings } from "./types";
 
 afterEach(() => document.body.replaceChildren());
 it("keeps name and about beside the shared owner avatar picker", () => {
-  const settings = { owner_name: "<Jack>", owner_about: "Brief & kind" } as BrainSettings;
-  expect(ownerProfileHTML(settings)).toContain("&lt;Jack&gt;");
+  const settings = { owner_name: "<Sam>", owner_about: "Brief & kind" } as BrainSettings;
+  expect(ownerProfileHTML(settings)).toContain("&lt;Sam&gt;");
   expect(ownerProfileHTML(settings)).toContain("Brief &amp; kind");
   expect(ownerProfileHTML(settings)).not.toContain('type="file"');
   expect(ownerProfileHTML(settings)).toContain("data-owner-photo");
@@ -25,10 +25,10 @@ it("persists profile edits in order through the core", async () => {
   const host = document.createElement("div"); host.innerHTML = ownerProfileHTML({} as BrainSettings); document.body.append(host);
   api.settingsSet.mockImplementation(async (key, value) => ({ settings: { [key]: value } }));
   const saved = vi.fn(), controls = createOwnerControls(saved);
-  const input = host.querySelector<HTMLInputElement>("[data-owner=owner_name]")!; input.value = "Jack";
+  const input = host.querySelector<HTMLInputElement>("[data-owner=owner_name]")!; input.value = "Sam";
   await controls.change(input);
   const about = host.querySelector<HTMLTextAreaElement>("[data-owner=owner_about]")!; about.value = "Brief";
   await controls.change(about);
   await vi.waitFor(() => expect(saved).toHaveBeenCalledTimes(2));
-  expect(api.settingsSet.mock.calls.map(call => call.slice(0, 2))).toEqual([["owner_name", "Jack"], ["owner_about", "Brief"]]);
+  expect(api.settingsSet.mock.calls.map(call => call.slice(0, 2))).toEqual([["owner_name", "Sam"], ["owner_about", "Brief"]]);
 });

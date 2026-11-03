@@ -64,7 +64,7 @@ def test_an_edit_below_the_confidence_or_without_one_is_not_taken():
 
 
 @pytest.mark.parametrize("words, about", [
-    ("使用者的名字是 Jack", True),
+    ("使用者的名字是 Sam", True),
     ("使用者住在台北", True),
     ("The user prefers short answers", True),
     ("我們決定下週三交稿", False),
@@ -205,7 +205,7 @@ async def test_a_file_with_room_is_not_tidied(memory, clock):
 
 async def test_a_consolidation_of_the_shared_file_keeps_who_was_told(memory, clock):
     assert memory.update_memory(7, {"target": "user", "operations": [
-        {"action": "add", "content": "主人的名字是 Jack"}, {"action": "add", "content": "主人住在台北"}]}, share=True).ok
+        {"action": "add", "content": "主人的名字是 Sam"}, {"action": "add", "content": "主人住在台北"}]}, share=True).ok
     before = memory.shared.read()
     told = before.splitlines()[0].rsplit(" — ", 1)[1]
     filler = before + "\n\n" + "\n\n".join(f"Fact number {n} about the owner and their long running projects" for n in range(20))

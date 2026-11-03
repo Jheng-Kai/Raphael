@@ -22,4 +22,4 @@ Core coverage: `tests/evaluate/test_slash_skills.py`, `tests/integrations/test_i
 
 ## Gotchas
 
-Run `.fold/wait-heavy.ps1` before each heavy step. No network, real provider, judge, cargo or native journey is authorized. Synthetic browser and fake-model evidence do not establish native, live or independent design acceptance. See root `CODEX_REPORT.md` for actual commands, exits and image review.
+Synthetic browser and fake-model evidence do not establish native, live or independent design acceptance.

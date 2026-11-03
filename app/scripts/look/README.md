@@ -92,7 +92,7 @@ For real store performance and catalog authorization, run from the owner's norma
 PowerShell (the restricted agent shell cannot read Windows Credential Manager):
 
 ```powershell
-Set-Location 'D:\Documentation\github_repos\Raphael\.worktrees\native\app'
+Set-Location app  # from the repository root
 $env:CARGO_TARGET_DIR = Join-Path (Get-Location) '.native/cargo-target'
 $env:CARGO_BUILD_JOBS = '2'
 $env:RAPHAEL_CORE_PYTHON = Join-Path (Get-Location) '../core/.venv/Scripts/python.exe'
@@ -142,7 +142,7 @@ undeclared external requests remain failures.
 
 ```powershell
 # Owner-only: do not include this in routine regression runs.
-Set-Location 'D:\Documentation\github_repos\Raphael\.worktrees\native\app'
+Set-Location app  # from the repository root
 $env:CARGO_TARGET_DIR = Join-Path (Get-Location) '.native/cargo-target'
 $env:CARGO_BUILD_JOBS = '2'
 $env:RAPHAEL_CORE_PYTHON = Join-Path (Get-Location) '../core/.venv/Scripts/python.exe'
@@ -194,7 +194,6 @@ npm run look -- --all --theme both --width 1120,720,1920x1080
 npm run look -- composer-learn member-composer-learn room-composer-learn --theme both --width 1120,720,1920x1080
 npm run look -- appearance --locale ja --out .look/review
 npm run verify
-npm run verify -- --out ../.fold/app/.look
 npm run verify -- --quick
 npm run verify -- --core --rust
 npm run judge -- .look/run-EXAMPLE --references <external-reference.png>
@@ -326,7 +325,7 @@ continue after a failure. These tools do not build, install, launch or deploy th
 Guardian's required UI sequence is look, inspection, then judge. Judge requires
 all three sizes and both themes for every selected scene and a passed look report.
 Its rules, feature context, external reference paths, budgets and cache are
-documented in the verify-raphael skill and `GUARDIAN-NOTES.md`. The verify alias is
+documented in the verify-raphael skill. The verify alias is
 `npm run verify -- --judge <look run>`; set `RAPHAEL_JUDGE_REFERENCES` to a JSON array
 of external image paths. Judge defaults to the signed-in Claude Code subscription;
 `npm run judge -- <look run> --brain codex --references <external image>` selects

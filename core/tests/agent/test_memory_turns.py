@@ -163,13 +163,13 @@ async def test_a_turn_after_a_web_search_changes_nothing_the_owner_confirmed(rig
 
 async def test_what_one_member_learns_of_the_owner_the_next_turn_of_raphael_reads(rig, client, memory):
     client.decisions.append(decision("chat"))
-    client.replies.append(reply(memory=[note("主人的名字是 Jack", target="user")]))
-    await rig.ask("我叫 Jack")
-    assert "主人的名字是 Jack" in memory.shared.read()
+    client.replies.append(reply(memory=[note("主人的名字是 Sam", target="user")]))
+    await rig.ask("我叫 Sam")
+    assert "主人的名字是 Sam" in memory.shared.read()
     client.decisions.append(decision("chat"))
-    client.replies.append(reply("Jack，你好。", prefix="答"))
+    client.replies.append(reply("Sam，你好。", prefix="答"))
     await rig.ask("你好")
-    assert "主人的名字是 Jack" in client.json_calls[-1]["system"]
+    assert "主人的名字是 Sam" in client.json_calls[-1]["system"]
 
 
 # --- reading ------------------------------------------------------------------------------------------

@@ -170,7 +170,7 @@ The scenario contracts S01–S22, the tool-coverage manifest and the exit codes 
 
 Use the PR template to record rule IDs, commands/exits, look/judge/live artifacts,
 images inspected and all incomplete/native acceptance. Never infer deployed or native
-acceptance from offline gates. See GUARDIAN-NOTES.md for repository settings and costs.
+acceptance from offline gates.
 
 ## Native regression gate
 

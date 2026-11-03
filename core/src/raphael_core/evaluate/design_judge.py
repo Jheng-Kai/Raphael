@@ -24,9 +24,16 @@ MAX_REQUESTS = 2000
 _FENCE = re.compile(r"```(?:json)?\s*\n(.*?)\n\s*```", re.S)
 
 
+def _staged(root):
+    """RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet."""
+    value = os.environ.get("RAPHAEL_STAGED_DOCS")
+    return root / value if value else None
+
+
 def rules_path(root):
-    staged = root / ".fold/.agents/product/RULES.md"
-    return staged if staged.is_file() else root / ".agents/product/RULES.md"
+    staged = _staged(root)
+    candidate = staged / ".agents/product/RULES.md" if staged else None
+    return candidate if candidate and candidate.is_file() else root / ".agents/product/RULES.md"
 
 
 def judge_rules(text):
@@ -35,7 +42,7 @@ def judge_rules(text):
 
 def feature_for(root, scene):
     folder = root / ".agents/skills/verify-raphael/features"
-    staged = root / ".fold/.agents/skills/verify-raphael/features"
+    staged = (_staged(root) or root) / ".agents/skills/verify-raphael/features"
     for name in sorted({p.name for p in folder.glob("*.md")} | {p.name for p in staged.glob("*.md")}):
         path = staged / name if (staged / name).is_file() else folder / name
         text = path.read_text(encoding="utf-8")

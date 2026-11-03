@@ -1,8 +1,8 @@
 # Recorded public catalog artwork
 
 `slack.svg` is the unmodified public SVG response for
-`https://logos.composio.dev/api/slack`, recovered from the owner's native run
-`run-qfeq8V` HTTP cache. It is Slack's brand artwork supplied by the Composio
+`https://logos.composio.dev/api/slack`, recovered from a recorded native run's
+HTTP cache. It is Slack's brand artwork supplied by the Composio
 catalog, retained only as offline visual-test evidence. Production continues to
 use the catalog URL through the shared HTTPS Composio allowlist.
 

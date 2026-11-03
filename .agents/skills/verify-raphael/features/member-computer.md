@@ -44,14 +44,9 @@ Selected matrix, both themes at 1120,720,1920x1080:
 npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
-Compare the full-size preparation images with the owner's local 79.png, the town
-periods with 80.png through 84.png and the approved .fold/wall-preview SVGs, and
-the preview/emblem with hero-0.png and the shared member-header face. The reference
-uses abstract monochrome curves and a spinner; this owner-approved unit instead
-uses our own colourful town and working slime. All reference assets remain outside
-the repository. Judge, real guest, native, network/provider, cargo and Docker work
-are explicitly prohibited by the unit. Offline look evidence does not prove the
-XFCE loader or guest timezone; the owner verifies the guest later.
+Compare the full-size preparation and town-period images and the preview/emblem
+with the shared member-header face. Offline look evidence does not prove the
+XFCE loader or guest timezone.
 
 ## Three computer levels (2026-11-02)
 
@@ -116,12 +111,8 @@ without a routines subpage. details-resource, member-edit and member-avatar scen
 enter through the gear. The earlier collapse/separate-computer-page and inline
 owner-control assertions are superseded; single-stream and nonce assertions stay.
 
-Compare full-size panel-screen-routines with the owner's local hero-0 reference,
-takeover views with view-009, and off/live wallpapers with view-010. Compare menu
-controls to existing shared menus and routine controls to automation editors at the
-same theme/width. Keep reference artwork outside the public repository.
-Network, judge, Docker, cargo, native/provider and real guest work are prohibited
-by this brief and must remain explicitly unverified in CODEX_REPORT.md.
+Compare menu controls to existing shared menus and routine controls to automation editors
+at the same theme/width.
 
 ## Named datasets (2026-11-01)
 
@@ -143,7 +134,7 @@ cancels existing vm_exec, leaving the durable database available for a later tur
 Core evidence includes production API/CLI/routine calls with a fake VM returning
 its real output shape. Real DuckDB import/reopen integration is explicitly skipped
 when its offline dependencies/Linux lock module are absent. No real installation,
-Docker start, host kernel or provider call is part of this task's acceptance.
+Docker start, host kernel or provider call is exercised.
 Selected UI consumers: dataset-table and dataset-chart, both themes and all three
 standard sizes; compare with the existing rich table and stored file controls.
 
@@ -191,8 +182,7 @@ draft editor with details-skills/skill-private-detail, and teaching controls wit
 desktop-owner. Offline proof: members/test_teaching.py, evaluate/test_teaching.py
 (API and CLI plus routines), computer/test_rfb_input.py and desktop-viewer.test.ts.
 Real Docker/cua accessibility, screenshot privacy across third-party applications,
-native shell, live model quality and judge remain separately unverified. This unit
-explicitly prohibits Docker lifecycle, cargo, native, network and judge execution.
+native shell, live model quality and judge remain separately unverified.
 
 ## Owner-PC commands (2026-11-01)
 
@@ -234,9 +224,8 @@ tests/agent tests/background tests/members tests/computer tests/worker.
 Acceptance still requires the owner's real CPU question to member 13 on both API
 and installed CLI brains, harmless process inspection, explicit approval/dismissal,
 tree cleanup on Stop/app close, and the granted Docker path after schema discovery.
-This brief prohibits Docker, cargo, native journeys, network, judge and real
-subscription commands. Offline fakes and rendered fixture success do not prove
-those boundaries. Rule IDs: R-PC-01/02/03 and R-AG-13.
+Offline fakes and rendered fixture success do not prove Docker, cargo, native
+journeys, network, judge or real subscription commands. Rule IDs: R-PC-01/02/03 and R-AG-13.
 
 The optional Docker desktop defaults to `computer_vm_mode=per-bot`: a durable workspace,
 container and browser profile per member (2 GiB and two CPUs each), plus a shared team
@@ -262,8 +251,8 @@ unknown future driver names are excluded too. No backend-supplied flag can pin a
 normal plugin tool. The gate and owner-control lease still apply on every call.
 
 The recorded names fixture is `core/tests/computer/fixtures/cua-driver-0.37.0.json`.
-The owner's brief says 67 but lists 68 unique names (including the two Raphael
-tools); the fixture preserves all 68. The pinned Linux wheel was unavailable
+It lists 68 unique names (including the two Raphael
+tools) and the fixture preserves all 68. The pinned Linux wheel was unavailable
 offline, so test schemas are explicitly synthetic objects, not captured schemas.
 Browser selection follows Cua's documented Linux CDP support; real image/browser
 operation remains pending the owner's native run. The native assertions are intact,
@@ -394,8 +383,7 @@ desktop-preparing, desktop-absent, desktop-install and chat-computer-takeover.
 Capture both themes at 1120,720,1920x1080 and inspect every contact/full-size image.
 Native member-computer signs in only to the disposable local page via the real
 side-panel noVNC stream, verifies no member calls while held, then one continuation.
-Docker runs only in an exclusive heavy slot. Stop only the journey-created container by exact name afterward; never stop Docker Desktop or another member computer. No paid/live provider
-or judge request is authorized.
+Docker runs only in an exclusive heavy slot. Stop only the journey-created container by exact name afterward; never stop Docker Desktop or another member computer.
 
 ## On-demand member permission (2026-10-31)
 
@@ -426,12 +414,12 @@ or handback semantics change under a grant. Both native VM journeys grant explic
 Offline regressions: core/tests/computer/test_grants.py and
 core/tests/agent/test_computer_grants.py, plus the existing computer/agent/background
 suites. Native member-computer grants first and starts the installed Docker engine
-only when its first screen tool is called. This brief prohibits judge and live/paid providers; core-only code
+only when its first screen tool is called. Core-only code
 has no changed visual scene or new UI. Fixture/fake results are not native acceptance.
 
 The panel view has a start button for a stopped computer and a take-back button for a granted member. `computer.revoke` keeps the row at 0, so a later request asks again. Looking at the panel never starts a computer.
 
-## Quiet, lazy startup (CODEX_BRIEF2)
+## Quiet, lazy startup
 
 The Windows host prefers PATH `docker.exe`, then
 `%ProgramFiles%/Docker/Docker/resources/bin/docker.exe`. A hidden, read-only
@@ -445,8 +433,7 @@ preparation progress, errors, grants, owner holds and leases.
 Offline coverage: `tests/computer/test_desktop_host.py`, `test_vm.py`,
 `test_grants.py`, `test_takeover.py`, `tests/agent/test_computer_grants.py`,
 `tests/background/test_computer_lazy.py`, and the snapshot/CLI/worker consumers.
-All startup tests fake processes and Docker. No real Docker/native run was made
-for this brief.
+All startup tests fake processes and Docker.
 
 Owner acceptance: from `app/`, run `npm.cmd run native -- member-computer`
 in the authorized native environment. Its pre-launch smoke asserts zero Docker
@@ -491,9 +478,7 @@ computer, grant/choice, lazy background, settings, native cleanup and architectu
 consumers. Native cleanup recovers and removes every container owned by the isolated
 journey data directory, retaining its workspaces. Each test member gets its own
 sign-in fixture; native frame checks still run inside the cross-origin viewer.
-Cleanup never stops Docker Desktop or touches the owner's 15 old containers.
-Judge/native/live/image build are SKIP by the
-explicit unit brief, not acceptance. See CODEX_REPORT.md for exact results.
+Cleanup never stops Docker Desktop.
 
 ```powershell
 npm run look -- desktop-host-remote desktop-host-invalid desktop-collapse desktop-panel desktop-viewer desktop-owner desktop-handback desktop-takeover desktop-takeover-owner desktop-takeover-done desktop-stopped desktop-unavailable desktop-starting desktop-building desktop-preparing desktop-absent desktop-install --theme both --width 1120,720,1920x1080
@@ -553,5 +538,4 @@ computer/test_login_vault.py, agent/test_private_login.py, brain/test_db.py,
 work-channels.test.ts and scripts/look/audit.test.mjs. The review follow-up runs
 computer, messaging, agent and background in full once, then targets any fixes.
 Report explicitly if that full run preceded the last change. Frontend verify uses
-two Vitest workers. The brief prohibits cargo, native, network, real providers and
-npm run judge: these are SKIP, never fixture-derived acceptance.
+two Vitest workers.

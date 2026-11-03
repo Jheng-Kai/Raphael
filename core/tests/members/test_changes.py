@@ -94,7 +94,7 @@ async def test_memory_writes_rpc_edits_and_clears_announce_the_affected_spaces(r
     await rig.call("memory.update", {"member_id": member_id, "space": "own", "text": "We are testing an app."})
     assert rig.notes == [own]
     rig.notes.clear()
-    assert write("user", "The owner is called Jack").ok
+    assert write("user", "The owner is called Sam").ok
     assert rig.notes == [shared]
     rig.notes.clear()
     await rig.call("memory.clear", {"space": "shared"})

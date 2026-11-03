@@ -5,7 +5,10 @@ import { coreCheck } from "./guardian.mjs";
 import { scenes } from "./look/scenes/index.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const read = path => readFileSync(resolve(root, existsSync(resolve(root, `.fold/${path}`)) ? `.fold/${path}` : path), "utf8");
+// RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet.
+const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS) : null;
+const located = path => staged && existsSync(resolve(staged, path)) ? resolve(staged, path) : resolve(root, path);
+const read = path => readFileSync(located(path), "utf8");
 
 it("CI enforces the same offline layers and real three-size UI for every PR", () => {
   const ci = read(".github/workflows/ci.yml");
@@ -45,7 +48,7 @@ it("every captured scene has feature context for the judge", () => {
   const names = ["home", "conversation", "members", "member-computer", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery"];
   const mapped = new Set(names.flatMap(name => {
     const path = `.agents/skills/verify-raphael/features/${name}.md`;
-    return [...read(existsSync(resolve(root, `.fold/${path}`)) ? `.fold/${path}` : path).matchAll(/^npm run look -- (.+)$/gm)].flatMap(([, command]) => command.split(/\s+/));
+    return [...read(path).matchAll(/^npm run look -- (.+)$/gm)].flatMap(([, command]) => command.split(/\s+/));
   }));
   expect(scenes.filter(scene => !mapped.has(scene.name)).map(scene => scene.name)).toEqual([]);
 });
@@ -53,8 +56,7 @@ it("every captured scene has feature context for the judge", () => {
 it("the hand-off contract requires rule IDs and evidence without claiming unrun acceptance", () => {
   const template = read(".github/pull_request_template.md");
   for (const text of ["RULES IDs", "ARCHITECTURE IDs", "Judge report", "images inspected", "Unverified", "Live brain matrix"]) expect(template).toContain(text);
-  const staged = ".fold/.agents/skills/verify-raphael/SKILL.md";
-  const spec = existsSync(resolve(root, staged)) ? staged : ".agents/skills/verify-raphael/SKILL.md";
-  expect(existsSync(resolve(root, spec))).toBe(true);
+  const spec = ".agents/skills/verify-raphael/SKILL.md";
+  expect(existsSync(located(spec))).toBe(true);
   expect(read(spec)).toContain("after look and before UI hand-off");
 });

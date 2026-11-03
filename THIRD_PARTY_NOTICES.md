@@ -209,7 +209,7 @@ Mermaid 11.12.2 is MIT; highlight.js 11.11.1 is BSD-3-Clause. Both load lazily.
 
 The lockfile adds 125 package paths, with no unrelated version changes.
 Transitive declared licences: MIT, Apache-2.0, ISC, BSD-3-Clause, (MPL-2.0 OR Apache-2.0), MIT (verified in installed license file), Unlicense.
-For package versions and licences, see .fold/rich-content-dependencies.json.
+For package versions and licences, see app/package-lock.json.
 
 ## Mermaid
 

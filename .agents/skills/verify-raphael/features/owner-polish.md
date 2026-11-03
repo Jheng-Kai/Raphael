@@ -31,9 +31,8 @@ the first completed result starts at the newest word, and stale replies cannot r
 npm run look -- polish-effort-composer polish-effort polish-data polish-data-more polish-data-delete polish-data-conversations polish-scroll polish-caption-settings polish-caption-member polish-caption-confirm polish-search-chief polish-search-member polish-search-room polish-room-recording composer-voice-recording quick-effort-menu member-edit-memory --theme both --width 1120,720,1920x1080
 ```
 
-Run npm run verify for the frontend; run the focused brain/messaging tests and the brief's
-final offline core selection. Vitest uses maxWorkers=2. Run .fold/wait-heavy.ps1 before
-look, full Vitest and the final core suite. Inspect all sheets and relevant full-size images,
+Run npm run verify for the frontend and the focused brain/messaging tests.
+Vitest uses maxWorkers=2. Inspect all sheets and relevant full-size images,
 including ruler pairs and the member/group recording buttons at equal widths/themes.
 
 ## Gotchas
@@ -44,6 +43,3 @@ for a group would require a separate destination and delivery/cancellation proto
 paths use brain.finalize_dictation with purpose=agent; group retries retain composer
 correction evidence until successful delivery. No native permission or microphone is used
 in look: audio input is fake at its browser boundary.
-
-Native, cargo, network, judge and all real providers are explicitly prohibited by this brief.
-Their acceptance remains unverified. The owner runs native/cargo acceptance separately.

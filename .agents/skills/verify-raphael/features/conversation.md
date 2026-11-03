@@ -34,11 +34,10 @@ coverage with the new sentence/footer markup. Core privacy/path regressions live
 in test_action_sentences.py, test_harness.py and background/test_service.py;
 work-line.test.ts covers precedence, text-only patches, escaping and detail.
 
-Native/provider/network/cargo/judge are prohibited by this task. The offline
-fixtures prove rendered behavior only. Native CLI operations that bypass Raphael
+The offline fixtures prove rendered behavior only. Native CLI operations that bypass Raphael
 MCP, and legacy quick-voice computer runs before a conversation turn exists,
 cannot supply argument-aware sentences through these boundaries; their existing
-activity labels remain the fallback. The owner runs any required native checks.
+activity labels remain the fallback.
 
 ## Member media (2026-11-01)
 
@@ -71,7 +70,7 @@ Inspect all sheets and full-size controls at both themes and all selected viewpo
 Compare media rows/pickers with quick-model-menu, stored media with generated-audio-member,
 running video with running, and inline repairs with generated-audio-missing. Fixture
 prices and media do not prove live billing, provider compatibility, native playback or
-external design acceptance. The brief prohibits network, native, cargo and judge.
+external design acceptance.
 
 ## Owner round 10 connected apps and chosen models
 
@@ -107,9 +106,7 @@ an actionable next step; successful history records the actual answering model.
 Focused evidence: core/tests/agent/test_composio.py (21), test_persona.py (121),
 test_model_choice.py (11), test_service.py (174), test_routing.py (111),
 core/tests/test_connectors.py (91), core/tests/brain/test_provider_registry.py (26),
-test_providers_more.py (48). All use fakes or mock transports. No live owner
-Composio, Gmail, OpenRouter, judge or live verification was exercised. Full verify,
-look, native tests and builds await maintainer authorization.
+test_providers_more.py (48). All use fakes or mock transports.
 
 
 ## Owner round 10 contracts (supersedes round 9 message previews)
@@ -145,11 +142,9 @@ Round 10 scenes: `long-owner`, `long-owner-expanded`, `long-member-reply`,
 `conversation-chief-bottom`, `conversation-member-up`, `conversation-member-bottom`,
 `conversation-room-up`, `conversation-room-bottom`, `overlay-learned-pill`,
 `stable-connections-switch`, `stable-dictionary-controls`, `stable-settings-controls`.
-Run both themes at 1120,720,1920x1080 only after maintainer authorization. One heavy
+Run both themes at 1120,720,1920x1080. One heavy
 process at a time, Vitest --maxWorkers=2, CARGO_BUILD_JOBS=2 and the shared native
-CARGO_TARGET_DIR apply. Full verify, look and builds are currently deferred at the
-maintainer's request; only focused single-file tests are authorized. Judge and all
-OpenRouter/live owner Composio requests are prohibited.
+CARGO_TARGET_DIR apply.
 
 
 ## Sub-features
@@ -194,8 +189,7 @@ theme: identical line/dot/text geometry, with no pending chevron. Inspect every 
 sheet. Group rooms name the current speaker (`rooms.speaking`); onboarding lessons
 show their own phase (`onboarding.lessonThinking`); the desktop overlay uses its emblem
 and rotating/static waiting caption. These are separate surfaces and remain unchanged.
-Offline fixtures do not prove native microphone, providers or transport. Judge requires
-network authorization; a no-network brief records it as SKIP.
+Offline fixtures do not prove native microphone, providers or transport.
 
 ## How to get to it (user POV)
 
@@ -274,8 +268,8 @@ The existing `admin-approval` look scene now opens a second member question thro
 native event boundary, visits that member, then returns to Raphael and requires his original
 approval card. Window cards retain independent ids across members and conversations.
 
-Typed progress never goes to the overlay. See `DICTATION-NOTES.md` for native concurrency,
-Esc, spoken-question and paste-last acceptance; browser fixtures cannot prove these.
+Typed progress never goes to the overlay. Browser fixtures cannot prove native concurrency,
+Esc, spoken-question and paste-last behaviour.
 
 Collapsed work contains hidden `.chat-message` elements before the visible reply.
 Answer scenes target `.chat-message[data-expandable]`; the driver chooses a visible
@@ -920,7 +914,7 @@ desktop-unavailable, desktop-install, model-choices-answer, plugins-store-key,
 messaging, connections-empty and email-draft-edit as affected existing consumers.
 Inspect all contact sheets and relevant full-size images. Offline tests cover the
 sanitized TTS event and dictation prerequisite routing; Rust/native acceptance,
-real microphone/audio, provider/login and judge are not authorized by this brief.
+real microphone/audio, provider/login and judge are separate checks.
 
 ## Durable owner questions and background cards (2026-11-01)
 
@@ -1020,8 +1014,7 @@ Both prove the resumed prompt and final owner-visible result, with no API fallba
 Existing room cancellation and card-expiry tests remain affected consumers.
 
 Core-only change: no new visual scene or frontend change. Run the selected core
-agent/background/members/worker/integrations suites. Live provider, native journeys,
-look and judge are explicitly outside this offline brief's authorization.
+agent/background/members/worker/integrations suites.
 ## Background app discovery (2026-11-01)
 
 Background API and CLI snapshots offer the same read-only find_app catalog contract
@@ -1038,10 +1031,6 @@ Routine event lines distinguish once, weekdays, daily, weekly and every in zh-TW
 ja and en, including start_date, until and max_runs. Evidence:
 core/tests/agent/test_routine_event.py and core/tests/members/test_harness.py.
 ## Existing composer and file consumers (feature-map sync)
-
-Keep the current deployed map's composer links, fresh voice conversation and team
-file consumers visible when this shadow map is promoted. These are existing
-journeys, not additional acceptance claimed by the work-channel unit.
 
 ```powershell
 npm run look -- composer-long-link composer-long-link-sent room-long-link room-composer-files room-composer-drop-sign room-files-sent --theme both --width 1120,720,1920x1080
@@ -1077,16 +1066,16 @@ npm run look -- form-forecast form-board form-chart-bar form-chart-line form-inv
 There are no message-* scenes in this branch: message-content/message-rich tests,
 reply-split-bubbles and bot-message-from-centred cover those existing consumers.
 Inspect every contact sheet and relevant full-size form in both themes, compare
-the shared header/copy button with rich-code and the external reference view-012.
-The task forbids judge, native, cargo, network and real providers; offline evidence
-never establishes their acceptance. See CODEX_REPORT.md for exact runs and limits.
+the shared header/copy button with rich-code.
+Offline evidence never establishes judge, native, cargo, network or real-provider
+acceptance.
 ## Still conversations during team work (2026-11-01)
 
 R-UI-71: unchanged refreshes retain DOM identity and scroll position. Private threads and rooms share the keyed line diff; private carry hooks retain typed, mail and page card state. Live labels paint synchronously through updateLiveTimes and tick independently of HTML identity. Cached previews paint before a frame. Member rows, heading faces, details, Home and Calendar patch or skip unchanged data. Loaded tasks and handoffs refresh promptly; unrelated workers poll at most once per second. Slow private reads coalesce without starving their result. MemberActivity and AgentTurn retain roster state and unread updates.
 
 Pressure scenes: busy-team-thread (quiet control reaches the bottom), busy-team-up, busy-team-steps (one changed turn and ready cached cards), busy-team-typing (real input and caret intact; nearest-rank key-to-frame P90 at most 100 ms, long tasks at most 50 ms; all samples and the slowest key remain in the report), busy-team-follow, busy-team-anchor, busy-team-hover, busy-team-room and busy-team-home. Unchanged thread/room limits: lines/cards/faces 0, all reads 24, member reads 6, long tasks 600 ms, bottom distance 80 px; scrolling-up writes 0. Room messages currently render plain links, so room card identity is vacuous; private scenes exercise actual preview cards. Home keeps faces.
 
-Regression consumers: composer-stop-background, composer-stop-navigation, composer-task-stop, polish-scroll, polish-search-chief, polish-search-room, polish-room-recording, generated-video-running, home-calendar-rhythm, search and calendar-rhythm-week. Run these and the pressure scenes with both themes at 1120, 720 and 1920x1080. Inspect contact sheets and relevant full-size images. This brief prohibits judge, native, live providers and network; browser fixture evidence does not establish those boundaries.
+Regression consumers: composer-stop-background, composer-stop-navigation, composer-task-stop, polish-scroll, polish-search-chief, polish-search-room, polish-room-recording, generated-video-running, home-calendar-rhythm, search and calendar-rhythm-week. Run these and the pressure scenes with both themes at 1120, 720 and 1920x1080. Inspect contact sheets and relevant full-size images. Browser fixture evidence does not establish judge, native, live-provider or network acceptance.
 
 Unit evidence: app/scripts/look/event-storm.test.mjs (nearest-rank P90, retained slowest frame and exact threshold), ui-patch.test.ts (identity, focus, listener and keyed reorder), pages/agent-stop.test.ts (same-page skip, task scope, slow reads), timeline.test.ts (clock-independent HTML), chat-work.test.ts (visible ticking labels and queued fallback), group-chats.test.ts (room identity and event scope), automations.test.ts (unchanged Calendar), link-previews.test.ts (synchronous cache paint).
 
@@ -1117,8 +1106,7 @@ npm run look -- busy-team-thread busy-team-up busy-team-steps busy-team-typing b
 
 R-UI-72 uses handoff-line.ts and event-line.ts for private turn groups and consecutive room receipts. A message or blocked-intent entry separates room groups. Shared thread-diff.ts retains every handoff-event disclosure and its open state, including received-message lines. Existing individual request, result and artifact controls remain inside the closed-by-default group.
 
-Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion now checks the two original receipt labels inside the collapsed group and keeps the meeting after them. No native, judge, network or provider acceptance is authorized by this brief.
-
+Selected matrix: handoff-group, handoff-group-done, handoff-group-many, handoff-group-open, handoff-group-room, centred-system-events, handoff-centred-line, room-handoff-queued, room-handoff-running, room-handoff-result, room-handoff-failed, room-workflow-blocked, room-immediate-work, room-mention-after-hop-limit, busy-team-thread, busy-team-room. Both themes at 1120,720,1920x1080. The centred-system-events assertion now checks the two original receipt labels inside the collapsed group and keeps the meeting after them.
 Additional R-UI-72 coverage: handoff-group-long checks long and unbroken names at all three sizes. Arriving receipts update only the event subtree; the owner question, answer and intervening room message retain their DOM nodes.
 
 
@@ -1154,8 +1142,8 @@ single-stream takeover/handback are explicit journeys. Checkpoint file counts
 must use actual stored diffs; no-files tasks remain prose.
 
 Inspect every contact sheet and relevant full-size images against local card-00
-through card-10 references. This worktree brief prohibits judge, native, network,
-cargo and real providers; these remain unverified, independently of fixture success.
+through card-10 references. Fixture success does not establish judge, native,
+network, cargo or real-provider acceptance.
 
 
 `````sh
@@ -1234,8 +1222,7 @@ owner waits, checks priority, safe localized labels and seen failures;
 tests/members/test_harness.py checks persisted routine targets and readable schedule
 receipts. MainEvent::MemberActivity forwards waiting/blocked and the public label;
 no RPC or migration is added. Historical plain-text events remain readable without
-invented inspection IDs. Cargo, native, provider and judge checks are prohibited by
-this task's .fold/rules.md and remain separate maintainer acceptance.
+invented inspection IDs.
 
 Additional calendar target journeys: event-calendar-line and event-calendar-opens
 verify the named event opens directly in its existing calendar detail.

@@ -34,7 +34,7 @@ Home selects only the brand; only a visible conversation selects its member or r
 Run `sidebar-group-avatar`, room-text, room-mentions and the
 affected room action scenes. Native readable-layout, locale-sweep and
 delete-conversation use the shared sidebar. Keep fake brain, isolated data and one
-heavy process at a time. No judge or paid/live requests are authorized for this brief.
+heavy process at a time.
 
 Owner review regression scenes: sidebar-group-avatar-hover, sidebar-group-avatar-pair,
 sidebar-room-home and sidebar-unread. Run every sidebar-prefixed scene plus home,
