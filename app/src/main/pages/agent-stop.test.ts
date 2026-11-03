@@ -107,6 +107,43 @@ beforeEach(() => {
 });
 afterEach(() => { agent?.hide(); vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
+test("Stop targets the running turn and appends every queued draft after current words", async () => {
+ turns=[live(),live({id:12,session_id:"queued-b",status:"queued",question:"Second"}),live({id:13,session_id:"queued-c",status:"queued",question:"Third"})];
+ api.agentStop.mockResolvedValue({stopped:true,returned:[{session_id:"queued-b",text:"Second",attachments:[{id:"stored-example",name:"example.txt",mime:"text/plain",size:7}]},{session_id:"queued-c",text:"Third",attachments:[]}]});
+ const originalCore = api.core.getMockImplementation()!;
+ api.core.mockImplementation((method,params) => method === "attachments.get" ? Promise.resolve({mime:"text/plain",data:"ZXhhbXBsZQ=="}) : originalCore(method,params));
+ mount();await flush();
+ const field=$<HTMLTextAreaElement>(".cmp-input");field.value="Already typed";field.dispatchEvent(new Event("input"));
+ press();await flush();
+ expect(api.agentStop).toHaveBeenCalledWith("reply-11",0);
+ expect(field.value).toBe("Already typed\n\nSecond\n\nThird");
+ expect(document.querySelector('.cmp-file')?.textContent).toContain("example.txt");
+ expect(api.core).toHaveBeenCalledWith("attachments.get", {id:"stored-example"});
+});
+
+test("a single live presence stays below additions without changing on an unchanged refresh", async () => {
+ turns=[live(),live({id:12,session_id:"queued-b",status:"queued",question:"Second",text:"",messages:[]}),live({id:13,session_id:"steered-c",status:"done",route:"owner_input",question:"Third",text:"",messages:[]})];
+ mount();await flush();
+ expect(document.querySelectorAll(".thread .live-presence")).toHaveLength(1);
+ const presence=$(".thread .live-presence");
+ const lines=[...document.querySelectorAll(".thread > li")];
+ expect(lines[lines.length-1]?.contains(presence)).toBe(true);
+ await refresh({type:"AgentTurn",turn_id:12,member_id:0});
+ expect($(".thread .live-presence")).toBe(presence);
+});
+
+test("messages before the first announcement share one presence below the newest bubble", async () => {
+ api.agentAskText.mockReturnValue(new Promise(() => {}));
+ mount(); await flush();
+ const field = $<HTMLTextAreaElement>(".cmp-input");
+ for (const text of ["First pending request", "Second pending request"]) {
+  field.value=text; field.dispatchEvent(new Event("input"));
+  $(".composer").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true}));
+ }
+ expect(document.querySelectorAll(".thread .live-presence")).toHaveLength(1);
+ expect($(".thread > li:last-child").contains($(".thread .live-presence"))).toBe(true);
+});
+
 test.each(["running", "queued", "waiting", "turn"])("a restored %s reply keeps Stop after roster updates", async kind => {
   turns = [live(kind === "turn" ? {} : { status: "done", task: { id: 7, state: kind } as AgentTurn["task"] })];
   mount(); await flush();
@@ -274,16 +311,16 @@ test.each(["failed", "cancelled", "pasted"] as const)("voice %s releases its pre
   expect($(".cmp-voice").querySelector('.av')).not.toBeNull();
 });
 
-test("a pending request returns only to its original conversation and stops before an older worker", async () => {
+test("Stop follows the running worker in its conversation before a newer submission", async () => {
   turns = [live({ status: "done", task: { id: 7, state: "running", started_at_ms: 1, finished_at_ms: null } })];
   api.agentAskText.mockReturnValue(new Promise(() => {})); mount(); await flush();
   $<HTMLTextAreaElement>(".cmp-input").value = "A newer reply";
   $(".composer").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   await choose(0, 4); expect($(".composer").dataset.taskState).toBe("idle");
   await choose(3, 31); expect($(".composer").dataset.taskState).toBe("idle");
-  await choose(0, 1); expectStop("ack"); press(); await flush();
-  expect(api.agentStop).toHaveBeenCalledExactlyOnceWith(api.agentAskText.mock.lastCall![3].requestId, 0);
-  expect(api.workerCancel).not.toHaveBeenCalled();
+  await choose(0, 1); expectStop("running"); press(); await flush();
+  expect(api.agentStop).toHaveBeenCalledExactlyOnceWith("reply-11", 0);
+  expect(api.workerCancel).toHaveBeenCalledExactlyOnceWith(7);
 });
 
 

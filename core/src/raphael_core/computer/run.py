@@ -414,8 +414,12 @@ class ComputerRun:
         clock: Callable[[], float] = time.monotonic,
         now_ms: Callable[[], int] = wall_clock_ms,
         handback: bool = False,
+        member_id: int = 0,
+        conversation_id: int | None = None,
     ) -> None:
         self.session_id = session_id
+        self.member_id = member_id
+        self.conversation_id = conversation_id
         self.run_id = uuid.uuid4().hex
         self.language = language
         self.request = request
@@ -1251,6 +1255,11 @@ class ComputerRuns:
         run = self.active
         if run is not None and not run.done and not (spare_owner and run.owner_has_control):
             run.stop(reason)
+
+    def stop_scope(self, member_id, conversation_id, reason, *, spare_owner=False):
+        run = self.active
+        if run is not None and (run.member_id, run.conversation_id) == (member_id, conversation_id):
+            self.stop_all(reason, spare_owner=spare_owner)
 
     def find(self, run_id: object) -> ComputerRun | None:
         """The run `run_id` names, if it is the one on the desktop and still going."""

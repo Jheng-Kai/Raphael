@@ -91,6 +91,8 @@ import {
   markSeen,
   noteTaskEnds,
   pendingTurnHTML,
+  latestProgress,
+  livePresenceHTML,
   parseMediaPayload,
   requestRerun,
   requestStop,
@@ -843,11 +845,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** One line of the thread as HTML, with the key it keeps across draws. */
   function lines(): { key: string; html: string; turnId?: number }[] {
     const shape = look();
+    const active = [...turns].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
+    const sentHere = outgoing.filter(belongs);
+    const additions = sentHere.length > 1 || active && (sentHere.length > 0 || turns.some(turn => turn.id > active.id && (turn.route === "owner_input" || turn.status === "queued")));
+    const turnLook = additions ? { ...shape, deferPresence: true } : shape;
     const out = threadItems(turns, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
         // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
-        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), { ...shape, regenerateTurnId: item.turn.id }), turnId: item.turn.id },
+        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), { ...turnLook, regenerateTurnId: item.turn.id }), turnId: item.turn.id },
     );
     const boundary = unreadFrom;
     if (boundary !== null) {
@@ -858,8 +864,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
     if (pendingAt !== undefined && pendingAt - lastAt >= 30 * 60 * 1000) out.push({ key: `time:pending:${pendingAt}`, html: dayHTML(`${dayLabel(pendingAt, state.nowMs)} ${formatClock(pendingAt)}`) });
-    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`)) });
+    for (const sent of outgoing) if (belongs(sent)) out.push({ key: sent.key, html: pendingTurnHTML(sent.text, TYPED, shape, sent.files, { id: sent.requestId, time: sent.sentAt, quote: sent.quote }, state.nowMs, state.expandedMessages.has(`pending:${sent.requestId}:question`), !additions) });
     if (hearingBelongs()) out.push({ key: "hearing", html: pendingTurnHTML(null, VOICE, shape, [], { time: hearing!.since }, state.nowMs) });
+    if (additions) out.push({ key: `presence:${memberId()}:${conversationId()}`, html: `<li class="tn tn-presence"><div class="ra"><div class="ra-body">${livePresenceHTML(shape, active ? latestProgress(active) : undefined, !active || active.status === "running" || isLive(active.task))}</div></div></li>` });
     return out;
   }
 
@@ -1789,12 +1796,16 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const member = memberId();
     // Speaking: the button ends the recording and sends it, so it is not Stop (that comes once something has been sent); Esc cancels.
     if(listening&&voiceMember===member)return {key:`listening:${listeningRun}`,state:"recording" as const,stop:()=>api.cancelSession()};
-    const sent = [...outgoing].reverse().find(belongs);
-    if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
     const turn = [...own()].reverse().find(turn => turn.status === "running" || turn.status === "confirm" || isLive(turn.task) || turn.task?.state === "waiting");
     const task = turn?.task;
-    if (task && (isLive(task) || task.state === "waiting")) return { key: `task:${task.id}`, state: "running" as const, stop: () => api.workerCancel(task.id) };
+    if (task && (isLive(task) || task.state === "waiting")) return { key: `task:${task.id}`, state: "running" as const, stop: async () => {
+      const result = turn?.session_id ? await api.agentStop(turn.session_id, member) : undefined;
+      await api.workerCancel(task.id);
+      return result;
+    } };
     if (turn?.session_id) return { key: `request:${turn.session_id}`, state: "running" as const, stop: () => api.agentStop(turn.session_id!, member) };
+    const sent = outgoing.find(belongs);
+    if (sent) return { key: `request:${sent.requestId}`, state: "ack" as const, stop: () => api.agentStop(sent.requestId, member) };
     // Before agent.turn exists, the native controller alone owns transcription/routing and its session.
     if (hearingBelongs()) return { key: `voice:${hearing!.since}`, state: "ack" as const, stop: () => api.cancelSession() };
     return null;
@@ -1819,7 +1830,21 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (!task || stoppingComposerTasks.has(task.key)) return;
     stoppingComposerTasks.add(task.key);
     drawComposerTask();
-    try { await task.stop(); }
+    const member = memberId(), conversation = conversationId();
+    try {
+      const result = await task.stop() as { returned?: {session_id: string; text: string; attachments?: TurnAttachment[]; quote?: MessageQuote}[] } | undefined;
+      if (result?.returned?.length) {
+        const returned: ComposerDraft[] = [];
+        for (const item of result.returned) returned.push(await draftFor({session_id: item.session_id, question: item.text, attachments: item.attachments, quote: item.quote}));
+        const current = member === memberId() && conversation === conversationId();
+        const before = current ? {text: input.value, files, missing: missingFiles, quote: composerQuote} : restored.get(draftKey(member, conversation)) ?? {text: "", files: [], missing: []};
+        const combined: ComposerDraft = {text: [before.text, ...returned.map(draft => draft.text)].filter(Boolean).join("\n\n"), files: [...before.files, ...returned.flatMap(draft => draft.files)], missing: [...before.missing, ...returned.flatMap(draft => draft.missing)], quote: before.quote ?? returned.find(draft => draft.quote)?.quote};
+        const sessions = new Set(result.returned.map(item => item.session_id));
+        outgoing = outgoing.filter(item => !sessions.has(item.requestId));
+        turns = turns.filter(item => !sessions.has(item.session_id ?? ""));
+        if (current) restoreDraft(combined); else restored.set(draftKey(member, conversation), combined);
+      }
+    }
     finally { stoppingComposerTasks.delete(task.key); drawComposerTask(); }
     if (visible) void load(false);
   }

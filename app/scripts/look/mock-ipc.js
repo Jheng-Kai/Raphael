@@ -814,12 +814,16 @@ export function installMock(fixture, config = {}, target = window) {
       case "agent.history.stop": {
         pendingReplies.get(p.session_id)?.();
         pendingReplies.delete(p.session_id);
+        const origin = data.turns.find(turn => turn.session_id === p.session_id && turn.member_id === (p.member_id ?? 0));
+        const queued = origin ? data.turns.filter(turn => turn.member_id === origin.member_id && turn.conversation_id === origin.conversation_id && turn.status === "queued") : [];
+        const returned = queued.map(turn => ({session_id:turn.session_id,text:turn.question,attachments:turn.attachments,quote:turn.quote}));
+        data.turns = data.turns.filter(turn => !queued.includes(turn));
         // As the core settles a stopped request: denied, with no answer, keeping its public steps.
         for (const turn of data.turns.filter(item => item.session_id === p.session_id && item.member_id === (p.member_id ?? 0) && ["running", "confirm"].includes(item.status))) {
           Object.assign(turn, { status: "denied", prefix: "了", text: "已取消。", messages: turn.messages.filter(message => message.kind !== "reply") });
           notify("AgentTurn", { turn_id: turn.id, member_id: turn.member_id });
         }
-        return { stopped: true };
+        return { stopped: true, ...(returned.length ? {returned} : {}) };
       }
       case "worker.cancel": {
         for (const turn of data.turns.filter(item => item.task?.id === p.task_id)) turn.task.state = "cancelled";
@@ -1250,11 +1254,11 @@ export function installMock(fixture, config = {}, target = window) {
       }
       if (command === "agent_ask_text") {
         if (variant.cardSendFailure && !variant.cardSendRetried) { variant.cardSendRetried = true; throw new Error("Synthetic send unavailable"); }
-        if (variant.ownerAddition) {
+        if (variant.ownerAddition || variant.queuedOwner) {
           const active = data.turns.find(turn => turn.status === "running" && turn.member_id === args.memberId);
           if (!active) throw new Error("No running member turn");
-          const addition = 901 + data.turns.filter(turn => turn.route === "owner_input").length;
-          data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: "owner_input", text: "", status: "done", steps: [], messages: [], created_at_ms: data.now});
+          const addition = 901 + data.turns.filter(turn => turn.id >= 901).length;
+          data.turns.push({...active, id: addition, session_id: args.requestId, question: args.text, route: variant.queuedOwner ? "answer" : "owner_input", text: "", status: variant.queuedOwner ? "queued" : "done", attachments: [], task: null, steps: [], messages: [], created_at_ms: data.now});
           notify("AgentTurn", {turn_id: addition, member_id: active.member_id});
           return null;
         }

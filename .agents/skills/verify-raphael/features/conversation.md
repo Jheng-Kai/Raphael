@@ -1289,3 +1289,27 @@ npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-s
 ```
 
 The long fixture covers more than one history page. The short fixture follows a long seen reply, so its scroller must overflow while the unread run fits. The short, arrival, leave/return and latest scenes assert scroll geometry, independent line identity, retained message HTML and no additional members.read on arrivals. Existing busy-team and send-prompt limits remain unchanged. Compare the muted label with adjacent time separators at matching theme/width. Core members and schema tests cover persistence and upgrade; agent-members.test.ts covers visit lifetime and scroll decisions. Existing regenerate tests now exercise the visible menu: eligibility is validated on menu open, so new replies no longer replace an older reply just to change hidden metadata.
+
+## Durable owner inbox (2026-11-03)
+
+R-QUEUE-01 through R-QUEUE-06 refine R-BATCH-01 and R-UI-08. Typed private input
+uses migration 58's agent_inbox and existing agent_turns bubbles. No navigation,
+settings, queue panel or queue limit is added. Withdraw is the existing retract
+action. Stop appends unread queued words and files after the current draft.
+CLI acceptance is separate from an answer: queued/steered ends the typed session
+silently; a malformed answer still fails. Fast voice, room routing and messaging
+remain on their existing paths. Computer replacement is scoped to its owner.
+
+Selected look matrix: composer-send-while-working, composer-queued,
+composer-queued-withdraw, composer-queued-stop, owner-addition,
+composer-stop-pending, composer-stop-pending-result, room-send-while-working,
+send-prompt and send-prompt-slow. Run both themes at 1120,720,1920x1080.
+Keep R-PERF-02's existing 120ms/12% limits and R-UI-71's stable node identity.
+Compare queued withdraw/action rows with owner-addition and the existing pending
+Stop scenes at matching dimensions. See core/tests/agent/test_inbox*.py,
+test_steering.py, test_cli_steering.py and app/src/main/pages/agent-stop.test.ts.
+Claude and Antigravity input during a turn is unmeasured, so it waits for the
+next turn in FIFO order.
+```powershell
+npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
+```

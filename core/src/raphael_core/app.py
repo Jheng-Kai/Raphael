@@ -1495,6 +1495,7 @@ class App(Router):
     async def _hello(self, params: dict) -> dict:
         self.vm.start_monitor()
         self.messaging.start()  # a Telegram bot that was left on polls again
+        self.agent.start()
         self.agent.prewarm()  # the app is up: read the Start menu now, not at the first "open"
         self.memory.start()  # and look for turns the reflection pass has not read, soon
         self.members.start()  # the routines: one missed while the core was not running runs now

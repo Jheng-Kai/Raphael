@@ -172,7 +172,7 @@ def _anything(step: Step) -> bool:
 def _thread(member_id: int, conversation_id: int | None, exchanges: bool) -> tuple[str, list[object]]:
     """The conditions of a member's thread as its chat lists it, and their params."""
     scopes = f"(scope = 'private' OR ({_HANDED}))" if exchanges else "scope = 'private'"
-    where, params = f"{scopes} AND member_id = ?", [member_id]
+    where, params = f"{scopes} AND status != 'withdrawn' AND member_id = ?", [member_id]
     if conversation_id is not None:
         where += " AND conversation_id = ?"
         params.append(conversation_id)
@@ -186,7 +186,7 @@ def _filters(
     """The conditions of a search besides its words, as SQL to add to its WHERE, and their params:
     the turns of the thread of `member_id`, made from `since_ms` on, and none of the ids of
     `exclude`."""
-    where, params = (" AND t.scope = 'private'", [])
+    where, params = (" AND t.scope = 'private' AND t.status != 'withdrawn'", [])
     if member_id is not None:
         where += " AND t.member_id = ?"
         params.append(member_id)
@@ -249,6 +249,7 @@ class AgentHistory:
         room_id: int | None = None,
         thread_id: int | None = None,
         source_turn_id: int | None = None,
+        admission: str | None = None,
     ) -> int:
         """Store a new turn, made now, in the thread of `member_id`, with the steps taken for it,
         and return its id. `attachments` are the names and the types of the files handed with the
@@ -298,6 +299,12 @@ class AgentHistory:
             self._index(turn_id, question, text, detail)
             if conversation_id is not None:
                 conversations.touch(conversation_id, question)
+            if admission is not None:
+                self._conn.execute(
+                    "INSERT INTO agent_inbox(turn_id,request_id,member_id,conversation_id,seq,state,payload_json,created_at_ms)"
+                    " SELECT ?,?,?,?,COALESCE(MAX(seq),0)+1,'queued',?,? FROM agent_inbox WHERE member_id=? AND conversation_id=?",
+                    (turn_id, session_id, member_id, conversation_id, admission, self._now_ms(), member_id, conversation_id),
+                )
         return turn_id
 
     def _index(self, turn_id: int, question: str, text: str, detail: str | None) -> None:
@@ -469,7 +476,7 @@ class AgentHistory:
         rows = self._conn.execute(
             "SELECT text FROM ("
             " SELECT created_at_ms AS at, question AS text FROM agent_turns"
-            "  WHERE scope = 'private' AND source = 'app' AND route <> 'draft' AND trim(question) <> ''"
+            "  WHERE scope = 'private' AND source = 'app' AND status != 'withdrawn' AND route <> 'draft' AND trim(question) <> ''"
             " UNION ALL SELECT created AS at, text FROM room_messages WHERE member_id IS NULL AND trim(text) <> ''"
             ") ORDER BY at DESC LIMIT ?", (limit * 4,)).fetchall()
         texts: list[str] = []

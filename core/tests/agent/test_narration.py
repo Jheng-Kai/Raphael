@@ -17,7 +17,9 @@ def chat(text, *calls):
 
 
 async def typed(rig, text="Check the time", member_id=0):
-    return await rig.call("agent.ask", {"session_id": "live", "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
+    rig.typed_count = getattr(rig, "typed_count", 0) + 1
+    session = "live" if rig.typed_count == 1 else f"live-{rig.typed_count}"
+    return await rig.call("agent.ask", {"session_id": session, "text": text, "ui_language": "en", "source": "app", "member_id": member_id})
 
 
 async def test_progress_is_persisted_and_notified_before_each_tool_round(make_rig, client):

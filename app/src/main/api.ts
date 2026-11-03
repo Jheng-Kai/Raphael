@@ -186,7 +186,7 @@ export const agentAskText = (text: string, attachments: WireAttachment[] = [], m
 export const agentRetract = (sessionId: string, memberId: number, turnId?: number): Promise<void> =>
   invoke("agent_retract", { sessionId, memberId, ...(turnId !== undefined ? { turnId } : {}) });
 /** Stop one typed task tree while retaining completed actions and history. */
-export const agentStop = (sessionId: string, memberId: number): Promise<unknown> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
+export const agentStop = (sessionId: string, memberId: number): Promise<{stopped: boolean; returned?: {session_id: string; text: string; attachments?: import("./types").TurnAttachment[]; quote?: import("./types").MessageQuote}[]}> => core("agent.history.stop", {session_id:sessionId,member_id:memberId});
 /** The YES/NO question that waits for an answer now, if one does. */
 export const agentQuestionOpen = (): Promise<AgentQuestion | null> => invoke("agent_question_open");
 /**

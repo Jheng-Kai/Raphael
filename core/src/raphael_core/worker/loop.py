@@ -250,8 +250,6 @@ def _assistant_message(turn: Turn) -> dict[str, Any]:
 
 async def run_task(*args, owner_input=None, **kwargs):
     outcome = await _run_task(*args, owner_input=owner_input, **kwargs)
-    if owner_input and outcome.messages is not None:
-        outcome.messages.extend(owner_input.drain())
     if owner_input and outcome.kind != WAITING:
         owner_input.closed = True
     return outcome

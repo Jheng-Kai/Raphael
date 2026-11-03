@@ -140,6 +140,10 @@
 
 /* a turn: the person on the right, Raphael on the left */
 .tn { display: flex; flex-direction: column; gap: var(--pa-gap-in); }
+.thread > .tn.is-owner-only + .tn.is-owner-only { margin-top: calc(var(--sp-1) - var(--pa-gap)); }
+.tn.is-owner-only > .ra:not(:has(.live-presence, .conversation-card, .chat-message, .work-section, .turn-question)) { display: none; }
+.queued-mark { color: var(--text-3); font: var(--fs-2xs)/1.4 var(--ui); margin-inline-end: var(--sp-2); }
+.message-actions:has(.queued-mark) { opacity: 1; }
 .tn.is-new { animation: ra-turn-in 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .me { display: flex; align-items: flex-end; justify-content: flex-end; gap: var(--sp-1); }
 .bubble { max-width: min(var(--pa-bw), 78%); padding: var(--pa-bpy) var(--pa-bpx); border-radius: var(--r-lg); background: var(--bubble); color: var(--on-bubble); font: var(--pa-fs-b)/var(--pa-lh-b) var(--voice); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }

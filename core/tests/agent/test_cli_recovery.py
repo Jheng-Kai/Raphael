@@ -228,21 +228,36 @@ async def test_recovery_uses_api_waits_and_preserves_provider_delay(monkeypatch,
     assert len(rig.lines) == 7
 
 
+async def test_original_answer_is_published_and_unread_addition_stays_ticketed(monkeypatch, tmp_path):
+    async def play(loop, attempt):
+        await loop._tool("save", "save_draft", {})
+        loop.owner_input.add("Also include a source link.", ticket=8)
+        yield Event("final", "Saved.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play, resume_session=False)
+    assert (await rig.loop.run()).final == "Saved."
+    assert len(rig.calls) == 1
+    assert rig.loop.owner_input.leftover() == [8]
+    assert "Save a draft, then check it." in rig.calls[0]["user"]
+
+
 async def test_recovery_keeps_original_work_after_owner_steering(monkeypatch, tmp_path):
     async def play(loop, attempt):
         if attempt == 1:
             await loop._tool("save", "save_draft", {})
-            loop.owner_input.add("Also include a source link.")
-            yield Event("final", "Saved.")
-        elif attempt == 2:
+            async def accept(text):
+                return True
+            loop.driver.steer = accept
+            assert await loop.steer("Also include a source link.", ticket=8)
             yield Event("error", "network")
         else:
             yield Event("final", "Saved and checked, with a source link.")
 
     rig = recovery_rig(monkeypatch, tmp_path, play, resume_session=False)
-    await rig.loop.run()
-    assert "Save a draft, then check it." in rig.calls[2]["user"]
-    assert "Also include a source link." in rig.calls[2]["user"]
+    assert (await rig.loop.run()).final == "Saved and checked, with a source link."
+    assert "Save a draft, then check it." in rig.calls[1]["user"]
+    assert "Also include a source link." in rig.calls[1]["user"]
+    assert rig.loop.owner_input.consumed(8)
 
 
 async def test_later_receipt_cannot_confirm_an_earlier_unfinished_native_action(monkeypatch, tmp_path):

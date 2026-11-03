@@ -218,7 +218,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   let room:Room|undefined,list:MembersList={members:[],groups:[]},messages:RoomMessage[]=[],generation=0,opened=false,canOlder=false,loadingOlder=false;
   // Navigation identity remains available while the complete room is loading.
   let roomId: number | undefined;
-  let requestId:string|undefined,retry="";
+  const failedRequests = new Map<string, string>();
+  const deliveries = new Map<number, Promise<void>>();
   let exchange:RoomExchange|null|undefined,replyTo:RoomMessage|undefined,stopping=false;
   let handoffs: HandoffView[] = [];
   const drawn = new WeakMap<Element, string>();
@@ -278,7 +279,37 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     scroll.scrollTop=top+scroll.scrollHeight-height;
   }});
   const sendingRooms=new Set<number>(),pendingStops=new Set<number>();
-  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote});}};},async send(text,files){if(!roomId)return;const id=roomId,sentQuote=replyTo?.id,key=JSON.stringify([text,files,sentQuote]);if(key!==retry)requestId=undefined;retry=key;requestId??=crypto.randomUUID();sendingRooms.add(id);try{await api.roomSend(id,text,requestId,getLocale(),files,replyTo?.id);if(pendingStops.delete(id))await api.roomStop(id);}finally{sendingRooms.delete(id);pendingStops.delete(id);}requestId=undefined;deliveredDraft(id,text,files,sentQuote);if(roomId===id){if(replyTo?.id===sentQuote)replyTo=undefined;await refresh();}changed();}});
+  const composer=createChatComposer({stopTask:stopRoom,placeholder:()=>t("rooms.message"),transcriptTarget(){const id=roomId;return text=>{if(roomId===id){composer.input.value+=(composer.input.value?" ":"")+text;composer.seedDictation(text);}else if(id){const draft=drafts.get(id)??{text:"",files:[]};draft.text+=(draft.text?" ":"")+text;drafts.set(id,draft);writeDraftWords(`room:${id}`,{text:draft.text,quote:draft.quote});}};},async send(text,files){
+    if (!roomId) return;
+    const id = roomId, sentQuote = replyTo?.id, key = JSON.stringify([id,text,files,sentQuote]);
+    const requestId = failedRequests.get(key) ?? crypto.randomUUID();
+    failedRequests.delete(key);
+    const previous = deliveries.get(id) ?? Promise.resolve();
+    const delivery = previous.catch(() => {}).then(async () => {
+      await api.roomSend(id,text,requestId,getLocale(),files,sentQuote);
+      if (pendingStops.delete(id)) await api.roomStop(id);
+    });
+    deliveries.set(id, delivery); sendingRooms.add(id);
+    if (replyTo?.id === sentQuote) replyTo = undefined;
+    draw();
+    try { await delivery; }
+    catch (error) {
+      failedRequests.set(key, requestId);
+      if (roomId !== id) {
+        const draft = drafts.get(id) ?? {text:"",files:[]};
+        const restored = {...draft, text:[draft.text,text].filter(Boolean).join("\n\n"), files:[...draft.files,...files]};
+        drafts.set(id, restored);
+        writeDraftWords(`room:${id}`, {text:restored.text,quote:restored.quote});
+      }
+      throw error;
+    } finally {
+      if (deliveries.get(id) === delivery) { deliveries.delete(id); sendingRooms.delete(id); pendingStops.delete(id); }
+      if (roomId === id) draw();
+    }
+    deliveredDraft(id,text,files,sentQuote);
+    if (roomId === id) await refresh();
+    changed();
+  }});
   const mentions = bindComposerMentions(composer.input, () => ({ list, allowed: room?.member_ids }));
   composer.input.addEventListener("input", () => { clearTimeout(draftTimer); draftTimer=setTimeout(saveRoomDraft,300); });
   composer.input.id="room-message";el.querySelector('.ra-dock')!.append(composer.el);
@@ -440,7 +471,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
     finder.close(false);
     saveRoomDraft();
     attachmentMedia.reset();questions.reset();
-    opened=true;generation++;rosterDirty=true;snapshot="";newestMessage=0;drewOnce=false;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;requestId=undefined;retry="";
+    opened=true;generation++;rosterDirty=true;snapshot="";newestMessage=0;drewOnce=false;roomId=id;room=undefined;messages=[];handoffs=[];exchange=undefined;replyTo=undefined;stopping=false;canOlder=false;
     el.querySelector('.au-room-heading')!.replaceChildren();thread.replaceChildren();older.replaceChildren();status.replaceChildren();
     composer.setTaskState("idle");const draft=drafts.get(id)??readDraftWords<RoomMessage>(`room:${id}`);replyTo=draft?.quote;composer.setDraft(draft?.text??"",drafts.get(id)?.files??[]);el.hidden=false;
     await refresh();void questions.load();

@@ -1686,6 +1686,18 @@ async def test_a_message_from_a_messaging_app_leaves_the_question_at_the_compute
     assert not any(t["status"] == "denied" for t in await rig.turns())
 
 
+async def test_a_message_from_a_messaging_app_ends_its_own_chats_waiting_question(rig, client, actions):
+    from raphael_core.agent.policy import Action
+    own = rig.service._confirmations.open("telegram:42", 0, Action("sample_tool"), Tier.T2, "zh-TW")
+    client.decisions.append(decision("chat"))
+    client.replies.append(spoken("答", "好。"))
+    await rig.call(
+        "agent.ask",
+        {"session_id": "telegram:42", "text": "你好", "ui_language": "zh-TW", "source": "telegram"},
+    )
+    assert own.id not in rig.service._confirmations._pending
+
+
 async def test_a_question_typed_in_a_formal_thread_leaves_the_quick_one_waiting(
     rig, client, actions
 ):

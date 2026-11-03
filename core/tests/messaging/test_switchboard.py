@@ -67,6 +67,38 @@ def make(channel, *, allowed=("U1",)):
     return board
 
 
+async def test_telegram_busy_ack_is_localized_once_per_busy_period_and_preserves_order():
+    from raphael_core.messaging.words import words
+    channel = FakeChannel()
+    channel.kind = "telegram"
+    board = make(channel)
+    entered, release = asyncio.Event(), asyncio.Event()
+    asked = []
+
+    async def ask(session, text, language, source):
+        asked.append(text)
+        if text == "First":
+            entered.set()
+            await release.wait()
+        return "Answer " + text
+
+    board._ask = ask
+    first = asyncio.create_task(board._converse("D1", "ja", text="First"))
+    await entered.wait()
+    second = asyncio.create_task(board._converse("D1", "ja", text="Second"))
+    third = asyncio.create_task(board._converse("D1", "ja", text="Third"))
+    try:
+        await asyncio.sleep(.01)
+        assert channel.sent == [("D1", words("ja", "queued"))]
+        release.set()
+        await asyncio.gather(first, second, third)
+        assert asked == ["First", "Second", "Third"]
+        assert [text for _, text in channel.sent][1:] == ["Answer First", "Answer Second", "Answer Third"]
+    finally:
+        release.set()
+        await asyncio.gather(first, second, third, return_exceptions=True)
+
+
 async def run(board, predicate):
     task = asyncio.ensure_future(board.run())
     try:

@@ -7,6 +7,15 @@ import { setLocale } from "./i18n";
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 beforeEach(()=>{document.body.innerHTML="";vi.clearAllMocks();setLocale("en");api.core.mockImplementation(async method => method === "settings.get" ? { settings: { action_mode: "ask" } } : {});});
 function mount(send=vi.fn().mockResolvedValue(undefined)) {const view=createChatComposer({placeholder:()=>"Room message",send});document.body.append(view.el);return {view,send};}
+
+test("room sends clear immediately and accept more messages while delivery is pending", async () => {
+ const complete: (() => void)[] = [];
+ const {view,send}=mount(vi.fn(()=>new Promise<void>(resolve=>complete.push(resolve))));
+ view.setDraft("First");view.el.requestSubmit();expect(view.input.value).toBe("");
+ view.input.value="Second";view.input.dispatchEvent(new Event("input"));view.el.requestSubmit();
+ expect(send.mock.calls.map(call=>call[0])).toEqual(["First","Second"]);
+ complete[0]();complete[1]();await flush();expect(view.input.value).toBe("");
+});
 test("failed delivery retains a draft and Enter retries; IME Enter never submits",async()=>{
  const {view,send}=mount(vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(undefined));view.setDraft("Hello");
  view.input.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",isComposing:true,bubbles:true}));expect(send).not.toHaveBeenCalled();

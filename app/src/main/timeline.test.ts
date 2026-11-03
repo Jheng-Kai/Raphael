@@ -34,6 +34,14 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
+  setLocale("en");
+  document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);
+  expect(document.querySelector(".queued-mark")?.textContent).toBe("Queued");
+  expect(document.querySelector('button[data-act="cancel-message"]')).not.toBeNull();
+  expect(document.querySelector('[data-act="edit-message"],.live-presence,.work-section')).toBeNull();
+});
+
 test("a pending permission card replaces duplicate running and waiting task controls", () => {
   for (const state of ["running","waiting"] as const) {
     const item=turn(71,{status:state === "running" ? "running" : "done",task:{id:71,state,waiting_owner:1} as AgentTask,

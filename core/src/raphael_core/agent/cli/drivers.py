@@ -2,6 +2,8 @@
 
 Only public text and explicit reasoning summaries are forwarded. Raw diagnostics,
 reasoning blocks, command output and provider credentials never become UI messages.
+Active-turn steering adapts Hermes agent/transports/codex_app_server_session.py
+(MIT, c419cf7c); see THIRD_PARTY_NOTICES.md.
 """
 
 import asyncio
@@ -10,6 +12,7 @@ import hashlib
 import json
 import os
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,6 +71,29 @@ class Driver:
         self.exhausted = False
         self.reset_at_ms = None
         self._diagnostic_secrets = []
+        self._steers = {}
+
+    async def steer(self, text):
+        if self.name != "codex" or not self.child or not self.session or not self.turn or not text.strip():
+            return False
+        thread, turn = self.session, self.turn
+        identifier = "steer:" + uuid.uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        self._steers[identifier] = (future, turn)
+        try:
+            await self.child.send({"jsonrpc": "2.0", "id": identifier, "method": "turn/steer",
+                                   "params": {"threadId": thread, "input": [{"type": "text", "text": text}], "expectedTurnId": turn}})
+            return await asyncio.wait_for(future, 10)
+        except (OSError, TimeoutError, RuntimeError):
+            return False
+        finally:
+            self._steers.pop(identifier, None)
+
+    def _close_steers(self):
+        self.turn = None
+        for future, _ in self._steers.values():
+            if not future.done():
+                future.set_result(False)
 
     def native_diagnostic(self, stage, value):
         native_capture(stage, value, self._diagnostic_secrets)
@@ -94,6 +120,7 @@ class Driver:
                 pass
         if self.child:
             await self.child.kill()
+        self._close_steers()
 
     async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None):
         files = PrivateFiles()
@@ -338,6 +365,12 @@ class Driver:
         while True:
             packet = await self._read()
             method, params = packet.get("method", ""), packet.get("params", {})
+            if not method and packet.get("id") in self._steers:
+                future, turn = self._steers[packet['id']]
+                result = packet.get('result') or {}
+                if not future.done():
+                    future.set_result('error' not in packet and result.get('turnId') in (None, turn))
+                continue
             if not method and packet.get("id") in pending:
                 label = pending.pop(packet["id"])
                 if "error" in packet:
@@ -412,6 +445,7 @@ class Driver:
             elif method == "turn/started":
                 self.turn = (params.get("turn") or {}).get("id")
             elif method == "turn/completed":
+                self._close_steers()
                 turn = params.get("turn") or {}
                 if turn.get("status") == "completed":
                     yield self._event("final", final_text)

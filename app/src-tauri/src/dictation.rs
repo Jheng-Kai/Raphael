@@ -2107,7 +2107,7 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             }
         };
         // Words added to work already running are in the thread, with nothing to say for them.
-        let added = reply.get("steered").and_then(Value::as_bool) == Some(true);
+        let added = agent::parse_reply(&reply) == Ok(Reply::Accepted);
         // A member's answer is in its thread on the 拉斐爾 page, and it has no prefix: the overlay is
         // Raphael's alone. The turn is over, as when an answer has been on screen long enough.
         if added || (member != 0 && reply.get("status").and_then(Value::as_str) == Some("done")) {
@@ -2126,6 +2126,10 @@ impl<C: CoreApi, O: OverlayApi, P: Paster, S: CancelSwitch> DictationController<
             agent::parse_answer(&reply)
         };
         match parsed {
+            Ok(Reply::Accepted) => {
+                self.end_session(id);
+                None
+            }
             Ok(Reply::Say { prefix, text }) => {
                 let turn = (reply.get("voiced").and_then(Value::as_bool) == Some(true))
                     .then(|| reply.get("turn_id").and_then(Value::as_u64))
@@ -6616,23 +6620,26 @@ mod tests {
     #[tokio::test]
     async fn a_message_added_to_work_already_running_is_never_a_failure_on_the_overlay() {
         for member in [0, 1] {
-            let c = agent(
+            for reply in [
                 json!({ "status": "done", "turn_id": 9, "prefix": "", "text": "", "steered": true }),
-            );
-            c.ask_typed_with("也請附上價格", Vec::new(), member)
-                .unwrap()
-                .await
-                .unwrap();
-            assert!(
-                c.overlay()
-                    .events()
-                    .iter()
-                    .all(|e| !e.starts_with("notice")),
-                "{:?}",
-                c.overlay().events()
-            );
-            assert_eq!(c.agent_stage(), None);
-            assert!(c.ask_typed("你好").is_ok(), "the next message is taken");
+                json!({ "status": "queued", "turn_id": 9 }),
+            ] {
+                let c = agent(reply);
+                c.ask_typed_with("也請附上價格", Vec::new(), member)
+                    .unwrap()
+                    .await
+                    .unwrap();
+                assert!(
+                    c.overlay()
+                        .events()
+                        .iter()
+                        .all(|e| !e.starts_with("notice")),
+                    "{:?}",
+                    c.overlay().events()
+                );
+                assert_eq!(c.agent_stage(), None);
+                assert!(c.ask_typed("你好").is_ok(), "the next message is taken");
+            }
         }
     }
 

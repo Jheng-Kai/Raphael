@@ -270,6 +270,13 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Hermes Agent (MIT)
 
+Durable owner admission in `core/src/raphael_core/agent/inbox.py` adapts
+`hermes_state_runtime.py`; consumed and leftover tickets in `worker/owner_input.py`
+adapt `agent/interrupt_control.py`; active-turn steering in `agent/cli/drivers.py`
+adapts `agent/transports/codex_app_server_session.py`, all at revision `c419cf7c`.
+Copyright (c) 2025 Nous Research. Raphael uses a single-process FIFO without
+Hermes' epoch/authority machinery or queue limit. The MIT license follows below.
+
 The Discord admission/gateway behavior in `core/src/raphael_core/messaging/channels/discord.py`
 draws on `tools/discord_tool.py` and `plugins/platforms/discord/adapter.py`; guest file checkpoints
 in `core/src/raphael_core/computer/checkpoints.py` draw on `tools/checkpoint_manager.py` and

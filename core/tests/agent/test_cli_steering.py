@@ -6,7 +6,7 @@ from raphael_core.agent.cli.drivers import Event
 from raphael_core.background.cli import RoomCliSessions
 
 
-async def test_cli_input_resumes_at_the_turn_boundary_in_the_existing_session(monkeypatch, tmp_path):
+async def test_cli_first_answer_is_published_and_unread_input_stays_for_the_next_turn(monkeypatch, tmp_path):
     started, release = asyncio.Event(), asyncio.Event()
     calls = []
 
@@ -37,13 +37,12 @@ async def test_cli_input_resumes_at_the_turn_boundary_in_the_existing_session(mo
                       thinking=lambda text: None, event=lambda text: None, execute=None)
     running = asyncio.create_task(loop.run())
     await asyncio.wait_for(started.wait(), 2)
-    assert loop.owner_input.add("The owner's new condition")
+    assert loop.owner_input.add("The owner's new condition", ticket="next")
     assert not running.done()
     release.set()
-    assert (await running).final == "Result with the owner's addition"
-    assert len(calls) == 2
-    assert calls[1]["session"] == "existing-session"
-    assert calls[1]["user"] == "The owner's new condition"
+    assert (await running).final == "Original result"
+    assert len(calls) == 1
+    assert loop.owner_input.leftover() == ["next"]
     assert not loop.owner_input.add("After completion")
 
 
@@ -57,3 +56,25 @@ def test_cli_handoff_keeps_accepted_owner_input_in_the_saved_continuation(tmp_pa
     assert loop._handed_off()
     assert loop.tool_messages[-1] == {"role": "user", "content": "Keep the prices in the final report"}
     assert not loop.owner_input.add("After handoff")
+
+
+async def test_private_cli_waits_for_the_existing_native_session_instead_of_failing_busy(monkeypatch, tmp_path):
+    from .test_cli_recovery import recovery_rig
+
+    async def play(loop, attempt):
+        yield Event("final", "Next answer")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play)
+    lock = rig.loop.sessions.locks[(5, 7)] = asyncio.Lock()
+    await lock.acquire()
+    running = asyncio.create_task(rig.loop.run())
+    try:
+        await asyncio.sleep(.02)
+        assert not running.done()
+        assert rig.calls == []
+        lock.release()
+        assert (await running).final == "Next answer"
+    finally:
+        if lock.locked():
+            lock.release()
+        await rig.loop.aclose()

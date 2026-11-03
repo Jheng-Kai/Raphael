@@ -610,3 +610,10 @@ without another layout, and newest-page reads skip the earlier-page scroll ancho
 ## First unseen private turn (2026-11-03)
 
 See [Conversation](conversation.md#first-unseen-private-turn-2026-11-03) for R-UI-96, migration 57, visit lifetime, paging, scroll and unchanged-line contracts. Selected scenes: thread-new-divider, thread-new-divider-short, thread-new-divider-stays, thread-new-divider-return, thread-new-divider-latest, chat, busy-team-thread, busy-team-follow and send-prompt, both themes at 1120,720,1920x1080.
+
+## Durable owner inbox (2026-11-03)
+
+See [Conversation](conversation.md#durable-owner-inbox-2026-11-03) for R-QUEUE-01
+through R-QUEUE-06 and refinements to R-BATCH-01/R-UI-08. See
+[Team and rooms](team-and-rooms.md#send-while-rooms-work-2026-11-03) for the shared
+room composer. The send-prompt and send-prompt-slow scenes keep their performance limits.

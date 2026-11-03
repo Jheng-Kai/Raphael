@@ -28,6 +28,8 @@ pub const SAY_MAX_MS: u64 = 12_000;
 /// What the core answered, ready for the overlay.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reply {
+    /// The message was admitted into running work or its durable queue.
+    Accepted,
     /// Raphael's answer, shown as 《prefix。text》.
     Say { prefix: String, text: String },
     /// A question to answer YES or NO before anything is done.
@@ -46,6 +48,10 @@ pub struct Malformed {
 /// "timeout_ms"}, ..}`.
 pub fn parse_reply(reply: &Value) -> Result<Reply, Malformed> {
     match reply.get("status").and_then(Value::as_str) {
+        Some("queued") => Ok(Reply::Accepted),
+        Some("done") if reply.get("steered").and_then(Value::as_bool) == Some(true) => {
+            Ok(Reply::Accepted)
+        }
         Some("done") => parse_say(reply),
         Some("confirm") => parse_ask(reply.get("confirm")),
         _ => Err(Malformed::default()),
@@ -58,6 +64,7 @@ pub fn parse_reply(reply: &Value) -> Result<Reply, Malformed> {
 /// (`dictation::MAX_QUESTIONS_IN_A_TURN`); up to then the reply is read with [`parse_reply`].
 pub fn parse_answer(reply: &Value) -> Result<Reply, Malformed> {
     match parse_reply(reply)? {
+        Reply::Accepted => Ok(Reply::Accepted),
         say @ Reply::Say { .. } => Ok(say),
         Reply::Ask(prompt) => Err(Malformed {
             confirm_id: Some(prompt.id),
@@ -224,6 +231,21 @@ mod tests {
         ] {
             assert_eq!(parse_reply(&reply), Err(Malformed::default()), "{reply}");
         }
+    }
+
+    #[test]
+    fn queued_and_steered_are_accepted_without_an_answer_prefix() {
+        for reply in [
+            json!({"status":"queued","turn_id":7}),
+            json!({"status":"done","steered":true,"prefix":"","text":""}),
+        ] {
+            assert_eq!(parse_reply(&reply), Ok(Reply::Accepted));
+            assert_eq!(parse_answer(&reply), Ok(Reply::Accepted));
+        }
+        assert_eq!(
+            parse_reply(&json!({"status":"done","prefix":"","text":"Answer"})),
+            Err(Malformed::default())
+        );
     }
 
     #[test]

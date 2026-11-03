@@ -226,12 +226,13 @@ async def test_an_allowed_user_is_answered_with_a_stable_session(fake, http):
     fake.message(OWNER, "what time is it")
     fake.message(OWNER, "and the weather")
     gateway = make_gateway(fake, http)
-    await run_until(gateway, lambda: len(fake.sent) == 2)
+    await run_until(gateway, lambda: len(fake.sent) == 3)
     assert gateway.asked == [
         (f"telegram:{OWNER}", "what time is it", "en", "telegram"),
         (f"telegram:{OWNER}", "and the weather", "en", "telegram"),
     ]
-    assert fake.sent == [(OWNER, "《答》好")] * 2
+    assert fake.sent.count((OWNER, "Queued. I'll answer in order.")) == 1
+    assert [(chat, text) for chat, text in fake.sent if text != "Queued. I'll answer in order."] == [(OWNER, "《答》好")] * 2
 
 
 async def test_typing_is_shown_while_the_assistant_works(fake, http):

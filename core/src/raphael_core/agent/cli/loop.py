@@ -128,6 +128,7 @@ class CliLoop:
             self.system = system + "\nThis is a tool-less memory pass. Return only JSON matching this schema:\n" + json.dumps(structured)
         from ...worker.owner_input import OwnerInput
         self.owner_input = OwnerInput()
+        self._steering = set()
         self.user = user
         self._original_user = user
         self.tools = list(tools) + ([APPROVE] if structured is None and (brain_ref(model) or ("",))[0] == "claude" else [])
@@ -292,6 +293,30 @@ class CliLoop:
         if self.task and not self.task.cancelling():
             self.task.cancel()
 
+    async def steer(self, text, ticket=None):
+        if self.owner_input.closed or not self.driver or brain_ref(self.model)[0] != "codex":
+            return False
+        send = getattr(self.driver, "steer", None)
+        if send is None:
+            return False
+        settled = asyncio.get_running_loop().create_future()
+        self._steering.add(settled)
+        try:
+            if not await send(text):
+                return False
+            # The native server owns delivery once it accepts the active turn id.
+            self.owner_input.mark_consumed(ticket)
+            self.tool_messages.append({"role": "user", "content": text})
+            return True
+        finally:
+            if not settled.done():
+                settled.set_result(None)
+            self._steering.discard(settled)
+
+    async def finish_steering(self):
+        # A completion packet may arrive in the same read as a steer receipt.
+        await asyncio.gather(*self._steering)
+
     async def aclose(self):
         self.cancel()
         if self.task:
@@ -437,9 +462,6 @@ class CliLoop:
             return
         # A colleague's question resumes no native session of this conversation: a member at work on something answers it too.
         lock = self.sessions.locks.setdefault((self.member_id, self.conversation_id), asyncio.Lock()) if self.resume_session else asyncio.Lock()
-        if lock.locked():
-            self._failure("busy", NAMES[name])
-            return
         async with lock:
             began = time.perf_counter()
             try:
@@ -582,11 +604,7 @@ class CliLoop:
                         return None
                     final = event.text.strip()
                     if final:
-                        pending = self.owner_input.drain(finishing=True)
-                        if pending:
-                            self.tool_messages.extend(pending)
-                            self.user = "\n\n".join(message["content"] for message in pending)
-                            return "owner_input"
+                        self.owner_input.closed = True
                         self._queue.put_nowait(Outcome("done", final=final))
                         return None
                     self._progress()

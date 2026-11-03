@@ -103,7 +103,29 @@ export function createChatComposer(options: { placeholder(): string; transcriptT
   /** 「＋」, a paste or a drop, one file after the other. One that cannot be taken says why and the rest are still taken, but for too many, which ends it. */
   const addFiles=(list:readonly File[]):void=>{const mine=revision;attaching++;draw();attachQueue=attachQueue.then(async()=>{for(const file of list){if(mine!==revision)break;const mime=fileMime(file),name=file.name.trim()||`image.${mime.slice(mime.indexOf("/")+1)}`,refusal=attachRefusal(files.length,mime,file.size,files.reduce((n,f)=>n+f.data.length*0.75,0));if(refusal==="count"){toaster.info(t("agent.attachTooMany",{p0:ATTACH_MAX}));break;}if(refusal==="size"){toaster.info(t("agent.attachTooBig",{p0:name,p1:FILE_MAX_BYTES/1024/1024}));continue;}if(refusal==="total"){toaster.info(t("agent.attachTotal",{p0:TOTAL_MAX_BYTES/1024/1024}));continue;}try{if(refusal==="empty")throw new Error("empty");const data=base64Of(new Uint8Array(await file.arrayBuffer()));if(mine===revision){files=[...files,{name,mime,data}];draw();}}catch{toaster.info(t("agent.attachUnreadable",{p0:name}));}}}).finally(()=>{attaching--;draw();});};
   const fit=():void=>{if(input.value.length>=2000)input.style.height="180px";else{input.style.height="auto";input.style.height=`${Math.min(180,input.scrollHeight)}px`;}draw();};
-  el.addEventListener("submit",e=>{e.preventDefault();if(send.disabled)return;el.querySelector(".composer-failure")?.remove();const text=input.value,snapshot=files,submitted=revision,dictation=learning.snapshot(),corrections=learning.take(text);busy=true;if(options.stopTask)taskState="ack";draw();void options.send(wholeLinks(text).trim(),snapshot).then(()=>{void learnComposerCorrections(corrections);if(submitted===revision){if(input.value===text)input.value="";if(files===snapshot)files=[];if(!input.value&&!files.length)input.dispatchEvent(new Event("composer-draft-restored"));}}).catch(()=>{if(submitted===revision&&!learning.snapshot())learning.restore(dictation);taskState="idle";let failed=el.querySelector<HTMLElement>(".composer-failure");if(!failed){failed=document.createElement("div");failed.className="composer-failure";el.prepend(failed);}failed.innerHTML=cardHTML({title:t("cards.sendFailed"),status:"failed"});cardFailure(failed.firstElementChild,()=>el.requestSubmit(),()=>failed?.remove());}).finally(()=>{busy=false;fit();input.focus();});});
+  el.addEventListener("submit", e => {
+    e.preventDefault();
+    if (send.disabled) return;
+    el.querySelector(".composer-failure")?.remove();
+    const text = input.value, snapshot = files, submitted = revision;
+    const dictation = learning.snapshot(), corrections = learning.take(text);
+    input.value = ""; files = [];
+    input.dispatchEvent(new Event("composer-draft-restored"));
+    if (options.stopTask) taskState = "ack";
+    fit();
+    void options.send(wholeLinks(text).trim(), snapshot).then(() => {
+      void learnComposerCorrections(corrections);
+    }).catch(() => {
+      if (submitted !== revision) return;
+      if (!learning.snapshot()) learning.restore(dictation);
+      input.value = [input.value, text].filter(Boolean).join("\n\n");
+      files = [...files, ...snapshot];
+      let failed = el.querySelector<HTMLElement>(".composer-failure");
+      if (!failed) { failed = document.createElement("div"); failed.className = "composer-failure"; el.prepend(failed); }
+      failed.innerHTML = cardHTML({title: t("cards.sendFailed"), status: "failed"});
+      cardFailure(failed.firstElementChild, () => el.requestSubmit(), () => failed?.remove());
+    }).finally(() => { if (submitted === revision) { fit(); input.focus(); } });
+  });
   input.addEventListener("input",fit);input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&e.keyCode!==229){e.preventDefault();el.requestSubmit();}});
   el.querySelector<HTMLElement>(".cmp-attach")!.addEventListener("click",()=>{picker.value="";picker.click();});bindActionMode(el.querySelector<HTMLElement>(".cmp-mode")!);
   el.querySelector(".cmp-file")!.addEventListener("click",e=>{const button=(e.target as Element).closest<HTMLElement>("[data-file]");if(button){files=files.filter((_,i)=>i!==Number(button.dataset.file));draw();}});

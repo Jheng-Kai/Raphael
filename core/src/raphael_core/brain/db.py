@@ -1336,6 +1336,32 @@ PRAGMA user_version = 57;
 COMMIT;
 """
 
+_MIGRATIONS[58] = """
+BEGIN;
+CREATE TABLE agent_inbox (
+    turn_id INTEGER PRIMARY KEY REFERENCES agent_turns(id) ON DELETE CASCADE,
+    request_id TEXT NOT NULL,
+    member_id INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('queued','steering','started','terminal')),
+    outcome TEXT,
+    payload_json TEXT NOT NULL,
+    boot_id TEXT,
+    created_at_ms INTEGER NOT NULL,
+    claimed_at_ms INTEGER,
+    settled_at_ms INTEGER,
+    UNIQUE(member_id, conversation_id, request_id)
+);
+CREATE INDEX agent_inbox_scope ON agent_inbox(member_id, conversation_id, state, seq);
+CREATE UNIQUE INDEX agent_inbox_started ON agent_inbox(member_id, conversation_id) WHERE state='started';
+CREATE TRIGGER agent_inbox_delete AFTER DELETE ON agent_turns BEGIN
+    DELETE FROM agent_inbox WHERE turn_id=OLD.id;
+END;
+PRAGMA user_version = 58;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

@@ -1313,12 +1313,48 @@ export function checkRendered(name, context = {}) {
     }
     return {check:name,place};
   }
+  if (name === "composer-queued" || name === "composer-queued-withdraw" || name === "composer-queued-stop" || name === "room-send-while-working") {
+    const calls = window.__look.calls;
+    if (name === "composer-queued") {
+      const queued = [...document.querySelectorAll('.tn[data-status="queued"]')];
+      require(queued.length === 2, "both queued messages are visible");
+      require(queued.map(node => node.querySelector('.message-text').textContent).join('|') === "第二個範例請求|第三個範例請求", "the bubbles retain send order");
+      require(queued.every(node => node.querySelector('button[data-act="cancel-message"]') && !node.querySelector('[data-act="edit-message"]')), "queued bubbles have withdraw instead of edit");
+      require(queued.every(node => visible(node.querySelector('.queued-mark'))), "each queued mark is visible");
+      const presence = [...document.querySelectorAll('.thread .live-presence')];
+      require(presence.length === 1 && presence[0].getBoundingClientRect().top >= queued[1].getBoundingClientRect().bottom, "one live presence follows the newest message");
+      const bubbles = queued.map(node => node.querySelector('.bubble').getBoundingClientRect());
+      require(bubbles[1].top - bubbles[0].bottom <= 42, "consecutive owner bubbles keep a speaker-sized gap");
+      require(!calls.some(call => call.method === "agent.history.stop" || call.method === "worker.cancel"), "admission stops no work");
+      return {check:name,gap:bubbles[1].top-bubbles[0].bottom};
+    }
+    if (name === "composer-queued-withdraw") {
+      require(document.querySelector('.cmp-input').value === "第二個範例請求", "withdraw returns the original words");
+      require(calls.filter(call => call.command === "agent_retract").length === 1, "withdraw uses the existing path exactly once");
+      require(document.querySelector('.composer').dataset.taskState === "running", "the first turn keeps working");
+    } else if (name === "composer-queued-stop") {
+      require(document.querySelector('.cmp-input').value === "目前草稿\n\n第二個範例請求\n\n第三個範例請求", "Stop returns every queued draft after current words");
+      const stopped = calls.filter(call => call.method === "agent.history.stop");
+      require(stopped.length === 1 && !/^(901|902)$/.test(stopped[0].params?.session_id ?? ''), "Stop targets the running turn exactly once");
+    } else {
+      const sent = calls.filter(call => call.method === "rooms.send");
+      require(sent.length === 2 && sent[0].params.text === "第一個範例請求" && sent[1].params.text === "第二個範例請求", "room requests enter in order");
+      require(sent[0].params.request_id !== sent[1].params.request_id, "room messages have independent admission identities");
+      require(document.querySelector('#room-message').value === "", "the room field is ready for the next message");
+      require(document.querySelector('.au-room-pane .composer').dataset.taskState === "running", "members keep working while the owner sends");
+      require(!calls.some(call => call.method === "rooms.stop" || call.method === "worker.cancel"), "room admission stops nothing");
+    }
+    return {check:name};
+  }
   if (name === "owner-additions-in-order") {
     const words = [...document.querySelectorAll('.thread .tn .owner-message .message-text')].map(node => node.textContent.trim());
     const at = ["第一則補充", "第二則補充", "第三則補充"].map(text => words.indexOf(text));
     require(at.every((index, i) => index >= 0 && (i === 0 || index > at[i - 1])), `every message shows, in the order sent: ${at}`);
     require(!window.__look.calls.some(call => call.method === "agent.history.stop" || call.method === "worker.cancel"), "sending stops nothing");
     require(window.__look.calls.filter(call => call.command === "agent_ask_text").length === 3, "each message went out once");
+    const presence = [...document.querySelectorAll('.thread .live-presence')];
+    const newest = document.querySelector('.tn[data-id="903"]');
+    require(presence.length === 1 && presence[0].getBoundingClientRect().top >= newest.getBoundingClientRect().bottom, "live work stays under the newest addition");
     return {check:name,at};
   }
   if (name === "preview-card-wide") {

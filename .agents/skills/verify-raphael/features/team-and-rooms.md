@@ -87,3 +87,10 @@ Synthetic IPC does not establish native persistence, provider or design acceptan
 ## Folded room receipts (2026-11-02)
 
 R-UI-72 groups consecutive handoff rows using the same renderer as private turns. handoff-group-room places a message between two receipt runs and requires two groups; handoff-group-open verifies disclosure identity during WorkerChanged delivery and arriving data. See conversation.md for the selected shared matrix. Individual receipt and room workflow checks retain their request/result/artifact protections.
+## Send while rooms work (2026-11-03)
+
+R-QUEUE-06 uses the shared chat composer: clear the submitted draft immediately,
+preserve new typing and files, and serialize rooms.send per room without changing
+speaker selection. Failed delivery keeps its request identity for retry. Scene:
+room-send-while-working, both themes at 1120,720,1920x1080. Shared private
+consumers and the selected matrix are in conversation.md#durable-owner-inbox-2026-11-03.

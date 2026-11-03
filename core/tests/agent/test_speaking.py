@@ -415,7 +415,8 @@ async def test_a_narrated_final_speaks_japanese_and_waits_for_voice_but_progress
         try:
             await until(lambda: speaker.waiting)
             assert not asking.done()
-            assert all(status == "running" for status, _ in announced)
+            assert announced[0][0] == "queued"
+            assert all(status in ("queued", "running") for status, _ in announced)
             count = len(announced)
         finally:
             speaker.gate.set()

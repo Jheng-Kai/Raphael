@@ -5,6 +5,7 @@ HEARD_CHARS = 80
 
 _WORDS: dict[str, dict[str, str]] = {
     "zh-TW": {
+        "queued": "已排隊，會依序回答。",
         "intro": "我是拉斐爾。直接傳訊息給我，我會像在電腦前一樣回答你。傳 /stop 可以中斷正在跑的背景任務。",
         "pair": "這個機器人是私人的。請主人在電腦的拉斐爾裡核准配對碼 {code}（10 分鐘內有效）。",
         "paired": "已連接。現在可以傳訊息給我了。",
@@ -20,6 +21,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "voice_large": "這則語音太大了（上限 {mb} MB）。",
     },
     "en": {
+        "queued": "Queued. I'll answer in order.",
         "intro": "I'm Raphael. Send me a message and I'll answer as I would at your computer. Send /stop to interrupt a background task.",
         "pair": "This bot is private. Ask the owner to approve the code {code} in Raphael on the computer (valid for 10 minutes).",
         "paired": "Connected. You can message me now.",
@@ -35,6 +37,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "voice_large": "That voice message is too large (the limit is {mb} MB).",
     },
     "ja": {
+        "queued": "順番にお答えします。",
         "intro": "ラファエルです。メッセージを送ってください。パソコンの前と同じように答えます。/stop でバックグラウンドの作業を止められます。",
         "pair": "このボットは非公開です。パソコンのラファエルでコード {code} を承認してください（10 分間有効）。",
         "paired": "接続しました。メッセージを送ってください。",

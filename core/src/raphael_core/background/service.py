@@ -492,7 +492,7 @@ class BackgroundService:
     async def _steer_run(self, run, text):
         loop = self._cli_loops.get(run.task_id)
         if loop is not None:
-            return loop.owner_input.add(text)
+            return await loop.steer(text)
         steer = getattr(self._host, "steer", None)
         return bool(steer is not None and await steer(run, text))
 

@@ -156,6 +156,8 @@ class Switchboard:
         self.pairing = pairing if pairing is not None else Pairing()
         self._tasks: set[asyncio.Task[None]] = set()
         self._locks: dict[str, asyncio.Lock] = {}
+        self._pending_chats = {}
+        self._queue_notices = set()
         # (chat, album id) -> the album being received.
         self._albums: dict[tuple[str, str], _Album] = {}
 
@@ -285,6 +287,27 @@ class Switchboard:
             await self._reply(chat, words(language, "intro"))
 
     async def _converse(
+        self, chat, language, *, text=None, voice=None, files=(),
+    ):
+        if voice is None and not files and not (text or "").strip():
+            return
+        pending = self._pending_chats.get(chat, 0)
+        self._pending_chats[chat] = pending + 1
+        if pending and self._channel.kind == "telegram" and chat not in self._queue_notices:
+            self._queue_notices.add(chat)
+            # Scheduling the notice never delays registration with the per-chat FIFO lock.
+            self._spawn(lambda: self._reply(chat, words(language, "queued")))
+        try:
+            await self._converse_in_order(chat, language, text=text, voice=voice, files=files)
+        finally:
+            remaining = self._pending_chats[chat] - 1
+            if remaining:
+                self._pending_chats[chat] = remaining
+            else:
+                self._pending_chats.pop(chat, None)
+                self._queue_notices.discard(chat)
+
+    async def _converse_in_order(
         self,
         chat: str,
         language: str,

@@ -1,6 +1,6 @@
 import asyncio
 
-from .test_service import make_rig  # noqa: F401
+from .test_service import make_rig, until  # noqa: F401
 from .test_narration import chat, typed
 
 
@@ -97,5 +97,6 @@ async def test_input_after_admission_closes_becomes_a_new_turn_even_before_the_o
     second = asyncio.create_task(typed(rig, "Last instant"))
     release.set()
     await first
-    assert (await second)["text"] == "Second answer"
+    assert (await second)["status"] == "queued"
+    await until(lambda: any(t.text == "Second answer" for t in rig.service._history.list()))
     assert {turn["question"] for turn in await rig.turns()} == {"First request", "Last instant"}

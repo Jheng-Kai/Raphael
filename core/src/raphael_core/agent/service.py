@@ -811,6 +811,14 @@ class AgentService:
         self._inflight_members: dict[str, int] = {}
         self._inflight_scopes: dict[str, tuple[int, int | None]] = {}
         self._owner_loops = {}
+        from .inbox import AgentInbox
+        self._inbox = AgentInbox(conn, self._history, now_ms)
+        self._inbox.recover()
+        self._queued_asks = {}
+        self._drains = {}
+        self._admissions = {}
+        self._direct_scopes = {}
+        self._closing = False
         self._clock = clock
         # session id -> when agent.cancel named it (the monotonic clock).
         self._cancelled: dict[str, float] = {}
@@ -935,6 +943,11 @@ class AgentService:
     async def aclose(self) -> None:
         """End the requests being thought about and close the HTTP client of the tools. A fold of
         the conversation that runs is ended too (the memory's own, by the memory)."""
+        self._closing = True
+        drains = list(self._drains.values())
+        for task in drains:
+            task.cancel()
+        await asyncio.gather(*drains, return_exceptions=True)
         await self.pages.host.aclose()
         if self._connection_proposals:
             await self._connection_proposals.aclose()
@@ -1049,7 +1062,7 @@ class AgentService:
         resumption: Resumption | None = None,
     ) -> dict:
         """One request, as `agent.ask` answers it. `attachments` are the files handed with it
-        (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), kept in memory only; with
+        (`services.attachments.Attachment`, at most MAX_ATTACHMENTS), saved on typed admission; with
         files and no words, the request asks 「看這個」 in its language. `member_id` is who it is
         for: Raphael (0), or a member of the team addressed by its thread's composer, in writing
         or by voice. The global voice hotkey and chat apps default to Raphael. `quick` sends it to
@@ -1103,24 +1116,169 @@ class AgentService:
             return self._done(
                 0, ask.language, "understood", phrase(ask.language, "denied"), silent=True
             )
+        if ask.source == TYPED and not ask.quick and resumption is None:
+            return await self._queue_ask(ask)
         if self._attachment_store and ask.attachments:
             ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
+        return await self._run_ask(ask)
+
+    async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
+        lock = self._admissions.setdefault(scope, asyncio.Lock())
+        async with lock:
+            existing = self._inbox.find(*scope, ask.session_id)
+            if existing:
+                return json.loads(existing['payload_json']).get('result') or {"status": "queued", "turn_id": existing['turn_id']}
+            if self._attachment_store and ask.attachments:
+                ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
+            if self._was_cancelled(ask.session_id):
+                return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+            payload = dict(text=ask.text, original_text=ask.original_text, language=ask.language,
+                           source=ask.source, quick=ask.quick, quote=ask.quote, memory_untrusted=ask.memory_untrusted,
+                           attachments=[a.metadata() for a in ask.attachments])
+            row, _ = self._inbox.admit(ask, payload)
+            ask.turn_id = row['turn_id']
+            self._queued_asks[ask.turn_id] = ask
+            self._turn_changed(ask.turn_id, ask.speaker.id)
         active = self._owner_loops.get(scope)
         if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
             self._owner_loops.pop(scope, None)
             active = None
-        if active and not ask.attachments and active.owner_input.add(ask.text):
-            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
-            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
-        steer = getattr(self._background, "steer", None)
-        if not ask.attachments and steer is not None and await steer(ask.speaker.id, ask.conversation_id, ask.text):
-            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
-            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
-        earlier_scope = next((task for session, task in self._inflight.items()
-                              if self._inflight_scopes.get(session) == scope and not task.done()), None)
-        if earlier_scope is not None:
-            await asyncio.gather(asyncio.shield(earlier_scope), return_exceptions=True)
+        older = self._conn.execute(
+            "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='queued' AND seq<?",
+            (*scope, row['seq']),
+        ).fetchone()
+        if active and not older and not ask.attachments and not active.owner_input.closed:
+            self._inbox.transfer(ask.turn_id)
+            accepted = await active.steer(ask.text, ticket=ask.turn_id) if isinstance(active, CliLoop) else active.owner_input.add(ask.text, ticket=ask.turn_id)
+            if accepted:
+                self._turn_changed(ask.turn_id, ask.speaker.id)
+                return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+            self._inbox.requeue(ask.turn_id)
+            self._turn_changed(ask.turn_id, ask.speaker.id)
+        first = self._start_drain(scope)
+        if first is not None and first[0] == ask.turn_id:
+            return await asyncio.shield(first[1])
+        return {"status": "queued", "turn_id": ask.turn_id}
+
+    def start(self):
+        for scope in self._inbox.scopes():
+            self._start_drain(scope)
+
+    def _start_drain(self, scope):
+        if self._closing or scope in self._drains:
+            return None
+        if any(self._inflight_scopes.get(session) == scope and not task.done() for session, task in self._inflight.items()):
+            return None
+        row = self._inbox.claim(scope)
+        if row is None:
+            return None
+        waiter = asyncio.get_running_loop().create_future()
+        task = asyncio.create_task(self._drain(scope, row, waiter))
+        self._drains[scope] = task
+        def finished(done):
+            if not waiter.done():
+                waiter.cancel()
+            if self._drains.get(scope) is done:
+                self._drains.pop(scope, None)
+        task.add_done_callback(finished)
+        return row['turn_id'], waiter
+
+    async def _restore_queued_ask(self, row):
+        cached = self._queued_asks.pop(row['turn_id'], None)
+        if cached is not None:
+            return cached
+        payload = json.loads(row['payload_json'])
+        speaker = self._speaker(row['member_id'])
+        if speaker is None:
+            raise ValueError("queued member is unavailable")
+        files = []
+        for item in payload.get('attachments', []):
+            if self._attachment_store is None or not item.get('id'):
+                raise ValueError("queued attachment is unavailable")
+            path = self._attachment_store.path(item['id'])
+            data = await asyncio.to_thread(path.read_bytes)
+            files.append(Attachment(item['name'], item['mime'], data, item['id']))
+        return _Ask(session_id=row['request_id'], turn_id=row['turn_id'], text=payload['text'],
+                    language=payload['language'], source=payload['source'], quick=payload.get('quick', False), speaker=speaker,
+                    conversation_id=row['conversation_id'], original_text=payload.get('original_text'),
+                    memory_untrusted=payload.get('memory_untrusted', False), quote=payload.get('quote'), attachments=files)
+
+    async def _drain(self, scope, row, waiter):
+        first = True
+        try:
+            while row is not None and not self._closing:
+                turn_id = row['turn_id']
+                try:
+                    ask = await self._restore_queued_ask(row)
+                    # Admission can be withdrawn after claim but before the model or any side effect.
+                    checkpoint = asyncio.get_running_loop().create_future()
+                    asyncio.get_running_loop().call_soon(checkpoint.set_result, None)
+                    await checkpoint
+                    current = self._inbox.get(turn_id)
+                    if current is None or current['state'] != 'started' or self._was_cancelled(ask.session_id):
+                        self._inbox.settle(turn_id, 'cancelled')
+                        result = self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                    else:
+                        result = await self._run_ask(ask)
+                        turn = self._history.get(turn_id)
+                        outcome = 'cancelled' if self._was_cancelled(ask.session_id) else 'failed' if turn and turn.status in ('error','expired') else 'completed'
+                        self._inbox.settle(turn_id, outcome, result)
+                    turn = self._history.get(turn_id)
+                    if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
+                        self._history.resolve(turn_id, prefix='', text='', detail=None, status='denied', cost_usd=0)
+                        self._turn_changed(turn_id, scope[0])
+                    if first and not waiter.done():
+                        waiter.set_result(result)
+                except asyncio.CancelledError:
+                    if first and not waiter.done():
+                        waiter.cancel()
+                    raise
+                except Exception as error:
+                    logger.warning("Queued turn failed: %s", type(error).__name__)
+                    self._inbox.settle(turn_id, 'failed')
+                    if self._history.get(turn_id):
+                        self._history.resolve(turn_id, prefix='', text='', detail=None, status='error', cost_usd=0)
+                        self._turn_changed(turn_id, scope[0])
+                    if first and not waiter.done():
+                        waiter.set_exception(error)
+                first = False
+                row = self._inbox.claim(scope)
+        finally:
+            self._drains.pop(scope, None)
+
+    def _settle_steering(self, scope, loop):
+        rows = self._conn.execute("SELECT turn_id FROM agent_inbox WHERE member_id=? AND conversation_id=? AND state='steering' ORDER BY seq", scope).fetchall()
+        for row in rows:
+            turn_id = row['turn_id']
+            if loop.owner_input.consumed(turn_id):
+                self._inbox.settle(turn_id, 'steered', {"status": "done", "turn_id": turn_id, "prefix": "", "text": "", "steered": True})
+                self._queued_asks.pop(turn_id, None)
+            else:
+                loop.owner_input.withdraw(turn_id)
+                self._inbox.requeue(turn_id)
+            self._turn_changed(turn_id, scope[0])
+
+    async def _discard_inbox(self, scope=None, *, member_id=None):
+        scopes = set(self._inbox.scopes()) | set(self._drains)
+        selected = [key for key in scopes if (scope is None or key == scope) and (member_id is None or key[0] == member_id)]
+        tasks = []
+        for key in selected:
+            for row in self._inbox.cancel_scope(key):
+                self._withdraw_admission(row['turn_id'], key)
+            if task := self._drains.get(key):
+                task.cancel()
+                tasks.append(task)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _run_ask(self, ask):
+        scope = (ask.speaker.id, ask.conversation_id)
+        async with self._direct_scopes.setdefault(scope, asyncio.Lock()):
+            return await self._execute_ask(ask)
+
+    async def _execute_ask(self, ask):
+        if self._was_cancelled(ask.session_id):
+            return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
         ask.voiced = self._voiced(ask.source, ask.speaker.id)
         # The questions that ran out are expired, and a new request replaces those that still wait
         # in its conversation: a quick question leaves a formal one waiting, and the other way round.
@@ -1128,9 +1286,10 @@ class AgentService:
         if ask.source in _AT_THIS_COMPUTER:
             self._stop_speaking()  # a new request ends what Raphael was saying
             self._deny(self._confirmations.cancel_where(
-                lambda pending: getattr(self.turn(pending.turn_id), "conversation_id", None) == ask.conversation_id))
+                lambda pending: (getattr(self.turn(pending.turn_id), "member_id", None),
+                                 getattr(self.turn(pending.turn_id), "conversation_id", None)) == (ask.speaker.id, ask.conversation_id)))
             if self._computer is not None:
-                self._computer.stop_all("replaced", spare_owner=True)
+                self._computer.stop_scope(ask.speaker.id, ask.conversation_id, "replaced", spare_owner=True)
         else:  # a message from a messaging app leaves a question asked at this computer alone
             self._deny(self._confirmations.cancel_session(ask.session_id))
         self._prune_if_due()
@@ -1176,8 +1335,9 @@ class AgentService:
                 logger.info("Quick latency ms: %s", json.dumps(ask.latency, sort_keys=True))
                 ask.trace_logged = True
             self._release(ask.held)  # a turn announced late must never be left unannounced
-            if resumption is not None:
-                resumption.made.extend(ask.made)
+            if ask.resumption is not None:
+                ask.resumption.made.extend(ask.made)
+            self._start_drain((ask.speaker.id, ask.conversation_id))
 
     @member_turn(lambda self, ask: ask.speaker.id,
                  waiting=lambda self, ask: ask.waiting_apps or ask.waiting_secrets or ask.waiting_computer)
@@ -1471,6 +1631,8 @@ class AgentService:
         limit = settings.limit_usd
         run = ComputerRun(
             session_id=ask.session_id,
+            member_id=ask.speaker.id,
+            conversation_id=ask.conversation_id,
             language=language,
             request=request or ask.text,
             model=model,
@@ -2101,8 +2263,13 @@ class AgentService:
         finally:
             if outcome is None or outcome.kind != WAITING:
                 loop.owner_input.closed = True
-                if self._owner_loops.get(scope) is loop:
-                    self._owner_loops.pop(scope, None)
+                try:
+                    if isinstance(loop, CliLoop):
+                        await loop.finish_steering()
+                finally:
+                    self._settle_steering(scope, loop)
+                    if self._owner_loops.get(scope) is loop:
+                        self._owner_loops.pop(scope, None)
             if isinstance(loop, CliLoop) and loop.task and loop.task.done():
                 self._cli_loops.discard(loop)
         if loop.response is not None:
@@ -4253,13 +4420,34 @@ class AgentService:
     async def _history_stop(self, params):
         session = _str(params, 'session_id')
         member = self._member_param(params)
-        rows = self._conn.execute("SELECT member_id,scope FROM agent_turns WHERE session_id=?", (session,)).fetchall()
+        rows = self._conn.execute("SELECT member_id,scope,conversation_id FROM agent_turns WHERE session_id=?", (session,)).fetchall()
         if any(row['member_id'] != member or row['scope'] != 'private' for row in rows):
             raise invalid_params('stop must identify this private conversation')
+        returned = []
+        if rows:
+            scope = (member, rows[-1]['conversation_id'])
+            active = self._owner_loops.get(scope)
+            if active:
+                self._settle_steering(scope, active)
+            for row in self._inbox.cancel_scope(scope):
+                payload = json.loads(row['payload_json'])
+                returned.append(dict(session_id=row['request_id'], text=payload.get('original_text') or payload['text'],
+                                     attachments=payload.get('attachments', []), quote=payload.get('quote')))
+                self._withdraw_admission(row['turn_id'], scope)
         await self._cancel({'session_id':session})
         if self._background:
             await self._background.cancel_session(session)
-        return {'stopped':True}
+        return {'stopped':True, **({'returned': returned} if returned else {})}
+
+    def _withdraw_admission(self, turn_id, scope):
+        self._queued_asks.pop(turn_id, None)
+        active = self._owner_loops.get(scope)
+        if active:
+            active.owner_input.withdraw(turn_id)
+        with self._conn:
+            self._conn.execute("UPDATE agent_turns SET status='withdrawn' WHERE id=?", (turn_id,))
+            self._conn.execute("DELETE FROM agent_turns_fts WHERE rowid=?", (turn_id,))
+        self._turn_changed(turn_id, scope[0])
 
     async def _cancel(self, params: dict) -> dict:
         session_id = _str(params, "session_id")
@@ -4268,6 +4456,9 @@ class AgentService:
         self._stop_speaking()
         self._forget_old_cancels()
         self._cancelled[session_id] = self._clock()
+        for row in self._conn.execute("SELECT turn_id,member_id,conversation_id FROM agent_inbox WHERE request_id=? AND state IN ('queued','steering')", (session_id,)).fetchall():
+            self._inbox.settle(row['turn_id'], 'cancelled')
+            self._withdraw_admission(row['turn_id'], (row['member_id'], row['conversation_id']))
         task = self._inflight.get(session_id)
         if task is not None:
             task.cancel()
@@ -4414,6 +4605,7 @@ class AgentService:
     async def _clear_conversation(self, conversation: dict) -> None:
         member = conversation["member_id"]
         conversation_id = conversation["id"]
+        await self._discard_inbox((member, conversation_id))
         # Stop writers before removing their rows, including background reports and pending yeses.
         while rows := self._conn.execute("SELECT id FROM agent_turns WHERE conversation_id = ? AND scope IN ('private','exchange') LIMIT 200", (conversation_id,)).fetchall():
             for row in rows:
@@ -4440,6 +4632,12 @@ class AgentService:
         own = [turn for turn in turns if turn.scope == "private" and turn.member_id == member and turn.source not in ("member", "routine")]
         if (turn_id is not None and not any(turn.id == turn_id for turn in own)) or (turns and not own):
             raise invalid_params("the message does not belong to this session and thread")
+        admitted_id = turn_id if turn_id is not None else own[0].id if len(own) == 1 else None
+        admission = self._inbox.get(admitted_id) if admitted_id is not None else None
+        if admission is not None and admission['state'] in ('queued', 'steering'):
+            self._inbox.settle(admitted_id, 'cancelled')
+            self._withdraw_admission(admitted_id, (member, admission['conversation_id']))
+            return {"deleted": 1}
         inflight = self._inflight.get(session)
         await self._cancel({"session_id": session})
         if inflight is not None:
@@ -4628,6 +4826,7 @@ class AgentService:
         opening taught Raphael and the background tasks."""
         if "member_id" in params:
             member_id = self._member_param(params)
+            await self._discard_inbox(member_id=member_id)
             sessions = {row[0] for row in self._conn.execute("SELECT DISTINCT session_id FROM agent_turns WHERE member_id = ?", (member_id,))}
             sessions |= {session for session, owner in self._inflight_members.items() if owner == member_id}
             tasks = [self._inflight[session] for session in sessions if session in self._inflight]
@@ -4657,6 +4856,7 @@ class AgentService:
             if self._team is not None and hasattr(self._team, "_changed"):
                 self._team._changed()
             return {"deleted": deleted}
+        await self._discard_inbox()
         if self._cli_loops:
             for task in self._inflight.values():
                 task.cancel()
