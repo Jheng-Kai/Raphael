@@ -33,6 +33,28 @@ test("cards load on intersection, share cached requests on redraw, reserve space
   previews.pause();
 });
 
+test("a page that gives nothing to show takes the short card, and keeps it from the next draw on", async () => {
+  vi.stubGlobal("IntersectionObserver", undefined);
+  const root = document.createElement("div"); document.body.append(root);
+  root.getBoundingClientRect = () => ({ top: 0, bottom: 800 }) as DOMRect;
+  const url = "https://unreadable.example/status/2115841281049940460";
+  root.innerHTML = previewCardsHTML(url);
+  const card = (): HTMLElement => root.querySelector<HTMLElement>(".preview-card")!;
+  card().getBoundingClientRect = () => ({ top: 10, bottom: 120 }) as DOMRect;
+  expect(card().classList.contains("is-short")).toBe(false);
+  const previews = createLinkPreviews(root, vi.fn().mockResolvedValue({ url, site: "unreadable.example", title: "", description: "", thumbnail: null }));
+  previews.sync(); for (let i = 0; i < 8; i++) await Promise.resolve();
+  expect(card().dataset.previewState).toBe("unavailable");
+  expect(card().classList.contains("is-short")).toBe(true);
+  // R-UI-71: the markup stays the same, so an unchanged line is never replaced; the cache paints the card before the frame.
+  const markup = previewCardsHTML(url);
+  expect(markup).not.toContain("is-short");
+  root.innerHTML = markup; previews.sync();
+  expect(card().classList.contains("is-short")).toBe(true);
+  expect([...card().querySelectorAll(".preview-meta > span")].map(line => line.textContent)).toEqual(["unreadable.example/status/2115841281049940460"]);
+  previews.pause();
+});
+
 test("an address with no page behind it reads once, in full, and says nothing else", () => {
   const root = document.createElement("div");
   root.innerHTML = previewCardsHTML("http://127.0.0.1:5173/some/rather/long/path/to/a/page/of/the/tool");

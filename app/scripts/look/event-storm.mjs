@@ -50,7 +50,7 @@ export async function eventStorm(page, options) {
         }
         for (const node of record.addedNodes) {
           if (node.nodeType !== 1 || !node.matches(".tn")) continue;
-          for (const card of node.querySelectorAll(".preview-card")) if (card.dataset.previewState !== "ready") seen.cachedMisses++;
+          for (const card of node.querySelectorAll(".preview-card")) if (!card.dataset.previewState) seen.cachedMisses++;
         }
       }
     });

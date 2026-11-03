@@ -26,6 +26,13 @@ function isLocalAddress(url: string): boolean {
   return !host.includes(".") || /\.(?:local|internal|lan)$/.test(host) || /^(?:127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host);
 }
 
+/** Pages that gave nothing to show. The markup never carries this (R-UI-71); a later draw paints it from the cache before the frame. */
+const unreadable = new Set<string>();
+function noteUnreadable(url: string): void {
+  unreadable.add(url);
+  if (unreadable.size > 256) unreadable.delete(unreadable.values().next().value!);
+}
+
 export function previewCardsHTML(text: string): string {
   const urls = rememberedUrls(text).slice(0, 3);
   return urls.length ? `<div class="preview-cards">${urls.map(url =>
@@ -51,7 +58,12 @@ export function createLinkPreviews(root: HTMLElement, fetch: (url: string) => Pr
       if (cache.size > 128) cache.delete(cache.keys().next().value!);
     }
     const paint = (result: LinkPreview | null): void => {
-      if (active && root.contains(card)) { card.innerHTML = contents(url, result); card.dataset.previewState = result ? "ready" : "unavailable"; }
+      if (active && root.contains(card)) {
+        // A page with no title and no picture leaves only its address, which needs no more room than an address on this machine.
+        const shown = result && (result.title || result.thumbnail) ? result : null;
+        card.innerHTML = contents(url, shown); card.dataset.previewState = shown ? "ready" : "unavailable";
+        if (!shown) { noteUnreadable(url); card.classList.add("is-short"); }
+      }
       else delete card.dataset.previewLoaded;
     };
     if (entry.result !== undefined) paint(entry.result);

@@ -63,7 +63,7 @@ export default [
     ["follow", { arrival: true, position: "bottom", wheelBy: 0 }],
     ["anchor", { arrival: true, position: "middle", wheelBy: 0, limits: { anchorMovement: 0, scrollWrites: 0 } }],
     ["hover", { hover: true, wheelBy: 0 }],
-  ].map(([name, options]) => scene(`busy-team-${name}`, "Team events preserve the reader's nodes, scroll and input", [wait('.thread .preview-card[data-preview-state="ready"]'),
+  ].map(([name, options]) => scene(`busy-team-${name}`, "Team events preserve the reader's nodes, scroll and input", [wait('.thread .preview-card[data-preview-state]'),
     { action: "event-storm", selector: ".mb-chat:not([hidden]) .ra-scroll", seconds: 4, measure: { name: "team-storm", enforce: false }, ...options,
       limits: { replacedLines: 0, replacedCards: 0, replacedFaces: 0, ...(!options.arrival ? { allReads: 18 } : {}), memberReads: 6, longTaskMs: 600,
         ...(["thread", "typing", "follow"].includes(name) ? { fromBottom: 80 } : {}), ...options.limits }, ...(name === "typing" ? {liveText:true} : {}) }],
