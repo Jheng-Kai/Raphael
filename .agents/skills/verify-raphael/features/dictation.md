@@ -174,11 +174,11 @@ to the ordinary overlay's 14px caption and reply-prefix treatment (R-UI-40/42).
 The title and details partition the original text without copying the title back
 into details. Long fixtures use distinct paragraphs, not repeated title/body blocks.
 `overlay-confirmation-content` rejects duplicate intent or details paragraphs in
-these scenes. Desktop Stop includes a visible localized label alongside the shared
-icon; `overlay-stop-content` rejects an ambiguous lone outline square. Arming Escape
-temporarily replaces both children with Esc and retains the shared cancellation hint.
-Unlike the icon-only composer action, this labeled task-action variant uses the
-shared text-button frame/surface required by R-UI-18, keeping its Send/Stop palette.
+these scenes. A desktop question shows no Stop beside it (2026-11-03: stopping is done
+in the app); `overlay-confirm-without-stop` checks Stop is hidden and the answers are
+compact buttons rather than halves of the card. The card leaves the moment an answer is
+pressed and comes back only if the answer could not be sent. Two Escapes still cancel
+the task through the shared gesture.
 
 The native overlay remains 540px wide. Its ordinary canvas + 40px geometry is
 unchanged; a question temporarily uses canvas + 300px, growing upward without

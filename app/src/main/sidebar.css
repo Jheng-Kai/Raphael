@@ -67,9 +67,11 @@
 .side .sidebar-account { flex: 1; min-height: 36px; }
 .sidebar-foot-row { display: flex; gap: var(--sp-1); min-width: 0; }
 .side .side-foot .btn.icon { flex: none; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-sm); }
-.side .side-foot .btn.icon[aria-current="page"] { background: var(--hover); color: var(--text); }
-.side .side-foot .btn.icon[aria-current="page"] .i { color: var(--text); }
-.side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled) { background: var(--pressed); }
+/* Collapse, plus, dictation and Home only light up: under the pointer, pressed or on their page the icon brightens,
+   with no frame and no filled square (2026-11-03). */
+.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon) { border-color: transparent; background: transparent; color: var(--text-2); }
+.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) { border-color: transparent; background: transparent; color: var(--text); }
+.side :is(.sidebar-brand .btn.icon, .btn.mb-tool, .side-foot .btn.icon):is(:hover, :active, [aria-current="page"]):not(:disabled) .i { color: var(--text); }
 .side .side-foot .sidebar-apps { height: 40px; border: 1px solid var(--line); border-radius: var(--r-pill); padding-inline: 12px; background: transparent; }
 .side .sidebar-apps:is(:hover, :active) { border-color: var(--edge); color: var(--text); background: transparent; }
 .side .sidebar-account:is(:hover, :active) { background: transparent; color: var(--text); }

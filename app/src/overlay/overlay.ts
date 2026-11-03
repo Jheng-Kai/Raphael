@@ -2,8 +2,9 @@
 //
 // Rust (overlay.rs) sends events on a channel that this page opens once. The window itself is
 // transparent, click-through and never hidden: "hidden" here means the page draws nothing and
-// the animation loop (see emblem.ts) is stopped. Only a question exposes Stop and its confirmation
-// card. Only the measured live controls take the mouse (overlay/mouse.rs).
+// the animation loop (see emblem.ts) is stopped. A question shows its confirmation card; stopping the
+// work is done in the app, and two Escapes still cancel it here. Only the measured live controls take the
+// mouse (overlay/mouse.rs).
 //
 // The controller below holds all the logic and takes the emblem and the DOM through small
 // interfaces, so the tests run it in Node.
@@ -166,7 +167,9 @@ interface Ask {
   /** The words and the buttons are on screen (the appear animation has played). */
   shown: boolean;
   hold: HoldState;
-  /** The answer that was sent while the app has not yet replaced the question. */
+  /** The question's own words, to show the card again if the answer could not be sent. */
+  text: string;
+  /** The answer that was sent while the app has not yet replaced the question.*/
   chosen: "yes" | "no" | "always" | null;
 }
 
@@ -388,7 +391,7 @@ export class OverlayController {
     }
   }
 
-  /** Sends the answer. The buttons stay (pressed, and dead) until the app replaces the question. */
+  /** Sends the answer, and the card goes at once: waiting for the app to replace it left a pressed card on screen. */
   private choose(ask: Ask, approved: boolean, always = false): void {
     // A hold that was still going (NO was clicked meanwhile) must not arm a button that is dead now.
     clearTimeout(this.holdTimer);
@@ -399,6 +402,8 @@ export class OverlayController {
     }
     ask.chosen = always ? "always" : approved ? "yes" : "no";
     this.view.setChoice(ask.chosen);
+    this.view.hideAsk();
+    this.view.clearLine();
     let sent: Promise<unknown>;
     try {
       sent = Promise.resolve(always ? this.options.confirm?.(ask.id, true, true) : this.options.confirm?.(ask.id, approved));
@@ -411,7 +416,9 @@ export class OverlayController {
       if (this.ask === ask) {
         ask.chosen = null;
         this.resetHold(ask);
-        this.view.setChoice(null);
+        this.view.showLine(ask.line, this.language);
+        this.view.showQuestion?.(ask.text, this.language);
+        this.view.showAsk({ yes: ask.yes, no: ask.no, ...(ask.always !== null ? { always: ask.always } : {}), tier: ask.tier, language: this.language });
       }
     });
   }
@@ -431,6 +438,7 @@ export class OverlayController {
       // answer (letting Raphael operate an app) is never held.
       tier: event.tier === "T2" || always !== null ? "T2" : "T3",
       line: replyLine(words(event.prefix), words(event.text)),
+      text: words(event.text),
       yes: words(event.yes) || "✓",
       no: words(event.no) || "✕",
       always,
@@ -922,7 +930,8 @@ async function start(): Promise<void> {
     if (event.type === "settings" && isLanguage(event.language)) { language=event.language; document.documentElement.lang=language; labelStop(language); }
     if (event.type === "show" || event.type === "mode") { taskRun++;taskActive=true;stop.hidden=true; }
     if (["hide","complete","release","notice","operate"].includes(event.type) || event.type === "say" && !event.hold) { taskActive=false;stop.hidden=true; }
-    if (event.type === "ask") { taskRun++;taskActive=true;stop.hidden=false; }
+    // A question answers yes or no here; stopping the work is done in the app.
+    if (event.type === "ask") { taskRun++;taskActive=true;stop.hidden=true; }
     gesture.sync();
     if (event.type === "avatar") {
       void picture();

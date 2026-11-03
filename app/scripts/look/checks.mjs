@@ -2014,6 +2014,8 @@ export function checkRendered(name, context = {}) {
     if(name === "cancel-cleared") { require(!button,"other input clears the gesture");return {check:name}; }
     require(visible(button),"the targeted Stop is visibly armed");
     require(button.dataset.cancelHint === "再按一次取消", "the cancellation hint follows the interface language");
+    // A desktop question has no Stop beside it: the emblem carries the armed Escape.
+    if (button.matches("canvas")) { require(!visible(document.querySelector("#overlay-stop")), "the emblem is armed because no Stop stands beside the question"); return {check:name,target:"emblem"}; }
     require(getComputedStyle(button,"::before").content === '"Esc"',"Esc replaces the Stop glyph");
     require(button.classList.contains("task-action"),"Stop shares the Send action component");
     const send=button.closest('form')?.querySelector('.cmp-send');
@@ -2043,6 +2045,12 @@ export function checkRendered(name, context = {}) {
   if (name === "overlay-working-no-stop") {
     require(!visible(document.querySelector('#overlay-stop')), "ordinary working orb has no floating Stop button");
     return { check: name };
+  }
+  if(name === "overlay-confirm-without-stop") {
+    require(visible(document.querySelector("#ask")) && !visible(document.querySelector("#overlay-stop")), "a question answers yes or no; Stop is in the app, not beside the question");
+    const buttons=[...document.querySelectorAll("#ask .ask-btn")].filter(visible), card=document.querySelector("#ask").getBoundingClientRect();
+    require(buttons.every(button=>button.getBoundingClientRect().width<card.width/2&&button.getBoundingClientRect().height<=32), "the answers are compact buttons, not halves of the card");
+    return {check:name};
   }
   if(name === "overlay-stop-content") {
     const stop=document.querySelector('#overlay-stop'),label=stop?.querySelector('.overlay-stop-label');

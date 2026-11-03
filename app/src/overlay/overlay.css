@@ -19,7 +19,7 @@
 
   /* The confirmation card grows upward from a fixed bottom edge. Its actions have their own
      row beneath the title and scrollable details. */
-  --ask-h: 36px;
+  --ask-h: 30px;
   --ask-gap: 10px;
   --ask-bottom: calc(var(--margin) + var(--e) * 0.2 - 6px);
 
@@ -161,7 +161,8 @@ body {
 }
 
 /* Confirmation actions use the app's button component and theme tokens. */
-.ask-btn { pointer-events: auto; position: relative; overflow: hidden; min-width: 64px; flex: 1; height: var(--ask-h); }
+/* Compact answers at the end of the card, not two halves of it. */
+.ask-btn { pointer-events: auto; position: relative; overflow: hidden; min-width: 64px; flex: none; height: var(--ask-h); min-height: var(--ask-h); padding-inline: var(--sp-4); }
 .ask-card {
   box-sizing: border-box;
   width: min(360px, calc(540px - var(--subs-right) - 16px));
@@ -180,7 +181,7 @@ body {
 .ask-title { margin: 0; font: 600 var(--fs-md)/1.5 var(--voice); overflow-wrap: anywhere; }
 .ask-details { max-height: 5lh; overflow-y: auto; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; color: var(--text-2); }
 .ask-card[data-expanded="true"] .ask-details { max-height: 9lh; }
-.ask-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.ask-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 #ask-expand { justify-self: start; }
 .subs.asking { visibility: hidden; }
 #overlay-stop { position: fixed; right: var(--margin); bottom: calc(var(--margin) + var(--e) + 8px); pointer-events: auto; }

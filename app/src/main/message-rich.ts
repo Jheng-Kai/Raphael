@@ -157,7 +157,13 @@ export function mountRichContent(root: HTMLElement): void {
     }
   }, true);
   const observer = new MutationObserver(refresh); observer.observe(root, { childList: true, subtree: true });
-  root.addEventListener("scroll", refresh, { passive: true });
+  // A scroll sends many events a frame; the blocks need looking at once per frame.
+  let framed = false;
+  root.addEventListener("scroll", () => {
+    if (framed) return;
+    framed = true;
+    requestAnimationFrame(() => { framed = false; refresh(); });
+  }, { passive: true });
   root.addEventListener("toggle", refresh, true);
   new MutationObserver(refresh).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-skin", "style"] });
   if (typeof ResizeObserver === "function") new ResizeObserver(refresh).observe(root);

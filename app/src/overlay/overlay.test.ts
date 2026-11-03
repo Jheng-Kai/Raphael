@@ -835,7 +835,7 @@ test("YES of a T2 question is a click, answered once", () => {
   asked();
   controller.clickAsk("yes");
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-  expect(view.log).toEqual(["choice:yes"]);
+  expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
   controller.clickAsk("yes");
   controller.clickAsk("no");
   controller.holdStart();
@@ -847,7 +847,7 @@ test("NO is a click too, and it is the same for T3", () => {
   asked({ tier: "T3" });
   controller.clickAsk("no");
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", false);
-  expect(view.log).toEqual(["choice:no"]);
+  expect(view.log).toEqual(["choice:no", "ask-hide", "clear"]);
 });
 
 test("a click before the buttons are on screen is not an answer", () => {
@@ -909,7 +909,7 @@ test("T3: held for the arming time, the button arms, and letting go on it answer
   expect(confirm).not.toHaveBeenCalled(); // armed is not answered: letting go is
   controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true);
-  expect(view.log).toEqual(["hold:holding", "hold:armed", "choice:yes"]);
+  expect(view.log).toEqual(["hold:holding", "hold:armed", "choice:yes", "ask-hide", "clear"]);
 });
 
 test("T3: armed, but let go away from the button, answers nothing and disarms", () => {
@@ -961,9 +961,9 @@ test("T3: NO clicked while YES is being held ends the hold and the YES stays dea
   vi.advanceTimersByTime(300);
   controller.clickAsk("no");
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", false);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no"]);
+  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]);
   vi.advanceTimersByTime(HOLD_MS);
-  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no"]); // nothing arms later
+  expect(view.log).toEqual(["hold:holding", "hold:idle", "choice:no", "ask-hide", "clear"]); // nothing arms later
   controller.holdEnd(true);
   expect(confirm).toHaveBeenCalledTimes(1);
 });
@@ -991,9 +991,9 @@ test("an answer that could not be sent gives the question back for another try",
   confirm.mockRejectedValueOnce(new Error("no"));
   asked();
   controller.clickAsk("yes");
-  expect(view.log).toEqual(["choice:yes"]);
+  expect(view.log).toEqual(["choice:yes", "ask-hide", "clear"]);
   await vi.advanceTimersByTimeAsync(0);
-  expect(view.log).toEqual(["choice:yes", "choice:null"]);
+  expect(view.log.slice(0, 3)).toEqual(["choice:yes", "ask-hide", "clear"]); expect(view.log.slice(3).map(entry => entry.split(":")[0])).toEqual(["line", "ask"]);
   controller.clickAsk("yes");
   expect(confirm).toHaveBeenCalledTimes(2);
 });
@@ -1387,7 +1387,7 @@ test("the third answer says YES with always, once", () => {
   asked({ always: "一律允許" });
   controller.clickAsk("always");
   expect(confirm).toHaveBeenCalledExactlyOnceWith("c1", true, true);
-  expect(view.log).toEqual(["choice:always"]);
+  expect(view.log).toEqual(["choice:always", "ask-hide", "clear"]);
   controller.clickAsk("yes");
   controller.clickAsk("no");
   expect(confirm).toHaveBeenCalledTimes(1);
@@ -1415,7 +1415,7 @@ test("a third answer that could not be sent can be given again", async () => {
   asked({ always: "一律允許" });
   controller.clickAsk("always");
   await vi.advanceTimersByTimeAsync(0);
-  expect(view.log).toEqual(["choice:always", "choice:null"]);
+  expect(view.log.slice(0, 3)).toEqual(["choice:always", "ask-hide", "clear"]); expect(view.log.slice(3).map(entry => entry.split(":")[0])).toEqual(["line", "ask"]);
   controller.clickAsk("always");
   expect(confirm).toHaveBeenCalledTimes(2);
 });
