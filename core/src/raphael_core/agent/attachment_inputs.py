@@ -36,3 +36,20 @@ def text_context(attachments: Sequence[Attachment]) -> str:
         blocks.append(block)
         remaining -= separator + len(block)
     return references + (_CONTEXT_HEADER + "\n".join(blocks) if blocks else "")
+
+# The most files of earlier turns that a turn names again.
+EARLIER_FILES = 8
+
+
+def earlier_files(turns: Sequence, current: Sequence[Attachment]) -> list[dict[str, str]]:
+    """The stored files the owner handed over earlier in the conversation, newest first and each once.
+    Without them a later turn asked about "the file above" cannot find it."""
+    seen = {attachment.stored_id for attachment in current if attachment.stored_id}
+    found = []
+    for turn in reversed(turns):
+        for item in turn.attachments or []:
+            key = item.get("id")
+            if isinstance(key, str) and key not in seen:
+                seen.add(key)
+                found.append({"name": item["name"], "mime": item["mime"], "id": key})
+    return found[:EARLIER_FILES]

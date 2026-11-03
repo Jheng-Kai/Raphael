@@ -156,7 +156,7 @@ from ..memory.conversation import Conversation, asks_to_remember
 from ..memory.store import MemorySnapshot
 from ..memory.growth import TOOLS as GROWTH_TOOLS, WRITE_TOOLS as GROWTH_WRITES
 from ..services.attachment_store import AttachmentStore
-from .attachment_inputs import text_context
+from .attachment_inputs import earlier_files, text_context
 from ..worker.guards import neutralize, wrap_untrusted
 from ..services.attachments import MAX_ATTACHMENTS, Attachment, AttachmentError, from_wire
 from ..services.urls import urls_in
@@ -1033,6 +1033,19 @@ class AgentService:
         if member_id == 0 and not quick and conversation_id is None and (source is None or source in _QUICK_SOURCES):
             raise invalid_params("a spoken question to Raphael must name its destination")
         return self.conversations.destination(member_id, conversation_id, quick=quick)
+
+    def _stored_path(self, key: str | None) -> dict[str, str]:
+        """`{"path"}` of a stored file on this computer, or nothing when it is not stored or is gone."""
+        if self._attachment_store is None or not key:
+            return {}
+        try:
+            return {"path": str(self._attachment_store.path(key))}
+        except RpcError:
+            return {}
+
+    def _earlier_files(self, turns, current) -> list[dict[str, str]]:
+        """The conversation's earlier files (`earlier_files`) that are still stored, each with its path."""
+        return [{**item, **found} for item in earlier_files(turns, current) if (found := self._stored_path(item["id"]))]
 
     def _speaker(self, member_id: int) -> Speaker | None:
         """Who `member_id` is: Raphael for 0, a member of the team, or None for nobody."""
@@ -2011,9 +2024,19 @@ class AgentService:
                     self._team, ask.speaker, ask.language)
                 if memory is not None:
                     user += "\n\nYour memory files as they are now, which replace any earlier copy:\n" + str(memory)
+            earlier = self._earlier_files(context.turns, ask.attachments)
+            if earlier:
+                user += "\nFiles the owner handed over earlier in this conversation, newest first: " + json.dumps([
+                    {"index": len(ask.attachments) + n, "name": neutralize(f["name"]), "mime": f["mime"], "path": f["path"]}
+                    for n, f in enumerate(earlier, 1)
+                ], ensure_ascii=False)
+                user += "\nUse read_attachment by index to read one of them again."
+            if ask.attachments or earlier:
+                user += ("\nA file's path is its whole stored copy on this computer: read it with your own file tools"
+                         " when read_attachment or an excerpt cuts it short.")
             if ask.attachments:
                 user += "\nFiles: " + json.dumps([
-                    {"index": n, "name": neutralize(a.name), "mime": a.mime}
+                    {"index": n, "name": neutralize(a.name), "mime": a.mime, **self._stored_path(a.stored_id)}
                     for n, a in enumerate(ask.attachments, 1)
                 ], ensure_ascii=False)
                 user += text_context(ask.attachments)
@@ -2031,7 +2054,7 @@ class AgentService:
                         ), ok=result.ok)
             snapshot = take_snapshot(
                 self._plugins, ask.text, memory=self._memory is not None,
-                attachments=bool(ask.attachments), speaker=ask.speaker,
+                attachments=bool(ask.attachments or earlier), speaker=ask.speaker,
                 team=team_tools_for(self._team, ask.speaker, always=True), max_tier=Tier.T3,
                 interactive=True,
             )
@@ -2187,10 +2210,19 @@ class AgentService:
                         result = await self._tool(ask, self._tools.generate_audio(args, self._attachment_store), name)
                     elif name == "read_attachment":
                         number = args.get("index")
-                        if type(number) is not int or not 1 <= number <= len(ask.attachments):
+                        if type(number) is not int or not 1 <= number <= len(ask.attachments) + len(earlier):
                             return ToolOutcome(False, "bad_arguments")
+                        if number <= len(ask.attachments):
+                            attachment = ask.attachments[number - 1]
+                        else:
+                            item = earlier[number - len(ask.attachments) - 1]
+                            try:
+                                data = await asyncio.to_thread(Path(item["path"]).read_bytes)
+                            except OSError:
+                                return ToolOutcome(False, "unavailable")
+                            attachment = Attachment(item["name"], item["mime"], data, item["id"])
                         result = await self._tool(ask, self._tools.read_attachment(
-                            ask.attachments[number - 1], str(args.get("question") or ask.text), ledger, number=number
+                            attachment, str(args.get("question") or ask.text), ledger, number=number
                         ), name)
                     elif name == "history_search":
                         reply = Reply("", "", None, search=str(args.get("query", "")))
