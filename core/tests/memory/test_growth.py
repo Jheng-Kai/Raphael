@@ -189,7 +189,7 @@ async def test_first_bots_cli_brain_handles_background_consolidation_without_api
     assert calls and all(call["model"] == "cli:codex" and call["tools"] == [] for call in calls)
 
 
-@pytest.mark.parametrize("kind, final", [("error", ""), ("done", "not JSON")])
+@pytest.mark.parametrize("kind, final", [("error", ""), ("done", "not JSON"), ("done", "```json")])
 async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing, monkeypatch, kind, final):
     from types import SimpleNamespace
     from raphael_core.agent.cli import loop as cli
@@ -212,3 +212,97 @@ async def test_cli_memory_failure_is_not_reported_as_an_openrouter_call(growing,
     monkeypatch.setattr(memory._base_client, "complete_json", forbidden)
     with pytest.raises(MemoryBrainError):
         await MemoryBrain(memory, 1).complete_json(model="cli:codex", system="Tidy", user="Private notes", schema={})
+
+
+async def test_owner_fact_and_web_fact_in_one_batch_have_separate_trust(growing):
+    memory, _ = growing
+    result = memory.update_memory(2, {"target": "memory", "operations": [
+        {"action": "add", "content": "The owner prefers concise answers."},
+        {"action": "add", "content": "The observatory opens in December."},
+    ]}, untrusted=True, owner_text="I prefer concise answers. Please check the observatory website.")
+    assert result.ok
+    assert memory.own(2).entries() == ["The owner prefers concise answers.", "（待確認）The observatory opens in December."]
+
+
+async def test_searching_own_clean_history_does_not_taint_the_next_note(growing, history):
+    memory, _ = growing
+    add_turn(history, "I prefer amber notebooks.", "Understood.")
+    found = memory.session_search(0, "notebooks")
+    assert found.ok and not found.untrusted
+    assert not memory.session_read(0, found.data["hits"][0]["id"]).untrusted
+
+
+async def test_a_done_cli_failure_keeps_its_kind_and_never_parses_the_owner_message(growing, monkeypatch):
+    from types import SimpleNamespace
+    from raphael_core.agent.cli import loop as cli
+    from raphael_core.memory.brain import MemoryBrain, MemoryBrainError
+    from raphael_core.failures import Failure
+
+    memory, _ = growing
+    class Loop:
+        failure = "usage_limit"
+        failure_reason = Failure("usage_limit", "synthetic private provider text")
+        def __init__(self, **kwargs):
+            pass
+        async def run(self):
+            return SimpleNamespace(kind="done", final="A friendly quota message, not JSON")
+        async def aclose(self):
+            pass
+    monkeypatch.setattr(cli, "CliLoop", Loop)
+    with pytest.raises(MemoryBrainError) as caught:
+        await MemoryBrain(memory, 1).complete_json(model="cli:claude", system="Tidy", user="Own turns", schema={})
+    assert caught.value.kind == "usage_limit"
+    assert "private" not in str(caught.value)
+
+
+def test_every_memory_writer_includes_the_same_doctrine():
+    from raphael_core.agent.persona import _MEMORY_EDITS
+    from raphael_core.memory.doctrine import DOCTRINE
+    from raphael_core.memory.growth import DEFINITIONS
+    from raphael_core.memory.reflection import _REFLECT_SYSTEM, _CONSOLIDATE_SYSTEM
+    from raphael_core.members.skill_review import SYSTEM
+
+    for prompt in (_MEMORY_EDITS, DEFINITIONS["memory_update"]["description"], _REFLECT_SYSTEM, _CONSOLIDATE_SYSTEM, SYSTEM):
+        assert DOCTRINE in prompt
+        assert "negative capability claims" in prompt
+        assert "Task lessons and reusable procedures belong in skills" in prompt
+        assert "decisions and work outcomes" not in prompt
+
+
+@pytest.mark.parametrize("owner_text", ["I do not prefer concise answers.", "A web page says I prefer concise answers.", "Please read the attachment."])
+async def test_unrelated_or_negated_owner_words_cannot_confirm_a_note(growing, owner_text):
+    memory, _ = growing
+    result = memory.update_memory(2, {"operations": [{"action": "add", "content": "The owner prefers concise answers."}]},
+                                  untrusted=True, owner_text=owner_text)
+    assert result.ok and memory.own(2).entries() == ["（待確認）The owner prefers concise answers."]
+
+
+async def test_a_model_cannot_confirm_an_existing_claim_without_the_owners_words(growing):
+    memory, _ = growing
+    claim = "The owner prefers amber notebooks."
+    args = {"operations": [{"action": "add", "content": claim}]}
+    assert memory.update_memory(2, args, untrusted=True).ok
+    assert memory.update_memory(2, args).ok
+    assert memory.own(2).entries() == ["（待確認）" + claim]
+    assert not memory.update_memory(2, {"operations": [{"action": "replace", "old_text": "（待確認）" + claim, "content": claim}]}).ok
+    assert memory.own(2).entries() == ["（待確認）" + claim]
+    assert memory.update_memory(2, args, untrusted=True, owner_text="I prefer amber notebooks.").ok
+    assert memory.own(2).entries() == [claim]
+
+
+async def test_moving_a_claim_to_shared_memory_does_not_confirm_it(growing):
+    memory, _ = growing
+    claim = "The owner prefers amber notebooks."
+    operations = [{"action": "add", "content": claim}]
+    assert memory.update_memory(2, {"operations": operations}, untrusted=True).ok
+    assert memory.update_memory(2, {"target": "user", "operations": operations}).ok
+    assert memory.shared.entries()[0].startswith("（待確認）" + claim)
+
+
+async def test_removing_then_adding_a_claim_in_one_batch_does_not_confirm_it(growing):
+    memory, _ = growing
+    claim = "The owner prefers amber notebooks."
+    assert memory.update_memory(2, {"operations": [{"action": "add", "content": claim}]}, untrusted=True).ok
+    assert memory.update_memory(2, {"operations": [
+        {"action": "remove", "old_text": claim}, {"action": "add", "content": claim}]}).ok
+    assert memory.own(2).entries() == ["（待確認）" + claim]

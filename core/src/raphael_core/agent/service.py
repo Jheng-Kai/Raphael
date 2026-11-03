@@ -1607,8 +1607,8 @@ class AgentService:
         began = time.perf_counter()
         untrusted = bool(ask.memory_untrusted or ask.attachments or any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen))
         applied = self._memory.apply_edits(reply.memory, ask.speaker.id, untrusted=untrusted,
+                                           owner_text=ask.text if ask.scope == "private" and not ask.nested else "",
                                            share=ask.scope == "room" or explicitly_shared(ask.text), private_request=keeps_private(ask.text))
-        applied.marked = untrusted
         for _ in (*applied.written, *applied.deleted):
             ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "ok", began, None, "external_content" if untrusted else None))
         for _ in applied.refused:
@@ -2837,12 +2837,13 @@ class AgentService:
                 if not private:
                     args = {**args, "target": "user" if ask.scope == "room" else "memory"}
                 result = self._memory.update_memory(member, args, untrusted=external,
+                    owner_text=ask.text if private and not ask.nested else "",
                     share=ask.scope == "room" or explicitly_shared(ask.text), private_request=keeps_private(ask.text))
             (ask.steps if steps is None else steps).append(self._step("tool", name, BUILTIN_SERVER,
                 "ok" if result.ok else "blocked", time.perf_counter(), result.error, "external_content" if external and result.ok else None))
             self._gate.record_builtin(name, outcome="ok" if result.ok else "blocked", approver="user" if approval is not None else "auto")
             if name == "memory_update" and result.ok and result.data.get("changed"):
-                self._message(ask, "event", phrase(ask.language, "remembered_unconfirmed" if external else "remembered"))
+                self._message(ask, "event", phrase(ask.language, "remembered_unconfirmed" if result.data.get("marked") else "remembered"))
             return result
         if call.tool.key in HARNESS_TOOLS:
             return await self._harness_call(ask, call, approval, action, steps=steps)

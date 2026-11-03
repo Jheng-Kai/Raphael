@@ -122,7 +122,7 @@ class Driver:
             await self.child.kill()
         self._close_steers()
 
-    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None):
+    async def run(self, *, user, system, endpoint, token, session=None, permission, cwd=None, images=(), computer_endpoint=None, structured=None):
         files = PrivateFiles()
         codex_auth = None
         self._diagnostic_secrets = [token]
@@ -141,10 +141,14 @@ class Driver:
             child_cwd = cwd or str(files.path)
             if self.name == "claude":
                 command += ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
+                            "--setting-sources", "", "--disable-slash-commands",
                             "--include-partial-messages", "--append-system-prompt-file", prompt_file,
                             "--mcp-config", config, "--strict-mcp-config", "--tools", "",
-                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*",
-                            "--permission-prompt-tool", "mcp__raphael__approve"]
+                            "--allowedTools", "mcp__raphael__*,mcp__computer__*" if computer_endpoint else "mcp__raphael__*"]
+                if structured is not None:
+                    command += ["--json-schema", json.dumps(structured)]
+                else:
+                    command += ["--permission-prompt-tool", "mcp__raphael__approve"]
                 if session:
                     command += ["--resume", session]
                 if self.model:
@@ -313,7 +317,8 @@ class Driver:
                     yield self._event("error", {"error": packet.get("result") or packet.get("errors") or "CLI failed",
                                                 "status": packet.get("api_error_status")})
                 else:
-                    yield self._event("final", packet.get("result") or "")
+                    output = packet.get("structured_output")
+                    yield self._event("final", json.dumps(output) if output is not None else packet.get("result") or "")
                 return
 
     async def _antigravity(self):

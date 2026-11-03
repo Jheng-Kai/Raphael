@@ -28,16 +28,15 @@ The RPC methods (the main window only; the shell checks their params before they
 - `memory.clear {space?, member_id?}` -> `{cleared}`: the file is emptied (its journal keeps what it held)
 - `memory.summary_clear {member_id?}` -> `{cleared}`: the conversation's summary is forgotten
 
-The tools of the assistant are in `growth`; `history_search` only reads (T0). What a turn writes after
-reading outside content goes in marked (`store.UNCONFIRMED`): the review queue this replaced held such a write
-out of the file until the owner approved it, row by row, and nearly every working turn landed there.
+The tools of the assistant are in `growth`; `history_search` only reads (T0). Outside claims go in
+marked (`store.UNCONFIRMED`), while verified restatements of the current owner's request stay trusted.
 
 The reflection pass runs in the background on each member's selected brain (including CLI), for each
 assistant over its own turns (a watermark each): after REFLECT_AFTER_TURNS answered turns it has not
 read, or once the conversation has been quiet for QUIET_S with any such turn, and once soon after
 the app starts when one is waiting. The consolidation runs with it for a file past `reflection.FULL_FROM` of
 its limit, once a day. A timer that finds nothing due yet, and every pass when it ends, arms the timer
-again for the next time something will be (the quiet time, the pause of RETRY_S after a failure, the
+again for the next time something will be (the quiet time, an increasing pause after a failure, the
 day), so nothing waits for the owner's next turn. Both need the key and room under the month's limit,
 and both are written to the spend with the purpose "memory".
 
@@ -71,7 +70,7 @@ from ..router import Router as RpcRouter
 from . import legacy
 from .conversation import SUMMARY_PURPOSE, Conversation
 from .reflection import FULL_FROM, MAX_TURNS, Applied, Edit, Reflector, about_the_owner
-from .store import UNCONFIRMED, MemoryFile, MemorySnapshot, relation, told_stamp
+from .store import UNCONFIRMED, MemoryFile, MemorySnapshot, is_unconfirmed, owner_stated, relation, told_stamp
 from .growth import Growth
 
 logger = logging.getLogger(__name__)
@@ -201,6 +200,7 @@ class MemoryService(Growth):
         self._timer: asyncio.TimerHandle | None = None
         self._running: asyncio.Task[None] | None = None
         self._failed_at: float | None = None
+        self._failure_count = 0
         # How many times the conversation was cleared: a pass that began at another count is stale.
         self._turn_clears = 0
 
@@ -358,7 +358,7 @@ class MemoryService(Growth):
         return SharedMemory(self)
 
     def edit_memory(self, member_id: int, target: str, operations: Sequence, *, untrusted: bool = False, share: bool = False,
-                    private_request: bool = False, unattended: bool = False) -> dict:
+                    private_request: bool = False, unattended: bool = False, owner_text: str = "") -> dict:
         """Apply a model's edits to the file `target` names, with the checks of the module for USER.md.
         The result is what the model is told."""
         mark = self._mark() if untrusted else ""
@@ -373,24 +373,27 @@ class MemoryService(Growth):
             if operations and not fresh:
                 return {"success": True, "done": True, "target": "user", "changed": False, "usage": self.shared.usage(), "entry_count": len(said),
                         "message": "USER.md already says this, so nothing was added.", "note": "This update is complete: do not repeat it."}
-            return own.apply(fresh, mark=mark, unattended=unattended)
+            return own.apply(fresh, mark=mark, unattended=unattended, owner_text=owner_text)
         told = told_stamp(self._told_name(member_id), self._today().isoformat())
         kept = [] if share else [op for op in operations if added(op) and (private_request or not about_the_owner(content(op)))]
         rest = [op for op in operations if not any(op is item for item in kept)]
         if kept:
-            result = own.apply(kept, mark=mark, unattended=unattended)
+            result = own.apply(kept, mark=mark, unattended=unattended, owner_text=owner_text)
             if result["success"]:
                 result["message"] = ("Kept in your own MEMORY.md, not USER.md: it is about this conversation or a plan, or "
                                      "the owner wants it kept from the others.")
             if not rest or not result["success"]:
                 return result
-        result = self.shared.apply(rest, mark=mark, told=told, unattended=unattended)
+        pending = [entry for entry in own.entries() if is_unconfirmed(entry)]
+        rest = [{**op, "content": self._mark() + content(op)} if added(op) and not owner_stated(content(op), owner_text)
+                and any(relation(content(op), entry) in ("same", "inside", "wider", "near") for entry in pending) else op for op in rest]
+        result = self.shared.apply(rest, mark=mark, told=told, unattended=unattended, owner_text=owner_text)
         if result["success"]:
             own.drop_said([content(op) for op in rest if added(op)])
         return result
 
     def apply_edits(self, edits: Sequence[Edit], member_id: int = 0, *, untrusted: bool = False, share: bool = False,
-                    private_request: bool = False, unattended: bool = False) -> Applied:
+                    private_request: bool = False, unattended: bool = False, owner_text: str = "") -> Applied:
         """What came of the edits of a reply or a pass, each file by itself."""
         applied = Applied()
         for target in ("memory", "user"):
@@ -398,7 +401,7 @@ class MemoryService(Growth):
             if not batch:
                 continue
             result = self.edit_memory(member_id, target, [asdict(edit) for edit in batch], untrusted=untrusted, share=share,
-                                      private_request=private_request, unattended=unattended)
+                                      private_request=private_request, unattended=unattended, owner_text=owner_text)
             applied.record(result, batch, target)
         return applied
 
@@ -540,7 +543,7 @@ class MemoryService(Growth):
         wait, or when its conversation will have been quiet for QUIET_S) and the daily
         consolidation. None when nothing waits: the owner's next turn arms the timer again."""
         if self._failed_at is not None:
-            left = RETRY_S - (self._clock() - self._failed_at)
+            left = self._retry_s() - (self._clock() - self._failed_at)
             if left > 0:
                 return left
         delays: list[float] = []
@@ -614,7 +617,7 @@ class MemoryService(Growth):
         it ends) or the pause after a failure is not over (the timer is armed for its end)."""
         if self._running is not None and not self._running.done():
             return
-        if self._failed_at is not None and self._clock() - self._failed_at < RETRY_S:
+        if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
             self._arm_next()
             return
         try:
@@ -628,6 +631,9 @@ class MemoryService(Growth):
         then the timer is armed for whatever is due next (the rest of a long backlog, the pause
         after a failure, the next quiet time or day). Without a key or room under the limit
         nothing runs, and the timer looks again no sooner than RETRY_S."""
+        if self._failed_at is not None and self._clock() - self._failed_at < self._retry_s():
+            self._arm_next()
+            return
         if not any(self.may_spend(member_id) for member_id in self._agents()):
             delay = self._next_due_s()
             if delay is not None:
@@ -638,15 +644,28 @@ class MemoryService(Growth):
                 if self._due(member_id) and self.may_spend(member_id):
                     applied = await self.reflect(member_id)
                     if applied.failed:
-                        break
+                        self._arm_next()
+                        return
             if self.skill_review is not None:
                 await self.skill_review.run_due()
             if self.consolidation_due():
                 await self.consolidate()
         except Exception as exc:  # the background must not break the conversation
-            self._failed_at = self._clock()
-            logger.warning("The memory's background pass failed: %s", type(exc).__name__)
+            self._record_failure()
+            logger.warning("The memory's background pass failed: kind=internal reason=Unexpected %s", type(exc).__name__)
         self._arm_next()
+
+    def _retry_s(self) -> float:
+        return min(RETRY_S * 2 ** min(max(0, self._failure_count - 1), 5), 6 * 3600.0)
+
+    def _record_failure(self) -> None:
+        self._failure_count += 1
+        self._failed_at = self._clock()
+        logger.info("Memory retry deferred: failures=%d delay_s=%d", self._failure_count, self._retry_s())
+
+    def _recovered(self) -> None:
+        self._failure_count = 0
+        self._failed_at = None
 
     async def reflect(self, member_id: int = 0) -> Applied:
         """One reflection pass over the turns of `member_id` it has not read. The watermark moves past
@@ -678,8 +697,9 @@ class MemoryService(Growth):
             apply=lambda edits: self.apply_edits(edits, member_id, private_request=private_request, unattended=True),
         )
         if applied.failed:
-            self._failed_at = self._clock()
+            self._record_failure()
         elif self._turn_clears == clears:
+            self._recovered()
             through = max(turns[-1].id or 0, self.reflected_through(member_id))
             self._set_state(_watermark(member_id), through)
         return applied
@@ -703,8 +723,9 @@ class MemoryService(Growth):
                 memory, today=self._today(), model=self._model(member_id), ledger=self.ledger(), apply=apply,
                 current=lambda memory=memory, clears=clears: memory.clears == clears))
         if total.failed:
-            self._failed_at = self._clock()
+            self._record_failure()
         else:
+            self._recovered()
             self._set_state(_CONSOLIDATED, self._now_ms())
         return total
 
@@ -793,8 +814,8 @@ class MemberMemory:
     memory: MemoryService
     member_id: int
 
-    def growth(self, name, args, *, untrusted=False):
-        return self.memory.growth(name, args, untrusted=untrusted, member_id=self.member_id)
+    def growth(self, name, args, *, untrusted=False, owner_text=""):
+        return self.memory.growth(name, args, untrusted=untrusted, member_id=self.member_id, owner_text=owner_text)
 
     def snapshot(self) -> MemorySnapshot:
         return self.memory.snapshot(self.member_id)

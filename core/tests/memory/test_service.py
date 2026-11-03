@@ -56,6 +56,15 @@ async def test_the_four_methods_are_registered(rpc):
         assert method in rpc.methods(), method
 
 
+async def test_the_owner_can_confirm_a_claim_in_the_existing_document_editor(memory):
+    claim = "The owner prefers amber notebooks."
+    assert memory.update_memory(0, {"operations": [{"action": "add", "content": claim}]}, untrusted=True).ok
+    view = await memory._get({})
+    assert view["text"].startswith("（待確認）")
+    saved = await memory._update({"text": claim, "revision": view["revision"]})
+    assert saved["text"].strip() == claim
+
+
 async def test_clear_empties_the_file_and_summary_clear_the_summary(rpc, memory):
     assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "一件事"}]}).ok
     memory.conversation._save("Context:\n...", 3)
@@ -249,6 +258,40 @@ async def test_a_pass_that_failed_is_tried_again_after_its_pause(memory, history
     memory._tick()
     await memory.wait_idle()
     assert SECRET_WORDS in memory.own(0).read()
+
+
+async def test_repeated_memory_failures_back_off_and_success_resets_the_pause(memory, history, model, clock, caplog):
+    from raphael_core.memory.brain import MemoryBrainError
+    from raphael_core.memory.service import RETRY_S
+
+    add_turn(history, "I prefer amber notebooks.")
+    clock.advance(seconds=1)
+    with caplog.at_level(logging.INFO):
+        for count in range(1, 4):
+            model.replies.append(MemoryBrainError(0, "usage_limit", "synthetic private prompt excerpt"))
+            await memory.run_due()
+            assert len(model.calls) == count
+            delay = RETRY_S * 2 ** (count - 1)
+            assert memory._next_due_s() == delay
+            await memory.run_due()
+            memory.after_turn()
+            assert len(model.calls) == count and memory.reflected_through() == 0
+            clock.advance(seconds=delay)
+        model.replies.append({"actions": []})
+        await memory.run_due()
+    assert memory.reflected_through() > 0
+    assert memory._failed_at is None and memory._failure_count == 0
+    assert "kind=usage_limit reason=Subscription usage limit reached" in caplog.text
+    assert "synthetic private" not in caplog.text
+
+
+async def test_failed_reflection_does_not_launch_consolidation_in_the_same_pass(memory, history, model, clock):
+    add_turn(history, "A synthetic question")
+    memory.own(0).edit_document("\n\n".join(f"Durable environment fact {n} uses a separate amber pipeline" for n in range(40)), None)
+    clock.advance(seconds=1)
+    model.replies.append(OpenRouterError(503, "server", "private provider text"))
+    await memory.run_due()
+    assert len(model.calls) == 1 and memory.consolidation_due()
 
 
 async def test_without_a_key_the_background_looks_again_later_not_at_once(memory, history, model, keys, clock):

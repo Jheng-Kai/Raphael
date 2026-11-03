@@ -312,6 +312,8 @@ class TaskRun:
         self._tools = tools
         self._store = store
         initial = store.get(task_id)
+        self._memory_owner_text = request if (initial and initial.scope == "private" and
+            initial.routine_id is None and initial.from_member_id is None and initial.parent_task_id is None) else ""
         self.generation = initial.generation if initial else 0
         self._spend = spend
         self._monthly_limit = monthly_limit
@@ -1019,7 +1021,8 @@ class TaskRun:
             if name in GROWTH_TOOLS:
                 if self._memory is None or not hasattr(self._memory, "growth"):
                     return ToolResult(name, False, None, "blocked")
-                result = self._memory.growth(name, arguments, untrusted=self._memory_untrusted)
+                result = self._memory.growth(name, arguments, untrusted=self._memory_untrusted,
+                    **({"owner_text": self._memory_owner_text} if self._memory_owner_text else {}))
                 self._memory_untrusted = self._memory_untrusted or result.untrusted
                 return result
             if name in ("web_search", "web_read", "read_attachment", "ask_member"):

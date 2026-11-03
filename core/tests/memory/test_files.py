@@ -363,7 +363,7 @@ def test_outside_content_enters_marked_and_never_changes_what_the_owner_said(mem
     assert edit(memory, 1, {"action": "replace", "old_text": "公開的", "content": "私密的"}, untrusted=True).ok
     assert is_unconfirmed(own_file(tmp_path, 1).strip().split("\n\n")[1])
     # The owner saying the same thing confirms it.
-    assert edit(memory, 1, add("使用者的銀行帳號是私密的")).ok
+    assert edit(memory, 1, add("使用者的銀行帳號是私密的"), owner_text="我的銀行帳號是私密的").ok
     assert not is_unconfirmed(own_file(tmp_path, 1).strip().split("\n\n")[1])
 
 

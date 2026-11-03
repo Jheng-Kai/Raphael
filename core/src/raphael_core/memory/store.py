@@ -34,10 +34,9 @@ members writing at once lose nothing, in one process or several.
 
 Outside content does not enter silently. Whatever is written is scanned (`scan.refusal`, at the write
 and again when a turn reads the file, where a line that fails is replaced by a [BLOCKED] note and stays
-in the file for the owner to see). What a turn writes after reading outside content (a web page, a file,
-a connected service, a colleague) goes in with a mark at its start (`UNCONFIRMED`), which the model reads
-as an unverified claim and the owner sees in the document; such a turn may add and may edit what is
-marked, and never touches an entry without the mark. The owner saying the same thing removes the mark.
+in the file for the owner to see). Outside claims carry a mark (`UNCONFIRMED`); close restatements of
+the owner's current request need none, even beside outside claims in the same batch. Outside claims
+never change confirmed entries. Only matching owner words or the owner document editor remove a mark.
 
 Nothing here logs an entry.
 """
@@ -87,6 +86,23 @@ def without_mark(entry: str) -> str:
         if entry.startswith(mark):
             return entry[len(mark):]
     return entry
+
+
+def owner_stated(content: str, owner_text: str) -> bool:
+    """Recognize close restatements without granting model-supplied provenance authority.
+
+    Exact clauses preserve negation; fuzzy token overlap could turn 'not red' into 'red'.
+    Unmatched paraphrases conservatively keep their unconfirmed mark.
+    """
+    def clause(text):
+        text = text.casefold().strip()
+        text = re.sub(r"^(?:please\s+)?remember(?:\s+that)?\s+|^(?:請)?(?:記住|記得)", "", text)
+        text = re.sub(r"^(?:the (?:owner|user)|i|my)\b\s*|^(?:使用者|主人|我)(?:的)?", "", text)
+        text = re.sub(r"\b(prefers|likes|lives|uses)\b", lambda match: match[0][:-1], text)
+        return " ".join(text.split()).strip(" .!?。！？")
+
+    note = clause(_TOLD.sub("", without_mark(content)))
+    return bool(note and owner_text and any(note == clause(part) for part in re.split(r"[.!?;。！？；\n]+", owner_text)))
 
 
 def told_stamp(name: str, day: str) -> str:
@@ -290,7 +306,7 @@ class MemoryFile:
 
     # --- writing -----------------------------------------------------------------------------------
 
-    def apply(self, operations: Sequence[dict], *, mark: str = "", told: str = "", unattended: bool = False) -> dict:
+    def apply(self, operations: Sequence[dict], *, mark: str = "", told: str = "", unattended: bool = False, owner_text: str = "") -> dict:
         """Apply `operations` ({action: add|replace|remove, content?, old_text?}) to the live file, all
         or none, against the limit on their final result. `mark` is the mark of a turn that read
         outside content, `told` the stamp of a shared entry, and `unattended` a pass nobody watches,
@@ -310,7 +326,7 @@ class MemoryFile:
                         f"{self.name} exists but could not be read right now. Writing from an empty view "
                         "would wipe it, so nothing was changed. Try again later.")}
                 try:
-                    working = self._walk(before, ops, mark=mark, told=told)
+                    working = self._walk(before, ops, mark=mark, told=told, owner_text=owner_text)
                 except Refused as refused:
                     if refused.kind in ("secret", "injection"):
                         return {"success": False, "kind": refused.kind, "error": str(refused)}
@@ -328,11 +344,12 @@ class MemoryFile:
         if changed and self._on_change is not None:
             self._on_change()
         return {"success": True, "done": True, "target": self.target,
+                "marked": any(is_unconfirmed(entry) and entry not in before for entry in working),
                 "changed": changed, "usage": self._usage(len(ENTRY_DELIMITER.join(working))), "entry_count": len(working),
                 "message": f"Applied {len(ops)} operation(s)." if changed else "Entry already exists (no duplicate added).",
                 "note": "Write saved. This update is complete: do not repeat it."}
 
-    def _walk(self, entries: Sequence[str], ops: Sequence[dict], *, mark: str, told: str) -> list[str]:
+    def _walk(self, entries: Sequence[str], ops: Sequence[dict], *, mark: str, told: str, owner_text: str = "") -> list[str]:
         working = list(entries)
         for number, op in enumerate(ops, 1):
             action = op.get("action")
@@ -340,26 +357,39 @@ class MemoryFile:
             old_text = str(op.get("old_text") or "")
             where = f"Operation {number} ({action or 'unknown'})"
             if action == "add":
-                self._add(working, clean_entry(content), where, mark=mark, told=told, alone=len(ops) == 1)
+                inherited = next((value for value in _UNCONFIRMED_MARKS if content.startswith(value)), "")
+                if not inherited:
+                    inherited = next((value for entry in entries if is_unconfirmed(entry) and relation(content, entry)
+                                      in ("same", "inside", "wider", "near") for value in _UNCONFIRMED_MARKS if entry.startswith(value)), "")
+                confirmed = owner_stated(content, owner_text)
+                note_mark = "" if confirmed else mark or inherited
+                self._add(working, clean_entry(content), where, mark=note_mark, told=told,
+                          alone=len(ops) == 1, confirmed=confirmed)
             elif action in ("replace", "remove"):
-                self._edit(working, action, old_text, content, where, mark=mark, told=told, alone=len(ops) == 1)
+                index, ambiguous = _find_unique_match(working, old_text)
+                patched = working[index].replace(old_text, content, 1) if index is not None and not ambiguous else ""
+                confirmed = action == "replace" and owner_stated(patched, owner_text)
+                self._edit(working, action, old_text, content, where, mark="" if confirmed else mark,
+                           told=told, alone=len(ops) == 1, confirmed=confirmed)
             else:
                 raise Refused("bad_arguments", f"{where}: unknown action. Use add, replace or remove.")
         return working
 
-    def _add(self, working: list[str], content: str, where: str, *, mark: str, told: str, alone: bool) -> None:
+    def _add(self, working: list[str], content: str, where: str, *, mark: str, told: str, alone: bool, confirmed: bool = False) -> None:
         if not without_mark(content).strip():
             raise Refused("bad_arguments", f"{where}: content is required.")
         fresh = mark + _TOLD.sub("", without_mark(content)) + told
         for index, entry in enumerate(working):
             found = relation(content, entry)
             if found == "same":
-                if is_unconfirmed(entry) and not mark:  # the owner said it: it needs no mark any more
+                if is_unconfirmed(entry) and confirmed:
                     working[index] = fresh
                 return
             if found == "inside":
                 return
             if found == "wider" and (not mark or is_unconfirmed(entry)):
+                if is_unconfirmed(entry) and not confirmed and not mark:
+                    fresh = next(value for value in _UNCONFIRMED_MARKS if entry.startswith(value)) + fresh
                 working[index] = fresh
                 return
             if found == "near":
@@ -369,7 +399,7 @@ class MemoryFile:
                     f"same, there is nothing to do.\nThe entry: {entry}"))
         working.append(fresh)
 
-    def _edit(self, working: list[str], action: str, old_text: str, content: str, where: str, *, mark: str, told: str, alone: bool) -> None:
+    def _edit(self, working: list[str], action: str, old_text: str, content: str, where: str, *, mark: str, told: str, alone: bool, confirmed: bool = False) -> None:
         if not old_text.strip():
             raise Refused("missing_old_text", (
                 f"{where}: old_text is required: a short unique part of the entry. Retry with old_text set "
@@ -401,6 +431,10 @@ class MemoryFile:
         if count == 0:
             raise Refused("no_match", f"{where}: old_text is not an exact part of the entry. Retry with it copied verbatim.\nThe entry: {entry}")
         patched = clean_entry(entry.replace(old_text, content, 1))
+        if confirmed:
+            patched = without_mark(patched)
+        elif is_unconfirmed(entry) and not is_unconfirmed(patched):
+            patched = next(value for value in _UNCONFIRMED_MARKS if entry.startswith(value)) + patched
         if patched == entry:
             raise Refused("no_change", f"{where}: this leaves the entry as it is.")
         if refused := _refusal(patched):

@@ -104,6 +104,7 @@ class CliLoop:
         self.conversation_id = sessions.conversations.resolve(member_id, conversation_id) if sessions else conversation_id
         self.quota = quota
         self.resume_session = resume_session
+        self.structured = structured
         # The waits before running a rate-limited request again: None waits as for a turn someone is reading
         # (RATE_LIMIT_WAITS_S), () never waits.
         self.rate_limit_waits = rate_limit_waits
@@ -549,6 +550,7 @@ class CliLoop:
         self.driver = Driver(name, command, model=model, effort=brain_effort(self.model), environ=self.brains.environ, quota=self.quota, home=self.brains.home)
         stream_records = {}
         async with aclosing(self.driver.run(user=user, system=self.system, endpoint=server.url,
+                **({"structured": self.structured} if self.structured is not None else {}),
                 token=server.token, session=session, permission=self._native_permission,
                 **({"computer_endpoint": server.computer_url} if server.computer_url else {}),
                 cwd=str(workspace), images=self.images if name in ("codex", "claude") else ())) as stream:

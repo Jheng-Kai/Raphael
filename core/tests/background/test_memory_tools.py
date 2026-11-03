@@ -92,6 +92,21 @@ async def test_retrieved_external_history_marks_what_a_task_writes(rig, memory, 
     assert rig.steps()[0].detail == "external_content"
 
 
+async def test_owner_fact_in_private_work_stays_trusted_after_outside_content(conn, plugins, memory):
+    rig = Rig(conn, plugins, snapshot=take_snapshot(plugins.hub, memory=True), memory=memory,
+              request="I prefer concise answers.")
+    try:
+        rig.run._memory_untrusted = True
+        result = await rig.tool("memory_update", {"operations": [
+            {"action": "add", "content": "The owner prefers concise answers."},
+            {"action": "add", "content": "The observatory opens in December."}]})
+        assert result["ok"]
+        assert "The owner prefers concise answers." in memory.own(0).entries()
+        assert "（待確認）The observatory opens in December." in memory.own(0).entries()
+    finally:
+        await rig.meteo.http.aclose()
+
+
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [("history_search", {}), ("history_search", {"query": " "}), ("memory_update", {}), ("memory_update", {"target": "memory", "operations": "x"})],

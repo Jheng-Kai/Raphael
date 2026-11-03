@@ -151,6 +151,15 @@ async def test_what_a_turn_writes_after_a_web_search_goes_in_marked(rig, client,
     assert ("memory_update", "ok") in await steps_of(rig)
 
 
+async def test_web_search_does_not_mark_the_owners_current_preference(rig, client, memory):
+    client.decisions.append(decision("answer", search=0.9))
+    client.texts.append(found("The observatory opens in December."))
+    client.replies.append(reply("Checked.", prefix="Answer", memory=[
+        note("The owner prefers concise answers."), note("The observatory opens in December.")]))
+    await rig.ask("I prefer concise answers. Please check the observatory website.", language="en")
+    assert memory.own(0).entries() == ["The owner prefers concise answers.", "（待確認）The observatory opens in December."]
+
+
 async def test_a_turn_after_a_web_search_changes_nothing_the_owner_confirmed(rig, client, memory):
     assert memory.update_memory(0, {"target": "memory", "operations": [{"action": "add", "content": "主人住在台北。"}]}).ok
     client.decisions.append(decision("answer", search=0.9))

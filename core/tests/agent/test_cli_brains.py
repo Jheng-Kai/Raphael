@@ -21,6 +21,27 @@ def test_a_cli_brain_edits_the_memory_by_the_fields_an_api_brain_is_given():
     assert {"content", "old_text"} <= set(tool["operations"]["items"]["properties"]) & set(item)
 
 
+async def test_claude_memory_uses_structured_output_without_an_unregistered_permission_tool(tmp_path):
+    from raphael_core.agent.cli.drivers import Driver
+
+    script = tmp_path / "memory_protocol.py"
+    script.write_text('''import json, sys
+schema = json.loads(sys.argv[sys.argv.index("--json-schema") + 1])
+assert schema["required"] == ["actions"]
+assert sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+assert "--disable-slash-commands" in sys.argv
+assert "--permission-prompt-tool" not in sys.argv
+json.loads(sys.stdin.readline())
+print(json.dumps({"type": "result", "subtype": "success", "result": "",
+                  "structured_output": {"actions": []}}), flush=True)
+''', encoding="utf-8")
+    schema = {"type": "object", "required": ["actions"], "properties": {"actions": {"type": "array"}}}
+    driver = Driver("claude", [sys.executable, str(script)])
+    events = [event async for event in driver.run(user="Synthetic owner turns", system="Capture memory",
+        endpoint="http://127.0.0.1:1/mcp", token="ephemeral", permission=None, structured=schema)]
+    assert events[-1].kind == "final" and json.loads(events[-1].text) == {"actions": []}
+
+
 async def test_discovery_uses_fake_process_and_auth_existence_only(tmp_path):
     script = tmp_path / "fake.py"
     script.write_text("print('fake 1.2.3')", encoding="utf-8")
@@ -275,6 +296,8 @@ def send(value):
     print(json.dumps(value), flush=True)
 assert all(key not in os.environ for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"))
 if name == "claude":
+    assert sys.argv[sys.argv.index("--setting-sources") + 1] == ""
+    assert "--disable-slash-commands" in sys.argv
     assert "--resume" in sys.argv and "previous" in sys.argv
     assert sys.argv[sys.argv.index("--model")+1] == "chosen-model"
     assert sys.argv[sys.argv.index("--effort")+1] == "high"

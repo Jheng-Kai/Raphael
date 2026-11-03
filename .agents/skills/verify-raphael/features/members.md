@@ -320,7 +320,9 @@ reads, and all read the one `shared/USER.md` (共同記憶). Limits are Hermes's
 
 Every API/CLI brain edits them through one tool, `memory_update {target: memory|user, operations: [{action:
 add|replace|remove, content?, old_text?}]}` (and an API brain's reply field `memory`, the same edits). Useful
-facts and work outcomes are recorded without a remember phrase. The same fact keeps one line: the same words
+durable facts and preferences are recorded without a remember phrase. Reusable task lessons belong in skills;
+progress and completed-work logs belong in session_search/memory_log. All writers, including skill review, use
+`memory/doctrine.py` and forbid negative capability claims and transient failures. The same fact keeps one line: the same words
 are not added again, more words take the place of fewer, another wording is refused with the entry to
 replace. A batch is atomic and its limit is checked on its result; a refusal says how much to free and shows the
 entries; past three failures in a turn the model is told to stop and answer. `old_text` is a short unique part of
@@ -335,10 +337,14 @@ ends with whom the owner told it to and when.
 There is no review queue. It protected against a web page planting a fact or an order through the model, and it
 held nearly every working turn's facts in rows the owner had to approve one by one. Now: instructions and secrets
 are refused at every write, and a line that reaches the file by hand is blocked from the prompt and stays for the
-owner to remove. What a turn writes after outside content (a web page, a file, a connected service, a colleague)
-goes in with 「（待確認）」 at its start, in the document the owner reads, stays in that member's own file, and may
-change only other marked entries; the model reads it as a claim. The owner saying the same thing, or editing the
-mark away, confirms it. The reflection pass reads only the owner's words of a turn that read outside content, so
+owner to remove. Each outside claim (a web page, a file, a connected service, a colleague) goes in with
+「（待確認）」 at its start and changes only other marked entries; the model reads it as a claim. In the same
+atomic batch, host-verified close restatements of the owner's current private request stay trusted. Matching
+preserves negation and clause boundaries; unmatched paraphrases conservatively keep the mark. Exchanges, rooms
+and routines do not supply owner evidence. Clean own-history search is not external ingestion; a recalled web
+claim or marked log still is. Only the owner's matching words or removing the mark through the existing document
+editor confirm a claim; model rewrites, remove/add batches and moves between files retain its mark.
+The reflection pass reads only the owner's words of a turn that read outside content, so
 what it writes needs no mark.
 
 A turn reads both files once, at its start, in a form nothing it writes changes (`snapshot`), with how full each
@@ -353,6 +359,17 @@ subscriptions) reads both files whole and answers with edits at confidence >=0.6
 with the refusal. Once a day a file past 80% of its limit is consolidated the same way. A pass nobody watches may
 not empty a file or take more than half of it, and the journal keeps what any edit replaced. Capture skips
 exchange/routine turns.
+
+CLI memory checks the loop's failure state before parsing its final text: an owner-facing quota/login message
+is not a successful JSON answer. Claude uses its native JSON schema output without a permission callback absent
+from the tool-less catalog. Failures log a known kind and fixed short reason, never model text, stderr, notes
+or provider excerpts. Background failures retain the watermark, stop before consolidation and retry after 15,
+30, 60 minutes, doubling up to six hours; success resets the pause. Claude member and memory turns use empty
+`--setting-sources` and `--disable-slash-commands` (verified with installed CLI help offline).
+
+Core-only regression scope: `tests/memory`, `tests/agent`, plus `tests/background/test_memory_tools.py` and
+`tests/members/test_skill_growth.py`. No UI markup/navigation changes require additional look scenes for these
+contracts (R-MEM-06–09, R-CLI-04). Live subscription acceptance remains separate and requires authorization.
 
 At every start `memory/legacy.py` moves what the old store left (note files, the review queue, derived documents)
 into the files, merging exact and near duplicates, after copying everything to `bot-state/<id>/notes-backup/`. What
