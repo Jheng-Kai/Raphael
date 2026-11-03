@@ -27,6 +27,8 @@
   --brand-telegram: #26a5e4;
   --ui: "Inter", "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
   --display: var(--ui);
+  /* Windows' own fixed-width faces for Latin, the UI face for Chinese: the generic family is MingLiU on zh-TW Windows. */
+  --mono: "Cascadia Mono", Consolas, "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", monospace;
   --ja: "Yu Gothic UI", "Yu Gothic", "Meiryo UI", "Meiryo", "Hiragino Sans", "Noto Sans JP", sans-serif;
   --zh-sub: "Microsoft JhengHei UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
 
@@ -259,6 +261,7 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .action-row.is-sticky { position: sticky; bottom: 0; z-index: 2; padding-block: var(--sp-3); border-top: 1px solid var(--line); background: var(--panel); }
 .lm-confirm-actions { flex: 1 1 100%; }
 .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-xs); }
+code, pre, samp { font-family: var(--mono); }
 kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--key); border: 1px solid var(--key-edge); border-bottom-width: 2px; font: 600 var(--fs-xs)/1 var(--ui); color: var(--text); }
 .rec-hint { color: var(--accent-text); font-size: var(--fs-xs); }
 .st { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }

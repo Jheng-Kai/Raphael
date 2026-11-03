@@ -140,6 +140,15 @@ describe("the main window's actions", () => {
     }
   });
 
+  test("monospace text has one font stack, with Windows' own faces before the browser's default", () => {
+    // Bare `monospace` resolves to MingLiU on Traditional Chinese Windows, whose Latin letters are ugly.
+    const css = read(path.join(root, "styles.css"));
+    expect(css).toMatch(/--mono: "Cascadia Mono", Consolas, "Microsoft JhengHei UI", "Microsoft JhengHei"[^;]*, monospace;/);
+    expect(css).toMatch(/\bcode, pre, samp \{ font-family: var\(--mono\); \}/);
+    for (const file of sources.filter((f) => f.endsWith(".css")))
+      expect(read(file).replace(/--mono:[^;]*;/, ""), file).not.toMatch(/monospace/);
+  });
+
   test("a button has an edge at rest and a fill when it is pressed", () => {
     expect(btn("變更", "sm")).toBe('<button type="button" class="btn sm">變更</button>');
     const css = read(path.join(root, "styles.css"));

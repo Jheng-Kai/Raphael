@@ -107,7 +107,7 @@
 .cs-tool-list .row .t { font-size: var(--fs-xs); }
 .cs-tool-list .row .t .tool-name { color: var(--text); overflow-wrap: anywhere; }
 .cs-tool-list .row .d { margin-top: var(--sp-1); font-size: var(--fs-xs); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--fs-xs); }
+.code { font-family: var(--mono); font-size: var(--fs-xs); }
 .cs-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-3); font-size: var(--fs-2xs); color: var(--text-3); }
 .cs-meta > span { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; overflow-wrap: anywhere; }
 .cs-key { color: var(--text-2); }
@@ -125,7 +125,7 @@
 .cs-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
 .cs-field > .flabel { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
 /* The document is a textarea with the field's look; the field's own padding and height (one line) yield to these, hence the longer selector. */
-.cs-field > .cs-skill-text { display: block; width: 100%; height: auto; min-height: 320px; padding: var(--sp-3); resize: vertical; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
+.cs-field > .cs-skill-text { display: block; width: 100%; height: auto; min-height: 320px; padding: var(--sp-3); resize: vertical; font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
 
 /* A notice that something waits for the user */
 .ca-alert { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3); border-radius: var(--r-lg); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-sm); }
@@ -189,7 +189,7 @@
 .fld .field { width: 100%; }
 .fld .sel { width: 100%; max-width: none; justify-content: space-between; }
 .secret-row { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: var(--fs-sm); }
-.secret-row .nm { font-weight: 600; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--fs-2xs); overflow-wrap: anywhere; }
+.secret-row .nm { font-weight: 600; font-family: var(--mono); font-size: var(--fs-2xs); overflow-wrap: anywhere; }
 .secret-row .where { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); display: inline-flex; align-items: center; gap: var(--sp-1); }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sp-2); }
 .trust { display: flex; gap: var(--sp-2); align-items: flex-start; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--warn-soft); border: 1px solid var(--warn-edge); font-size: var(--fs-2xs); line-height: 1.55; color: var(--text-2); }
@@ -210,14 +210,14 @@
   .cs-scrim { padding: var(--sp-4); }
 }
 
-/* The code of a device login: large monospace keycaps and the one button that copies it and opens the page */
+/* The code of a device login: large fixed-width keycaps and the one button that copies it and opens the page */
 .cs-device { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); padding: var(--sp-4) var(--sp-4); border: 0; border-radius: 0; background: transparent; }
 .cs-device-hint { margin: 0; font-size: var(--fs-xs); color: var(--text-2); text-align: center; text-wrap: pretty; }
 .cs-code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: var(--sp-1); user-select: text; }
-.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 600 var(--fs-h1)/1 ui-monospace, "Cascadia Mono", Consolas, monospace; }
-.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 600 var(--fs-h1)/1 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.cs-cap { display: inline-grid; place-items: center; width: 36px; height: 46px; border: 1px solid var(--key-edge); border-bottom-width: 3px; border-radius: var(--r-sm); background: var(--key); color: var(--text); font: 600 var(--fs-h1)/1 var(--mono); }
+.cs-dash { padding: 0 var(--sp-1); color: var(--text-3); font: 600 var(--fs-h1)/1 var(--mono); }
 .cs-device-acts { gap: var(--sp-2); }
-.mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: ui-monospace, monospace; white-space: pre; }
+.mcp-lines { width: 100%; min-height: 96px; padding: var(--sp-2) var(--sp-3); resize: vertical; font-family: var(--mono); white-space: pre; }
 .mcp-row-actions { display: flex; align-items: center; gap: var(--sp-1); }
 .modal-body:has(.cs-form) { display:flex; flex-direction:column; overflow:hidden; }
 .modal-body:has(.cs-form) > .set-content { display:flex; flex-direction:column; flex:1; min-height:0; }
@@ -230,7 +230,7 @@
 .cs-form .add-grid::-webkit-scrollbar { width:var(--sp-2); }
 .cs-form .add-acts.is-sticky { flex:none; position:relative; background:var(--content); margin-top:0; padding-right:var(--sp-2); }
 .mcp-import-label { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-.mcp-import-label textarea { width: 100%; min-height: 170px; padding: var(--sp-2); font-family: ui-monospace, monospace; }
+.mcp-import-label textarea { width: 100%; min-height: 170px; padding: var(--sp-2); font-family: var(--mono); }
 .mcp-candidates { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); margin-top: var(--sp-3); }
 .mcp-candidates label { display: flex; gap: var(--sp-2); align-items: start; padding: var(--sp-2); border: 1px solid var(--edge); border-radius: var(--r-sm); }
 .mcp-candidates label span { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }

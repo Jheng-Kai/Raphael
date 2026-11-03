@@ -17,7 +17,7 @@
 .message-table .align-right { text-align: right; }
 .message-table code { font-size: var(--fs-xs); background: var(--surface-2); border-radius: var(--r-sm); }
 .rich-block.message-code { margin: 0; }
-.rich-block.message-code pre { margin: 0; padding: var(--sp-3); border-radius: 0; overflow-x: auto; background: var(--panel); white-space: pre; overflow-wrap: normal; font: var(--fs-xs)/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.rich-block.message-code pre { margin: 0; padding: var(--sp-3); border-radius: 0; overflow-x: auto; background: var(--panel); white-space: pre; overflow-wrap: normal; font: var(--fs-xs)/1.7 var(--mono); }
 .rich-block.message-code pre code { padding: 0; background: transparent; font: inherit; }
 .rich-note { margin: 0; padding: var(--sp-2) var(--sp-3); color: var(--text-3); font-size: var(--fs-xs); }
 .diagram-view { padding: var(--sp-4); overflow-x: auto; overflow-y: auto; text-align: center; }

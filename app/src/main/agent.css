@@ -173,7 +173,7 @@
 /* A message's list is the first level, even inside the thread's own list. */
 .message-text ul { list-style-type: disc; }
 .message-text li { padding-inline-start: 0.15em; }
-.message-text code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: var(--fs-xs); padding: 0.12em 0.3em; border-radius: var(--r-sm); background: var(--surface-2); }
+.message-text code { font-family: var(--mono); font-size: var(--fs-xs); padding: 0.12em 0.3em; border-radius: var(--r-sm); background: var(--surface-2); }
 .message-code { position: relative; margin-block: 0.6em; min-width: 0; }
 .message-code pre { margin: 0; padding: 34px var(--sp-3) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-code pre code { padding: 0; background: transparent; }
@@ -304,7 +304,7 @@
 .btn.team-file:hover { background: var(--hover); }
 .btn.team-file svg { flex: none; }
 .btn.team-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.local-command { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text); }
+.local-command { margin: var(--sp-2) 0; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 var(--mono); color: var(--text); }
 
 /* An email card (mail-card.ts): who sends it and to whom, the subject and the body, with 捨棄 and 傳送. A draft that is over
    is a quiet line (a connector card); the choice card of a hand-over is a connector card with the colleague's face. */
