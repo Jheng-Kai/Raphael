@@ -550,6 +550,44 @@ class BackgroundService:
             self._changed(task_id, QUEUED)
             self._ensure_pump()
 
+    def bring_owner_question(self, identifier) -> int | None:
+        """Move a question still waiting for the owner to the end of its conversation, when the owner has said
+        more since: a new turn of the member holds the card, and the work that waits for it continues there, so
+        the answer and what follows read at the bottom instead of above what came after. The turn it is in
+        now, or None for a question that is not a waiting conversation question."""
+        from ..agent.owner_questions import ASK_OWNER
+        question = self.owner_questions.get(identifier) if isinstance(identifier, str) else None
+        if question is None or question["state"] != "asked" or question["kind"] != ASK_OWNER:
+            return None
+        origin = self._history.get(question["turn_id"])
+        if origin is None or origin.scope != "private" or origin.conversation_id is None:
+            return None
+        latest = self._metrics_conn.execute(
+            "SELECT max(id) FROM agent_turns WHERE conversation_id=? AND scope='private'", (origin.conversation_id,)).fetchone()[0]
+        if latest == origin.id:
+            return origin.id
+        moved = self._history.add(session_id=f"{origin.session_id}:asked-{question['id']}", question="", route=origin.route,
+                                  prefix=origin.prefix, text="", status="done", source=origin.source, model=origin.model,
+                                  member_id=origin.member_id, conversation_id=origin.conversation_id)
+        with self._metrics_conn:
+            self._metrics_conn.execute("UPDATE owner_questions SET turn_id=? WHERE id=?", (moved, question["id"]))
+        self.attach_turn(question["task_id"], moved)
+        for turn_id in (origin.id, moved):
+            self._notify("agent.turn", {"turn_id": turn_id, "member_id": origin.member_id})
+        return moved
+
+    async def _bring_owner(self, params):
+        moved = self.bring_owner_question(params.get("id"))
+        if moved is None:
+            raise invalid_params("unknown owner question")
+        return {"turn_id": moved}
+
+    async def _answer_owner(self, params):
+        # However the owner answers, what follows reads at the end of the conversation; a dismissed card stays put.
+        if params.get("answer") is not None:
+            self.bring_owner_question(params.get("id"))
+        return await self.owner_questions.answer(params)
+
     def recover_owner_waits(self):
         for row in self._metrics_conn.execute("SELECT id FROM worker_tasks WHERE state='waiting' AND continuation IS NOT NULL").fetchall():
             self._owner_answered(row[0])
@@ -647,7 +685,8 @@ class BackgroundService:
     def register(self, router: Router) -> None:
         for method, handler in {
             "worker.cancel": self._cancel,
-            "owner_questions.answer": self.owner_questions.answer,
+            "owner_questions.answer": self._answer_owner,
+            "owner_questions.bring": self._bring_owner,
             "background.waiting.list": self._waiting_list,
             "worker.rerun": self._rerun,
             "worker.announce_pending": self._announce_pending,

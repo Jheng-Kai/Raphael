@@ -161,6 +161,46 @@ else:
     await connector.cards.aclose()
 
 
+@pytest.mark.parametrize("how", ["bring", "answer"])
+async def test_a_question_answered_after_the_owner_said_more_continues_at_the_end(wired, client, how):
+    agent, background = wired
+    client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday", "Tuesday"]})),
+                    chat("Lunch is at noon.")]
+    await typed(agent, "Arrange a visit")
+    [asked] = await agent.turns()
+    [question] = asked["owner_questions"]
+    await typed(agent, "When is lunch?")
+    if how == "bring":
+        moved = (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"]
+        assert moved != asked["id"]
+        # Brought again, it stays where it now is.
+        assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == moved
+    background.client.replies = [report("Scheduled for Tuesday.")]
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": "Tuesday"})
+    await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
+    turns = sorted(await agent.turns(), key=lambda item: item["id"])
+    assert [item["id"] for item in turns][:2] == [asked["id"], turns[1]["id"]] and len(turns) == 3
+    last = turns[-1]
+    assert last["question"] == "" and [item["id"] for item in last["owner_questions"]] == [question["id"]]
+    assert not turns[0].get("owner_questions")
+    assert background.task(question["task_id"]).turn_id == last["id"]
+    assert "Scheduled for Tuesday" in background.task(question["task_id"]).report_text
+
+
+async def test_a_dismissed_or_latest_question_stays_where_it_is(wired, client):
+    agent, background = wired
+    client.chats = [chat("I need your date.", ("ask_owner", {"question": "Which day?", "options": ["Monday"]}))]
+    await typed(agent, "Arrange a visit")
+    [asked] = await agent.turns()
+    [question] = asked["owner_questions"]
+    assert (await background.rpc.call("owner_questions.bring", {"id": question["id"]}))["turn_id"] == asked["id"]
+    background.client.replies = [report("No date chosen.")]
+    await background.rpc.call("owner_questions.answer", {"id": question["id"], "answer": None})
+    await until(lambda: background.task(question["task_id"]).state in ("done", "failed", "limit"))
+    assert [item["id"] for item in await agent.turns()] == [asked["id"]]
+    with pytest.raises(Exception):
+        await background.rpc.call("owner_questions.bring", {"id": question["id"]})
+
 async def test_background_page_uses_existing_store_and_foreign_routines_stay_closed(wired):
     agent, background = wired
     origin = agent.history.add(session_id="job", question="Prepare", route="delegate", prefix="", text="",

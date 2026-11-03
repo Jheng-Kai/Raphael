@@ -431,6 +431,7 @@ const ALLOWED_METHODS: &[&str] = &[
     "computer.wallpaper",
     "pages.open",
     "owner_questions.answer",
+    "owner_questions.bring",
     "pages.tool_call",
     "home.overview",
     "connectors.catalog",
@@ -2771,6 +2772,7 @@ mod tests {
     fn the_whole_list_of_allowed_methods() {
         for method in [
             "owner_questions.answer",
+            "owner_questions.bring",
             "connectors.catalog",
             "connectors.categories",
             "connectors.toolkit",
