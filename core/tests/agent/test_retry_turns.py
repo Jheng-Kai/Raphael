@@ -162,8 +162,11 @@ async def test_a_colleagues_question_is_answered_while_the_member_is_at_work(mon
         assert loop.failure is None and loop._queue.get_nowait().final == "It is in the team folder."
         own, _ = cli_loop(monkeypatch, tmp_path, [answered])
         own.sessions = loop.sessions
-        await own._work()
-        assert own.failure == "busy"
+        waiting = asyncio.create_task(own._work())
+        await asyncio.sleep(0)
+        assert not waiting.done() and own.failure is None and own._queue.empty()
+    await asyncio.wait_for(waiting, 5)
+    assert own.failure is None and own._queue.get_nowait().final == "It is in the team folder."
 
 
 async def test_a_cli_usage_limit_is_not_run_again_and_says_when_it_resets(monkeypatch, tmp_path, sleeps):

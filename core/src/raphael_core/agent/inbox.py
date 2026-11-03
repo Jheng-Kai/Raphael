@@ -14,7 +14,7 @@ class AgentInbox:
 
     def find(self, member, conversation, request):
         return self.conn.execute(
-            "SELECT * FROM agent_inbox WHERE member_id=? AND conversation_id=? AND request_id=?",
+            "SELECT * FROM agent_inbox WHERE member_id=? AND conversation_id=? AND request_id=? AND state!='terminal'",
             (member, conversation, request),
         ).fetchone()
 
@@ -54,17 +54,14 @@ class AgentInbox:
             self.conn.execute("UPDATE agent_inbox SET state='steering',boot_id=? WHERE turn_id=? AND state='queued'", (self.boot_id, turn_id))
             self.conn.execute("UPDATE agent_turns SET status='done',route='owner_input' WHERE id=?", (turn_id,))
 
-    def settle(self, turn_id, outcome, result=None):
+    def settle(self, turn_id, outcome):
         with self.conn:
             row = self.get(turn_id)
             if not row or row['state'] == 'terminal':
                 return
-            payload = json.loads(row['payload_json'])
-            if result is not None:
-                payload['result'] = result
             self.conn.execute(
-                "UPDATE agent_inbox SET state='terminal',outcome=?,settled_at_ms=?,payload_json=? WHERE turn_id=?",
-                (outcome, self.now_ms(), json.dumps(payload, ensure_ascii=False), turn_id),
+                "UPDATE agent_inbox SET state='terminal',outcome=?,settled_at_ms=? WHERE turn_id=?",
+                (outcome, self.now_ms(), turn_id),
             )
 
     def requeue(self, turn_id):

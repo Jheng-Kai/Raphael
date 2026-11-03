@@ -1111,16 +1111,32 @@ class AgentService:
         if ask.attachments and not ask.text.strip():
             ask.text = _LOOK_AT_THIS[ask.language]
         self._last_language = ask.language
+        if ask.source == TYPED and not ask.quick and resumption is None:
+            return await self._queue_ask(ask)
         if self._was_cancelled(ask.session_id):
             # Esc came first: the request is answered as cancelled and nothing runs or is kept.
             return self._done(
                 0, ask.language, "understood", phrase(ask.language, "denied"), silent=True
             )
-        if ask.source == TYPED and not ask.quick and resumption is None:
-            return await self._queue_ask(ask)
         if self._attachment_store and ask.attachments:
             ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
+        if not ask.attachments and await self._join_running_work(ask):
+            self._record(ask, "owner_input", "", "", "done", None, Ledger(self._spend))
+            return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
         return await self._run_ask(ask)
+
+    async def _join_running_work(self, ask):
+        """A quick question or a messaging app's message said while its conversation works goes to that work."""
+        scope = (ask.speaker.id, ask.conversation_id)
+        active = self._owner_loops.get(scope)
+        if active and (origin := self._history.get(active.owner_turn_id)) is not None and origin.status not in ("running", "confirm"):
+            self._owner_loops.pop(scope, None)
+            active = None
+        if active and not active.owner_input.closed:
+            if await active.steer(ask.text) if isinstance(active, CliLoop) else active.owner_input.add(ask.text):
+                return True
+        steer = getattr(self._background, "steer", None)
+        return bool(steer is not None and await steer(ask.speaker.id, ask.conversation_id, ask.text))
 
     async def _queue_ask(self, ask):
         scope = (ask.speaker.id, ask.conversation_id)
@@ -1128,7 +1144,16 @@ class AgentService:
         async with lock:
             existing = self._inbox.find(*scope, ask.session_id)
             if existing:
-                return json.loads(existing['payload_json']).get('result') or {"status": "queued", "turn_id": existing['turn_id']}
+                return {"status": "queued", "turn_id": existing['turn_id']}
+            if self._was_cancelled(ask.session_id):
+                terminal = self._conn.execute(
+                    "SELECT 1 FROM agent_inbox WHERE member_id=? AND conversation_id=? AND request_id=? AND state='terminal'",
+                    (*scope, ask.session_id),
+                ).fetchone()
+                if not terminal:
+                    return self._done(0, ask.language, "understood", phrase(ask.language, "denied"), silent=True)
+                # A settled request ID may be reused; a cancel before first delivery still wins.
+                self._cancelled.pop(ask.session_id, None)
             if self._attachment_store and ask.attachments:
                 ask.attachments = [await asyncio.to_thread(self._attachment_store.save, a) for a in ask.attachments]
             if self._was_cancelled(ask.session_id):
@@ -1156,6 +1181,15 @@ class AgentService:
                 return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
             self._inbox.requeue(ask.turn_id)
             self._turn_changed(ask.turn_id, ask.speaker.id)
+        steer = getattr(self._background, "steer", None)
+        if not older and not ask.attachments and steer is not None:
+            self._inbox.transfer(ask.turn_id)
+            if await steer(ask.speaker.id, ask.conversation_id, ask.text):
+                self._inbox.settle(ask.turn_id, 'steered')
+                self._queued_asks.pop(ask.turn_id, None)
+                self._turn_changed(ask.turn_id, ask.speaker.id)
+                return {"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": "", "steered": True}
+            self._inbox.requeue(ask.turn_id)
         first = self._start_drain(scope)
         if first is not None and first[0] == ask.turn_id:
             return await asyncio.shield(first[1])
@@ -1223,7 +1257,7 @@ class AgentService:
                         result = await self._run_ask(ask)
                         turn = self._history.get(turn_id)
                         outcome = 'cancelled' if self._was_cancelled(ask.session_id) else 'failed' if turn and turn.status in ('error','expired') else 'completed'
-                        self._inbox.settle(turn_id, outcome, result)
+                        self._inbox.settle(turn_id, outcome)
                     turn = self._history.get(turn_id)
                     if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
                         self._history.resolve(turn_id, prefix='', text='', detail=None, status='denied', cost_usd=0)
@@ -1252,7 +1286,7 @@ class AgentService:
         for row in rows:
             turn_id = row['turn_id']
             if loop.owner_input.consumed(turn_id):
-                self._inbox.settle(turn_id, 'steered', {"status": "done", "turn_id": turn_id, "prefix": "", "text": "", "steered": True})
+                self._inbox.settle(turn_id, 'steered')
                 self._queued_asks.pop(turn_id, None)
             else:
                 loop.owner_input.withdraw(turn_id)
@@ -4420,7 +4454,12 @@ class AgentService:
     async def _history_stop(self, params):
         session = _str(params, 'session_id')
         member = self._member_param(params)
-        rows = self._conn.execute("SELECT member_id,scope,conversation_id FROM agent_turns WHERE session_id=?", (session,)).fetchall()
+        rows = self._conn.execute(
+            "SELECT t.member_id,t.scope,t.conversation_id FROM agent_inbox i JOIN agent_turns t ON t.id=i.turn_id"
+            " WHERE i.request_id=? AND i.state!='terminal' ORDER BY (i.state='started'),i.seq", (session,),
+        ).fetchall()
+        if not rows:
+            rows = self._conn.execute("SELECT member_id,scope,conversation_id FROM agent_turns WHERE session_id=?", (session,)).fetchall()
         if any(row['member_id'] != member or row['scope'] != 'private' for row in rows):
             raise invalid_params('stop must identify this private conversation')
         returned = []
@@ -4632,7 +4671,8 @@ class AgentService:
         own = [turn for turn in turns if turn.scope == "private" and turn.member_id == member and turn.source not in ("member", "routine")]
         if (turn_id is not None and not any(turn.id == turn_id for turn in own)) or (turns and not own):
             raise invalid_params("the message does not belong to this session and thread")
-        admitted_id = turn_id if turn_id is not None else own[0].id if len(own) == 1 else None
+        active = [turn.id for turn in own if (row := self._inbox.get(turn.id)) is not None and row['state'] != 'terminal']
+        admitted_id = turn_id if turn_id is not None else active[0] if len(active) == 1 else own[0].id if len(own) == 1 else None
         admission = self._inbox.get(admitted_id) if admitted_id is not None else None
         if admission is not None and admission['state'] in ('queued', 'steering'):
             self._inbox.settle(admitted_id, 'cancelled')

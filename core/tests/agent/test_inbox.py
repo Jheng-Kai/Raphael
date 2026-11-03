@@ -219,3 +219,37 @@ async def test_codex_receipt_at_completion_consumes_once_or_queues_for_next_turn
     finally:
         release.set()
         await asyncio.gather(first, return_exceptions=True)
+
+
+@pytest.mark.parametrize('quick', [False, True])
+async def test_a_message_while_background_work_runs_in_its_conversation_joins_that_work(make_rig, quick):
+    rig = make_rig()
+    joined = []
+
+    async def steer(member_id, conversation_id, text):
+        joined.append((member_id, conversation_id, text))
+        return True
+
+    rig.service._background.steer = steer
+    params = {"session_id": "joining", "text": "Also check the second file", "ui_language": "en", "source": "app"}
+    answer = await rig.call("agent.ask", {**params, "destination": "quick"} if quick else params)
+    assert answer["steered"] is True
+    assert [text for *_, text in joined] == ["Also check the second file"]
+    if not quick:
+        assert rig.service._inbox.get(answer["turn_id"])["outcome"] == "steered"
+    assert not rig.service._drains
+
+
+async def test_a_message_the_background_work_turns_down_waits_for_its_own_turn(make_rig, client):
+    rig = make_rig()
+
+    async def steer(member_id, conversation_id, text):
+        return False
+
+    rig.service._background.steer = steer
+    client.chats = [chat("Done separately.")]
+    answer = await typed(rig, "A separate question")
+    assert "steered" not in answer and answer["text"] == "Done separately."
+    await until(lambda: not rig.service._drains)
+    assert rig.service._inbox.get(answer["turn_id"])["outcome"] == "completed"
+    assert len(client.chat_calls) == 1

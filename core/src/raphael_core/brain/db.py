@@ -1350,9 +1350,9 @@ CREATE TABLE agent_inbox (
     boot_id TEXT,
     created_at_ms INTEGER NOT NULL,
     claimed_at_ms INTEGER,
-    settled_at_ms INTEGER,
-    UNIQUE(member_id, conversation_id, request_id)
+    settled_at_ms INTEGER
 );
+CREATE UNIQUE INDEX agent_inbox_request ON agent_inbox(member_id, conversation_id, request_id) WHERE state!='terminal';
 CREATE INDEX agent_inbox_scope ON agent_inbox(member_id, conversation_id, state, seq);
 CREATE UNIQUE INDEX agent_inbox_started ON agent_inbox(member_id, conversation_id) WHERE state='started';
 CREATE TRIGGER agent_inbox_delete AFTER DELETE ON agent_turns BEGIN

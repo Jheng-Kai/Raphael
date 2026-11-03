@@ -1313,3 +1313,31 @@ next turn in FIFO order.
 ```powershell
 npm run look -- composer-send-while-working composer-queued composer-queued-withdraw composer-queued-stop owner-addition composer-stop-pending composer-stop-pending-result room-send-while-working send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
 ```
+
+### Request ID reuse after settlement (2026-11-03)
+
+R-QUEUE-07 narrows migration 58's request uniqueness to nonterminal inbox rows.
+Queued, steering and started duplicates return queued with the existing turn ID;
+terminal requests admit a new turn at the FIFO tail, with no cached answer replay.
+Restart never replays started work, but its lost request ID can be sent again.
+Failed, cancelled and withdrawn requests can also be sent again. Stop and implicit
+withdrawal prefer in-flight admissions when that ID also has terminal history.
+Cancel before first delivery and a new cancel during retry attachment saving remain effective.
+
+Regression evidence: core/tests/agent/test_inbox_recovery.py covers recovery,
+sequential answers, retry outcomes, FIFO placement, in-flight deduplication, the
+partial unique index and Stop scope selection; test_message_edits.py preserves
+pre-delivery cancellation. Run core/tests/members and core/tests/evaluate, then
+the whole core suite with fake brains. No frontend, navigation or rendered scene
+changes are needed. The existing composer-queued, composer-queued-withdraw and
+composer-queued-stop scenes remain the affected visual consumers.
+
+R-QUEUE-08: while background work runs in a conversation, a typed message with
+nothing queued ahead of it, a quick question or a messaging app's message joins
+that work when it accepts the text, as before the inbox. test_e2e_worker.py runs
+this through a real worker process.
+
+The existing test_retry_turns.py::test_a_colleagues_question_is_answered_while_the_member_is_at_work
+also preserves the colleague bypass and verifies that an owner CLI turn waits
+for the held conversation lock, then answers after release. It must not wait
+for that owner turn while still holding the lock or expect the removed busy reply.
