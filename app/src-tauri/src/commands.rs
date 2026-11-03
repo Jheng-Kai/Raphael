@@ -1194,6 +1194,11 @@ pub async fn main_events(
     PAGE.lock()
         .unwrap_or_else(PoisonError::into_inner)
         .subscribe(channel.clone());
+    // Autostart begins hidden; wait until the page has loaded before suspending its webview.
+    if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
+        let active = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+        crate::webview_power::main_active(&window, active);
+    }
     let forwarder = tauri::async_runtime::spawn(async move {
         // The window can load before the app has started the core. Such a page still has to hear
         // from it, so wait for the core rather than leave the page deaf until it reloads.

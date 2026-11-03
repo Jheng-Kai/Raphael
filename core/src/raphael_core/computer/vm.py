@@ -235,6 +235,7 @@ class LocalVm:
         self.wallpaper_attempted = set()
         # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
         self.changes = 0
+        self.status_engines = {}
         self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
@@ -357,11 +358,26 @@ class LocalVm:
             raise VmError("invalid_status") from None
 
     async def status(self, target, *, probe=True):
-        if not await self.available(target):
+        if not self.enabled:
             return {"state": "unavailable", "ready": False}
-        image_id = await self.image(target)
-        raw = await self.inspect(target)
+        now, changes = self.clock(), self.changes
+        kept = self.status_engines.get(target.remote)
+        if probe or not kept or kept[2] != changes or not 0 <= now - kept[0] < 60:
+            if not await self.available(target):
+                return {"state": "unavailable", "ready": False}
+            image_id = await self.image(target)
+            self.status_engines[target.remote] = (now, image_id, changes)
+        else:
+            image_id = kept[1]
+        try:
+            raw = await self.inspect(target)
+        except (VmError, OSError, TimeoutError):
+            self.status_engines.pop(target.remote, None)
+            raise
         if raw is None:
+            # A failed inspect can mean the engine or image changed outside Raphael.
+            self.status_engines.pop(target.remote, None)
+            image_id = await self.image(target)
             return {"state": "missing", "image": bool(image_id), "ready": False}
         if not image_id or not compatible(raw, target, self.owner, image_id):
             return {"state": "incompatible", "ready": False}

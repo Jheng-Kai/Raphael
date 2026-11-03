@@ -40,6 +40,10 @@ pub struct KeyboardListener {
 }
 
 impl KeyboardListener {
+    #[cfg(windows)]
+    pub(crate) fn running_flag(&self) -> Arc<AtomicBool> {
+        self.running.clone()
+    }
     /// Create a new KeyboardListener (non-blocking mode)
     ///
     /// Events are observed but not blocked. Use this for "record hotkey" UI flows.

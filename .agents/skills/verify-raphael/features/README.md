@@ -1,5 +1,13 @@
 # Raphael feature map
 
+## Idle native runtime (2026-11-04)
+
+See [Idle native runtime](idle-runtime.md) for R-PERF-09 through R-PERF-12:
+computer status/leases, blocking hotkeys, suspended main webview and off-thread
+floating-control cursor sampling. This scoped unit uses fake core tests and
+offline Rust/frontend checks. Its brief defers look, judge and native journeys
+to integration; those boundaries remain unverified here.
+
 ## Three computer levels (2026-11-02)
 
 See [Member computer](member-computer.md#three-computer-levels-2026-11-02) for

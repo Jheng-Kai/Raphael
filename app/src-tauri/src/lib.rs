@@ -25,6 +25,7 @@ mod paste;
 mod rpc;
 mod schedule_awake;
 mod tray;
+mod webview_power;
 
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime, WindowEvent, plugin::TauriPlugin};
@@ -159,7 +160,17 @@ pub fn run() {
                 api.prevent_close();
                 if let Err(err) = window.hide() {
                     log::warn!("could not hide the main window: {err}");
+                } else if let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW) {
+                    webview_power::main_active(&webview, false);
                 }
+            }
+            if window.label() == MAIN_WINDOW
+                && matches!(event, WindowEvent::Resized(_))
+                && let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW)
+            {
+                let active = !window.is_minimized().unwrap_or(false)
+                    && window.is_visible().unwrap_or(false);
+                webview_power::main_active(&webview, active);
             }
         })
         // Tauri keeps only the last `invoke_handler` call, so every command of the app goes into
@@ -471,6 +482,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
         log::warn!("the main window does not exist");
         return;
     };
+    webview_power::main_active(&window, true);
     let shown = window
         .unminimize()
         .and_then(|()| window.show())

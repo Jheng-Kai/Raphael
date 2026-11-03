@@ -135,6 +135,7 @@ class DesktopViewer:
         self.vm, self.member_exists = vm, member_exists
         self.sessions, self.owners = {}, {}
         self.remembered = {}
+        self.status_cache, self.status_locks = {}, {}
         self.vm.viewer_owners = self.owners
         self.server = self.monitor = None
         self.origin = ""
@@ -230,33 +231,51 @@ class DesktopViewer:
         session.expires = self.vm.clock() + LEASE_SECONDS
         if self.owners.get(session.target.key) == token:
             self.vm.hold(session.target, True)
-        return await self.session_state(session)
+        return await self.session_state(session, read=not session.sockets)
 
-    async def session_state(self, session):
-        state = await self.status_for(session.target)
+    async def session_state(self, session, *, read=True):
+        # An authenticated live socket already proves the guest is running. Ownership,
+        # work and teaching below remain fresh without another Docker status read.
+        state = await self.status_for(session.target) if read else {"state": "running", "ready": True}
         works = self.vm.work.views(session.member_id, session.conversation_id)
         token = self.owners.get(session.target.key)
         return {**state, "control": "owner" if self.sessions.get(token) is session else "member",
-                "preview_allowed": state["control"] == "member", "granted": self.vm.grants.allowed(session.member_id),
+                "preview_allowed": session.target.key not in self.vm.held, "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}
 
     async def unwatched_status(self, target):
-        """Docker is only asked at every poll while someone watches this computer or it is being prepared."""
+        """Unwatched computers keep the longer cache; active viewers share the short cache."""
+        key = (target.remote, target.key)
         if (target.key in self.vm.preparation or target.key in self.vm.held
                 or any(session.target.key == target.key for session in self.sessions.values())):
-            self.remembered.pop(target.key, None)
+            self.remembered.pop(key, None)
             return await self.status_for(target)
         changes, now = self.vm.changes, self.vm.clock()
-        kept = self.remembered.get(target.key)
+        kept = self.remembered.get(key)
         if kept and kept[0] == changes and 0 <= now - kept[1] < UNWATCHED_STATUS_S:
             return kept[2]
         state = await self.status_for(target)
         if changes == self.vm.changes:
-            self.remembered[target.key] = (changes, now, state)
+            self.remembered[key] = (changes, now, state)
         return state
 
     async def status_for(self, target):
+        key = (target.remote, target.key)
+        async with self.status_locks.setdefault(key, asyncio.Lock()):
+            changes, now = self.vm.changes, self.vm.clock()
+            kept = self.status_cache.get(key)
+            if target.key in self.vm.preparation:
+                state = await self.read_status(target)
+            elif kept and kept[0] == changes and 0 <= now - kept[1] < 3:
+                state = kept[2]
+            else:
+                state = await self.read_status(target)
+                if changes == self.vm.changes:
+                    self.status_cache[key] = (changes, now, state)
+        return {**state, "control": "owner" if target.key in self.vm.held else "member"}
+
+    async def read_status(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.
         try:
             state = self.vm.preparation.get(target.key) or await self.vm.status(target, probe=False)
@@ -264,8 +283,7 @@ class DesktopViewer:
             state = {"state": "unavailable"}
         return {"state": state["state"], "ready": state["state"] == "running",
                 **({"progress": state["progress"]} if state.get("progress") else {}),
-                **({"error": state["error"]} if state.get("error") else {}),
-                "control": "owner" if target.key in self.vm.held else "member"}
+                **({"error": state["error"]} if state.get("error") else {})}
 
     async def control(self, params):
         async with self.control_lock:

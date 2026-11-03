@@ -1,5 +1,14 @@
 # Raphael product rules
 
+## Idle native runtime (2026-11-04)
+
+| ID | Date | Rule | Verification | Severity | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| R-PERF-09 | 2026-11-04 | Watched computer status bursts share one container inspect per target within three seconds, invalidated by VM changes. Non-probing status reuses engine/image checks for sixty seconds; failed inspect rechecks them. Connected leases renew without Docker status reads; unchanged viewer polling backs off to eight to ten seconds. Ownership and pending work remain live. | pytest, vitest, native | hard | core/tests/computer/test_viewer.py::test_watched_status_bursts_share_one_inspect_and_changes_invalidate; core/tests/computer/test_viewer.py::test_connected_renewal_extends_the_lease_without_reading_status; core/tests/computer/test_vm.py::test_status_without_probe_only_inspects_until_engine_ttl_expires; app/scripts/desktop-viewer-poll.test.mjs; features/idle-runtime.md |
+| R-PERF-10 | 2026-11-04 | The hotkey worker blocks on its shared command/backend wake channel. The Windows manager blocks on raw input; its hook loop wakes on input immediately and at most every 100 ms for liveness. Heartbeat and observation guards retain their stricter synchronous deadline checks and swallow semantics. | Rust, native | hard | app/src-tauri/src/hotkey.rs::idle_worker_blocks_without_timing_out_and_backend_input_wakes_it; features/idle-runtime.md |
+| R-PERF-11 | 2026-11-04 | Tray-hidden or minimized main windows hide the WebView2 controller, request Low memory and suspend. Returning resumes before Normal memory and controller visibility, including a late suspension callback. Learned stays Low; idle overlay lifecycle requests Low without ever suspending its webview. Resume re-reads the current page through comeBack. | native | hard | app/src-tauri/src/webview_power.rs; features/idle-runtime.md |
+| R-PERF-12 | 2026-11-04 | Floating-control cursor sampling reads GetCursorPos off the UI thread, using a client origin cached at registration and native move, resize or DPI changes. Empty controls stop sampling; hold, stale-layout rejection, negative monitor origins and passive styles retain R-UI-70. | Rust, native | hard | app/src-tauri/src/overlay/mouse.rs::physical_bounds_follow_scale_and_negative_monitor_origins; app/src-tauri/src/overlay/mouse.rs::holding_survives_leaving_but_hide_and_stale_reports_cannot_keep_it; features/idle-runtime.md |
+
 ## Memory sources and background recovery (2026-11-04)
 
 R-MEM-06 refines R-MEM-03: trust belongs to each note's source, rather than every write in a turn that used a tool.

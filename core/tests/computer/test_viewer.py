@@ -59,14 +59,48 @@ async def test_a_change_to_the_computer_is_seen_at_the_next_poll(viewer):
     assert (await bridge.status({}))["state"] == "running"
 
 
-async def test_a_watched_computer_is_never_answered_from_memory(viewer):
+async def test_watched_status_bursts_share_one_inspect_and_changes_invalidate(viewer):
     bridge, runtime, clock = viewer
     opened = await bridge.open({"member_id": 0, "preview": True})
-    await bridge.status({})
-    asked = _docker_calls(runtime)
-    await bridge.status({})
-    assert _docker_calls(runtime) > asked
+    runtime.calls.clear()
+    clock[0] += 3
+    async def interleaved(args, **kwargs):
+        await asyncio.sleep(0)
+        return await runtime(args, **kwargs)
+    bridge.vm.run = interleaved
+    await asyncio.gather(*(bridge.status({}) for _ in range(12)))
+    assert sum(args[:2] == ["container", "inspect"] for args, _ in runtime.calls) == 1
+    runtime.raw["State"]["Running"] = False
+    bridge.vm.changes += 1
+    assert (await bridge.status({}))["state"] == "stopped"
     await bridge.close({"session": opened["session"]})
+
+
+async def test_status_cache_keeps_captured_engine_targets_separate(viewer):
+    from dataclasses import replace
+    from unittest.mock import AsyncMock
+    bridge, _, _ = viewer
+    local = bridge.vm.target()
+    remote = replace(local, remote="test-host")
+    bridge.vm.status = AsyncMock(side_effect=[{"state": "running"}, {"state": "stopped"}])
+    assert (await bridge.status_for(local))["state"] == "running"
+    assert (await bridge.status_for(remote))["state"] == "stopped"
+    assert (await bridge.status_for(local))["state"] == "running"
+    assert bridge.vm.status.await_count == 2
+
+
+async def test_connected_renewal_extends_the_lease_without_reading_status(viewer):
+    bridge, runtime, clock = viewer
+    opened = await bridge.open({"preview": True})
+    socket = object()
+    bridge.sessions[opened["session"]].sockets.add(socket)
+    runtime.calls.clear()
+    clock[0] += 10
+    renewed = await bridge.renew(opened)
+    bridge.sessions[opened["session"]].sockets.remove(socket)
+    assert renewed["state"] == "running"
+    assert bridge.sessions[opened["session"]].expires == clock[0] + LEASE_SECONDS
+    assert not runtime.calls
 
 
 async def test_the_panel_reads_the_owner_picture_only_when_it_exists(viewer, tmp_path):
@@ -132,16 +166,21 @@ async def test_closed_and_expired_viewers_release_the_hold_but_renewal_preserves
 
 
 async def test_stopped_unavailable_and_restarted_desktops_keep_the_session(viewer):
-    bridge, runtime, _ = viewer
+    bridge, runtime, clock = viewer
     opened = await bridge.open({})
     runtime.raw["State"]["Running"] = False
+    clock[0] += 3
     assert (await bridge.renew(opened))["state"] == "stopped"
     with pytest.raises(RpcError):
         await bridge.control({**opened, "held": True})
     runtime.up = False
-    assert (await bridge.renew(opened))["state"] == "unavailable"
+    for _ in range(6):
+        clock[0] += 10
+        renewed = await bridge.renew(opened)
+    assert renewed["state"] == "unavailable"
     runtime.up = True
     runtime.raw["State"]["Running"] = True
+    clock[0] += 3
     assert (await bridge.renew(opened))["state"] == "running"
     assert (await bridge.control({**opened, "held": True}))["control"] == "owner"
     bridge.vm.enabled = False

@@ -39,6 +39,7 @@ pub fn start(app: &AppHandle) -> tauri::Result<()> {
         .data_directory(crate::webview_data_dir(app)?)
         .build()?;
     window.set_ignore_cursor_events(true)?;
+    crate::webview_power::low_memory(&window, true);
     crate::overlay::apply_passive_style(&window);
     app.state::<crate::overlay::mouse::Windows>()
         .register(&window);

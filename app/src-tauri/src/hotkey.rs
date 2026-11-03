@@ -7,7 +7,7 @@
 //! does not close a dialog only while recording audio.
 //!
 //! `HotkeyManager` is `Send` but not `Sync`, so one thread owns it. The service talks to that
-//! thread over a channel, and the thread looks for key events every 10 ms between commands. This
+//! thread over one channel shared by commands and backend wake notifications. This
 //! layout follows Handy's `shortcut/handy_keys.rs` (<https://github.com/cjpais/Handy>, MIT
 //! licence).
 //!
@@ -27,6 +27,7 @@
 //! (key-ups sent with `SendInput`, the Ctrl+V chord) can not produce a `DictationDown`,
 //! `DictationUp` or `PasteLast`, and the keys it sends are never swallowed.
 
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -35,8 +36,6 @@ use handy_keys::{Hotkey, HotkeyId, HotkeyManager, HotkeyState, Key, Modifiers};
 use serde::Deserialize;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// How often the hotkey thread looks for key events while it waits for commands.
-const POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// How long [`HotkeyService::update_bindings`] waits for the hotkey thread to answer.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(2);
 const NOT_RUNNING: &str = "the hotkey service is not running";
@@ -216,6 +215,7 @@ impl CancelSwitch for HotkeyService {
 pub struct HotkeyService {
     commands: Sender<Command>,
     thread: Option<JoinHandle<()>>,
+    closed: tauri::async_runtime::JoinHandle<()>,
 }
 
 impl HotkeyService {
@@ -253,14 +253,25 @@ impl HotkeyService {
     {
         let mut worker = Worker::new(backend, wanted, events);
         worker.sync()?;
+        let output = worker.events.clone();
         let (commands, inbox) = mpsc::channel();
+        let wake = commands.clone();
+        worker.backend.set_waker(Some(Arc::new(move || {
+            let _ = wake.send(Command::Wake);
+        })));
         let thread = thread::Builder::new()
             .name("raphael-hotkeys".to_string())
             .spawn(move || worker.run(&inbox))
             .map_err(|err| format!("could not start the hotkey thread: {err}"))?;
+        let stop = commands.clone();
+        let closed = tauri::async_runtime::spawn(async move {
+            output.closed().await;
+            let _ = stop.send(Command::Shutdown);
+        });
         Ok(Self {
             commands,
             thread: Some(thread),
+            closed,
         })
     }
 
@@ -349,6 +360,7 @@ fn await_reply(answer: &Receiver<Result<(), String>>, timeout: Duration) -> Resu
 
 impl Drop for HotkeyService {
     fn drop(&mut self) {
+        self.closed.abort();
         // If the thread is already gone the send fails, which is fine.
         let _ = self.commands.send(Command::Shutdown);
         if let Some(thread) = self.thread.take()
@@ -360,6 +372,7 @@ impl Drop for HotkeyService {
 }
 
 enum Command {
+    Wake,
     WindowHotkey(WindowHotkey),
     ConversationVoice {
         member: u64,
@@ -455,6 +468,7 @@ trait Backend {
     fn register(&self, hotkey: Hotkey) -> Result<Self::Id, String>;
     fn unregister(&self, id: Self::Id) -> Result<(), String>;
     fn try_recv(&self) -> Option<(Self::Id, HotkeyState)>;
+    fn set_waker(&self, _wake: Option<Arc<dyn Fn() + Send + Sync>>) {}
     fn uses_cancel_input_stream(&self) -> bool {
         false
     }
@@ -486,6 +500,9 @@ impl Backend for WindowOnlyBackend {
 
 impl Backend for HotkeyManager {
     type Id = HotkeyId;
+    fn set_waker(&self, wake: Option<Arc<dyn Fn() + Send + Sync>>) {
+        handy_keys::set_event_waker(wake);
+    }
     fn uses_cancel_input_stream(&self) -> bool {
         true
     }
@@ -539,18 +556,18 @@ impl<B: Backend> Worker<B> {
     }
 
     fn run(mut self, inbox: &Receiver<Command>) {
+        self.pump();
         loop {
-            self.pump();
             if self.events.is_closed() {
                 log::warn!("nobody listens to hotkey events any more; releasing the keyboard");
                 break;
             }
-            match inbox.recv_timeout(POLL_INTERVAL) {
-                Ok(Command::Shutdown) | Err(RecvTimeoutError::Disconnected) => break,
+            match inbox.recv() {
+                Ok(Command::Shutdown) | Err(_) => break,
                 Ok(command) => self.handle(command),
-                Err(RecvTimeoutError::Timeout) => {}
             }
         }
+        self.backend.set_waker(None);
     }
 
     fn handle(&mut self, command: Command) {
@@ -602,7 +619,7 @@ impl<B: Backend> Worker<B> {
                 self.paused = paused;
                 self.sync_logged();
             }
-            Command::Shutdown => {}
+            Command::Wake | Command::Shutdown => {}
         }
     }
 
@@ -1123,6 +1140,8 @@ mod tests {
 
     #[derive(Default)]
     struct FakeState {
+        waker: Option<Arc<dyn Fn() + Send + Sync>>,
+        polls: usize,
         cancel_inputs: VecDeque<bool>,
         input_stream: bool,
         next_id: u32,
@@ -1134,6 +1153,9 @@ mod tests {
 
     impl Backend for FakeBackend {
         type Id = u32;
+        fn set_waker(&self, wake: Option<Arc<dyn Fn() + Send + Sync>>) {
+            self.0.lock().unwrap().waker = wake;
+        }
         fn uses_cancel_input_stream(&self) -> bool {
             self.0.lock().unwrap().input_stream
         }
@@ -1163,7 +1185,9 @@ mod tests {
         }
 
         fn try_recv(&self) -> Option<(u32, HotkeyState)> {
-            self.0.lock().unwrap().queue.pop_front()
+            let mut state = self.0.lock().unwrap();
+            state.polls += 1;
+            state.queue.pop_front()
         }
     }
 
@@ -1190,7 +1214,14 @@ mod tests {
         }
 
         fn queue(&self, id: u32, state: HotkeyState) {
-            self.0.lock().unwrap().queue.push_back((id, state));
+            let wake = {
+                let mut fake = self.0.lock().unwrap();
+                fake.queue.push_back((id, state));
+                fake.waker.clone()
+            };
+            if let Some(wake) = wake {
+                wake();
+            }
         }
 
         fn press(&self, binding: &str) {
@@ -1694,6 +1725,34 @@ mod tests {
     }
 
     // ---- HotkeyService, with real threads and the fake keyboard hook ----
+
+    #[test]
+    fn idle_worker_blocks_without_timing_out_and_backend_input_wakes_it() {
+        let fake = FakeBackend::default();
+        let bindings = Bindings::default();
+        let (svc, mut rx) = service(&fake, &bindings);
+        settle(&svc, &bindings);
+        let polls = fake.0.lock().unwrap().polls;
+        thread::sleep(Duration::from_millis(80));
+        assert_eq!(fake.0.lock().unwrap().polls, polls);
+        fake.press("AltRight");
+        assert_eq!(next_event(&mut rx), HotkeyEvent::DictationDown);
+        drop(svc);
+    }
+
+    #[test]
+    fn dropping_event_receiver_wakes_an_idle_worker() {
+        let fake = FakeBackend::default();
+        let (svc, rx) = service(&fake, &Bindings::default());
+        settle(&svc, &Bindings::default());
+        drop(rx);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Arc::strong_count(&fake.0) != 1 {
+            assert!(Instant::now() < deadline, "idle worker retained its backend");
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(svc.update_bindings(&Bindings::default()), Err(NOT_RUNNING.to_string()));
+    }
 
     fn service(
         fake: &FakeBackend,

@@ -117,6 +117,20 @@ impl Windows {
             window: window.clone(),
             state: Mutex::new(Regions::default()),
             changes: Arc::new(AtomicU64::new(0)),
+            origin: Mutex::new(window.inner_position().ok()),
+        });
+        let weak = Arc::downgrade(&mouse);
+        window.on_window_event(move |event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Moved(_)
+                    | tauri::WindowEvent::Resized(_)
+                    | tauri::WindowEvent::ScaleFactorChanged { .. }
+            ) && let Some(mouse) = weak.upgrade()
+            {
+                let origin = mouse.window.inner_position().ok();
+                *lock(&mouse.origin) = origin;
+            }
         });
         lock(&self.0).insert(window.label().to_owned(), mouse.clone());
         mouse
@@ -132,6 +146,7 @@ pub(crate) struct Mouse {
     window: WebviewWindow,
     state: Mutex<Regions>,
     changes: Arc<AtomicU64>,
+    origin: Mutex<Option<PhysicalPosition<i32>>>,
 }
 
 impl Mouse {
@@ -189,12 +204,8 @@ impl Mouse {
                 return false;
             }
         }
-        // Tauri getters wait for the UI thread. Never hold a lock that an IPC handler needs.
-        let point = self
-            .window
-            .cursor_position()
-            .ok()
-            .zip(self.window.inner_position().ok())
+        let point = cursor_position(&self.window)
+            .zip(*lock(&self.origin))
             .map(|(cursor, origin)| client_point(cursor, origin));
         let mut state = lock(&self.state);
         if state.rects.is_empty() {
@@ -228,6 +239,20 @@ impl Mouse {
             Err(error) => log::warn!("could not dispatch floating window mouse handling: {error}"),
         }
     }
+}
+
+fn cursor_position(window: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::{Foundation::POINT, UI::WindowsAndMessaging::GetCursorPos};
+        let _ = window;
+        let mut point = POINT::default();
+        // SAFETY: GetCursorPos writes one live POINT and can run off the window thread.
+        unsafe { GetCursorPos(&mut point) }.ok()?;
+        Some(PhysicalPosition::new(f64::from(point.x), f64::from(point.y)))
+    }
+    #[cfg(not(windows))]
+    window.cursor_position().ok()
 }
 
 #[cfg(test)]

@@ -7,6 +7,20 @@ use std::time::{Duration, Instant};
 static CANCEL_INPUTS: std::sync::Mutex<std::collections::VecDeque<bool>> =
     std::sync::Mutex::new(std::collections::VecDeque::new());
 static ESCAPE_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+type EventWake = std::sync::Arc<dyn Fn() + Send + Sync>;
+static EVENT_WAKE: std::sync::Mutex<Option<EventWake>> = std::sync::Mutex::new(None);
+
+/// Wakes the consumer after either hotkey or cancel-input data has been queued.
+pub fn set_event_waker(wake: Option<EventWake>) {
+    *EVENT_WAKE.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = wake;
+}
+
+pub(crate) fn wake_events() {
+    let wake = EVENT_WAKE.lock().ok().and_then(|wake| wake.clone());
+    if let Some(wake) = wake {
+        wake();
+    }
+}
 /// Only ordered Escape/reset markers, never key identities, text or pointer positions.
 pub fn take_cancel_input() -> Option<bool> {
     CANCEL_INPUTS.lock().ok()?.pop_front()
@@ -19,6 +33,7 @@ fn cancel_input(reset: bool) {
         }
         inputs.push_back(reset);
     }
+    wake_events();
 }
 pub(crate) fn note_cancel_interruption() {
     cancel_input(true);
@@ -82,7 +97,7 @@ fn input_origin(physical: bool, extra: usize) -> InputOrigin {
 }
 
 /// The hook thread's message loop must have run this recently for the hooks to count as alive.
-/// The loop wakes every 10 ms, so this is far above a healthy gap and well under the 500 ms
+/// The loop wakes every 100 ms, so this is above a healthy gap and under the 500 ms
 /// between two reads of a watched field: a dead hook cannot stay unnoticed through a read.
 pub(crate) const HOOK_HEARTBEAT_MAX_AGE_MS: u64 = 250;
 
@@ -100,7 +115,7 @@ pub(crate) fn monotonic_ms() -> u64 {
 /// every guard built on "no input happened" would be blind without saying so.
 ///
 /// Two independent signals, both written only by the hook thread:
-/// - `loop_ms`: when its message loop last ran (every 10 ms). Without that loop no hook callback
+/// - `loop_ms`: when its message loop last ran (every 100 ms). Without that loop no hook callback
 ///   can run at all. It is checked every time the hooks are relied on, so a hook thread that
 ///   stops during a watch ends the watch.
 /// - `key_events`: how many keyboard events reached the hook procedure. Windows silently removes

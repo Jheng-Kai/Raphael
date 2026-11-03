@@ -255,16 +255,21 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (active() && next.state === 'running') void openStream();
     draw();
   }
+  let pollDelay = 2000;
   async function poll(): Promise<void> {
     if ((!visible && !session) || loading) return;
     loading = true;
     const current = generation, id = member();
     try {
+      // The core renews a connected lease from the authenticated socket and live work metadata.
       const next = session ? await api.desktopRenew(session.session) : await api.desktopStatus(id, options.conversation());
-      if ((visible || session) && current === generation && id === member()) update(next);
+      if ((visible || session) && current === generation && id === member()) {
+        pollDelay = JSON.stringify(next) === JSON.stringify(state) ? Math.min(10_000, pollDelay * 2) : 2000;
+        update(next);
+      }
     } catch {
       if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
-    } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(() => void poll(), 2000); } }
+    } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(() => void poll(), pollDelay); } }
   }
   async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
     if (!session || changing || held && !connected) return;
@@ -397,12 +402,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   });
   onLocaleChange(draw);
   return {
-    show() { visible = true; suspended = false; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
+    show() { visible = true; suspended = false; pollDelay = 2000; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
     hide(close = false) { visible = false; if (close || panel.hasAttribute('data-expanded')) closeStream(); else leave(); timeline.clear(); draw(); },
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.
       if (session && streamMember === member() && streamConversation === options.conversation()) { clearTimeout(lingering); draw(); return; }
-      closeStream(); suspended = false; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
+      closeStream(); suspended = false; pollDelay = 2000; filesOpen = false; checkpoints.hide(); clearReview(); demonstration = undefined; skillName = ''; teachingBusy = drafting = false; state = undefined; timeline.clear(); clearTimeout(timer); draw(); if (visible) void poll();
     },
     sync() { timeline.sync(); if (!active() && session) leave(); else { clearTimeout(lingering); if (active() && state?.state === 'running') void openStream(); } draw(); },
     carry(before) { if (before.contains(frame)) parkFrame(); },

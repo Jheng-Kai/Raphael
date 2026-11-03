@@ -41,7 +41,7 @@ describe("maintained verification feature map", () => {
     }
     const stagedFeatures = staged && resolve(staged, "features");
     const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(stagedFeatures && existsSync(stagedFeatures) ? readdirSync(stagedFeatures) : [])])];
-    expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer"].map(name => `${name}.md`).sort());
+    expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer", "idle-runtime"].map(name => `${name}.md`).sort());
   });
   it("maps the Docker-only foundation and live viewer through look and the native journey", () => {
     expect(readMap("features/README.md")).toContain("](member-computer.md)");

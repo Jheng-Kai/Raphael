@@ -91,6 +91,30 @@ def desktop(tmp_path, conn):
     return vm, target, runtime
 
 
+async def test_status_without_probe_only_inspects_until_engine_ttl_expires(desktop):
+    vm, target, runtime = desktop
+    clock = [0]
+    vm.clock = lambda: clock[0]
+    await vm.status(target, probe=False)
+    runtime.calls.clear()
+    for _ in range(5):
+        await vm.status(target, probe=False)
+    assert [args[:2] for args, _ in runtime.calls] == [["container", "inspect"]] * 5
+    clock[0] = 60
+    runtime.calls.clear()
+    await vm.status(target, probe=False)
+    assert [args[0] for args, _ in runtime.calls] == ["info", "image", "container"]
+
+
+async def test_failed_container_inspect_rechecks_engine_and_image(desktop):
+    vm, target, runtime = desktop
+    await vm.status(target, probe=False)
+    runtime.calls.clear()
+    runtime.raw = None
+    assert (await vm.status(target, probe=False))["state"] == "missing"
+    assert [args[0] for args, _ in runtime.calls] == ["container", "info", "image"]
+
+
 def test_args_are_hardened_loopback_only_and_host_agnostic(tmp_path):
     vm = LocalVm(tmp_path / 'a,b')
     target = vm.target()

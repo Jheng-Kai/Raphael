@@ -549,7 +549,7 @@ pub(super) fn mouse(mouse: &MSLLHOOKSTRUCT) {
     });
 }
 
-/// The existing hook loop calls this every 10 ms to expire even an idle observation. It is also
+/// The existing hook loop calls this every 100 ms to expire even an idle observation. It is also
 /// the heartbeat: it runs only while the thread that owns the hooks is pumping messages.
 pub(super) fn tick() {
     HEARTBEAT.beat(monotonic_ms());
