@@ -159,6 +159,18 @@ pub fn learned_subscribe(
     Ok(())
 }
 
+/// The pill stands this far above the taskbar, in logical pixels.
+const BOTTOM_GAP: f64 = 16.0;
+
+/// Where the pill goes, in physical pixels: centred across the work area (the screen without the
+/// taskbar) and `BOTTOM_GAP` above its bottom edge, so it sits just above the middle of the taskbar.
+fn place(work: crate::overlay::Rect, w: u32, h: u32, scale: f64) -> PhysicalPosition<i32> {
+    PhysicalPosition::new(
+        work.x + (work.w - w as i32) / 2,
+        work.y + work.h - h as i32 - (BOTTOM_GAP * scale).round() as i32,
+    )
+}
+
 #[tauri::command]
 pub fn learned_layout(
     app: AppHandle,
@@ -191,7 +203,7 @@ pub fn learned_layout(
     let monitor = foreground_monitor(&app)
         .or_else(|| app.primary_monitor().ok().flatten())
         .ok_or("no monitor")?;
-    let work = monitor.work_area();
+    let work = crate::overlay::Rect::from(monitor.work_area());
     let scale = monitor.scale_factor();
     let bounds = crate::overlay::mouse::ControlRect {
         x: 0.0,
@@ -200,16 +212,13 @@ pub fn learned_layout(
         height,
     }
     .scaled(scale);
-    let w = bounds.width.round().min(f64::from(work.size.width)) as u32;
+    let w = bounds.width.round().min(f64::from(work.w)) as u32;
     let h = bounds.height.round() as u32;
     window
         .set_size(PhysicalSize::new(w, h))
         .map_err(|e| e.to_string())?;
     window
-        .set_position(PhysicalPosition::new(
-            work.position.x + (work.size.width as i32 - w as i32) / 2,
-            work.position.y + (f64::from(work.size.height) * 0.56) as i32,
-        ))
+        .set_position(place(work, w, h, scale))
         .map_err(|e| e.to_string())?;
     crate::overlay::apply_passive_style(&window);
     round_region(&window, w, h);
@@ -309,6 +318,37 @@ fn round_region(window: &tauri::WebviewWindow, width: u32, height: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::overlay::Rect;
+    #[test]
+    fn the_pill_sits_centred_just_above_the_taskbar_of_its_screen() {
+        let work = Rect {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1032,
+        };
+        assert_eq!(place(work, 300, 48, 1.0), PhysicalPosition::new(810, 968));
+        let scaled = Rect {
+            x: 0,
+            y: 0,
+            w: 2880,
+            h: 1548,
+        };
+        assert_eq!(
+            place(scaled, 450, 72, 1.5),
+            PhysicalPosition::new(1215, 1452)
+        );
+        let left = Rect {
+            x: -1920,
+            y: 120,
+            w: 1920,
+            h: 1032,
+        };
+        assert_eq!(
+            place(left, 300, 48, 1.0),
+            PhysicalPosition::new(-1110, 1088)
+        );
+    }
     #[test]
     fn composer_uses_the_external_dictation_tracker() {
         let before = "Please ask Allice to review the next release notes carefully.";

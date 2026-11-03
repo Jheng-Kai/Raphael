@@ -1403,7 +1403,8 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     // The mouse passes through until the real pointer is on the pill's own controls, which CDP hovering never moves.
 if (!pillWindow || !(pillWindow.style & 0x08000000) || !pillWindow.rounded) throw new Error(`Native learned pill is not passive with its rounded click region: ${JSON.stringify(pillWindow)}`);
     const [left,top,right,bottom] = pillWindow.rect, work = result.focusBefore.workArea;
-    if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || Math.abs(top-(work[1]+(work[3]-work[1])*0.56))>1) throw new Error(`Native pill is not centered below the active monitor midpoint: ${JSON.stringify({pill:pillWindow.rect,work})}`);
+    // 16 logical pixels above the taskbar, at any scale from 100% to 300%.
+    if (Math.abs((left+right)/2-(work[0]+work[2])/2)>1 || work[3]-bottom<16 || work[3]-bottom>48 || top<work[1]) throw new Error(`Native pill is not centred just above the taskbar of the active monitor: ${JSON.stringify({pill:pillWindow.rect,work})}`);
     if (result.focusBefore.foreground !== result.focusDuring.foreground) throw new Error("Publishing the learned pill changed the foreground window");
     await capture("learned-hover",learned);
     await learned.click('.learned-undo');

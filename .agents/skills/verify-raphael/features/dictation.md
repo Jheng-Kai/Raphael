@@ -15,7 +15,7 @@ existing Escape handling.
 used for external editor corrections. Core owns final term acceptance and opaque,
 single-use batch Undo, including prior evidence restoration. A separate passive
 `learned.html` native window shows the learned batch and localized Undo at the active
-monitor's horizontal center, 56% down its work area. It expires after five seconds
+monitor's horizontal center, 16 px above its taskbar. It expires after five seconds
 without hover. The ordinary overlay remains click-through. Fixture pill evidence
 does not establish native hit-testing, positioning, paste or persistence.
 
