@@ -47,6 +47,28 @@ EchoClient answers normal agent turns. In native mode only, `[native-consult:Nam
 scripts its choice of the real `ask_member` tool. The normal tool gate, shared
 AgentService, room scheduler and SQLite stores create the exchanges/reports.
 
+`npm run native -- hidden-window` opts only that isolated debug instance into the
+real CloseRequested hide path (`RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE=1`). It also
+minimizes/restores once. The existing Python helper sends Win32 system commands to
+the runner's owned PID. Both cycles wake through CDP on the never-suspended learned
+page, invoking `main_window_forward` and the tray's actual `show_main_window`
+routine (Resume before show/unminimize) without a tray icon or Win32 ShowWindow.
+Only this isolated debug lifecycle mode permits learned to call that command;
+ordinary instances retain the main-only caller check. The main page is never
+evaluated while hidden, including at wake time. CDP has a five-second protocol
+timeout and the passive-page wake command has its own three-second bound.
+An unconditional 100 ms page interval must remain flat for at least six seconds
+after a 1.5-second suspend grace, then tick again within three seconds of showing.
+No CDP evaluation or screenshot occurs during that hidden observation. A typed
+RPC submitted just before hiding finishes in the core after the fake brain's
+four-second delay; SQLite must contain its completed zero-cost reply while the
+window is still hidden, and its real reply row must be visible on return. Both
+cycles retain timer timestamps, native window states, page visibility console logs
+and before/returned screenshots in the ordinary native report. The runner closes
+this lifecycle instance by its owned PID, because CloseRequested now only hides it.
+The integrator must run both the suspension build and a control build without
+main-window suspension; throttled hidden timer ticks must make the latter exit 1.
+
 The voice journey synthesizes its own short 16 kHz mono WAV offline with Windows
 `System.Speech` into its run; it never reads a sample from the owner's data. It uses
 the real local Qwen3 ASR and VAD models, read-only. `RAPHAEL_NATIVE_WAV` supplies an

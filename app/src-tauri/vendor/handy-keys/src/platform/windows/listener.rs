@@ -100,7 +100,8 @@ use super::keycode::{is_altgr_phantom_ctrl, map_key, vk_to_modifier};
 const HOOK_LOOP_TIMEOUT_MS: u32 = 100;
 // A quiet hook still proves liveness before the 250 ms heartbeat limit; observations
 // also check their deadline synchronously before returning any edit data.
-const _: () = assert!(HOOK_LOOP_TIMEOUT_MS as u64 * 2 < crate::observation::HOOK_HEARTBEAT_MAX_AGE_MS);
+const _: () =
+    assert!(HOOK_LOOP_TIMEOUT_MS as u64 * 2 < crate::observation::HOOK_HEARTBEAT_MAX_AGE_MS);
 
 /// Modifiers whose lone press-and-release makes the shell activate a menu:
 /// Win opens the Start menu, Alt focuses the active window's menu bar.

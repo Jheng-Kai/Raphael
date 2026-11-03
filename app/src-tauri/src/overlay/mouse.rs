@@ -249,7 +249,10 @@ fn cursor_position(window: &WebviewWindow) -> Option<PhysicalPosition<f64>> {
         let mut point = POINT::default();
         // SAFETY: GetCursorPos writes one live POINT and can run off the window thread.
         unsafe { GetCursorPos(&mut point) }.ok()?;
-        Some(PhysicalPosition::new(f64::from(point.x), f64::from(point.y)))
+        Some(PhysicalPosition::new(
+            f64::from(point.x),
+            f64::from(point.y),
+        ))
     }
     #[cfg(not(windows))]
     window.cursor_position().ok()

@@ -1748,10 +1748,16 @@ mod tests {
         drop(rx);
         let deadline = Instant::now() + Duration::from_secs(5);
         while Arc::strong_count(&fake.0) != 1 {
-            assert!(Instant::now() < deadline, "idle worker retained its backend");
+            assert!(
+                Instant::now() < deadline,
+                "idle worker retained its backend"
+            );
             thread::sleep(Duration::from_millis(2));
         }
-        assert_eq!(svc.update_bindings(&Bindings::default()), Err(NOT_RUNNING.to_string()));
+        assert_eq!(
+            svc.update_bindings(&Bindings::default()),
+            Err(NOT_RUNNING.to_string())
+        );
     }
 
     fn service(

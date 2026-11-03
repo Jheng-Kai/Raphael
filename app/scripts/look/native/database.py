@@ -7,7 +7,51 @@ from pathlib import Path
 directory = Path(sys.argv[1]).resolve()
 database = directory / "raphael.db"
 operation = sys.argv[2]
-if operation == "windows":
+if operation == "window-action":
+    import ctypes
+    import time
+    from ctypes import wintypes as w
+
+    user = ctypes.windll.user32
+    user.GetWindowThreadProcessId.argtypes = [w.HWND, ctypes.POINTER(w.DWORD)]
+    user.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
+    user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
+    user.IsWindowVisible.argtypes = user.IsIconic.argtypes = [w.HWND]
+    pid, action = int(sys.argv[3]), sys.argv[4]
+    commands = {"close": 0xF060, "minimize": 0xF020, "restore": 0xF120}
+    if pid <= 0 or action not in (*commands, "state"):
+        raise ValueError("Expected an owned PID and close/minimize/restore/state")
+    handles = []
+
+    @ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+    def visit(hwnd, _):
+        owner = w.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        title = ctypes.create_unicode_buffer(512)
+        user.GetWindowTextW(hwnd, title, len(title))
+        if owner.value == pid and title.value == "Raphael":
+            handles.append(hwnd)
+        return True
+
+    user.EnumWindows(visit, 0)
+    if len(handles) != 1:
+        raise RuntimeError(f"Expected one main window for owned PID {pid}, found {len(handles)}")
+    hwnd = handles[0]
+    if action != "state" and not user.PostMessageW(hwnd, 0x0112, commands[action], 0):
+        raise ctypes.WinError()
+    deadline = time.monotonic() + 3
+    while True:
+        visible, minimized = bool(user.IsWindowVisible(hwnd)), bool(user.IsIconic(hwnd))
+        reached = action == "state" or (not visible if action == "close" else
+                                       minimized if action == "minimize" else visible and not minimized)
+        if reached:
+            print(json.dumps({"hwnd": hwnd, "pid": pid, "action": action,
+                              "visible": visible, "minimized": minimized}))
+            break
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"Owned main window did not {action}")
+        time.sleep(0.05)
+elif operation == "windows":
     import ctypes
     from ctypes import wintypes as w
     user, gdi = ctypes.windll.user32, ctypes.windll.gdi32

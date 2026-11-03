@@ -57,6 +57,11 @@ async function run(options) {
       delete env.RAPHAEL_TEST_NATIVE_GMAIL;
       delete env.RAPHAEL_TEST_NATIVE_HOMES;
       delete env.RAPHAEL_TEST_NATIVE_HOME;
+      delete env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE;
+      if (journey.name === "hidden-window") {
+        env.RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE = "1";
+        env.RAPHAEL_NATIVE_THINK_S = "4";
+      }
       if (journey.name === "home-timing") env.RAPHAEL_TEST_NATIVE_HOME = "1";
       if (journey.name === "openrouter-turn") delete env.RAPHAEL_FAKE_LLM;
       if (journey.name === "owner-words") env.RAPHAEL_TEST_NATIVE_LOCAL = "1";
@@ -149,6 +154,7 @@ async function run(options) {
         };
         const rpc = (method, params) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("core_call", { method, params }), { method, params });
         await drive(journey.name, { page, result, capture, learnedPage: async () => (await browser.pages()).find(page => /\/learned\.html/.test(page.url())), windows: () => database("windows", String(owned.pid)), computerOffset: () => database("vm-offset"), computerSignin: member => database("vm-signin", String(member)), snapshot: () => database("snapshot"), nativeLog: () => readFile(join(data, "logs/raphael.log"), "utf8").catch(() => ""), homes: () => database("homes"), memoryHome: member => database("memory-home", String(member)), threadQuery: (member, conversation) => database("thread", String(member), String(conversation)), rpc, audioMs, phrases, catalogApp: process.env.RAPHAEL_NATIVE_APP || "slack",
+          windowAction: action => database("window-action", String(owned.pid), action),
           modelRequests: async () => (await readFile(join(data, "model-requests.jsonl"), "utf8")).trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) });
         await capture("final");
       } catch (error) {
@@ -162,8 +168,8 @@ async function run(options) {
           } catch (error) { result.failures.push(`Failure screenshot: ${error.message}`); }
         }
       } finally {
-        // Debug-native Close exits instead of hiding in a tray, allowing the core to flush first.
-        if (activePage) {
+        // The lifecycle journey keeps CloseRequested's real hide path; terminate only its owned PID below.
+        if (activePage && journey.name !== "hidden-window") {
           try {
             await activePage.evaluate(() => window.__TAURI_INTERNALS__.invoke("plugin:window|close", { label: "main" }));
             await Promise.race([owned.closed, pause(2000)]);

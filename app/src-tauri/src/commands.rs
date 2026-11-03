@@ -1196,7 +1196,8 @@ pub async fn main_events(
         .subscribe(channel.clone());
     // Autostart begins hidden; wait until the page has loaded before suspending its webview.
     if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW) {
-        let active = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+        let active =
+            window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
         crate::webview_power::main_active(&window, active);
     }
     let forwarder = tauri::async_runtime::spawn(async move {
@@ -1779,11 +1780,21 @@ fn show_in_folder(path: &str) -> Result<(), String> {
     }
 }
 
+fn native_learned_forward_allowed(label: &str, lifecycle_journey: bool) -> bool {
+    lifecycle_journey && label == "learned"
+}
+
 /// Chat links may open only a web address, and only at the main window's request.
 /// A sign-in in the browser has finished: the owner's way back is this window coming to the front.
 #[tauri::command]
 pub fn main_window_forward(webview: Webview) -> Result<(), String> {
-    require_main(&webview)?;
+    // The isolated lifecycle journey must wake the main page from a webview that never suspends.
+    let lifecycle_journey = crate::native_journey()
+        && std::env::var_os("RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE")
+            .is_some_and(|value| value == "1");
+    if !native_learned_forward_allowed(webview.label(), lifecycle_journey) {
+        require_main(&webview)?;
+    }
     crate::show_main_window(webview.app_handle());
     Ok(())
 }
@@ -2054,6 +2065,16 @@ mod tests {
         }
         for label in ["main", "worker", "", "other"] {
             assert!(!floating_controls_allowed(label));
+        }
+    }
+
+    #[test]
+    fn only_the_isolated_lifecycle_journey_can_forward_from_learned() {
+        assert!(native_learned_forward_allowed("learned", true));
+        assert!(!native_learned_forward_allowed("learned", false));
+        for label in ["overlay", "worker", "", "Learned", "learned ", "main"] {
+            assert!(!native_learned_forward_allowed(label, true), "{label:?}");
+            assert!(!native_learned_forward_allowed(label, false), "{label:?}");
         }
     }
 

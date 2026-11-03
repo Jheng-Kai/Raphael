@@ -12,6 +12,7 @@ export const journeys = [
   { name: "rich-content", description: "Persisted rich reply renders tables, highlighted code and SVG; remote images require consent" },
   { name: "owner-round10", description: "Native learned batch Undo, hover/expiry, passive window and stable conversation controls" },
   { name: "home-timing", description: "Measure first painted Home against a two-second offline CLI allowance read" },
+  { name: "hidden-window", description: "Close to tray and minimize suspend page timers; returning catches up a fake reply completed while hidden" },
   { name: "model-sync", description: "The real core and the real Codex CLI: its models reach the composer, a choice and a depth reach Settings, a change reaches the composer, and a turn runs on it" },
   { name: "owner-words", description: "The real core and the real Codex CLI, on what the owner really asks: an event goes on today's calendar, and a question about this PC's CPU runs read-only commands after the card" },
   { name: "office-mission", description: "The acceptance test, on the real Codex and real computers: the owner asks for a 3D office, Raphael plans roles, makes the team and hands out the work, and they finish it" },
@@ -42,6 +43,29 @@ const click = (page, selector) => perform(page, { action: "click", selector });
 const wait = (page, selector) => perform(page, { action: "wait", selector });
 const type = (page, selector, text) => perform(page, { action: "type", selector, text });
 export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+export function assertWindowSlept({ ticks, hiddenAt, showAt }) {
+  // Allow the asynchronous TrySuspend transition, then observe six full seconds.
+  const from = hiddenAt + 1500;
+  if (showAt - from < 6000) throw new Error("Hidden counter observation was shorter than six seconds");
+  const before = ticks.filter(at => at < from).length;
+  const after = ticks.filter(at => at < showAt).length;
+  if (after !== before) throw new Error(`Hidden page counter advanced by ${after - before}; timers were throttled, not suspended`);
+  return { from, to: showAt, before, after };
+}
+
+export async function forwardMainWindow(wakePage) {
+  if (!/\/learned\.html(?:[?#]|$)/.test(wakePage.url())) throw new Error("Window wake must use the never-suspended learned page");
+  const session = await wakePage.createCDPSession();
+  try {
+    const wake = await session.send("Runtime.evaluate", {
+      expression: 'window.__TAURI_INTERNALS__.invoke("main_window_forward")', awaitPromise: true, timeout: 3000,
+    }, { timeout: 3000 });
+    if (wake.exceptionDetails) throw new Error(JSON.stringify(wake.exceptionDetails));
+  } catch (error) {
+    throw new Error(`Learned page could not wake the main window: ${error.message}`, { cause: error });
+  } finally { await session.detach(); }
+}
 
 /** The window runs beside whatever the owner is doing on this PC: their taking the focus is not what a journey tests. */
 async function keepFocus(page) {
@@ -117,6 +141,89 @@ export function wrongLanguage(locale, otherPhrases, deviceNames = []) {
 
 export async function drive(name, context) {
   const { page, result, capture, snapshot, phrases } = context;
+  if (name === "hidden-window") {
+    const { member } = await context.rpc("members.create", { name: "Window sleeper", role: "Offline suspension check" });
+    const conversation = await newConversation(context, member.id);
+    await typed(context, "Visible baseline before the window sleeps", conversation);
+    result.windowSleep = { member: member.id, conversation, before: await snapshot(), cycles: [], visibilityLog: [] };
+    let wakePage;
+    for (let i = 0; i < 30 && !wakePage; i++) {
+      wakePage = await context.learnedPage();
+      if (!wakePage) await pause(100);
+    }
+    if (!wakePage) throw new Error("Never-suspended learned page is missing; cannot wake the main window");
+    await wakePage.waitForFunction(() => typeof window.__TAURI_INTERNALS__?.invoke === "function", { timeout: 3000 });
+    result.windowSleep.wakeUrl = wakePage.url();
+    const logVisibility = message => {
+      if (/^main page: document (hidden|visible)$/.test(message.text())) result.windowSleep.visibilityLog.push(message.text());
+    };
+    page.on("console", logVisibility);
+    try {
+      for (const action of ["close", "minimize"]) {
+        const cycle = { action, visibilityLogStart: result.windowSleep.visibilityLog.length };
+        result.windowSleep.cycles.push(cycle);
+        await page.evaluate(() => {
+          window.__nativeWindowProbe = { ticks: [] };
+          // Deliberately unconditional: a visibility-gated counter cannot prove suspension.
+          window.__nativeWindowProbe.timer = setInterval(() => window.__nativeWindowProbe.ticks.push(Date.now()), 100);
+        });
+        await pause(350);
+        cycle.before = await page.evaluate(() => ({ count: window.__nativeWindowProbe.ticks.length, visibility: document.visibilityState }));
+        if (cycle.before.count < 2 || cycle.before.visibility !== "visible") throw new Error("The visible page counter was not running");
+        await capture(`${action}-before`);
+        const question = `Offline reply completed while ${action} hides the window`;
+        // Start the existing typed RPC while visible; the fake brain waits four seconds in the core.
+        // No page evaluation, animation-frame wait or screenshot may wake it during the hidden dwell.
+        await page.evaluate(({ text, memberId, conversationId }) => {
+          void window.__TAURI_INTERNALS__.invoke("agent_ask_text", { text, memberId, conversationId })
+            .catch(error => console.error(`Hidden-window typed turn: ${error}`));
+        }, { text: question, memberId: member.id, conversationId: conversation });
+        cycle.hiddenWindow = await context.windowAction(action);
+        cycle.hiddenAt = Date.now();
+        const pending = (await snapshot()).agent_turns.find(turn => turn.conversation_id === conversation && turn.question === question);
+        if (pending && pending.status !== "running") throw new Error("The fake reply finished before the window was hidden");
+        await pause(7600);
+        for (let i = 0; i < 100; i++) {
+          cycle.reply = (await snapshot()).agent_turns.find(turn => turn.conversation_id === conversation && turn.question === question && turn.status === "done");
+          if (cycle.reply) break;
+          await pause(100);
+        }
+        if (!cycle.reply?.text.trim() || cycle.reply.member_id !== member.id || cycle.reply.cost_usd !== 0) throw new Error("No zero-cost member reply completed while hidden");
+        cycle.completedWhileHiddenAt = Date.now();
+        cycle.stillHidden = await context.windowAction("state");
+        if (action === "close" ? cycle.stillHidden.visible : !cycle.stillHidden.minimized) throw new Error("The window returned before its hidden reply was stored");
+        cycle.showAt = Date.now();
+        // Only the never-suspended learned page invokes the tray's shared Resume/show/restore path.
+        await forwardMainWindow(wakePage);
+        cycle.shownWindow = await context.windowAction("state");
+        if (!cycle.shownWindow.visible || cycle.shownWindow.minimized) throw new Error("The main window did not return visible and restored");
+        const wakeCount = await page.evaluate(() => window.__nativeWindowProbe.ticks.length);
+        await page.waitForFunction(count => !document.hidden && window.__nativeWindowProbe.ticks.length > count,
+          { timeout: 3000, polling: 50 }, wakeCount);
+        cycle.awakeMs = Date.now() - cycle.showAt;
+        if (cycle.awakeMs > 3000) throw new Error(`Page did not answer within three seconds of showing: ${cycle.awakeMs} ms`);
+        cycle.after = await page.evaluate(() => ({ ticks: window.__nativeWindowProbe.ticks, visibility: document.visibilityState }));
+        cycle.counter = assertWindowSlept({ ticks: cycle.after.ticks, hiddenAt: cycle.hiddenAt, showAt: cycle.showAt });
+        let replyText = cycle.reply.text;
+        try { replyText = JSON.parse(replyText).text ?? replyText; } catch { /* Plain stored replies need no decoding. */ }
+        await page.waitForFunction(({ id, text }) => {
+          const reply = document.querySelector(`.tn[data-id="${id}"] .ra`);
+          if (!reply?.innerText.replace(/\s+/g, " ").includes(text.replace(/\s+/g, " "))) return false;
+          const rect = reply.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && rect.top < innerHeight && rect.bottom > 0;
+        }, { timeout: 3000 }, { id: cycle.reply.id, text: replyText });
+        cycle.visibilityLog = result.windowSleep.visibilityLog.slice(cycle.visibilityLogStart);
+        if (cycle.visibilityLog.indexOf("main page: document hidden") < 0 ||
+            cycle.visibilityLog.indexOf("main page: document visible") <= cycle.visibilityLog.indexOf("main page: document hidden")) throw new Error("Main page did not log hidden then visible");
+        await capture(`${action}-returned`);
+        await page.evaluate(() => clearInterval(window.__nativeWindowProbe.timer));
+      }
+      if (result.runtimeErrors.length) throw new Error("Hidden-window journey collected runtime errors");
+    } finally {
+      page.off("console", logVisibility);
+    }
+    return;
+  }
   if (name === "appearance") {
     await click(page, '#nav [data-go="settings"]');
     await click(page, '.modal-scrim [data-pane="appearance"]');

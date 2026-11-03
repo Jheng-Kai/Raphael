@@ -53,7 +53,7 @@ Tauri cursor_position or inner_position. Non-Windows cursor fallback is retained
 Run the existing isolated fake-brain journeys, with one heavy job at a time:
 
 ```powershell
-npm.cmd run native -- owner-round10 voice-conversation voice-keys locale-sweep delete-conversation
+npm.cmd run native -- hidden-window owner-round10 voice-conversation voice-keys locale-sweep delete-conversation
 ```
 
 owner-round10 covers learned hover/expiry, mouse pass-through, foreground
@@ -61,11 +61,35 @@ continuity, monitor positioning and Undo. voice-conversation and voice-keys cove
 worker/controller input, release, cancellation and dictation timing; debug native
 journeys omit registration on the owner's global keyboard, so a separately
 authorized physical-key hold/chord/swallow journey is still required. Check
-tray hide/show, OS minimize/restore, rapid show during pending suspend, long-hidden
+rapid show during pending suspend, long-hidden
 history/activity catch-up, idle/active overlay memory target, hidden dictation and
 floating controls across negative origins and 100/125/150/200 percent DPI.
-Retain native logs, screenshots and channel/persistence evidence. These manual
-extensions are not yet named native-runner journeys.
+Retain native logs, screenshots and channel/persistence evidence. These remaining
+manual extensions are not yet named native-runner journeys.
+
+hidden-window covers R-PERF-11 and the R-PERF-03 visibility-log boundary with an
+isolated member conversation, fake brain and real WebView2. CloseRequested hides
+the main window; the never-suspended learned page invokes main_window_forward,
+which calls the tray's shared show_main_window routine. A second cycle minimizes
+through a Win32 system command scoped to the runner's PID and restores through
+that same learned-to-native Resume/show path, never Win32 ShowWindow. Learned may
+call this command only in the isolated debug lifecycle journey; production keeps
+its main-only caller check. No main-page evaluation occurs while hidden, even to
+wake it. CDP's protocol timeout is five seconds; the wake command is bounded to
+three seconds. Only this debug-native journey opts into close-to-tray via
+RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE; it creates no tray icon or global hooks.
+The unconditional 100 ms page timer must tick while visible, remain flat over at
+least six hidden seconds after a 1.5-second suspension grace, and tick again within
+three seconds of showing. No CDP page evaluation occurs during the hidden dwell.
+A typed RPC submitted just before hiding completes after the existing fake
+brain's four-second core delay; read-only SQLite must show that zero-cost reply
+before returning, and the reply row must appear on screen afterward. Each cycle
+also requires the main page's hidden-then-visible console logs and no runtime
+errors. Timer timestamps, window states, persisted replies and captures stay in
+the ordinary native report. A control build retaining this harness but omitting
+main-window suspension must fail its counter assertion even with once-per-second
+hidden timer throttling. Native before/after evidence remains integrator-owned;
+offline native.test.mjs covers selection and rejects throttled counter samples.
 
 The existing member-computer journey verifies the real stream, renewals, takeover,
 handback and reconnect, including click latency. It starts/stops Docker and needs

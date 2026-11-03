@@ -12,7 +12,9 @@ static EVENT_WAKE: std::sync::Mutex<Option<EventWake>> = std::sync::Mutex::new(N
 
 /// Wakes the consumer after either hotkey or cancel-input data has been queued.
 pub fn set_event_waker(wake: Option<EventWake>) {
-    *EVENT_WAKE.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = wake;
+    *EVENT_WAKE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = wake;
 }
 
 pub(crate) fn wake_events() {

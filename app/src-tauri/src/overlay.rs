@@ -647,11 +647,19 @@ impl Overlay {
         // Finite captions can expire entirely in the page, without a native hide.
         // Keep those Low throughout; live recording and questions use Normal.
         match &event {
-            OverlayEvent::Hide | OverlayEvent::Release | OverlayEvent::Complete
-            | OverlayEvent::Notice { .. } | OverlayEvent::Learned { .. }
-            | OverlayEvent::Say { hold: false, .. } => crate::webview_power::low_memory(&self.window, true),
-            OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } | OverlayEvent::Say { hold: true, .. }
-            | OverlayEvent::Ask(_) | OverlayEvent::Operate { .. } => {
+            OverlayEvent::Hide
+            | OverlayEvent::Release
+            | OverlayEvent::Complete
+            | OverlayEvent::Notice { .. }
+            | OverlayEvent::Learned { .. }
+            | OverlayEvent::Say { hold: false, .. } => {
+                crate::webview_power::low_memory(&self.window, true)
+            }
+            OverlayEvent::Show { .. }
+            | OverlayEvent::Mode { .. }
+            | OverlayEvent::Say { hold: true, .. }
+            | OverlayEvent::Ask(_)
+            | OverlayEvent::Operate { .. } => {
                 crate::webview_power::low_memory(&self.window, false);
             }
             _ => {}

@@ -51,7 +51,7 @@ export async function connectWebView(puppeteer, port, process, timeout = 90000) 
       }
       const response = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) });
       const version = await response.json();
-      return await puppeteer.connect({ browserWSEndpoint: version.webSocketDebuggerUrl, defaultViewport: null });
+      return await puppeteer.connect({ browserWSEndpoint: version.webSocketDebuggerUrl, defaultViewport: null, protocolTimeout: 5000 });
     } catch { await new Promise(resolve => setTimeout(resolve, 250)); }
   }
   throw new Error(`WebView2 CDP readiness timed out on port ${port}`);

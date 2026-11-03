@@ -154,7 +154,9 @@ pub fn run() {
             // The app lives in the tray, so closing the main window only hides it.
             // "Quit" in the tray menu is the way out.
             if window.label() == MAIN_WINDOW
-                && !native_journey()
+                && (!native_journey()
+                    || std::env::var_os("RAPHAEL_TEST_NATIVE_WINDOW_LIFECYCLE")
+                        .is_some_and(|value| value == "1"))
                 && let WindowEvent::CloseRequested { api, .. } = event
             {
                 api.prevent_close();
@@ -168,8 +170,8 @@ pub fn run() {
                 && matches!(event, WindowEvent::Resized(_))
                 && let Some(webview) = window.app_handle().get_webview_window(MAIN_WINDOW)
             {
-                let active = !window.is_minimized().unwrap_or(false)
-                    && window.is_visible().unwrap_or(false);
+                let active =
+                    !window.is_minimized().unwrap_or(false) && window.is_visible().unwrap_or(false);
                 webview_power::main_active(&webview, active);
             }
         })
