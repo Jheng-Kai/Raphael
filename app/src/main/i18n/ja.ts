@@ -4,6 +4,7 @@ import { missingJa } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const ja = {
+  "chat.newMessages": "新着",
   "work.inspect": "過程を見る",
   "work.thinking": "考えています",
   "work.thought": "依頼を検討しました",

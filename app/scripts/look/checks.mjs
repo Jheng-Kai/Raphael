@@ -2,6 +2,34 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
+  if (name.startsWith("thread-new-divider")) {
+    const scroller = document.querySelector('.mb-chat .ra-scroll');
+    const divider = scroller.querySelector('.thread-new');
+    if (name === "thread-new-divider-return") {
+      require(!divider, "returning to a read thread has no divider");
+      return { check: name };
+    }
+    require(divider && scroller.querySelectorAll('.thread-new').length === 1, "one independent divider is present");
+    require(divider.nextElementSibling?.dataset.id === "7001", "the line precedes the first unseen turn");
+    const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const top = divider.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    if (name === "thread-new-divider") require(top >= 0 && top <= 40 && bottom > 80, "a long run starts near the top");
+    if (["thread-new-divider-short", "thread-new-divider-bottom"].includes(name)) require(bottom <= 2, "the thread opens or jumps to the bottom");
+    if (name === "thread-new-divider-short") require(scroller.scrollHeight > scroller.clientHeight && top >= 0 && top < scroller.clientHeight, "seen history scrolls while the short unread run and its line fit");
+    if (name === "thread-new-divider-snapshot") window.__unreadSnapshot = {
+      divider, lines: [...scroller.querySelector('.thread').children].map(node => [node, node.innerHTML]),
+      reads: window.__look.calls.filter(call => call.method === "members.read").length,
+    };
+    if (name === "thread-new-divider-stays") {
+      const before = window.__unreadSnapshot;
+      require(before.divider === divider, "the divider retains its identity");
+      require(before.lines.every(([node, html]) => node.isConnected && node.innerHTML === html), "other lines retain their nodes and HTML");
+      require(window.__look.calls.filter(call => call.method === "members.read").length === before.reads, "arrivals add no read per event");
+    }
+    require(getComputedStyle(divider, "::before").height === "1px", "the divider uses a hairline");
+    require(getComputedStyle(divider).color === getComputedStyle(scroller.querySelector('.day')).color, "new and time labels share muted words");
+    return { check: name, top, bottom };
+  }
   if (name === 'desktop-own-wallpaper') {
     for (const image of [...document.querySelectorAll('.desktop-wallpaper[data-own]')].filter(visible)) {
       require(image.complete && image.naturalWidth > 0, 'the picture decoded');

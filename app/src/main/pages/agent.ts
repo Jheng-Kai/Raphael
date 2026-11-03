@@ -55,6 +55,7 @@ import { createLinkPreviews, type LinkPreview } from "../link-previews";
 import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
+import { openUnread, unreadLine } from "../unread-divider";
 import { measureMessagePreviews } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
@@ -272,6 +273,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   // ---------- the members ----------
 
   let visible = false;
+  let unreadFrom: number | null = null;
+  let unreadCaptured = false;
+  let openingThread = true;
   let composerBrain: ReturnType<typeof mountComposerBrain> | undefined;
   const chosenConversations = new Map<number, number>();
   const members = createMembers({
@@ -279,6 +283,18 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     onOpenConversation: (member, conversation, turn) => openConversation(member, conversation, turn),
     conversationOf: member => chosenConversations.get(member),
     visible: () => visible,
+    onReadThread: member => {
+      if (unreadCaptured) return;
+      unreadCaptured = true;
+      unreadFrom = member.unread_from ?? null;
+      if (loadedThread) {
+        if (unreadFrom !== null) {
+          render();
+          if (needsUnreadHistory()) { void load(true); return; }
+        }
+        finishOpening();
+      }
+    },
     focusHeader: () => conversationButton.focus({ preventScroll: true }),
     onDetailsChange: open => { conversationButton.setAttribute("aria-expanded", String(open)); queueMicrotask(() => open && visible && !roomPane.active ? desktop.show() : desktop.sync()); },
     onSelect: (_id, sameThread) => {
@@ -456,6 +472,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   el.append(roomPane.el);
   window.addEventListener("raphael:open-room", event => {
     if (!el.isConnected) return;
+    unreadFrom = null;
+    unreadCaptured = false;
+    openingThread = true;
     // A member's private computer does not stay open behind a group.
     desktop.hide(true);
     el.classList.add("is-room"); memberChat.hidden = true;
@@ -827,8 +846,14 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     const out = threadItems(turns, state.nowMs).map((item) =>
       item.kind === "day"
         ? { key: item.key, html: dayHTML(item.label) }
-        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), shape), turnId: item.turn.id },
+        // Eligibility belongs to the turn; the menu checks which reply is latest when opened.
+        : { key: item.key, html: turnHTML(pacing.view(item.turn), state, details.has(item.turn.id), { ...shape, regenerateTurnId: item.turn.id }), turnId: item.turn.id },
     );
+    const boundary = unreadFrom;
+    if (boundary !== null) {
+      const at = out.findIndex(line => line.turnId !== undefined && line.turnId >= boundary);
+      if (at >= 0) out.splice(at, 0, unreadLine(boundary));
+    }
     // What is on its way stands under the day its turn will have, so it does not move when the turn comes.
     const pendingAt = outgoing.find(belongs)?.sentAt ?? (hearingBelongs() ? hearing!.since : undefined);
     const lastAt = Math.max(0, ...turns.map(turn => turn.created_at_ms));
@@ -881,7 +906,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   let renderedPage = "";
-  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), pending, turns, outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
+  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), unreadFrom, pending, turns, outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
@@ -951,6 +976,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** Loads the newest turns, or with `earlier` the ones before what is loaded, keeping the reader's place. */
   let activeRead: { key: string; promise: Promise<void> } | null = null;
   let readAgain = false;
+  const needsUnreadHistory = (): boolean => openingThread && unreadFrom !== null && canLoadEarlier && (oldestId(turns) ?? 0) > unreadFrom;
+  function finishOpening(): void {
+    if (!openingThread || !unreadCaptured || pending || needsUnreadHistory() || !visible || scroller.hidden || targetTurn !== undefined) return;
+    openingThread = false;
+    openUnread(scroller);
+  }
   async function load(earlier: boolean, fromEvent = false): Promise<void> {
     if (earlier) return readPage(true);
     const key = `${memberId()}:${conversationId()}:${loads}`;
@@ -1048,7 +1079,13 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     else { stage.setAttribute("aria-busy", "false"); updateLiveTimes(thread); }
     // The earlier turns come in above the reader, who stays where they were.
     if (earlier) scroller.scrollTop = scroller.scrollHeight - fromBottom;
+    if (needsUnreadHistory()) {
+      await readPage(true);
+    }
+    if (mine !== loads) return;
+    finishOpening();
     if (targetTurn !== undefined) {
+      openingThread = false;
       const target = thread.querySelector<HTMLElement>(`[data-id="${targetTurn}"]`);
       if (target) { target.scrollIntoView?.({ block: "center" }); target.classList.add("is-search-target"); setTimeout(() => target.classList.remove("is-search-target"), 2400); }
       targetTurn = undefined;
@@ -1478,6 +1515,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
    * closes, the composer and the card become that thread's, and nothing of the last thread moves in.
    */
   function switchThread(): void {
+    unreadFrom = members.member().unread_from ?? null;
+    unreadCaptured = true;
+    openingThread = true;
     if (composerKey !== "deleted") saveComposerDraft();
     desktop.refresh();
     drawConversation();
@@ -1523,7 +1563,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     if (visible) {
       const generation = loads + 1;
       void load(false).then(() => {
-        if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) scroller.scrollTop = scroller.scrollHeight;
+        if (generation === loads && visible && !scroller.hidden && !thread.querySelector(".is-search-target")) finishOpening();
       });
       focusComposer();
     }
@@ -2260,6 +2300,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     loadSidebar: () => members.load(),
     show(arg) {
       const wasVisible = visible;
+      if (!wasVisible) { unreadFrom = null; unreadCaptured = false; openingThread = true; }
       visible = true;
       if (!wasVisible) members.show();
       if (!roomPane.active) desktop.show();
@@ -2290,7 +2331,10 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         })
         .catch(() => {});
       void load(false).then(() => {
-        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) scroller.scrollTop = scroller.scrollHeight;
+        if (visible && !scroller.hidden && (!wasVisible || draft !== null)) {
+          if (unreadFrom !== null) finishOpening();
+          else scroller.scrollTop = scroller.scrollHeight;
+        }
         if (visible && listening && voiceMember === memberId() && !question) drawComposerTask();
         refocus();
       });

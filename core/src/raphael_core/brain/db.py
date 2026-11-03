@@ -1329,6 +1329,13 @@ PRAGMA user_version = 56;
 COMMIT;
 """
 
+_MIGRATIONS[57] = """
+BEGIN;
+ALTER TABLE member_unread ADD COLUMN unread_from INTEGER;
+PRAGMA user_version = 57;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

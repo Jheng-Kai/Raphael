@@ -50,6 +50,7 @@ export interface MembersHost {
   onSelect(id: number, sameThread?: boolean): void;
   /** The list of members changed (a name or picture was updated). */
   onUpdate?(): void;
+  onReadThread?(member: Member): void;
   /** Whether the page is on screen now (a thread read only then). */
   visible(): boolean;
   focusHeader?(): void;
@@ -242,9 +243,11 @@ export function createMembers(host: MembersHost): MembersShell {
   /** The open thread is read: the core forgets that it was unread. */
   async function readThread(): Promise<void> {
     const m = member();
-    if (!host.visible() || !m.unread || m.id === RAPHAEL_ID) return;
-    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false } : other)) };
+    if (host.visible() && currentRoomId() === null) host.onReadThread?.(m);
+    if (!host.visible() || !m.unread) return;
+    if (list) list = { ...list, members: list.members.map((other) => (other.id === m.id ? { ...other, unread: false, unread_from: null } : other)) };
     column.draw();
+    if (m.id === RAPHAEL_ID) return;
     try {
       await api.membersRead(m.id);
     } catch {
@@ -277,7 +280,7 @@ export function createMembers(host: MembersHost): MembersShell {
   function select(id: number): void {
     if (!host.visible()) host.app.go("agent");
     if (id === current) {
-      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); }
+      if (currentRoomId() !== null) { host.onSelect(id, true); drawAll(); void readThread(); }
       // Reopening the same conversation preserves its details state.
       return;
     }

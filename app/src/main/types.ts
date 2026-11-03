@@ -898,6 +898,7 @@ export interface Member {
   /** When it was made, in ms. */
   created: number;
   unread: boolean;
+  unread_from?: number | null;
   waiting: boolean;
   activity?: string;
   activity_label?: string;

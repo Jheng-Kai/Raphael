@@ -135,6 +135,8 @@
 /* The day reads like the other system lines: centred grey words, no chip. */
 .thread > .day { align-self: center; margin: var(--sp-2) 0 0; font-size: var(--pa-day); line-height: 1.6; color: var(--text-3); }
 .thread > .day:first-child { margin-top: var(--sp-1); }
+.thread > .thread-new { display: flex; align-items: center; gap: var(--sp-2); color: var(--text-3); font-size: var(--pa-day); line-height: 1.6; }
+.thread-new::before, .thread-new::after { content: ""; height: 1px; flex: 1; background: var(--edge); }
 
 /* a turn: the person on the right, Raphael on the left */
 .tn { display: flex; flex-direction: column; gap: var(--pa-gap-in); }

@@ -4,6 +4,7 @@ import { missingEn } from "./missing-catalogs";
 import type { Messages } from './zh-TW';
 
 export const en = {
+  "chat.newMessages": "New",
   "work.inspect": "View process",
   "work.thinking": "Thinking",
   "work.thought": "Considered the request",

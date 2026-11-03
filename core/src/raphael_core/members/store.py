@@ -828,10 +828,13 @@ class MemberStore:
     def unread(self) -> set[int]:
         return {int(row[0]) for row in self._conn.execute("SELECT member_id FROM member_unread")}
 
-    def mark_unread(self, member_id: int) -> None:
+    def unread_from(self) -> dict[int, int | None]:
+        return {int(row[0]): row[1] for row in self._conn.execute("SELECT member_id, unread_from FROM member_unread")}
+
+    def mark_unread(self, member_id: int, turn_id: int | None = None) -> None:
         with self._conn:
             self._conn.execute(
-                "INSERT OR IGNORE INTO member_unread (member_id) VALUES (?)", (member_id,)
+                "INSERT OR IGNORE INTO member_unread (member_id, unread_from) VALUES (?, ?)", (member_id, turn_id)
             )
 
     def mark_read(self, member_id: int) -> bool:

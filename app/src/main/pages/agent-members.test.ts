@@ -93,6 +93,95 @@ const pick = async (id: number) => {
   await flush();
 };
 
+test.each(["member", "page", "room"])("the first unseen turn has its own stable line until the thread is left (%s)", async leave => {
+  vi.useFakeTimers();
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  api.membersRead.mockImplementation(async (id: number) => {
+    Object.assign(roster.members.find(m => m.id === id)!, { unread: false, unread_from: null });
+    return {};
+  });
+  const agent = mount(); await flush(); await pick(3);
+  const divider = $('.thread-new');
+  expect(divider).not.toBeNull();
+  expect(divider.nextElementSibling).toBe($('.tn[data-id="31"]'));
+  const old = $('.tn[data-id="30"]'), unseen = $('.tn[data-id="31"]');
+  const oldHTML = old.outerHTML, unseenHTML = unseen.outerHTML;
+  api.agentHistoryList.mockResolvedValueOnce({ turns: [turn(32, { member_id: 3 }), ...THREADS[3]] });
+  send({ type: 'AgentTurn', turn_id: 32, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(400); await flush();
+  expect($('.thread-new')).toBe(divider);
+  expect($('.tn[data-id="30"]')).toBe(old); expect(old.outerHTML).toBe(oldHTML);
+  expect($('.tn[data-id="31"]')).toBe(unseen); expect(unseen.outerHTML).toBe(unseenHTML);
+  expect(api.membersRead.mock.calls.filter(([id]) => id === 3)).toHaveLength(1);
+  if (leave === "member") { await pick(0); await pick(3); }
+  if (leave === "page") { agent.hide(); agent.show(); await flush(); }
+  if (leave === "room") { await openGroupChat(1); await flush(); await pick(3); }
+  expect(document.querySelector('.thread-new')).toBeNull();
+  agent.hide();
+});
+
+test("an unread boundary before the newest history page loads its original turn", async () => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 101 });
+  api.membersList.mockResolvedValue(roster);
+  const history = Array.from({length:61}, (_, i) => turn(100 + i, {member_id:3})).reverse();
+  api.agentHistoryList.mockImplementation(async (q: {member_id?: number; before_id?: number; limit?: number}) => ({turns:
+    q.member_id === 3 ? history.filter(t => q.before_id === undefined || t.id < q.before_id).slice(0,q.limit) : THREADS[0]}));
+  const agent = mount(); await flush();
+  Object.defineProperties($('.mb-chat .ra-scroll'), {scrollHeight:{configurable:true,value:5000},clientHeight:{configurable:true,value:500}});
+  await pick(3);
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="101"]'));
+  expect(api.agentHistoryList.mock.calls.some(([q]) => q.member_id === 3 && q.before_id === 111)).toBe(true);
+  agent.hide();
+});
+
+test("the initial chief thread snapshots news before viewing clears it", async () => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], {unread:true, unread_from:2});
+  api.membersList.mockImplementation(async () => structuredClone(roster));
+  api.membersViewing.mockImplementation(async (id: number) => {
+    if (id === 0) Object.assign(roster.members[0], {unread:false, unread_from:null});
+    return {};
+  });
+  const agent = mount(); await flush();
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="2"]'));
+  agent.hide(); agent.show(); await flush();
+  expect(document.querySelector('.thread-new')).toBeNull();
+  agent.hide();
+});
+
+test("a delayed initial roster still opens at news before the newest history page", async () => {
+  let deliver!: (list: MembersList) => void;
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members[0], {unread:true, unread_from:101});
+  api.membersList.mockImplementation(() => new Promise(resolve => { deliver = resolve; }));
+  const history = Array.from({length:61}, (_, i) => turn(100 + i)).reverse();
+  api.agentHistoryList.mockImplementation(async (q: {before_id?: number; limit?: number}) => ({turns:
+    history.filter(t => q.before_id === undefined || t.id < q.before_id).slice(0,q.limit)}));
+  const agent = mount();
+  Object.defineProperties($('.mb-chat .ra-scroll'), {scrollHeight:{configurable:true,value:5000},clientHeight:{configurable:true,value:500}});
+  await flush(); deliver(roster); await flush();
+  expect($('.thread-new').nextElementSibling).toBe($('.tn[data-id="101"]'));
+  agent.hide();
+});
+
+test.each([false, true])("opening unread content follows its length (long: %s)", async long => {
+  const roster = structuredClone(LIST);
+  Object.assign(roster.members.find(m => m.id === 3)!, { unread: true, unread_from: 31 });
+  api.membersList.mockResolvedValue(roster);
+  const agent = mount(); await flush();
+  const scroller = $('.mb-chat .ra-scroll');
+  Object.defineProperties(scroller, { scrollHeight: { configurable: true, get: () => 1500 }, clientHeight: { configurable: true, get: () => 500 } });
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+    return { top: this.classList.contains('thread-new') ? (long ? 200 : 1200) - scroller.scrollTop : 0 } as DOMRect;
+  });
+  await pick(3);
+  expect(scroller.scrollTop).toBe(long ? 176 : 1500);
+  rect.mockRestore(); agent.hide();
+});
+
 test("member drafts follow the composer owner through switching and page return", async () => {
   const agent = mount(); await flush();
   const input = agent.el.querySelector<HTMLTextAreaElement>('.composer textarea')!;
@@ -630,8 +719,10 @@ test.each(["finish", "switch", "search", "reduced"])("a finished member burst re
 
 test("regenerating the latest member reply asks the same question in that member's thread", async () => {
   const agent = mount(); await flush(); await pick(3);
-  expect(document.querySelectorAll('[data-regenerate="true"]')).toHaveLength(1);
-  document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
+  document.querySelector<HTMLButtonElement>('.tn[data-id="30"] [data-act="more-message"]')!.click();
+  await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
+  document.querySelector<HTMLButtonElement>('.tn[data-id="31"] [data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush();
   expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 31", [], 3, expect.objectContaining({ requestId: expect.any(String) }));

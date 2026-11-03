@@ -2,6 +2,20 @@
 export function installMock(fixture, config = {}, target = window) {
   const data = structuredClone(fixture);
   const variant = config.fixture ?? {};
+  if (variant.unreadDivider) {
+    const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id === 11));
+    const sample = data.unreadSample;
+    const make = (id, text) => ({ ...base, id, created_at_ms: data.now - (7100 - id) * 1000,
+      session_id: `sample-unread-${id}`, source: "routine", route: "routine", question: sample.question,
+      text, detail: null, status: "done", task: null, steps: [], messages: [], attachments: [], handoffs: [],
+      permissions: [], drafts: [], computers: [], connectors: [], secrets: [], pages: [] });
+    data.turns = data.turns.filter(turn => turn.member_id !== 1);
+    const long = variant.unreadDivider === "long";
+    for (let id = 7000; id <= (long ? 7060 : 7001); id++) data.turns.push(make(id, id === 7000 && variant.unreadSeenLong
+      ? Array(24).fill(sample.paragraph).join("\n\n") : long && id > 7000
+        ? `${sample.answer}\n\n${Array(5).fill(sample.paragraph).join("\n\n")}` : sample.answer));
+    Object.assign(data.members.find(member => member.id === 1), { unread: true, unread_from: 7001 });
+  }
   if (variant.presence) {
     const sample = data.presenceSample;
     const base = structuredClone(data.turns.find(turn => turn.member_id === 1 && turn.conversation_id !== 4));
@@ -718,7 +732,13 @@ export function installMock(fixture, config = {}, target = window) {
           apps: counted.apps, connected: counted.count,
         } };
       }
-      case "members.viewing": case "members.read": return {};
+      case "members.viewing": case "members.read": {
+        if (variant.unreadDivider) {
+          const member = data.members.find(member => member.id === p.id);
+          if (member) Object.assign(member, { unread: false, unread_from: null });
+        }
+        return {};
+      }
       case "members.tool_choices": return { tools: [], connections: data.servers };
       case "members.update": { const member = update(data.members, p.id, p); if (p.hidden && p.id === data.primaryId) data.primaryId = 0; notify("MembersChanged", { member_id: p.id }); return { member }; }
       case "members.set_primary": {

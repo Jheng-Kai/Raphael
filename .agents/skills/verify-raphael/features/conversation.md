@@ -1274,3 +1274,18 @@ npm run look -- daily-footer-hover daily-footer-marks daily-footer-home daily-pr
 ```
 
 Local unit authorization excludes judge, native, network and providers. Browser fixture evidence remains separate from native and design acceptance.
+
+
+## First unseen private turn (2026-11-03)
+
+R-UI-96: migration 57 adds nullable unread_from beside member_unread's member key. The first unseen private turn sets it once; read/viewing clears the row. Existing unread rows upgrade with no invented boundary; heard Raphael voice turns remain read. Members list samples boundaries once for all members. No RPC or Rust allowlist change is needed.
+
+The page snapshots the boundary before the existing read/viewing calls clear it, retaining it only for the current visit. A separate keyed line precedes the first visible conversation turn at or after the boundary, outside that turn's HTML. Initial history pages extend backwards until they cover the boundary. A short unread run opens at the bottom; a long one opens with the line 24px below the scroller top. Existing latest navigation remains available. Rooms retain their own unread behavior.
+
+Selected matrix, both themes and widths 1120,720,1920x1080:
+
+```powershell
+npm run look -- thread-new-divider thread-new-divider-short thread-new-divider-stays thread-new-divider-return thread-new-divider-latest chat busy-team-thread busy-team-follow send-prompt --theme both --width 1120,720,1920x1080
+```
+
+The long fixture covers more than one history page. The short fixture follows a long seen reply, so its scroller must overflow while the unread run fits. The short, arrival, leave/return and latest scenes assert scroll geometry, independent line identity, retained message HTML and no additional members.read on arrivals. Existing busy-team and send-prompt limits remain unchanged. Compare the muted label with adjacent time separators at matching theme/width. Core members and schema tests cover persistence and upgrade; agent-members.test.ts covers visit lifetime and scroll decisions. Existing regenerate tests now exercise the visible menu: eligibility is validated on menu open, so new replies no longer replace an older reply just to change hidden metadata.

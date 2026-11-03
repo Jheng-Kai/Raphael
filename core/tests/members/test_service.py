@@ -39,7 +39,7 @@ async def test_raphael_is_first_in_the_list_in_the_language_asked(rig):
         "blurb": "", "reply_style": "full", "voice": "", "read_aloud": False,
         "notify": False, "ask_before_members": False, "pinned": False, "hidden": False, "draft_first": True,
         "id": 0, "name": "Raphael", "role": "", "personality": "", "instructions": "", "avatar": "", "group_id": None,
-        "model": "", "tools": None, "position": -1, "created": 0, "unread": False,
+        "model": "", "tools": None, "position": -1, "created": 0, "unread": False, "unread_from": None,
         "waiting": False, "activity": "idle", "activity_label": "", "preview": "", "last_at": None, "profile_ready": False, "chief": True,
     }  # fmt: skip
     rig.language = "ja"
@@ -156,6 +156,41 @@ async def test_a_picture_from_an_older_build_has_no_url_left(rig):
 
 
 # --- unread and waiting ----------------------------------------------------------------------------
+
+async def test_unread_from_keeps_the_first_unseen_turn_until_read(rig, conn):
+    member = (await rig.call("members.create", {"name": "Sample reader"}))["member"]["id"]
+    history = AgentHistory(conn)
+
+    def arrive(member_id=member, source="app"):
+        turn_id = history.add(session_id="sample", question="Sample question", route="answer",
+                              prefix="", text="Sample reply", status="done", source=source, member_id=member_id)
+        rig.service.turn_arrived(turn_id)
+        return turn_id
+
+    async def listed(member_id=member):
+        return next(m for m in (await rig.call("members.list"))["members"] if m["id"] == member_id)
+
+    await rig.call("members.viewing", {"id": member})
+    arrive()
+    arrive(0, "voice")
+    assert (await listed())["unread_from"] is None
+    assert (await listed(0))["unread_from"] is None
+    await rig.call("members.viewing", {"id": None})
+    first = arrive()
+    arrive()
+    rig.service.turn_arrived(first)
+    assert (await listed())["unread_from"] == first
+    assert (await listed())["unread"] is True
+    await rig.call("members.read", {"id": member})
+    assert (await listed())["unread_from"] is None
+    assert (await listed())["unread"] is False
+    assert (await listed(0))["unread"] is False
+    next_first = arrive()
+    assert (await listed())["unread_from"] == next_first
+    first_chief = arrive(0)
+    arrive(0, "voice")
+    assert (await listed(0))["unread_from"] == first_chief
+
 
 
 async def test_a_turn_in_a_thread_that_is_not_on_screen_is_unread_until_it_is_read(rig, conn):

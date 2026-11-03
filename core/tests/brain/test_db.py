@@ -11,6 +11,25 @@ from raphael_core.brain.settings import SettingsStore
 from .conftest import item
 
 
+def test_unread_boundary_migration_preserves_existing_unread_members(monkeypatch, tmp_path):
+    path = tmp_path / "unread-before-boundaries.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 56)
+        conn = db.connect(path)
+    conn.execute("INSERT INTO member_unread(member_id) VALUES (3)")
+    conn.commit()
+    conn.close()
+    conn = db.connect(path)
+    assert tuple(conn.execute("SELECT member_id, unread_from FROM member_unread").fetchone()) == (3, None)
+    conn.execute("UPDATE member_unread SET unread_from=42 WHERE member_id=3")
+    conn.commit()
+    db.migrate(conn)
+    conn.close()
+    conn = db.connect(path)
+    assert tuple(conn.execute("SELECT member_id, unread_from FROM member_unread").fetchone()) == (3, 42)
+    conn.close()
+
+
 def test_message_preview_migration_preserves_existing_permission_rows(monkeypatch):
     with monkeypatch.context() as old:
         old.setattr(db, "LATEST_VERSION", 54)
@@ -342,7 +361,7 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 56
+LATEST = 57
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -530,6 +549,7 @@ SCHEMA_V55 = {**SCHEMA_V53, "routine_runs": [*SCHEMA_V53["routine_runs"], "trigg
 
 
 SCHEMA_V56 = {**SCHEMA_V55, "permission_cards": [*SCHEMA_V55["permission_cards"], "message TEXT NOT NULL DEFAULT '{}'"]}
+SCHEMA_V57 = {**SCHEMA_V56, "member_unread": ["member_id INTEGER PK", "unread_from INTEGER"]}
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -686,7 +706,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V56) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V57) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -704,7 +724,7 @@ def test_connect_creates_the_latest_schema(conn):
         "owner_question_turn",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V56.items():
+    for table, columns in SCHEMA_V57.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

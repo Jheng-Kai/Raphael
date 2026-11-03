@@ -6,9 +6,10 @@ The RPC methods (the main window only, through the shell's allow-list):
 - `members.list {ui_language?}` -> `{members, groups}`. `members` is Raphael first (`id` 0, his name
   in the language, his picture when the owner chose one: `avatar_url`, a data URL, and
   `avatar_crop`), then every member in its place: `{id, name, role, personality, instructions, avatar,
-  avatar_url?, group_id, model, tools, position, created, unread, waiting, preview, last_at}`.
+  avatar_url?, group_id, model, tools, position, created, unread, unread_from, waiting, preview, last_at}`.
   `preview` is the last line of its thread (one line, cut) and `last_at` when it was said; `unread`
-  says the thread has news the owner has not seen (`members.read` clears it), and `waiting` that a
+  says the thread has news the owner has not seen (`members.read` clears it), `unread_from` names
+  its first unseen turn when known, and `waiting` that a
   question waits for the owner there. `groups` is `[{id, name, position, sources}]`.
 - `members.create {name, role?, personality?, instructions?, group_id?, avatar?, tools?, model?, ui_language?}` ->
   `{member, routine_offer}`. `routine_offer` is the routine offered to a member of a group that
@@ -456,7 +457,7 @@ class MembersService:
             if turn is None or (turn.source == "voice" and turn.member_id == 0) or turn.member_id == self._viewing:
                 return
             was_unread = turn.member_id in self.store.unread()
-            self.store.mark_unread(turn.member_id)
+            self.store.mark_unread(turn.member_id, turn_id)
             if not was_unread:
                 self._changed()
         except sqlite3.Error as exc:
@@ -573,7 +574,7 @@ class MembersService:
     # --- views ---------------------------------------------------------------------------------------
 
     def _member_view(
-        self, member: Member, unread: set[int], waiting: set[int], latest: dict[int, Turn]
+        self, member: Member, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(member.id)
         activity, activity_label = self.activity.describe(member.id, waiting)
@@ -592,6 +593,7 @@ class MembersService:
             "position": member.position,
             "created": member.created_at_ms,
             "unread": member.id in unread,
+            "unread_from": unread.get(member.id),
             "waiting": member.id in waiting,
             "activity": activity,
             "activity_label": activity_label,
@@ -604,7 +606,7 @@ class MembersService:
         return view
 
     def _raphael_view(
-        self, language: str, unread: set[int], waiting: set[int], latest: dict[int, Turn]
+        self, language: str, unread: dict[int, int | None], waiting: set[int], latest: dict[int, Turn]
     ) -> dict[str, Any]:
         last = latest.get(0)
         activity, activity_label = self.activity.describe(0, waiting)
@@ -624,6 +626,7 @@ class MembersService:
             "position": -1,
             "created": 0,
             "unread": 0 in unread,
+            "unread_from": unread.get(0),
             "waiting": 0 in waiting,
             "activity": activity,
             "activity_label": activity_label,
@@ -644,7 +647,7 @@ class MembersService:
         last = self._history.list(1, member_id=member.id)
         if last:
             latest[member.id] = last[0]
-        return self._member_view(member, self.store.unread(), self.waiting_members(), latest)
+        return self._member_view(member, self.store.unread_from(), self.waiting_members(), latest)
 
     def _ui_language(self, params: dict) -> str:
         language = params.get("ui_language")
@@ -817,7 +820,7 @@ class MembersService:
 
     async def _list(self, params: dict) -> dict:
         language = self._ui_language(params)
-        unread = self.store.unread()
+        unread = self.store.unread_from()
         waiting = self.waiting_members()
         latest = self._history.latest_by_member()
         members = [self._raphael_view(language, unread, waiting, latest)]
@@ -1324,7 +1327,7 @@ class MembersService:
                     self._conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                                        (key, json.dumps(profile)))
                 self._changed()
-                return {"member": self._raphael_view(self._language(), set(), set(), {})}
+                return {"member": self._raphael_view(self._language(), {}, set(), {})}
             if name == "member_update":
                 self._member_id(params)
             if "avatar_preset" in params:

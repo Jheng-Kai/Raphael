@@ -605,3 +605,8 @@ without another layout, and newest-page reads skip the earlier-page scroll ancho
 ## Motion cost (2026-11-03)
 
 [Members](members.md#motion-cost-2026-11-03) maps R-PERF-01, bounded event reads, sampled loops and the mixed-state main-thread budget.
+
+
+## First unseen private turn (2026-11-03)
+
+See [Conversation](conversation.md#first-unseen-private-turn-2026-11-03) for R-UI-96, migration 57, visit lifetime, paging, scroll and unchanged-line contracts. Selected scenes: thread-new-divider, thread-new-divider-short, thread-new-divider-stays, thread-new-divider-return, thread-new-divider-latest, chat, busy-team-thread, busy-team-follow and send-prompt, both themes at 1120,720,1920x1080.

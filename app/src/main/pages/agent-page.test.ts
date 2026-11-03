@@ -128,7 +128,9 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   const copy = vi.spyOn(ui, "copyButton").mockResolvedValue(true);
   const agent = mount(); await flush();
   const latest = document.querySelector<HTMLElement>('.tn[data-id="2"]')!;
-  expect(document.querySelectorAll('[data-regenerate="true"]')).toHaveLength(1);
+  document.querySelector<HTMLButtonElement>('.tn[data-id="1"] [data-act="more-message"]')!.click();
+  await flush(); expect(document.querySelector('[data-pick="regenerate"]')).toBeNull();
+  document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}));
   latest.querySelector<HTMLButtonElement>('.owner-message [data-act="copy-message"]')!.click();
   await flush(); expect(copy).toHaveBeenLastCalledWith(expect.any(HTMLElement), "問題 2");
   latest.querySelector<HTMLButtonElement>('.ra [data-act="copy-message"]')!.click();
@@ -139,7 +141,7 @@ test("messages copy plain text, code copies exactly, only the latest reply regen
   expect(latest.querySelector('.ra [data-act="expand-message"]')).toBeNull();
   expect([...latest.querySelectorAll('.ra .message-text')].map(node => node.textContent).join("\n")).toContain("line 34");
   expect(latest.querySelector('.ans .message-code')).toBeNull();
-  document.querySelector<HTMLButtonElement>('[data-regenerate="true"]')!.click();
+  latest.querySelector<HTMLButtonElement>('[data-act="more-message"]')!.click();
   await flush(); document.querySelector<HTMLButtonElement>('[data-pick="regenerate"]')!.click();
   await flush(); expect(api.agentAskText).toHaveBeenCalledExactlyOnceWith("問題 2", [], 0, expect.objectContaining({ requestId: expect.any(String) }));
   copy.mockRestore(); agent.hide();
