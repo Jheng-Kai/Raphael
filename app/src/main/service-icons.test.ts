@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { readdirSync } from "node:fs";
-import { BRAND_COLORS, LOGO_IDS, SERVICE_ICONS, brandStyle, hasLogo, monogram, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
+import { BRAND_COLORS, COLOURED_MARKS, LOGO_IDS, SERVICE_ICONS, brandStyle, hasLogo, monogram, serviceIconOf, serviceIconSVG, serviceLogoHTML } from "./service-icons";
 import { iconHTML } from "./connections";
 import { ico } from "./ui";
 import { providerMark } from "./provider-marks";
@@ -98,13 +98,18 @@ describe("the marks of well-known programs", () => {
     expect(serviceIconOf({ name: "筆記" })).toBeNull();
   });
 
-  test("every mark is one drawn path in the colour of the text, with no colour of its own", () => {
+  test("a one-colour mark is one drawn path; a many-coloured one draws each part in its official colour", () => {
     for (const id of Object.keys(SERVICE_ICONS) as (keyof typeof SERVICE_ICONS)[]) {
       const svg = serviceIconSVG(id);
-      expect(svg).toContain('fill="currentColor"');
       expect(svg).toContain('aria-hidden="true"');
-      expect(svg).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
       expect(SERVICE_ICONS[id].path).toMatch(/^[Mm][\d. ,\-a-zA-Z]+$/);
+      if (id in COLOURED_MARKS) {
+        expect(svg).not.toContain("currentColor");
+        expect(svg.match(/<path fill="#[0-9A-Fa-f]{6}" d="/g)?.length, id).toBe(COLOURED_MARKS[id]!.parts.length);
+      } else {
+        expect(svg).toContain('fill="currentColor"');
+        expect(svg).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
+      }
     }
   });
 
@@ -118,41 +123,38 @@ describe("the marks of well-known programs", () => {
     for (const name of ["close", "ramp", "jam", "gamma", "exa"]) expect(serviceIconOf({ name })).toBeNull();
   });
 
-  test("brand colours and their dark-theme fallback read on every surface of both themes", () => {
-    const css = readFileSync("src/main/styles.css", "utf8");
-    const token = (block: string, name: string): string => new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)![1];
-    const light = css.slice(css.indexOf(":root {"), css.indexOf(':root[data-theme="dark"]'));
-    const dark = css.slice(css.indexOf(':root[data-theme="dark"]'));
-    const surfaces = [token(light, "--content"), token(light, "--panel"), token(dark, "--content"), token(dark, "--panel")];
-    const luminance = (hex: string): number => {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    };
-    const ratio = (a: string, b: string): number => {
-      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-      return (hi + 0.05) / (lo + 0.05);
-    };
-    expect(Object.keys(BRAND_COLORS).length).toBeGreaterThan(5);
-    for (const [id, colour] of Object.entries(BRAND_COLORS)) {
-      expect(id in SERVICE_ICONS).toBe(true);
-      for (const [index, surface] of surfaces.entries()) {
-        const rendered = id === "slack" && index >= 2 ? token(dark, "--text") : colour;
-        expect(ratio(rendered, surface), `${id} on ${surface}`).toBeGreaterThanOrEqual(3);
-      }
+  test("marks keep their owners' official colours, whatever the surface", () => {
+    expect(BRAND_COLORS).toMatchObject({
+      linear: "#5E6AD2", discord: "#5865F2", spotify: "#1ED760", telegram: "#26A5E4", atlassian: "#0052CC",
+      cloudflare: "#F38020", obsidian: "#7C3AED", netlify: "#00C7B7", neon: "#00E599", postman: "#FF6C37",
+      sanity: "#F03E2F", searxng: "#3050FF", todoist: "#E44332", stripe: "#635BFF", zapier: "#FF4F00",
+    });
+    // the many-coloured logos carry their colours in their parts, not one brand colour
+    for (const id of ["slack", "gmail", "googledrive", "googlecalendar", "figma", "airtable"] as const) {
+      expect(COLOURED_MARKS[id], id).toBeDefined();
+      expect(BRAND_COLORS[id], id).toBeUndefined();
     }
-    // the ones that would not read are left to the colour of the text
-    for (const id of ["notion", "github", "spotify", "obsidian", "atlassian", "cloudflare", "sentry", "paypal", "telegram"] as const) expect(BRAND_COLORS[id]).toBeUndefined();
+    // black in their official form: black on the light theme, their official white on the dark one
+    for (const id of ["notion", "github", "openrouter", "posthog"] as const) expect(brandStyle(id)).toBe("");
   });
 
   test("the brand colour is given to the wrapper as a variable, and only for the marks that have one", () => {
     expect(brandStyle("linear")).toBe(' style="--brand:#5E6AD2"');
     expect(brandStyle("notion")).toBe("");
+    expect(brandStyle("slack")).toBe("");
   });
 
-  test("Slack uses the supplied Simple Icons path and a readable dark-theme twin", () => {
+  test("a mark that is near black in its colour turns to the colour of the text on the dark theme", () => {
+    expect(brandStyle("sentry")).toBe(' style="--brand:light-dark(#362D59,var(--text))"');
+    expect(brandStyle("paypal")).toBe(' style="--brand:light-dark(#002991,var(--text))"');
+    expect(brandStyle("prisma")).toBe(' style="--brand:light-dark(#2D3748,var(--text))"');
+  });
+
+  test("Slack draws its supplied Simple Icons path in its four official colours, two pieces each", () => {
     expect(createHash("sha256").update(SERVICE_ICONS.slack.path).digest("hex")).toBe("69c3650cc9632f4edcf00bb5fd02792d5cb46d8af58f8db5001ba64cdd40da4b");
-    expect(BRAND_COLORS).toHaveProperty("slack", "#4A154B");
-    expect(brandStyle("slack")).toBe(' style="--brand:light-dark(#4A154B,var(--text))"');
+    const parts = COLOURED_MARKS.slack!.parts;
+    expect(parts.map(([fill]) => fill)).toEqual(["#E01E5A", "#E01E5A", "#36C5F0", "#36C5F0", "#2EB67D", "#2EB67D", "#ECB22E", "#ECB22E"]);
+    expect(parts.map(([, d]) => d).join("")).toBe(SERVICE_ICONS.slack.path);
   });
 
   test("a paired person's avatar can keep an escaped initial", () => {

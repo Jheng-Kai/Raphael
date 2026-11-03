@@ -537,7 +537,7 @@ describe("商店", () => {
     expect(notion).not.toContain('data-conn="join" data-id="notion"');
   });
 
-  test("a service with no bundled mark uses a plug, and known marks keep their brand colour where it reads", () => {
+  test("a service with no bundled mark uses a plug, and known marks keep their brand colour", () => {
     expect(html).toContain(ico("plug"));
     expect(html).not.toContain(">C<");
     expect(html).toMatch(/class="mono md logo-mono" style="--brand:#5E6AD2"/); // Linear

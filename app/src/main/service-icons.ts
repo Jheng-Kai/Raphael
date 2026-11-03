@@ -1,9 +1,10 @@
 // The marks of the well-known programs a connection can be, to tell them apart in the lists. Two kinds,
 // and nothing is fetched at run time:
 // - one drawn path (the existing marks are from Simple Icons 16.35.0, https://simpleicons.org, CC0-1.0;
-//   its text is in the release
-//   notices), bare, in the brand colour where that has enough contrast on every surface of both themes
-//   (`BRAND_COLORS`), else in the colour of the text;
+//   its text is in the release notices), bare, in the owner's official colour (`BRAND_COLORS`) on every
+//   surface; a mark that is black in its official form takes the colour of the text, which is its own white
+//   version on the dark theme. A many-coloured logo is drawn in the parts and colours of the official one
+//   (`COLOURED_MARKS`);
 //   OpenRouter, Brave and SearXNG are Simple Icons paths too, checked identical to the upstream files
 //   (develop branch) on 2026-10-23; the existing marks are from 16.35.0.
 //   Upstream reference: https://github.com/simple-icons/simple-icons (icons/openrouter.svg,
@@ -71,6 +72,65 @@ export const SERVICE_ICONS = {
 
 export type MonoIconId = keyof typeof SERVICE_ICONS;
 export type ServiceIconId = MonoIconId | LogoIconId;
+
+/** The drawn pieces of a Simple Icons path, in order: each starts at its own `M`. */
+const pieces = (path: string): string[] => path.split(/(?=M)/);
+const paint = (fills: readonly string[], parts: readonly string[]): (readonly [string, string])[] => parts.map((d, i) => [fills[i]!, d] as const);
+
+/**
+ * The many-coloured logos, in the parts and colours of the official ones. Slack and Airtable colour the
+ * pieces of their Simple Icons paths; Gmail, Google Drive, Google Calendar and Figma follow the official
+ * artwork in its own coordinates.
+ */
+export const COLOURED_MARKS: Partial<Record<MonoIconId, { viewBox: string; parts: readonly (readonly [string, string])[] }>> = {
+  slack: { viewBox: "0 0 24 24", parts: paint(["#E01E5A", "#E01E5A", "#36C5F0", "#36C5F0", "#2EB67D", "#2EB67D", "#ECB22E", "#ECB22E"], pieces(SERVICE_ICONS.slack.path)) },
+  airtable: { viewBox: "0 0 24 24", parts: paint(["#FCB400", "#18BFFF", "#F82B60"], pieces(SERVICE_ICONS.airtable.path)) },
+  gmail: {
+    viewBox: "52 42 88 66",
+    parts: [
+      ["#4285F4", "M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"],
+      ["#34A853", "M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"],
+      ["#FBBC04", "M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"],
+      ["#EA4335", "M72 74V48l24 18 24-18v26L96 92"],
+      ["#C5221F", "M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"],
+    ],
+  },
+  googledrive: {
+    viewBox: "0 0 87.3 78",
+    parts: [
+      ["#0066DA", "m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z"],
+      ["#00AC47", "m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z"],
+      ["#EA4335", "m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z"],
+      ["#00832D", "m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z"],
+      ["#2684FC", "m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z"],
+      ["#FFBA00", "m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z"],
+    ],
+  },
+  googlecalendar: {
+    viewBox: "-3.75 -3.75 200 200",
+    parts: [
+      ["#FFFFFF", "M148.882 43.618l-47.368-5.263-57.895 5.263-5.264 52.632 5.263 52.632 52.632 6.579 52.632-6.579 5.263-53.947z"],
+      ["#1A73E8", "M65.211 125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c.829 3.158 2.276 5.605 4.342 7.342 2.053 1.737 4.553 2.592 7.474 2.592 2.987 0 5.553-.908 7.697-2.724s3.224-4.132 3.224-6.934c0-2.868-1.132-5.211-3.395-7.026s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921 0 5.382-.789 7.382-2.368 2-1.579 3-3.737 3-6.487 0-2.447-.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684 0-4.816.711-6.395 2.145s-2.724 3.197-3.447 5.276l-9.039-3.763c1.197-3.395 3.395-6.395 6.618-8.987 3.224-2.592 7.342-3.895 12.342-3.895 3.697 0 7.026.711 9.974 2.145 2.947 1.434 5.263 3.421 6.934 5.947 1.671 2.539 2.5 5.382 2.5 8.539 0 3.224-.776 5.947-2.329 8.184-1.553 2.237-3.461 3.947-5.724 5.145v.539c2.987 1.25 5.421 3.158 7.342 5.724 1.908 2.566 2.868 5.632 2.868 9.211s-.908 6.776-2.724 9.579c-1.816 2.803-4.329 5.013-7.513 6.618-3.197 1.605-6.789 2.421-10.776 2.421C73.408 129.263 69.145 127.934 65.211 125.276z"],
+      ["#1A73E8", "M121.25 79.961l-9.974 7.25-5.013-7.605 17.987-12.974h6.895v61.197h-9.895z"],
+      ["#EA4335", "M148.882 196.25l47.368-47.368-23.684-10.526-23.684 10.526-10.526 23.684z"],
+      ["#34A853", "M33.092 172.566l10.526 23.684h105.263v-47.368H43.618z"],
+      ["#4285F4", "M11.974-3.75C3.25-3.75-3.75 3.25-3.75 11.974v136.908l23.684 10.526 23.684-10.526V43.618h105.263l10.526-23.684-10.525-23.684z"],
+      ["#188038", "M-3.75 148.882v31.579c0 8.724 7.066 15.789 15.789 15.789h31.579v-47.368z"],
+      ["#FBBC04", "M148.882 43.618v105.263h47.368V43.618l-23.684-10.526z"],
+      ["#1967D2", "M196.25 43.618V11.974c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368z"],
+    ],
+  },
+  figma: {
+    viewBox: "0 0 38 57",
+    parts: [
+      ["#1ABCFE", "M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z"],
+      ["#0ACF83", "M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 1 1-19 0z"],
+      ["#FF7262", "M19 0v19h9.5a9.5 9.5 0 1 0 0-19z"],
+      ["#F24E1E", "M0 9.5A9.5 9.5 0 0 0 9.5 19H19V0H9.5A9.5 9.5 0 0 0 0 9.5z"],
+      ["#A259FF", "M0 28.5A9.5 9.5 0 0 0 9.5 38H19V19H9.5A9.5 9.5 0 0 0 0 28.5z"],
+    ],
+  },
+};
 
 const svgFiles = import.meta.glob("./service-logos/*.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const pngFiles = import.meta.glob("./service-logos/*.png", { query: "?inline", import: "default", eager: true }) as Record<string, string>;
@@ -180,38 +240,53 @@ export function serviceIconOf(hints: ServiceHints): ServiceIconId | null {
 }
 
 /**
- * The brand colour of a mark (Simple Icons' own), for the marks whose colour is at least 3:1 against every
- * surface of both themes (the page and the panels, light and dark). The others are drawn in the colour of
- * the text, which reads on both. Slack keeps its dark brand colour in the light theme
- * and uses the text colour in the dark theme, like other dark marks. The test checks both.
+ * The official colour of each one-colour mark, the same on every surface of both themes: the owners'
+ * colours are never changed for contrast. Marks that are black in their official form (Notion, GitHub,
+ * OpenRouter, PostHog) have none and take the colour of the text.
  */
 export const BRAND_COLORS: Partial<Record<MonoIconId, string>> = {
-  googledrive: "#4285F4",
-  gmail: "#EA4335",
-  googlecalendar: "#4285F4",
   linear: "#5E6AD2",
-  figma: "#F24E1E",
   discord: "#5865F2",
-  slack: "#4A154B",
+  spotify: "#1ED760",
   todoist: "#E44332",
+  obsidian: "#7C3AED",
+  atlassian: "#0052CC",
+  cloudflare: "#F38020",
+  sentry: "#362D59",
   stripe: "#635BFF",
   zapier: "#FF4F00",
+  paypal: "#002991",
   webflow: "#146EF5",
   wix: "#0C6EFC",
+  telegram: "#26A5E4",
+  netlify: "#00C7B7",
+  neon: "#00E599",
+  prisma: "#2D3748",
   calendly: "#006BFF",
+  postman: "#FF6C37",
+  sanity: "#F03E2F",
   bitly: "#EE6123",
   brave: "#FB542B",
+  searxng: "#3050FF",
 };
+
+/** Near black in their official colour: on the dark theme they take the colour of the text, as their white versions do. */
+const NEAR_BLACK = new Set<MonoIconId>(["sentry", "paypal", "prisma"]);
 
 /** The attribute that gives a mark's wrapper its brand colour (`.logo-mono[style]` uses it); none for the others. */
 export const brandStyle = (id: MonoIconId): string => {
   const colour = BRAND_COLORS[id];
-  return colour ? ` style="--brand:${id === "slack" ? `light-dark(${colour},var(--text))` : colour}"` : "";
+  return colour ? ` style="--brand:${NEAR_BLACK.has(id) ? `light-dark(${colour},var(--text))` : colour}"` : "";
 };
 
-/** The mark as an inline picture in the colour of the text around it. */
-export const serviceIconSVG = (id: MonoIconId): string =>
-  `<svg class="logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="${SERVICE_ICONS[id].path}"/></svg>`;
+/** The mark as an inline picture: in its official parts and colours, or one path in the colour around it. */
+export const serviceIconSVG = (id: MonoIconId): string => {
+  const art = COLOURED_MARKS[id];
+  const body = art
+    ? art.parts.map(([fill, d]) => `<path fill="${fill}" d="${d}"/>`).join("")
+    : `<path fill="currentColor" d="${SERVICE_ICONS[id].path}"/>`;
+  return `<svg class="logo" viewBox="${art?.viewBox ?? "0 0 24 24"}" aria-hidden="true" focusable="false">${body}</svg>`;
+};
 
 /** The first letter of a name, capitalised: used for paired user avatars. */
 export const monogram = (name: string): string => esc((Array.from(name.trim())[0] ?? "?").toUpperCase());

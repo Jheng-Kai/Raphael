@@ -593,11 +593,10 @@ export function checkRendered(name, context = {}) {
     const sections = document.querySelectorAll('[data-msg-kind]');
     require(sections.length === 3, 'all three channels use the existing settings group');
     const slackMark = document.querySelector('[data-msg-kind=slack] .msg-name .logo-mono');
-    const markColour = document.documentElement.dataset.theme === 'dark' ? getComputedStyle(document.documentElement).getPropertyValue('--text').trim() : '#4A154B';
-    const colourProbe = document.createElement('span');
-    colourProbe.style.color = markColour; document.body.append(colourProbe);
-    const expectedColour = getComputedStyle(colourProbe).color; colourProbe.remove();
-    require(visible(slackMark) && slackMark.querySelector('svg path')?.getAttribute('d').startsWith('M5.042 15.165') && getComputedStyle(slackMark).color === expectedColour, 'Slack uses its real mark with a readable colour in both themes');
+    const slackFills = [...(slackMark?.querySelectorAll('svg path') ?? [])].map(path => path.getAttribute('fill')?.toUpperCase());
+    require(visible(slackMark) && slackMark.querySelector('svg path')?.getAttribute('d').startsWith('M5.042 15.165')
+      && new Set(slackFills).size === 4 && ['#E01E5A', '#36C5F0', '#2EB67D', '#ECB22E'].every(fill => slackFills.includes(fill)),
+    'Slack uses its real mark in its four official colours in both themes (R-UI-97)');
     if (name === 'work-messaging') {
       require(document.querySelectorAll('[data-msg-kind] input[type=password]').length === 3, 'each token has its own masked field');
       for (const kind of ['slack', 'discord']) require(visible(document.querySelector(`[data-msg-kind=${kind}] [data-msg=setup-link]`)), 'each work channel has the shared setup button');
