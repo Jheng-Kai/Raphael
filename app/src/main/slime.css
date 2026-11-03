@@ -56,6 +56,9 @@
 
 /* ---- Loops follow the clock (--slime-delay), each a little faster or slower than its neighbours' (--slime-tempo). ---- */
 
+/* Far outside the view the compositor cannot take a loop, and the main thread would advance it every frame (slime-offscreen.ts). */
+.slime-surface[data-offscreen], .slime-surface[data-offscreen] * { animation: none !important; }
+
 /* Idle uses a few vector cels. The compositor only slides whole pixels, so it neither resamples a pose nor repaints twelve SVG trees each frame. */
 .slime-idle { display: none; position: absolute; left: -100%; top: -100%; width: 300%; height: 300%; overflow: hidden; pointer-events: none; }
 .slime-surface[data-state="idle"] :is(.slime-body, .slime-eyes, .slime-back, .slime-marks) { visibility: hidden; }

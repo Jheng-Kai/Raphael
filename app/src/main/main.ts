@@ -30,6 +30,7 @@ import { installContextMenus } from "./context-menu";
 import { followTray } from "./tray-open";
 import { installWindowChrome, labelWindowControls, showMaximized } from "./window-chrome";
 import { installWindowZoom } from "./window-zoom";
+import { stopOffscreenSlimes } from "./slime-offscreen";
 import type { PageArgument, AppContext, DeviceSettings, MainEvent, MainPageId, Page, PageId, SettingsPane } from "./types";
 import { Undoable } from "./undo";
 import { Cleared } from "./cleared";
@@ -166,6 +167,7 @@ async function start(): Promise<void> {
   const main = document.getElementById("main")!;
   const guide = document.getElementById("ob")!;
   createSidebar(nav, agent.sidebar, ctx);
+  stopOffscreenSlimes(document.body);
   void loadAvatar(api.avatarGet);
   void agent.loadSidebar();
   nav.addEventListener("click", (e) => {
