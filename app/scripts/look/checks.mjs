@@ -1205,7 +1205,8 @@ export function checkRendered(name, context = {}) {
     require(!nav.querySelector('.brand, .app-icon, [data-col="search"]')&&header.querySelector('[data-sidebar="collapse"]')&&nav.querySelector('.sidebar-foot-row [data-go="home"]'),'no brand; collapse leads the top row and Home sits beside the owner');
     if(!rail)require(header.querySelector('[data-col="add"]')&&visible(nav.querySelector('.mb-find-input'))&&nav.querySelector('.mb-find').getBoundingClientRect().top>=header.getBoundingClientRect().bottom-1,'plus shares the top row and search stands below it');
     require([...nav.querySelectorAll('.side-foot [data-go]')].map(el=>el.dataset.go).join()==='settings,settings,dictation,home','footer opens Connections above account, dictation and Home');
-    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&parseFloat(getComputedStyle(home).borderRadius)>=18,'Home keeps the shared round icon surface');}
+    if(!document.documentElement.hasAttribute('data-sidebar-collapsed')){const home=nav.querySelector('.sidebar-home'),box=home.getBoundingClientRect();require(Math.abs(box.width-36)<1&&Math.abs(box.height-36)<1&&getComputedStyle(home).borderRadius===getComputedStyle(header.querySelector('[data-sidebar="collapse"]')).borderRadius,'Home keeps the shared icon surface');}
+    for(const button of nav.querySelectorAll('.btn.icon, .side-foot .nav'))if(visible(button)&&!visible(button.querySelector('.nav-t'))){const box=button.getBoundingClientRect(),corner=parseFloat(getComputedStyle(button).borderRadius);require(corner>0&&corner<Math.min(box.width,box.height)/2,`sidebar buttons are rounded squares, never circles (${button.className})`);}
     require(nav.querySelector('.side-foot [data-go="dictation"]').getAttribute('aria-label')&&!nav.querySelector('.side-foot [data-go="dictation"] .nav-t'),'dictation is a named icon button');
     require(nav.querySelector('.sidebar-account .owner-face')&&nav.querySelector('.sidebar-account').getAttribute('aria-label'),'account has its own face and accessible name');
     require(!nav.querySelector('.sidebar-account > svg.i')&&(rail||visible(nav.querySelector('.sidebar-account-name'))),'account shows its face and name, without a gear');
@@ -3988,7 +3989,8 @@ export function checkRendered(name, context = {}) {
       require(main.children[1].children.length === 2 && title.tagName === 'SPAN' && title.className === 'nm' && summary.tagName === 'SPAN' && ['sub', 'sub wait'].includes(summary.className), "every row has the same name and one-line summary");
       require(action.matches('button.btn.sm[data-conn="join"], button.btn.sm[data-conn="cancel-login"], span.cs-state'), "every state stays in the shared inline action slot");
       const style = window.getComputedStyle(row);
-      require(style.display === 'grid' && style.gridTemplateColumns.trim().split(/\s+/).length === 2 && style.borderRadius === '0px' && parseFloat(style.borderBottomWidth) === 1 && parseFloat(style.borderLeftWidth) === 0, "every source keeps the same compact row and divider");
+      const divider = window.getComputedStyle(row, '::after');
+      require(style.display === 'grid' && style.gridTemplateColumns.trim().split(/\s+/).length === 2 && parseFloat(style.borderRadius) > 0 && parseFloat(style.borderBottomWidth) === 0 && parseFloat(style.borderLeftWidth) === 0 && divider.height === '1px', "every source keeps the same compact row, a rounded hover and an inset divider");
       const frame = row.getBoundingClientRect();
       require([main, action, title, summary].every(node => {
         const box = node.getBoundingClientRect();

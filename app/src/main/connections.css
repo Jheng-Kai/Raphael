@@ -42,8 +42,10 @@
 
 /* 已安裝: one rounded list; a row is the mark, the name and its line, the switch and a chevron, none of them boxed */
 .cs-list { border: 0; border-radius: 0; background: transparent; overflow: hidden; }
-.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); padding-right: var(--sp-3); cursor: pointer; }
-.cs-item + .cs-item { border-top: 1px solid var(--line); }
+.cs-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: var(--sp-3); padding-right: var(--sp-3); border-radius: var(--r-md); cursor: pointer; }
+/* Dividers are lines of their own, so a rounded hover does not bend them; they step aside for the row under the pointer. */
+.cs-item + .cs-item::before, .cs-grp > .btn.gr + .btn.gr::before { content: ""; position: absolute; top: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+:is(.cs-item:hover, .cs-item:hover + .cs-item)::before, :is(.cs-grp > .btn.gr:hover, .cs-grp > .btn.gr:hover + .btn.gr)::before { opacity: 0; }
 .cs-item:hover { background: var(--hover); }
 .cs-item .btn.cs-open { justify-content: flex-start; gap: var(--sp-3); min-width: 0; min-height: 60px; padding: var(--sp-2) 0 var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
 .cs-item .btn.cs-open:hover:not(:disabled), .cs-item .btn.cs-open:active:not(:disabled) { background: transparent; }
@@ -85,8 +87,7 @@
 .cs-kind-list > .row + .row { border-top: 1px solid var(--line); }
 .cs-kind-list .t { font-size: var(--fs-xs); }
 .cs-grp { border: 0; border-radius: 0; overflow: hidden; }
-.cs-grp > .btn.gr { width: 100%; justify-content: space-between; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: 0; background: transparent; font-size: var(--fs-xs); text-align: left; }
-.cs-grp > .btn.gr + .btn.gr { border-top: 1px solid var(--line); }
+.cs-grp > .btn.gr { position: relative; width: 100%; justify-content: space-between; min-height: 44px; padding: var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; font-size: var(--fs-xs); text-align: left; }
 .cs-grp > .btn.gr:hover:not(:disabled) { background: var(--hover); }
 .cs-grp > .btn.gr:active:not(:disabled) { background: var(--pressed); }
 .cs-grp > .btn.gr:focus-visible { outline: none; }
@@ -151,7 +152,9 @@
 
 /* Store rows share the detail button, action slot and divider across both catalogs. */
 .cs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2) var(--sp-3); }
-.cs-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 64px; padding-right: var(--sp-3); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.cs-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 64px; padding-right: var(--sp-3); border: 0; border-radius: var(--r-md); background: transparent; }
+.cs-card::after { content: ""; position: absolute; bottom: 0; left: var(--sp-3); right: var(--sp-3); height: 1px; background: var(--line); }
+.cs-card:is(:hover, :has(+ .cs-card:hover))::after { opacity: 0; }
 .cs-card:hover { background: var(--hover); }
 .cs-card .btn.cs-main { flex: 1; min-width: 0; justify-content: flex-start; gap: var(--sp-3); align-self: stretch; min-height: 62px; padding: var(--sp-2) var(--sp-1) var(--sp-2) var(--sp-3); border: 0; border-radius: var(--r-lg); background: transparent; text-align: left; white-space: normal; }
 .cs-card .btn.cs-main:hover:not(:disabled), .cs-card .btn.cs-main:active:not(:disabled) { background: transparent; }

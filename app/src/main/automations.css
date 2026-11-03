@@ -70,7 +70,7 @@
 .au-room-row { position: relative; display: flex; align-items: center; margin: var(--sp-1) 0; }
 .au-room-row > .btn:first-child { flex: 1; min-width: 0; justify-content: flex-start; border: 0; background: transparent; gap: var(--sp-2); font-size: var(--fs-xs); }
 .au-room-row > .btn:first-child span { overflow: hidden; text-overflow: ellipsis; }
-.au-room-row > .au-room-more { position: absolute; top: 50%; right: 4px; width: var(--pa-more, var(--h-ctl-sm)); min-height: var(--pa-more, var(--h-ctl-sm)); margin-top: calc(var(--pa-more, var(--h-ctl-sm)) / -2); border-radius: var(--r-pill); opacity: 0; }
+.au-room-row > .au-room-more { position: absolute; top: 50%; right: 4px; width: var(--pa-more, var(--h-ctl-sm)); min-height: var(--pa-more, var(--h-ctl-sm)); margin-top: calc(var(--pa-more, var(--h-ctl-sm)) / -2); border-radius: var(--r-sm); opacity: 0; }
 .au-room-row:hover > .au-room-more, .au-room-row > .au-room-more:focus-visible, .au-room-row > .au-room-more[aria-expanded="true"] { opacity: 1; }
 .au-room-row:hover > .btn:first-child, .au-room-row:has(.au-room-more[aria-expanded="true"]) > .btn:first-child { padding-right: calc(var(--pa-more, var(--h-ctl-sm)) + 8px); }
 .au-room-reply { display: inline-flex; max-width: 100%; margin-left: var(--sp-2); padding: 2px var(--sp-2); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-2xs); overflow-wrap: anywhere; }

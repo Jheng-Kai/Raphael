@@ -10,7 +10,7 @@ import { ownerFaceHTML, ownerName, setOwnerProfile } from "./owner-avatar";
 import { roomAvatarHTML } from "./group-chats";
 import type { Member } from "./types";
 
-test("the footer opens Connections, keeps named round actions and refreshes only changed app marks", async () => {
+test("the footer opens Connections, keeps named icon actions and refreshes only changed app marks", async () => {
   const inventory = { state: "complete", count: 4, apps: [
     { name: "Unknown sample", connected: true, last_used_at: 10 },
     { name: "GitHub", connected: true, last_used_at: 9 },

@@ -1,7 +1,7 @@
 /* One fixed conversation list, shared by Home, chat, calendar and dictation. */
 .side { overflow: hidden; padding: var(--sp-2); gap: var(--sp-2); }
 .sidebar-brand { display: flex; align-items: center; gap: var(--sp-1); flex: 1; min-width: 0; }
-.sidebar-brand .btn.icon { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-pill); }
+.sidebar-brand .btn.icon { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .btn.icon:hover:not(:disabled) { background: var(--hover); }
 .side .btn.icon:active:not(:disabled) { background: var(--pressed); }
 .btn.sidebar-close, .btn.sidebar-toggle { display: none; }
@@ -9,7 +9,7 @@
 .side .mb-col { flex: 1; width: 100%; padding-top: 0; }
 .side .mb-top { min-height: 40px; padding: 0 0 var(--sp-1); gap: var(--sp-1); }
 .side .mb-find { flex: none; height: 36px; margin: 0 0 var(--sp-2); }
-.side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-pill); }
+.side .btn.mb-tool { flex: none; width: 36px; min-height: 36px; border-radius: var(--r-sm); }
 .side .mb-scroll { padding: 0 0 var(--sp-3); }
 .side .mb-list { gap: var(--sp-1); }
 .side .mb-row-t i { display: inline; max-width: 50%; }
@@ -53,7 +53,7 @@
 :root[data-sidebar-collapsed] .side .sidebar-apps { width: 44px; height: 44px; min-height: 44px; padding: 0; }
 :root[data-sidebar-collapsed] .sidebar-app-marks { display: none; }
 :root[data-sidebar-collapsed] .side .sidebar-account { flex: none; }
-:root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-pill); }
+:root[data-sidebar-collapsed] .side .side-foot .nav { justify-content: center; width: 44px; padding: 0; border-radius: var(--r-sm); }
 :root[data-sidebar-collapsed] .side-foot :is(.nav-t, .sidebar-account-name) { display: none; }
 .side .mb-sec.is-drop-target { border-radius: var(--r-sm); outline: 2px solid var(--accent-text); background: var(--selected); }
 .side .mb-ghead { cursor: pointer; border-radius: var(--r-sm); }
@@ -66,7 +66,7 @@
 .side .side-foot .nav { justify-content: flex-start; gap: var(--sp-2); min-width: 0; min-height: 40px; padding: 0 var(--sp-2) 0 var(--sp-1); border-radius: var(--r-md); }
 .side .sidebar-account { flex: 1; min-height: 36px; }
 .sidebar-foot-row { display: flex; gap: var(--sp-1); min-width: 0; }
-.side .side-foot .btn.icon { flex: none; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-pill); }
+.side .side-foot .btn.icon { flex: none; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: var(--r-sm); }
 .side .side-foot .btn.icon[aria-current="page"] { background: var(--hover); color: var(--text); }
 .side .side-foot .btn.icon[aria-current="page"] .i { color: var(--text); }
 .side .side-foot .btn.icon[aria-current="page"]:active:not(:disabled) { background: var(--pressed); }

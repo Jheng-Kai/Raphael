@@ -763,12 +763,23 @@ describe("rendered look checks", () => {
 
 it("rejects divergent store add classes, row markup and card styling", () => {
   const browser = new Window();
-  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:0px;border-bottom:1px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
+  const row = `<div class="cs-card" style="display:grid;grid-template-columns:240px 64px;border-radius:12px;border-bottom:0px solid;border-left:0px solid"><button class="btn cs-main" data-conn="open-store"><span class="ic"></span><span class="tx"><span class="nm">App</span><span class="sub">Summary</span></span></button><button class="btn sm" data-conn="join">Add</button></div>`;
   browser.document.body.innerHTML = row + row;
+  // happy-dom has no pseudo-elements, so the divider line is stood in for by a data attribute.
+  const own = browser.getComputedStyle.bind(browser);
+  browser.getComputedStyle = (element, pseudo) => pseudo === '::after' ? { height: element.dataset.divider ?? '1px' } : own(element);
   const previous = { document: globalThis.document, window: globalThis.window };
   globalThis.document = browser.document; globalThis.window = browser;
   try {
     expect(checkRendered("plugins-store-rows")).toEqual({ check: "plugins-store-rows", rows: 2, addClass: "btn sm" });
+    const first = browser.document.querySelector('.cs-card');
+    first.style.borderRadius = '0px';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("rounded hover");
+    first.style.borderRadius = '12px'; first.style.borderBottom = '1px solid';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("inset divider");
+    first.style.borderBottom = '0px solid'; first.dataset.divider = '0px';
+    expect(() => checkRendered("plugins-store-rows")).toThrow("inset divider");
+    delete first.dataset.divider;
     const second = browser.document.querySelectorAll('.cs-card')[1];
     const add = second.querySelector('[data-conn="join"]');
     add.classList.add('pri');
@@ -779,9 +790,9 @@ it("rejects divergent store add classes, row markup and card styling", () => {
     oldMain.innerHTML = main.innerHTML; main.replaceWith(oldMain);
     expect(() => checkRendered("plugins-store-rows")).toThrow("same detail button");
     oldMain.replaceWith(main); second.style.display = 'flex';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row");
     second.style.display = 'grid'; second.style.gridTemplateColumns = '304px';
-    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row and divider");
+    expect(() => checkRendered("plugins-store-rows")).toThrow("same compact row");
     second.style.gridTemplateColumns = '240px 64px';
     add.getBoundingClientRect = () => new browser.DOMRect(0, 0, 64, 80);
     second.getBoundingClientRect = () => new browser.DOMRect(0, 0, 320, 64);
