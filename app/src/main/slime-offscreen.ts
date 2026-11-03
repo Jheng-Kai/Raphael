@@ -1,7 +1,9 @@
 // A slime far outside what can be seen does not move. Chromium does not paint content well outside a
 // scroller's view, so it cannot hand those animations to the compositor and instead advances them on the
-// main thread every frame (at 165-180 Hz on the owner's screens), which froze the window in long threads.
-// Slimes within the margin keep moving, so one coming into view is already in motion.
+// main thread every frame, at the display's refresh rate, which froze the window in long threads.
+// Slimes within the margin keep moving, so one coming into view is already in motion. A newly drawn slime
+// moves until the observer has placed it, a frame later: holding it still first would make a slime in view
+// start from its rest pose and jump into its loop.
 
 const MARGIN = "300px";
 const SURFACE = ".slime-surface";

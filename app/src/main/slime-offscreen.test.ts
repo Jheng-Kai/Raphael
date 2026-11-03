@@ -38,6 +38,22 @@ test("a slime far outside the visible part of its scroller stops moving, and mov
   expect(far.hasAttribute("data-offscreen")).toBe(false);
 });
 
+test("a newly drawn slime keeps moving until it is placed, and one moved by a redraw keeps its state", async () => {
+  const fresh = surface();
+  document.body.append(fresh);
+  await flush();
+  // Held still first, a slime in view would start from its rest pose and jump into its loop.
+  expect(fresh.hasAttribute("data-offscreen")).toBe(false);
+  const [io] = observers;
+  io!.report([{ target: fresh, isIntersecting: false }]);
+  const other = document.createElement("div");
+  document.body.append(other);
+  other.append(fresh);
+  await flush();
+  expect(fresh.hasAttribute("data-offscreen")).toBe(true);
+  expect(io!.observed.has(fresh)).toBe(true);
+});
+
 test("slimes drawn later inside new lines are watched, and removed ones are let go", async () => {
   const line = document.createElement("li");
   line.innerHTML = `<span class="av"><span class="slime-surface"></span></span><span class="slime-surface"></span>`;
