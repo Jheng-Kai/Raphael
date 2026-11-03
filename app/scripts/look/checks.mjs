@@ -3438,17 +3438,17 @@ export function checkRendered(name, context = {}) {
     return { check: name };
   }
   if (name === "permission-menu") {
-    const rows = [...document.querySelectorAll("#app-popover [data-value]")];
-    require(rows.map(row => row.dataset.value).join() === "direct,ask,plan,bypass", "four modes");
-    require(rows.every(row => row.querySelector(".mt")?.textContent.trim() && row.querySelector(".mdesc")?.textContent.trim()), "each says what it does");
-    require(["left", "start"].includes(getComputedStyle(document.querySelector("#app-popover .menu-head")).textAlign), "the title stands on the left");
-    require(new Set(rows.map(row => Math.round(row.querySelector(".mt").getBoundingClientRect().left))).size === 1, "the names line up on the left");
-    const chosen = rows.find(row => row.getAttribute("aria-checked") === "true");
-    require(chosen.querySelector(".ck svg").getBoundingClientRect().left >= chosen.querySelector(".mtd").getBoundingClientRect().right, "the check stands at the end of the row");
+    const card = document.querySelector("#app-popover.cb-menu > .cb-card.cb-modes"), rows = [...(card?.querySelectorAll(".cb-row[data-mode]") ?? [])];
+    require(card, "the permission choice is the same card as the model menu");
+    require(rows.map(row => row.dataset.mode).join() === "direct,ask,plan,bypass", "four modes");
+    require(rows.every(row => row.getAttribute("role") === "radio" && row.querySelector(".cb-name b")?.textContent.trim() && row.querySelector(".cb-name small")?.textContent.trim()), "each says what it does");
+    require(card.querySelector(".cb-head h3")?.textContent.trim(), "the card has its title");
+    require(new Set(rows.map(row => Math.round(row.querySelector(".cb-name b").getBoundingClientRect().left))).size === 1, "the names line up on the left");
+    const chosen = rows.filter(row => row.getAttribute("aria-checked") === "true");
+    require(chosen.length === 1 && chosen[0].querySelector(".cb-check svg").getBoundingClientRect().left >= chosen[0].querySelector(".cb-name").getBoundingClientRect().right, "one mode is checked, the check at the end of its row");
     require(document.querySelector("#app-popover").getBoundingClientRect().bottom <= document.querySelector(".cmp-mode").getBoundingClientRect().top + 1, "it opens above the button, inside the window");
     return { check: name };
-  }
-  if (name === "chooser-chatgpt") {
+  }  if (name === "chooser-chatgpt") {
     const rail = [...document.querySelectorAll(".model-chooser [data-source]")], chatgpt = document.querySelector('.model-chooser [data-source="chatgpt"]');
     require(rail[0] === chatgpt, "first in the rail");
     require(chatgpt.closest("section") === document.querySelector('.model-chooser [data-source="cli:codex"]').closest("section"), "under the subscriptions, with the CLIs");

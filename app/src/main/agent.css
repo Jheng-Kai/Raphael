@@ -161,6 +161,11 @@
 .mb-chat[data-member-bubble] .owner-message { --bubble: var(--member-bubble); }
 .mb-chat[data-member-bubble="light"] .owner-message { --on-bubble: var(--on-tint-light); }
 .mb-chat[data-member-bubble="dark"] .owner-message { --on-bubble: var(--on-tint-dark); }
+/* Words selected in the owner's coloured bubble invert it, as the bubble's own colours do; a member's answers keep the shared selection. */
+.mb-chat[data-member-bubble] .owner-message :is(.bubble, .bubble *)::selection { background: var(--on-bubble); color: var(--member-bubble); }
+/* The member's colour also marks the controls of its conversation: send, stop and its computer (memberAccent in owner-bubble.ts). */
+.mb-chat[data-member-bubble] :is(.composer .cmp-pair, .btn.ra-tool[data-act="computer"]) { --accent-icon: var(--member-accent); --accent-text: var(--member-accent); }
+.mb-chat[data-member-bubble] .btn.ra-tool[data-act="computer"] { color: var(--member-accent); }
 .chat-message > .ans { padding: var(--pa-bpy) var(--pa-bpx); border: 0; border-radius: var(--r-lg); background: var(--panel); }
 .message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ans .message-text { white-space: normal; }

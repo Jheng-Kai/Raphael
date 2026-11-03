@@ -13,7 +13,7 @@ import { wholeLinks } from "./composer-links";
 import { describeError } from "./format";
 import { getLocale, onLocaleChange, t } from "./i18n";
 import type { WireAttachment } from "./types";
-import { esc, ico, iconButton, openMenu, patchHTML, sendGlyph, toaster } from "./ui";
+import { closeMenu, esc, ico, iconButton, openPopover, patchHTML, sendGlyph, toaster } from "./ui";
 import "./agent.css";
 
 /** `recording`: the owner is speaking into this composer and the button that ends it sends what was said. */
@@ -69,12 +69,25 @@ export function bindActionMode(button: HTMLElement): void {
     try { mode = (await api.core<{ settings: { action_mode?: ActionMode } }>("settings.get"))?.settings?.action_mode ?? "direct"; draw(); }
     catch { /* A reconnecting core keeps the last answer; saving still requires the core. */ }
   };
-  button.addEventListener("click", () => {
-    const modes = Object.keys(MODES) as ActionMode[];
-    openMenu(button, modes.map(value => ({ value, label: name(value), desc: t(MODES[value].hint) })), mode, value => {
-      mode = value as ActionMode; draw();
+  // The same card as the model beside it (composer-brain.ts): its title, then each mode with what it does.
+  const rows = (): string => (Object.keys(MODES) as ActionMode[]).map(value =>
+    `<button type="button" role="radio" class="cb-row" data-mode="${value}" aria-checked="${value === mode}"><span class="cb-name"><b>${esc(name(value))}</b><small>${esc(t(MODES[value].hint))}</small></span>` +
+    `${value === mode ? `<span class="cb-check" aria-hidden="true">${ico("check")}</span>` : ""}</button>`).join("");
+  let menu: HTMLElement | null = null;
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    if (menu?.isConnected) { closeMenu(); return; }
+    const title = esc(t("chat.beforeAct"));
+    menu = openPopover(button, `<div class="cb-card cb-modes"><header class="cb-head"><h3><span>${title}</span></h3></header><div class="cb-list" role="radiogroup" aria-label="${title}">${rows()}</div></div>`,
+      { className: "menu cb-menu", role: "dialog", label: t("chat.beforeAct"), placement: "above", onClose: () => { menu = null; } });
+    menu.addEventListener("click", picked => {
+      const row = (picked.target as Element).closest<HTMLElement>("[data-mode]");
+      if (!row) return;
+      const value = row.dataset.mode as ActionMode;
+      mode = value; draw(); closeMenu(); button.focus({ preventScroll: true });
       void api.core("settings.set", { key: "action_mode", value }).then(() => window.dispatchEvent(new Event(MODE_CHANGED))).catch(error => toaster.info(describeError(error)));
-    }, t("chat.beforeAct"), [], { placement: "above" });
+    });
+    menu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
   });
   window.addEventListener(MODE_CHANGED, () => void read());
   onLocaleChange(draw);

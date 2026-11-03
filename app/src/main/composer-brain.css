@@ -43,3 +43,5 @@
 .cb-pick-name .i { flex: none; width: 16px; height: 16px; color: var(--text-3); }
 .cmp-model .cb-depth { flex: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: 400; }
 .cmp-model .mp-ttext:has(.cb-depth) { display: inline-flex; align-items: baseline; gap: var(--sp-1); max-width: 200px; }
+/* The permission card beside it (bindActionMode in chat-composer.ts) shares this card; what a mode does may take two lines. */
+.cb-modes .cb-name small { white-space: normal; }

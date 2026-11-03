@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, test } from "vitest";
 import { esc } from "./ui";
-import { ownerBubble } from "./owner-bubble";
+import { memberAccent, ownerBubble } from "./owner-bubble";
 import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "./slime";
 
 const WORDS = { light: "#ffffff", dark: "#0a0a0a" };
@@ -36,4 +36,14 @@ test("a dark enough colour takes light words, darkened only as far as it must; a
 test("two members of different colours never share a bubble", () => {
   const fills = ["#2A83D5", "#D4556D", "#4C8A43", "#9270CB"].map(colour => ownerBubble(colour).fill);
   expect(new Set(fills).size).toBe(fills.length);
+});
+
+test("every character and colour marks send, stop and its computer at 3:1 on both themes' panels", () => {
+  for (const colour of everySlime()) {
+    const [, onLight, onDark] = memberAccent(colour).match(/^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/)!;
+    expect(ratio(onLight!, "#ffffff"), `${colour} on white as ${onLight}`).toBeGreaterThanOrEqual(3);
+    expect(ratio(onDark!, "#161616"), `${colour} on black as ${onDark}`).toBeGreaterThanOrEqual(3);
+  }
+  // A colour that already stands off both panels is kept as it is.
+  expect(memberAccent("#7c3aed")).toBe("light-dark(#7c3aed, #7c3aed)");
 });

@@ -266,7 +266,7 @@ export default [
   scene("work-member-builtin", "A member's own tools in its work steps say what was done and never name Raphael; a connected service keeps its name",
     [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait(".work-body:not([hidden]) .work-sentences li"), check("work-steps-own-words")], { turns: [memberWork] }),
   scene("composer", "Composer attachment menu", composer),
-  scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-value]"), check("permission-menu")]),
+  scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
   scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),
   scene("reply", "Quote a reply into the composer", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="reply-message"]')]),
   scene("search", "Search conversation messages", [search("研究"), wait("[data-message-result]")]),

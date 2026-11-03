@@ -75,7 +75,7 @@ import { mountPages } from "../page-card";
 import { mountMailActions } from "../mail-actions";
 import { answerOwnerPage, mountOwnerQuestions } from "../owner-questions";
 import { approvalCopy, permissionFor } from "../permission-card";
-import { ownerBubble } from "../owner-bubble";
+import { memberAccent, ownerBubble } from "../owner-bubble";
 import { slimeColorOf } from "../slime";
 import { dayLabel, describeError, formatClock } from "../format";
 import { loadingHTML } from "../loading";
@@ -686,6 +686,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const bubble = ownerBubble(slimeColorOf(member));
       memberChat.dataset.memberBubble = bubble.words;
       memberChat.style.setProperty("--member-bubble", bubble.fill);
+      memberChat.style.setProperty("--member-accent", memberAccent(slimeColorOf(member)));
     }
     voice.redraw();
   }
