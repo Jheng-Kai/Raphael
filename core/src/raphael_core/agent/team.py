@@ -48,10 +48,11 @@ SKILLS_LIST = "skills_list"
 SKILL_MANAGE = "skill_manage"
 SKILL_TOOLS = (SKILL_READ, SKILLS_LIST, SKILL_MANAGE)
 ROOM_MEETING = "room_meeting"
+ROOM_TOOLS = ("room_list", "room_post")
 HANDOFF = "handoff"
 _MEETING = re.compile(r"meeting|discuss|brainstorm|開會|會議|会议|会議|討論|讨论|商量", re.I)
 _SKILLS = re.compile(r"skill|procedure|學會|技能|技巧|スキル|手順", re.I)
-TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, HANDOFF)
+TEAM_TOOLS = (ASK_MEMBER, CREATE_MEMBER, *SKILL_TOOLS, ROOM_MEETING, *ROOM_TOOLS, HANDOFF)
 TEAM_SERVER = "Raphael"
 TEAM_TIER = Tier.T1
 # The most of a request one member hands another, and of the answer that comes back, in characters.
@@ -119,6 +120,13 @@ def _definition(name: str) -> dict[str, Any]:
                     "requires_artifact":{"type":"boolean","default":False,"description":"True only when completion requires a file; false for read-only reviews and written answers."},
                     "done_when":{"type":"string","maxLength":2000}},
                     "required":["member_id","request","stage_id","done_when"], "additionalProperties":False}}
+    if name == "room_list":
+        return {"description": "List existing rooms you belong to, with their real IDs, names and member IDs. Read this before proposing another room.",
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
+    if name == "room_post":
+        return {"description": "Post as yourself into an existing room you belong to. Use room_list to find its ID; reuse it for review results instead of creating another room.",
+                "parameters": {"type": "object", "properties": {"room_id": {"type": "integer"}, "text": {"type": "string", "maxLength": 10000}},
+                               "required": ["room_id", "text"], "additionalProperties": False}}
     if name == ROOM_MEETING:
         return {"description": "Start a group discussion. Select colleagues by their expertise from the team snapshot, including its current chief as the room requires, and supply an agenda. Reuse a room with exactly these members or create it. Use this for meetings, never a series of ask_member calls. Everyone reads every message and decides for themselves whether to speak. There are no fixed rounds, dispatched speakers, templates or automatic conclusions. An @mention asks for a reply; handoff assigns concrete work. Whenever the owner names a moderator, a chair or sides, pass those room-only roles keyed by member id strings, for example {\"4\": \"moderator\", \"1\": \"pro\", \"5\": \"con\"}; roles do not grant control of other speakers.",
                 "parameters": {"type": "object", "properties": {
@@ -313,6 +321,8 @@ def team_tools_for(
     ) else []
     if team is not None and (always or any(other.id != speaker.id for other in team.named_in(text))):
         tools.append(HANDOFF)
+    if team is not None and (always or _MEETING.search(text)):
+        tools.extend(ROOM_TOOLS)
     if team is None or not speaker.may_ask:
         return tools
     if always:

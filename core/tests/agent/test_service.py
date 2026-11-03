@@ -1494,6 +1494,26 @@ async def test_routine_history_exposes_the_trigger_without_secret_or_prompt(rig,
     assert "Private instructions" not in json.dumps(views)
 
 
+@pytest.mark.parametrize("mirrored", [True, False])
+async def test_routine_history_shows_a_mirrored_worker_step_once(rig, monkeypatch, mirrored):
+    from raphael_core.agent.steps import step_view
+    from raphael_core.background.tasks import TaskStore
+    turn = rig.history.add(session_id="sample-routine", question="Sample routine", route="routine",
+                           prefix="", text="Sample report", status="error", source="routine")
+    store = TaskStore(rig.conn)
+    task = store.create(session_id="sample-routine", language="en", text="Check sample")
+    store.attach_turn(task, turn)
+    store.add_step(task, kind="tool", tool="local_exec", outcome="timeout", reason="timeout")
+    if not mirrored:
+        with rig.conn:
+            rig.conn.execute("DELETE FROM agent_steps WHERE turn_id=?", (turn,))
+    monkeypatch.setattr(rig.service._background, "tasks_for_turns", lambda ids: {
+        turn: ({"id": task, "state": "error"}, [step_view(step) for step in store.steps(task)])})
+    [view] = await rig.turns()
+    [step] = view["steps"]
+    assert step["tool"] == "local_exec" and step["reason"] == "timeout"
+
+
 async def test_the_history_pages_by_limit_and_before_id(rig):
     for n in range(7):
         rig.seed(f"q{n}", "a")

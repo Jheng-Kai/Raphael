@@ -21,6 +21,31 @@ async def create(rig, ids, **kwargs):
     return (await rig.call("rooms.create", {"name":"Team", "member_ids":ids, **kwargs}))["room"]
 
 
+async def test_members_find_and_post_into_their_existing_room_with_real_chief_membership(rig, rooms):
+    from raphael_core.agent.team import team_tools_for
+    peer = (await rig.call("members.create", {"name": "Reviewer"}))["member"]["id"]
+    outsider = (await rig.call("members.create", {"name": "Other reviewer"}))["member"]["id"]
+    room = await create(rig, [0, peer])
+    before = rig.conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
+    assert rooms.member_rooms(0)["rooms"][0]["member_ids"] == [0, peer]
+    assert rooms.member_rooms(peer)["rooms"][0]["id"] == room["id"]
+    assert rooms.member_rooms(outsider) == {"rooms": []}
+    offered = team_tools_for(rig.service, replace(rig.service.speaker(peer), depth=MAX_DEPTH), always=True)
+    assert {"room_list", "room_post"} <= set(offered) and "ask_member" not in offered
+    turn = AgentHistory(rig.conn).add(session_id="review", question="Review", route="exchange", prefix="",
+        text="Reviewed", status="done", member_id=peer, peer_id=0, source="member", scope="exchange")
+    args = {"room_id": room["id"], "text": "Synthetic review completed."}
+    posted = rooms.post(peer, args, turn)
+    assert rooms.post(peer, args, turn)["duplicate"]
+    with pytest.raises(RpcError, match="only a room member"):
+        rooms.post(outsider, args, turn)
+    message = (await rig.call("rooms.messages", {"room_id": room["id"]}))["messages"][0]
+    assert message["id"] == posted["message_id"] and message["member_id"] == peer
+    assert message["text"] == args["text"]
+    assert message["status"] == "done" and AgentHistory(rig.conn).get(message["turn_id"]).scope == "room"
+    assert rig.conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0] == before
+
+
 async def test_sidebar_room_summary_read_position_and_actions_persist(rig, rooms):
     room = await create(rig, [0])
     await rig.call("rooms.send", {"room_id": room["id"], "text": "Please review", "request_id": "sidebar"})

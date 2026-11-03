@@ -480,7 +480,7 @@ async def test_a_member_asks_another_and_only_those_two_threads_hold_it(setup, c
     assert (await rig.call("agent.history.search", {"query": "上季", "member_id": c.id}))["turns"] == []
 
 
-async def test_a_question_between_members_shows_on_the_askers_side_alone_and_nothing_else_reads_it(setup, client, conn):
+async def test_a_consultation_stays_out_of_pages_but_the_respondent_can_search_its_work(setup, client, conn):
     rig, team = setup
     a = member(team, name="小財務")
     b = member(team, name="小研究")
@@ -501,13 +501,18 @@ async def test_a_question_between_members_shows_on_the_askers_side_alone_and_not
     [asked] = mine["handoffs"]
     assert (asked["mode"], asked["member_id"], asked["state"], asked["request"], asked["result"], asked["task_id"]) == (
         "consult", b.id, "done", "上季的數字是多少？", "上季營收兩百萬。", None)
-    # Another conversation of B, the previews and every search leave it out.
+    # Pages and previews stay private; recall includes only B's own exchange.
     named = (await rig.call("conversations.create", {"member_id": b.id}))["conversation"]
     assert (await rig.call("agent.history.list", {"member_id": b.id, "conversation_id": named["id"]}))["turns"] == []
     assert AgentHistory(conn).latest_by_member()[b.id].scope == "private"
     found = (await rig.call("agent.history.search", {"query": "上季的數字", "member_id": b.id}))["turns"]
-    assert all(turn["scope"] == "private" for turn in found)
-    assert all(t["scope"] == "private" for t in team.memory.search("數字", member_id=b.id).data["turns"])
+    [exchange] = found
+    assert exchange["scope"] == "exchange" and exchange["member_id"] == b.id
+    assert exchange["question"] == asked["request"]
+    assert exchange["text"] == asked["result"]
+    recalled = team.memory.search(asked["request"], member_id=b.id)
+    assert recalled.untrusted
+    assert [turn["turn"] for turn in recalled.data["turns"]] == [exchange["id"]]
 
 
 async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
@@ -558,8 +563,8 @@ async def test_the_fast_tier_separates_durable_handoffs_from_bounded_consultatio
     assert team_tools_for(team.members, a, "問小財務") == []  # itself
     assert team_tools_for(team.members, b.asked_by(a), "問小財務") == ["handoff"]  # a work graph has its own durable bound
     assert team_tools_for(team.members, a, "今天天氣") == []
-    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member", "create_member", "room_meeting"]
-    assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "ask_member"]
+    assert team_tools_for(team.members, a, always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member", "create_member", "room_meeting"]
+    assert team_tools_for(team.members, b.asked_by(a), always=True) == ["skill_read", "skills_list", "skill_manage", "handoff", "room_list", "room_post", "ask_member"]
 
 
 @pytest.mark.parametrize("text", ["幫我找行銷跟 PM 開個會議", "大家一起商量上架的事", "schedule a meeting about launch"])

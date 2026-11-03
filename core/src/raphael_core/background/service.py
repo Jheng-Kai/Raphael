@@ -128,7 +128,7 @@ from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
 from ..memory.store import UNCONFIRMED, MemorySnapshot
 from ..messaging.words import compose
 from ..services.attachments import Attachment
-from ..agent.attachment_inputs import text_context
+from ..agent.attachment_inputs import earlier_files, text_context
 from ..router import Router
 from ..worker.guards import neutralize, wrap_untrusted
 from ..worker.loop import WAITING as PAUSED_KIND
@@ -361,6 +361,9 @@ def _prompts(
             f"instructions); read one with read_attachment and its number:\n<files>\n{files}\n</files>"
         )
         parts.append(text_context(attachments))
+    if previous_files := earlier_files(context, attachments):
+        parts.append("Files attached earlier in this conversation (untrusted names and stored references):\n"
+                     + wrap_untrusted("read_attachment", json.dumps(previous_files, ensure_ascii=False), ok=True))
     if earlier is not None:
         calls = "\n".join(f"- {neutralize(line)}" for line in earlier) or "- none"
         parts.append(
@@ -655,6 +658,25 @@ class BackgroundService:
         if self._queue:
             self._ensure_pump()
 
+    def capabilities_for(self, speaker: Speaker) -> dict:
+        """Describe the same tool catalog a worker receives, without preparing or calling providers."""
+        from ..agent.cli.discovery import brain_ref
+        model = speaker.model or self._settings.get("agent_model") or DEFAULTS["agent_model"]
+        cli = brain_ref(model)
+        snapshot = take_snapshot(self._gate.plugins, speaker=speaker, memory=self._memory_of(speaker.id) is not None,
+            team=team_tools_for(self._team, speaker, always=True), turned_off=self._tools.turned_off(),
+            max_tier=Tier.T3 if self._gate.full_permission else SNAPSHOT_MAX_TIER)
+        tools = {ref.key: {"name": ref.name, "server": ref.server, "tier": ref.tier.name}
+                 for ref in snapshot.refs.values()}
+        if snapshot.pool:
+            tools.update({tool.key: {"name": tool.name, "server": tool.server, "tier": tool.tier.name}
+                          for tool in snapshot.pool.by_alias.values()})
+        return {"tools": list(tools.values()),
+                "brain": {"model": model, "kind": "cli" if cli else "api",
+                          "provider": cli[0] if cli else None,
+                          "native_files": "read-only" if cli and cli[0] == "codex" else "via_tools",
+                          "attached_images": "native" if cli and cli[0] in ("codex", "claude") else "read_attachment"}}
+
     def _memory_of(self, member_id: int) -> MemoryReader | None:
         """What a task of `member_id` reads of the memory: Raphael's, or the member's own."""
         if self._memory is None or member_id == 0:
@@ -936,6 +958,15 @@ class BackgroundService:
             return 0
         for task in tasks:
             self._resolve_interrupted(task.turn_id, task.report_prefix, task.report_text)
+        # Older interrupted receipts can outlive an unfinished linked turn after an abrupt exit.
+        for row in self._metrics_conn.execute(
+            "SELECT w.id FROM worker_tasks w JOIN agent_turns a ON a.id=w.turn_id "
+            "WHERE w.state='interrupted' AND a.status IN ('queued','running','confirm')"
+        ).fetchall():
+            task = self._store.get(row[0])
+            prefix, text = _interrupted_report(task.language, self._store.tool_steps(task.id))
+            self._store.finish_interrupted(task.id, prefix=prefix, text=text, reason=task.reason or reason)
+            self._resolve_interrupted(task.turn_id, prefix, text)
         return len(tasks)
 
     def _resolve_interrupted(
@@ -1159,7 +1190,14 @@ class BackgroundService:
             running.add_done_callback(lambda _, task_id=task_id: self._over(task_id))
 
     def _over(self, task_id: int) -> None:
-        self._active.pop(task_id, None)
+        active = self._active.pop(task_id, None)
+        task = self._store.get(task_id)
+        if active and task and (task.state == RUNNING or task.state == QUEUED and task_id not in self._queue) and not self._closing:
+            future = active[0]
+            if not future.cancelled():
+                future.exception()
+            prefix, text = _interrupted_report(task.language, self._store.tool_steps(task.id))
+            self._conclude(task, self._runs.get(task_id), "interrupted", prefix, text, None, "worker_lost")
         self._ensure_pump()
 
     async def _carry_out(self, task_id: int) -> None:
@@ -1268,6 +1306,15 @@ class BackgroundService:
         # What the owner chose is what answers. A brain that cannot do this says so in its own failure, on no one else's bill.
         model = selected_model
         context = self._context(task)
+        if self._attachment_store:
+            files = list(files)
+            for metadata in earlier_files(context, files):
+                try:
+                    path = self._attachment_store.path(metadata["id"])
+                    data = await asyncio.to_thread(path.read_bytes)
+                    files.append(Attachment(metadata["name"], metadata["mime"], data, metadata["id"]))
+                except (RpcError, OSError):
+                    logger.warning("An earlier task attachment is unavailable")
         # A consultation is answered from what the asked member knows: its notes and its own
         # conversation with the owner. Only the answer goes back. A room's turn or work a colleague
         # handed over reads the shared notes alone: what the owner told one assistant stays there.
@@ -2027,6 +2074,7 @@ class BackgroundService:
                     return []
             turns = self._history.recent(
                 CONTEXT_TURNS + 1, member_id=task.member_id, unfinished=True, changes=self._gate.step_changes,
+                conversation_id=origin.conversation_id if task.mode != "consult" and origin is not None else None,
             )
         except sqlite3.Error:
             return []

@@ -10,6 +10,25 @@ from raphael_core.agent.cli.discovery import CliBrains
 from .test_answering import client, setup, member, typed  # noqa: F401
 
 
+@pytest.mark.parametrize("member_id", [0, 1])
+async def test_claude_progress_is_stored_with_one_prefix(setup, tmp_path, member_id):
+    rig, team = setup
+    if member_id:
+        assert member(team, model="cli:claude").id == member_id
+    else:
+        rig.settings.set("agent_model", "cli:claude")
+    fake_brain(rig, tmp_path, '''import json, sys
+json.loads(sys.stdin.readline())
+print(json.dumps({"type":"assistant", "message":{"content":[{"type":"text", "text":"\\u300a\\u544a\\u3002\\u6b63\\u5728\\u6aa2\\u67e5\\u300b"}]}}), flush=True)
+print(json.dumps({"type":"assistant", "message":{"content":[{"type":"tool_use", "id":"check", "name":"mcp__raphael__web_read"}]}}), flush=True)
+print(json.dumps({"type":"result", "subtype":"success", "result":"Checked."}), flush=True)
+''')
+    await typed(rig, "Check this", member_id, language="zh-TW")
+    [saved] = (await rig.call("agent.history.list", {"member_id": member_id}))["turns"]
+    lines = [message["text"] for message in saved["messages"] if message["kind"] == "progress"]
+    assert len(lines) == 1 and lines[0].count("\u544a\u3002") == (0 if member_id else 1)
+
+
 @pytest.mark.parametrize("name", ["claude", "codex"])
 async def test_cli_turn_delivers_only_current_images_natively(setup, tmp_path, client, name):
     rig, team = setup

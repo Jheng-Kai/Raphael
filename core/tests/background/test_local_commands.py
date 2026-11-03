@@ -9,6 +9,28 @@ from raphael_core.protocol import RpcError
 from .conftest import call, turn, report, until
 
 
+async def test_routine_timeout_is_a_failed_step_in_task_and_conversation_history(make_rig, plugins, conn):
+    from raphael_core.agent.history import AgentHistory
+    host = AsyncMock()
+    host.execute.return_value = {"timed_out": True, "stdout": "Partial synthetic output", "exit_code": -1}
+    plugins.hub = LocalTools(plugins.hub, conn, host=host)
+    plugins.hub.settings.set("local_commands_mode", "always")
+    plugins.hub.settings.set("local_commands_seen", True)
+    rig = make_rig()
+    history = AgentHistory(conn)
+    origin = history.add(session_id="routine:sample", question="Check samples", route="routine", source="routine",
+                         prefix="", text="", status="running")
+    rig.client.replies = [turn("Checking.", [call("local__local_exec", {"command": "Get-Process"}, "cpu")]), report("The command timed out.")]
+    task = rig.submit("Check samples")
+    rig.service.attach_turn(task, origin)
+    await rig.wait_for_reports()
+    task_step = next(s for s in rig.steps(task) if s.tool == "local_exec")
+    history_step = next(s for s in history.steps([origin])[origin] if s.tool == "local_exec")
+    assert task_step.outcome == history_step.outcome == "timeout"
+    assert task_step.reason == history_step.reason == "timeout"
+    assert host.execute.await_count == 1
+
+
 async def test_event_item_requires_command_confirmation_even_when_local_commands_are_always_allowed(make_rig, plugins, conn):
     host = AsyncMock()
     host.execute.return_value = {"exit_code": 0, "stdout": "ok", "stderr": "", "truncated": False}

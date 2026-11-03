@@ -17,6 +17,14 @@
       "scenario_ids": ["S07.meeting", "S21.meetings.create-reuse"],
       "expected_assertions": ["production_state"]
     },
+    "raphael/core/room_list": {
+      "scenario_ids": ["S21.meetings.list"],
+      "expected_assertions": ["production_state"]
+    },
+    "raphael/core/room_post": {
+      "scenario_ids": ["S21.meetings.post"],
+      "expected_assertions": ["production_state"]
+    },
     "raphael/core/approve": {
       "scenario_ids": [
         "S21.settings-quick.approve"

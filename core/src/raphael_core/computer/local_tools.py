@@ -175,7 +175,10 @@ class LocalTools:
             else:
                 data = await self._execute(arguments["command"], **params)
                 outcome = "timeout" if data.get("timed_out") else "error" if data.get("error") else "ok"
-                result = PluginResult(not data.get("error"), text=json.dumps(data), truncated=data.get("truncated", False))
+                if data.get("timed_out"):
+                    data["error"] = "timeout"
+                    data["message"] = "The command timed out and was stopped. Output may be partial. Use background:true for long commands."
+                result = PluginResult(outcome == "ok", kind=data.get("error"), text=json.dumps(data), truncated=data.get("truncated", False))
             return result
         except asyncio.CancelledError:
             outcome = "denied"

@@ -65,6 +65,18 @@ def test_an_unknown_turn_is_none(history):
     assert history.get(99) is None
 
 
+@pytest.mark.parametrize("conversation", [False, True])
+def test_members_recall_only_their_own_exchanges(history, clock, conversation):
+    own = add(history, clock, "Synthetic review", member_id=1, peer_id=2,
+              scope="exchange", route="exchange", source="member")
+    add(history, clock, "Synthetic review private", member_id=2)
+    add(history, clock, "Synthetic review delegated", member_id=2, peer_id=1,
+        scope="exchange", route="exchange", source="member")
+    params = {"conversation_id": history.get(own).conversation_id} if conversation else {}
+    assert [t.id for t in history.search("Synthetic", member_id=1, **params)] == [own]
+    assert [t.id for t in history.recent(10, member_id=1, **params)] == [own]
+
+
 def test_messages_are_immediately_readable_in_order_and_cleared_with_their_thread(history, clock):
     first = add(history, clock, status="running", member_id=1)
     other = add(history, clock, member_id=2)

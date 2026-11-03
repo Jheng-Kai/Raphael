@@ -47,7 +47,8 @@ SERVICE_TIMEOUT_S = 12.0
 # second needs a little margin; use that conservative pace for each search service.
 SEARCH_TIMEOUT_S = 12.0
 SEARCH_INTERVAL_S = 1.1
-SEARCH_ATTEMPTS = 3
+SEARCH_ATTEMPTS = 2
+SEARCH_RETRY_WAIT_S = 8.0
 # The services that read a page for Raphael may take longer: they fetch it first.
 READ_TIMEOUT_S = 25.0
 
@@ -100,9 +101,14 @@ async def _search_call(service: str, http: httpx.AsyncClient, method: str, url: 
         for attempt in range(SEARCH_ATTEMPTS):
             now = loop.time()
             wait_s = max(0.0, gate.next_at - now)
-            if wait_s > 0 and wait_s > deadline - now:
-                raise ServiceError("rate_limit")
-            await asyncio.sleep(wait_s)
+            budget = min(SEARCH_RETRY_WAIT_S, max(0.0, deadline - now - .01))
+            wait_until = now + min(wait_s, budget)
+            # Event-loop timers can wake early on Windows; keep the provider's deadline.
+            while (remaining := wait_until - loop.time()) > 0:
+                await asyncio.sleep(remaining)
+            if wait_s > budget:
+                # Do not send before the provider's cooldown, even when it exceeds this turn's budget.
+                raise _RateLimited(str(wait_s - budget))
             gate.next_at = loop.time() + SEARCH_INTERVAL_S
             try:
                 return await _call(http, method, url, **kwargs)

@@ -1,5 +1,9 @@
 # Raphael feature map
 
+## Delegated work and run endings (2026-11-04)
+
+See [Work truth](work-truth.md) for R-WORK-06 through R-WORK-15: private/exchange history, earlier files, local commands, task recovery, existing room posts, search cooldowns, CLI progress, routine steps and capability inventory. This core-only unit uses offline tests; no UI, native or live-provider acceptance is implied.
+
 ## Idle native runtime (2026-11-04)
 
 See [Idle native runtime](idle-runtime.md) for R-PERF-09 through R-PERF-12:

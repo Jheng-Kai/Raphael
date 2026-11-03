@@ -85,6 +85,29 @@ async def test_searches_share_a_provider_queue_across_clients_and_successive_cal
     assert all(b - a >= .025 for a, b in zip(starts, starts[1:]))
 
 
+async def test_a_search_rechecks_the_cooldown_after_an_early_timer_wakeup(fast_search, monkeypatch):
+    starts, early = [], False
+    sleep = asyncio.sleep
+
+    async def wake_early(delay):
+        nonlocal early
+        if delay > 0 and not early:
+            early = True
+            return
+        await sleep(delay)
+
+    def answer(request):
+        starts.append(time.monotonic())
+        return httpx.Response(200, json={"web": {"results": []}})
+
+    monkeypatch.setattr(web.asyncio, "sleep", wake_early)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        await web.search("brave", "first", http=http, key=KEY)
+        await web.search("brave", "second", http=http, key=KEY)
+    assert early and len(starts) == 2
+    assert starts[1] - starts[0] >= .025
+
+
 @pytest.mark.parametrize("retry_after", ["0.06", "date", "invalid", None])
 async def test_a_throttled_search_retries_after_the_provider_wait(fast_search, retry_after):
     starts = []
@@ -103,15 +126,16 @@ async def test_a_throttled_search_retries_after_the_provider_wait(fast_search, r
     assert len(starts) == 2 and starts[1] - starts[0] >= minimum - .005
 
 
-async def test_a_persistent_throttle_is_reported_after_three_attempts(fast_search):
+async def test_a_persistent_throttle_is_reported_after_one_retry(fast_search):
     api = Api({"api.search.brave.com": httpx.Response(429)})
     assert await kind_of(web.search("brave", "q", http=api.http, key=KEY)) == "rate_limit"
-    assert len(api.requests) == 3
+    assert len(api.requests) == 2
 
 
 @pytest.mark.parametrize("request_delay,retry_after", [(0, "3600"), (.08, ".25")])
-async def test_a_retry_after_beyond_the_remaining_budget_reports_rate_limit_quickly(fast_search, monkeypatch, request_delay, retry_after):
+async def test_a_retry_after_beyond_the_remaining_budget_waits_bounded_without_early_request(fast_search, monkeypatch, request_delay, retry_after):
     monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .3)
+    monkeypatch.setattr(web, "SEARCH_RETRY_WAIT_S", .06)
     requests = []
 
     async def answer(request):
@@ -123,25 +147,28 @@ async def test_a_retry_after_beyond_the_remaining_budget_reports_rate_limit_quic
         began = time.monotonic()
         assert await kind_of(web.search("brave", "q", http=http, key=KEY)) == "rate_limit"
         assert time.monotonic() - began < .2
+        assert time.monotonic() - began >= .055
         assert len(requests) == 1
 
 
-async def test_a_retained_cooldown_rejects_later_searches_quickly_without_more_requests(fast_search, monkeypatch):
+async def test_a_retained_cooldown_waits_without_more_requests(fast_search, monkeypatch):
     monkeypatch.setattr(web, "SEARCH_TIMEOUT_S", .3)
+    monkeypatch.setattr(web, "SEARCH_RETRY_WAIT_S", .03)
     requests = []
 
     def answer(request):
         requests.append(request)
-        return httpx.Response(429, headers={"Retry-After": "3600" if len(requests) == 3 else "0"})
+        return httpx.Response(429, headers={"Retry-After": "3600" if len(requests) == 2 else "0"})
 
     api = Api({"api.search.brave.com": answer})
     assert await kind_of(web.search("brave", "first", http=api.http, key=KEY)) == "rate_limit"
-    assert len(api.requests) == 3
+    assert len(api.requests) == 2
     began = time.monotonic()
     results = await asyncio.gather(*(kind_of(web.search("brave", str(n), http=api.http, key=KEY)) for n in range(3)))
     assert results == ["rate_limit"] * 3
     assert time.monotonic() - began < .2
-    assert len(api.requests) == 3
+    assert time.monotonic() - began >= .08
+    assert len(api.requests) == 2
 
 
 async def test_queued_searches_cancel_or_time_out_without_blocking_other_providers(fast_search, monkeypatch):

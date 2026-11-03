@@ -123,13 +123,26 @@ async def test_real_powershell_readonly_output_nonzero_and_closed_stdin():
     assert result["exit_code"] == 0 and "True" in result["stdout"]
 
 
-@pytest.mark.parametrize("data,outcome,ok", [({"timed_out": True}, "timeout", True), ({"error": "OSError"}, "error", False)])
+@pytest.mark.parametrize("data,outcome,ok", [({"timed_out": True}, "timeout", False), ({"error": "OSError"}, "error", False)])
 async def test_audit_records_timeout_and_host_errors(local, data, outcome, ok):
     hub, host, _ = local
     host.execute.return_value = data
     result = await hub.call("mcp:local/local_exec", {"command": "Get-Process"}, approver="user")
     assert result.ok is ok
     assert hub.audit.recent()[0].outcome == outcome
+    if data.get("timed_out"):
+        assert result.kind == "timeout" and "partial" in result.text and "background:true" in result.text
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows PowerShell adapter")
+async def test_powershell_defaults_read_and_write_utf8(tmp_path):
+    source, target = tmp_path / "source.txt", tmp_path / "target.txt"
+    content = "Synthetic: \u7e41\u9ad4\u4e2d\u6587, caf\u00e9, \u65e5\u672c\u8a9e"
+    source.write_text(content, encoding="utf-8")
+    command = f"Get-Content -LiteralPath '{source}'; '" + content + f"' | Set-Content -LiteralPath '{target}'"
+    result = await LocalHost().execute(command, timeout_seconds=30)
+    assert result["exit_code"] == 0 and content in result["stdout"]
+    assert target.read_text(encoding="utf-8-sig").strip() == content
 
 
 async def test_adapter_filters_environment_and_kills_on_timeout_and_cancel(monkeypatch):

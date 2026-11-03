@@ -6,7 +6,43 @@ import pytest
 
 from raphael_core.members.rooms import RoomsService
 from raphael_core.members.service import MembersService
-from .conftest import report, until
+from .conftest import call, report, turn, until
+
+
+def test_worker_prompt_names_earlier_files_with_the_shared_budget():
+    from types import SimpleNamespace
+    from raphael_core.background.service import _prompts
+    from raphael_core.background.run import RunLimits
+    turns = [SimpleNamespace(question="Read the file", text="Read", prefix="", status="done",
+                             attachments=[{"id": "stored-sample", "name": "sample.txt", "mime": "text/plain"}])]
+    _, user = _prompts("en", "Continue", {}, turns, RunLimits())
+    assert "stored-sample" in user and "read_attachment" in user
+    assert '<tool_result untrusted="true"' in user
+
+
+async def test_worker_reads_an_earlier_source_conversation_file_by_index(make_rig, conn, tmp_path):
+    from raphael_core.agent.history import AgentHistory
+    from raphael_core.services.attachment_store import AttachmentStore
+    from raphael_core.services.attachments import checked
+    rig = make_rig()
+    store = AttachmentStore(tmp_path / "attachments")
+    rig.service.use_attachment_store(store)
+    history = AgentHistory(conn)
+    attachment = store.save(checked("earlier.txt", "text/plain", b"Synthetic earlier file contents"))
+    history.add(session_id="first", question="Keep this file", route="answer", prefix="", text="Kept", status="done",
+                attachments=[attachment.metadata()])
+    foreign = store.save(checked("private.txt", "text/plain", b"Other member private contents"))
+    history.add(session_id="other", question="Private", route="answer", prefix="", text="Kept", status="done",
+                member_id=1, attachments=[foreign.metadata()])
+    origin = history.add(session_id="next", question="Read the earlier file", route="delegate", prefix="", text="Working", status="done")
+    rig.client.replies = [turn("", [call("read_attachment", {"index": 1}, "earlier")]), report("Read the earlier file.")]
+    task = rig.submit("Read the earlier file")
+    rig.service.attach_turn(task, origin)
+    await until(lambda: rig.task(task).state not in ("queued", "running"))
+    assert rig.task(task).state == "done"
+    prompt = rig.client.chat_calls[0]["messages"][1]["content"]
+    assert "Synthetic earlier file contents" in prompt and "Other member private contents" not in prompt
+    assert rig.steps(task)[-1].outcome == "ok"
 
 
 @pytest.mark.parametrize("member_id", [0, 1])

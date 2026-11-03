@@ -23,6 +23,23 @@ def test_a_new_task_is_queued_and_holds_what_was_handed_over(store):
     assert task.turn_id is None and task.report_text is None and task.finished_at_ms is None
 
 
+def test_routine_steps_are_readable_while_running_and_after_interruption(store, conn):
+    from raphael_core.agent.history import AgentHistory
+    history = AgentHistory(conn)
+    turn = history.add(session_id="routine:sample", question="Synthetic routine", route="routine",
+                       source="routine", prefix="", text="", status="running")
+    task = make(store)
+    store.attach_turn(task, turn)
+    step = store.add_step(task, kind="tool", tool="web_read", server="Raphael", outcome="in_progress")
+    assert history.steps([turn])[turn][0].outcome == "in_progress"
+    store.update_step(step, outcome="error", reason="timeout", ms=17)
+    saved = history.steps([turn])[turn]
+    assert len(saved) == 1 and saved[0].reason == "timeout" and saved[0].ms == 17
+    store.add_step(task, kind="tool", tool="web_search", outcome="in_progress")
+    store.interrupt_unfinished()
+    assert [s.outcome for s in history.steps([turn])[turn]] == ["error", "cancelled"]
+
+
 def test_a_task_goes_from_queued_to_running_to_its_end_with_its_report(store):
     task_id = make(store)
     store.attach_turn(task_id, 41)

@@ -136,7 +136,7 @@ def cells(registry=(), catalog=(), *, servers=()):
         "memory": ("show", "save-global", "forget", "private-global", "history-search", "update", "log", "session-search", "session-read"),
         "calendar": ("create", "move", "list", "delete"),
         "members-groups": ("draft-confirm", "rename", "regroup", "archive", "delete", "overview", "command-save", "skill-import", "set-my-job"),
-        "meetings": ("create-reuse", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
+        "meetings": ("create-reuse", "list", "post", "roles", "agenda", "mentions", "dispatch", "result", "chief-wrapup", "consult"),
         "web-open": ("search", "read", "show", "show-page", "update-page", "url", "app", "settings", "weather", "local-time"),
         "files": ("create-html", "create-xlsx", "create-pdf", "create-audio", "attachment-inventory"),
         "computer": ("operate", "take-over", "done", "stop", "apps", "open", "look", "act", "hand-over"),

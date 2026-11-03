@@ -451,6 +451,7 @@ class TaskStore:
                 ),
             )
         assert cursor.lastrowid is not None
+        self._sync_routine_steps(task_id, cursor.lastrowid)
         return cursor.lastrowid
 
     def update_step(
@@ -471,6 +472,25 @@ class TaskStore:
                 " detail = COALESCE(?, detail), cost_usd = COALESCE(?, cost_usd) WHERE id = ?",
                 (outcome, tier, ms, reason or (reason_of(outcome, None) if outcome == 'blocked' else None), detail, cost_usd, step_id),
             )
+            row = self._conn.execute("SELECT task_id FROM worker_steps WHERE id=?", (step_id,)).fetchone()
+            if row:
+                self._sync_routine_steps(row[0], step_id)
+
+    def _sync_routine_steps(self, task_id: int, step_id: int | None = None) -> None:
+        """Keep routine history auditable even while a run waits or the process is interrupted."""
+        with self._conn:
+            rows = self._conn.execute(
+                "SELECT t.turn_id,s.n,s.at_ms,s.kind,COALESCE(s.tool,''),s.server,s.outcome,s.ms,s.reason,s.detail "
+                "FROM worker_steps s JOIN worker_tasks t ON t.id=s.task_id "
+                "JOIN agent_turns a ON a.id=t.turn_id WHERE t.id=? AND a.route='routine' "
+                "AND (? IS NULL OR s.id=?)", (task_id, step_id, step_id)).fetchall()
+            for row in rows:
+                changed = self._conn.execute(
+                    "UPDATE agent_steps SET outcome=?,ms=?,reason=?,detail=? WHERE turn_id=? AND n=?",
+                    (*row[6:10], *row[:2])).rowcount
+                if not changed:
+                    self._conn.execute("INSERT INTO agent_steps(turn_id,n,at_ms,kind,tool,server,outcome,ms,reason,detail) "
+                                       "VALUES(?,?,?,?,?,?,?,?,?,?)", tuple(row))
 
     def settle_in_progress(self, task_id: int) -> None:
         """A call still "in_progress" when its task is over was cut off: it may have been made."""
@@ -480,6 +500,7 @@ class TaskStore:
                 " WHERE task_id = ? AND outcome = 'in_progress'",
                 (task_id,),
             )
+            self._sync_routine_steps(task_id)
 
     def get(self, task_id: int) -> Task | None:
         row = self._conn.execute(
@@ -545,6 +566,7 @@ class TaskStore:
                     " WHERE task_id = ? AND outcome = 'in_progress'",
                     (row["id"],),
                 )
+                self._sync_routine_steps(row["id"])
                 if report is None:
                     self._conn.execute(
                         "UPDATE worker_tasks SET state = 'interrupted', finished_at_ms = ?,"

@@ -239,6 +239,42 @@ class RoomsService:
             raise invalid_params('roles must name room members and at most one moderator')
         return roles
 
+    def member_rooms(self, member_id):
+        return {"rooms": [{key: room[key] for key in ("id", "name", "member_ids", "membership_state")}
+                          for row in self._conn.execute("SELECT * FROM rooms ORDER BY id")
+                          if member_id in (room := self._view(row))["member_ids"]]}
+
+    def post(self, member_id, arguments, source_turn_id):
+        import hashlib
+        room = self._room(arguments)
+        if member_id not in self._ids(room):
+            raise invalid_params("only a room member may post")
+        self._validated_ids(self._ids(room), team=bool(room["is_team"]))
+        if room["membership_state"] != "ready":
+            raise invalid_params("adjust room membership before sending")
+        text = arguments.get("text")
+        if not isinstance(text, str) or not text.strip() or len(text) > MAX_MESSAGE:
+            raise invalid_params("text must contain 1 to 10000 characters")
+        source = self._history.get(source_turn_id) if source_turn_id else None
+        if source is None or source.member_id != member_id:
+            raise invalid_params("a source turn is required")
+        # A tool retry publishes once; distinct summaries from the same turn remain distinct.
+        request = f"post_{source_turn_id}_{hashlib.sha256(text.strip().encode()).hexdigest()[:24]}"
+        thread = self._thread(room)
+        existing = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
+        if existing:
+            return {"room_id": room["id"], "message_id": existing[0], "member_id": member_id, "duplicate": True}
+        with self._conn:
+            turn = self._history.add(session_id=request, question="", route="exchange", source="member", prefix="",
+                text=text.strip(), status="done", member_id=member_id, scope="room", room_id=room["id"],
+                thread_id=thread, source_turn_id=source_turn_id, model=source.model)
+            cursor = self._conn.execute(
+                "INSERT INTO room_messages(room_id,thread_id,member_id,text,created,request_id,turn_id) VALUES(?,?,?,?,?,?,?)",
+                (room["id"], thread, member_id, text.strip(), self._now(), request, turn))
+            row = self._conn.execute("SELECT id FROM room_messages WHERE room_id=? AND request_id=?", (room["id"], request)).fetchone()
+        self._changed(room["id"])
+        return {"room_id": room["id"], "message_id": row[0], "member_id": member_id, "duplicate": cursor.rowcount == 0}
+
     async def meeting(self, arguments, language, source_turn_id):
         ids = self._validated_ids(arguments.get('member_ids'))
         agenda = arguments.get('agenda')

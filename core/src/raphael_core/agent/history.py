@@ -28,11 +28,10 @@ something through `ask_member` and the other answered (kept as a separate exchan
 naming the requester), and a routine's run (`route` and `source` "routine"), whose `question` is the
 routine's title and whose answer is what the run reported.
 
-Private reads always select scope=private. Room turns require a room/thread, never resolve or
+Private reads include the member's own exchanges. Room turns require a room/thread, never resolve or
 touch a private conversation, and remain available through the room service and internal audit.
 A member's own chat also lists its exchanges with colleagues where they came (`list` and `after`
-with `exchanges`), each drawn as one line; what a model reads (context, search, reflection) never
-includes them.
+with `exchanges`), each drawn as one line; context and search also include its own delegated work.
 
 The conversation is not pruned: unlike the dictations, which go after the retention setting, the
 turns stay until the user clears them (`clear`). Nothing here logs a question or an answer.
@@ -186,12 +185,13 @@ def _filters(
     """The conditions of a search besides its words, as SQL to add to its WHERE, and their params:
     the turns of the thread of `member_id`, made from `since_ms` on, and none of the ids of
     `exclude`."""
-    where, params = (" AND t.scope = 'private' AND t.status != 'withdrawn'", [])
+    scopes = "t.scope = 'private'" if member_id is None else "t.scope IN ('private', 'exchange')"
+    where, params = (f" AND {scopes} AND t.status != 'withdrawn'", [])
     if member_id is not None:
         where += " AND t.member_id = ?"
         params.append(member_id)
     if conversation_id is not None:
-        where += " AND t.conversation_id = ?"
+        where += " AND (t.conversation_id = ? OR t.scope = 'exchange')"
         params.append(conversation_id)
     if since_ms is not None:
         where += " AND t.created_at_ms >= ?"
@@ -510,10 +510,10 @@ class AgentHistory:
         them, in their place (`is_unfinished`), each told what it already did (`with_work`)."""
         if count <= 0:
             return []
-        condition = "" if conversation_id is None else " AND conversation_id = ?"
+        condition = "" if conversation_id is None else " AND (conversation_id = ? OR scope = 'exchange')"
         said = _READABLE if unfinished else "status = 'done'"
         rows = self._conn.execute(
-            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope = 'private' AND {said} AND member_id = ?"
+            f"SELECT {_COLUMNS} FROM agent_turns WHERE scope IN ('private', 'exchange') AND {said} AND member_id = ?"
             + condition + " ORDER BY id DESC LIMIT ?",
             [member_id, *([] if conversation_id is None else [conversation_id]), count],
         )

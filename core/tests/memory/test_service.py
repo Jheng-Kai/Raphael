@@ -115,22 +115,32 @@ def test_search_gives_the_turns_with_their_dates_cut_short(memory, history):
 
 
 def test_history_search_labels_every_line_and_keeps_exchange_quote_sources(memory, history):
-    ordinary = add_turn(history, "日文課\n先生、今日は何を勉強しますか？", "今天用中文練習。\n先介紹自己。")
+    ordinary = add_turn(history, "Language lesson\nWhich greeting should we practice?", "Practice a greeting.\nIntroduce yourself.")
     exchange = add_turn(
-        history, "Raphael: 日文課教了什麼？",
-        "owner: 先生、今日は何を勉強しますか？\n紫苑: 那是你問我的句子。",
+        history, "Raphael: What did the language lesson cover?",
+        "owner: Which greeting should we practice?\nMira: That is the quoted question.",
         route="exchange",
     )
-    found = {t["turn"]: t for t in memory.search("日文課").data["turns"]}
-    assert found[ordinary]["question"] == "owner: 日文課\nowner: 先生、今日は何を勉強しますか？"
-    assert found[ordinary]["answer"] == "Raphael: 今天用中文練習。\nRaphael: 先介紹自己。"
-    assert exchange not in found
+    result = memory.search("lesson")
+    found = {t["turn"]: t for t in result.data["turns"]}
+    assert found[ordinary]["question"] == "owner: Language lesson\nowner: Which greeting should we practice?"
+    assert found[ordinary]["answer"] == "Raphael: Practice a greeting.\nRaphael: Introduce yourself."
+    assert found[exchange]["question"] == "requesting assistant: Raphael: What did the language lesson cover?"
+    assert found[exchange]["answer"] == (
+        "responding assistant: owner: Which greeting should we practice?\n"
+        "responding assistant: Mira: That is the quoted question."
+    )
+    assert result.untrusted
     assert history.get(exchange).scope == "exchange"
 
 
 def test_exchange_search_keeps_the_quoted_speaker_when_a_snippet_starts_mid_line(memory, history):
-    add_turn(history, "Raphael: 回顧課程", "owner: " + "長" * 200 + "先生、今日は何を勉強しますか？", route="exchange")
-    assert memory.search("先生").data["turns"] == []
+    turn = add_turn(history, "Raphael: Review the lesson", "owner: " + "padding " * 200 + "Which greeting?", route="exchange")
+    result = memory.search("greeting")
+    [found] = result.data["turns"]
+    assert found["turn"] == turn and result.untrusted
+    assert found["answer"].startswith("responding assistant: owner: …")
+    assert "Which greeting?" in found["answer"]
 
 
 def test_a_search_that_finds_a_run_on_the_desktop_is_untrusted(memory, history):

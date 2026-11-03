@@ -1938,6 +1938,10 @@ class AgentService:
         """Publish only public words; each commit is visible before the next model/tool call."""
         if not ask.turn_id or not text.strip():
             return
+        if kind == "progress" and prefix:
+            opening = compose(prefix, "", None)[:-1]
+            while text.strip().startswith(opening) and text.strip().endswith("\u300b"):
+                text = text.strip()[len(opening):-1].strip()
         line = compose(prefix, text, None) if ask.speaker.is_raphael and kind in ("progress", "reply") else text
         if ask.speaker.is_raphael and kind == "reply" and prefix:
             if not first:
@@ -3612,7 +3616,7 @@ class AgentService:
         team = self._team
         if team is None or name not in TEAM_TOOLS:
             return ToolResult(name, False, None, "blocked", instruction="This team tool is unavailable here. Answer with the information already available or tell the owner what is missing.")
-        if name not in (*SKILL_TOOLS, "handoff") and not speaker.may_ask:
+        if name not in (*SKILL_TOOLS, "handoff", "room_list", "room_post") and not speaker.may_ask:
             return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
@@ -3629,6 +3633,15 @@ class AgentService:
             if result.ok and source_turn_id:
                 self._consulting.add(source_turn_id)
             return result
+        if name in ("room_list", "room_post"):
+            rooms = getattr(team, "rooms", None)
+            if rooms is None:
+                return ToolResult(name, False, None, "unavailable")
+            try:
+                data = rooms.member_rooms(speaker.id) if name == "room_list" else rooms.post(speaker.id, dict(arguments), source_turn_id)
+            except RpcError as error:
+                return ToolResult(name, False, None, "bad_arguments", instruction=error.message)
+            return ToolResult(name, True, data)
         if name == "room_meeting":
             rooms = getattr(team, 'rooms', None)
             if rooms is None or not source_turn_id:
@@ -4833,6 +4846,9 @@ class AgentService:
         views = []
         for turn in turns:
             task, task_steps = tasks.get(turn.id or 0, (None, []))
+            # Routine worker steps are also mirrored in history; prefer the complete task audit.
+            turn_steps = task_steps if turn.route == "routine" and task else (
+                [_step_view(step) for step in steps.get(turn.id or 0, [])] + task_steps)
             handoffs = self._colleague_events(turn, asked.get(turn.id or 0, []))
             shown = cards.get(turn.id or 0)
             successful_resume = turn.source == RESUMED and not turn.session_id.startswith("failure-")
@@ -4869,8 +4885,7 @@ class AgentService:
                     "attachments": list(turn.attachments or []),
                     **({"quote": turn.quote} if turn.quote else {}),
                     # What the fast tier did, then what the worker did for the task it was given.
-                    "steps": [_step_view(step) for step in steps.get(turn.id or 0, [])]
-                    + task_steps,
+                    "steps": turn_steps,
                     "task": task,
                     **({"handoffs": handoffs} if handoffs else {}),
                     **({"connectors": shown} if shown else {}),

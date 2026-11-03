@@ -31,6 +31,33 @@ def hand_over(rig, conn, *, language="en", source="voice", text=TASK_TEXT):
 # --- interrupted tasks are told ---------------------------------------------------------------------
 
 
+async def test_restart_closes_legacy_queued_and_interrupted_turns(make_rig, conn):
+    first = make_rig()
+    queued, queued_turn, history = hand_over(first, conn)
+    lost, lost_turn, _ = hand_over(first, conn)
+    history.resolve(lost_turn, prefix="", text="", status="running")
+    first.service._store.finish_interrupted(lost, prefix="", text="", reason="restart")
+    first.service._queue.clear()
+    second = make_rig()
+    assert second.task(queued).state == "interrupted" and second.task(queued).reason == "restart"
+    for turn in (queued_turn, lost_turn):
+        assert history.get(turn).status == "error" and "interrupted" in history.get(turn).text
+
+
+async def test_a_lost_worker_closes_its_task_with_a_reason(make_rig, conn, monkeypatch):
+    rig = make_rig()
+    blocked = asyncio.Event()
+    async def lost(task, files):
+        rig.service._store.start(task.id)
+        await blocked.wait()
+    monkeypatch.setattr(rig.service, "_execute", lost)
+    task, turn, history = hand_over(rig, conn)
+    await until(lambda: rig.task(task).state == "running")
+    rig.service._active[task][0].cancel()
+    await until(lambda: rig.task(task).state == "interrupted")
+    assert rig.task(task).reason == "worker_lost" and history.get(turn).status == "error"
+
+
 async def test_tasks_left_unfinished_get_a_report_and_their_turn_is_completed(make_rig, conn):
     first = make_rig()
     running, running_turn, history = hand_over(first, conn, language="zh-TW")

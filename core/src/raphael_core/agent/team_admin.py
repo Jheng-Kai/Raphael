@@ -66,7 +66,7 @@ for field, limit in (("name", 16), ("role", 24), ("blurb", 200), ("personality",
     MEMBER[field]["maxLength"] = limit
 
 DEFINITIONS = {
-    "team_overview": definition("Read the team: member IDs, names, roles, blurbs, groups, skill/command counts, routines, groups and available avatar presets."),
+    "team_overview": definition("Read member IDs, names, roles, configured brains, native image/file limits, actual tool catalog and computer grants, groups, skills, commands and routines. Rooms show real IDs and membership for rooms you belong to."),
     "member_create": definition("Create a team member; the result carries its real ID. When the owner's setting asks first it is only a proposal for the owner's editable draft: nothing exists until they confirm, and the turn goes on with the real IDs afterwards. At most 10 creates per turn. Omitted preferences use the create dialog defaults.", MEMBER, ("name", "role")),
     "member_update": definition("Change the supplied fields of an existing member, including group placement. ID 0 is the first Bot's name, role, personality and instructions. When the owner's setting asks first, nothing changes until they confirm.", {"id": {"type": "integer", "minimum": 0}, **MEMBER}, ("id",)),
     "member_delete": definition("Permanently delete a member and its conversations, memories, routines and resources. Always requires the owner's approval.", {"id": ID}, ("id",)),

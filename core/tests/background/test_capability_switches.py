@@ -12,6 +12,26 @@ def names(snapshot):
     return [d["function"]["name"] for d in snapshot.definitions]
 
 
+async def test_team_overview_uses_each_members_brain_grants_and_actual_tool_catalog(make_rig, conn, tmp_path):
+    from raphael_core.members.service import MembersService
+    from raphael_core.computer.grants import ComputerGrants
+    rig = make_rig()
+    members = MembersService(conn, tmp_path, background=rig.service)
+    reader = members.store.create_member(name="Reader", role="Reviewer", model="cli:codex:synthetic")
+    writer = members.store.create_member(name="Writer", role="Editor", model="cli:claude:synthetic")
+    rig.service.use_team(members, None)
+    ComputerGrants(conn).set(reader.id, False)
+    ComputerGrants(conn).set(writer.id, True)
+    await rig.plugins.connect(look="T0", note="T1")
+    rows = {row["id"]: row for row in (await members.admin_tool(reader.id, "team_overview", {}))["members"]}
+    assert rows[reader.id]["brain"]["native_files"] == "read-only"
+    assert rows[reader.id]["brain"]["attached_images"] == "native"
+    assert rows[writer.id]["brain"]["model"] == "cli:claude:synthetic"
+    assert rows[reader.id]["computer"]["allowed"] is False
+    assert rows[writer.id]["computer"]["allowed"] is True
+    assert {"look", "note"} <= {t["name"] for t in rows[reader.id]["tools"]}
+
+
 async def test_a_search_and_a_page_read_that_are_off_are_refused_to_the_task_and_not_made(web_rig):
     rig = web_rig()
     rig.settings.set("web_search_service", "brave")

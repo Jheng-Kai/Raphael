@@ -54,7 +54,8 @@ class LocalHost:
         if os.name != "nt":
             raise OSError("windows_required")
         shell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
-        script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; " + RUNNER
+        script = ("[Console]::InputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+                  "$OutputEncoding = [Console]::OutputEncoding; $PSDefaultParameterValues['*:Encoding'] = 'utf8'; " + RUNNER)
         child = CommandChild([str(shell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
                              environ={**worker_environment(), "RAPHAEL_LOCAL_COMMAND": command}, cwd=cwd or str(Path.home()), errors=errors)
         stdout = output if output is not None else Output()

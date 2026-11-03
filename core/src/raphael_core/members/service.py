@@ -1296,17 +1296,26 @@ class MembersService:
                 any(field not in arguments for field in schema["required"])):
             raise invalid_params("invalid team administration fields")
         if name == "team_overview":
+            from ..computer.grants import ComputerGrants
             roster = await self._list({})
             groups = {group["id"]: group["name"] for group in roster["groups"]}
             members = []
             for item in roster["members"]:
                 identifier = item["id"]
+                speaker = self.speaker(identifier)
+                model = speaker.model or self._starting_model()
+                capabilities = getattr(self._background, "capabilities_for", lambda speaker: {"tools": [], "brain": {"model": model}})(speaker)
                 members.append({**{field: item[field] for field in ("id", "name", "role", "blurb")},
+                                **capabilities,
+                                "computer": {"allowed": ComputerGrants(self._conn).allowed(identifier),
+                                             "local_commands": self._settings.get("local_commands_mode")},
                                 "group": groups.get(item["group_id"]),
                                 "skills_count": len(self.capabilities.skills(identifier)),
                                 "commands_count": len(self.capabilities.commands(identifier)) if identifier else 0,
                                 "routines": (await self._routines_list({"member_id": identifier}))["routines"]})
-            return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"]}
+            rooms = getattr(self, "rooms", None)
+            return {"members": members, "groups": roster["groups"], "primary_id": roster["team_context"]["primary_id"],
+                    "rooms": rooms.member_rooms(member_id)["rooms"] if rooms else []}
         if name in ("member_create", "member_update"):
             params = dict(arguments)
             if name == "member_update" and params.get("id") == 0:

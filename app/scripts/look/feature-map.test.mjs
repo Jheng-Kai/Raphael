@@ -11,7 +11,24 @@ const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHA
 const readMap = file => readFileSync(staged && existsSync(resolve(staged, file)) ? resolve(staged, file) : resolve(skill, file), "utf8");
 const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery", "performance"];
 
+function expectIndexedNotes(index, files) {
+  const linked = [...new Set([...index.matchAll(/\]\((?:\.\/)?([\w.-]+\.md)(?:#[^\s)]*)?\)/g)].map(([, file]) => file))];
+  expect(files.filter(file => file !== "README.md").sort()).toEqual(linked.filter(file => file !== "README.md").sort());
+}
+
 describe("maintained verification feature map", () => {
+  it("accepts new notes linked from the index without extending the required names", () => {
+    expectIndexedNotes("[Home](home.md) [Future](./future-note.md#checks) [Again](future-note.md)",
+      ["README.md", "home.md", "future-note.md"]);
+  });
+  it("rejects notes absent from the index and index links without a note", () => {
+    expect(() => expectIndexedNotes("[Home](home.md)", ["README.md", "home.md", "unlinked.md"])).toThrow();
+    expect(() => expectIndexedNotes("[Home](home.md) [Missing](missing.md)", ["README.md", "home.md"])).toThrow();
+  });
+  it("does not accept external or parent-document links as local feature notes", () => {
+    expectIndexedNotes("[Home](home.md) [Web](https://example.test/external.md) [Parent](../SKILL.md) [Section](#checks)",
+      ["README.md", "home.md"]);
+  });
   it("uses explicit modifier fields instead of unsupported Puppeteer key chords", () => {
     expect(scenes.flatMap(scene => scene.steps.filter(step => step.action === 'key' && /(?:Shift|Control|Alt|Meta)\+/.test(step.key)).map(step => `${scene.name}: ${step.key}`))).toEqual([]);
   });
@@ -42,7 +59,7 @@ describe("maintained verification feature map", () => {
     }
     const stagedFeatures = staged && resolve(staged, "features");
     const files = [...new Set([...readdirSync(resolve(skill, "features")), ...(stagedFeatures && existsSync(stagedFeatures) ? readdirSync(stagedFeatures) : [])])];
-    expect(files.filter(file => file !== "README.md").sort()).toEqual([...names, "member-computer", "idle-runtime"].map(name => `${name}.md`).sort());
+    expectIndexedNotes(index, files);
   });
   it("maps the Docker-only foundation and live viewer through look and the native journey", () => {
     expect(readMap("features/README.md")).toContain("](member-computer.md)");
