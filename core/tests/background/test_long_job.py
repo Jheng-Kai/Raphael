@@ -1,7 +1,7 @@
 """A long task through the real worker and host: the model's window comes from the catalog, the
 provider's usage comes back with every reply, and the checkpoint is written over the same channel."""
 
-from raphael_core.agent.persona import phrase
+from raphael_core.failures import Failure
 from raphael_core.brain.catalog import LLM, CatalogEntry, ModelPrice
 from raphael_core.brain.openrouter import OpenRouterError
 from raphael_core.memory.conversation import DEFAULT_CONTEXT_WINDOW
@@ -71,4 +71,5 @@ async def test_an_overflow_that_cannot_be_shrunk_ends_the_task_as_a_failure_with
     rig.client.replies = [OpenRouterError(400, "bad_request", "prompt is too long") for _ in range(5)]
     rig.submit()
     [done] = await rig.wait_for_reports()
-    assert done["state"] == "failed" and done["text"] == phrase("en", "error")
+    assert done["state"] == "failed" and done["text"] == Failure("context_overflow", "context_overflow").sentence("Raphael", "en")
+    assert rig.task(done["task_id"]).reason == "context_overflow"

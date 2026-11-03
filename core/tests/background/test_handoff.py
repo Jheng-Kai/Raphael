@@ -665,7 +665,7 @@ async def test_a_file_left_in_the_team_folder_counts_as_the_work_it_was_to_leave
     rig.service.use_workspaces(lambda member:[own,team])
     (team/'office.html').write_text('<html></html>',encoding='utf-8')
     rig.client.replies.append(report('The page is in the team folder.'))
-    result=rig.service.handoff(RAPHAEL,args(target,done_when='office.html exists'),source_turn_id=source.id,language='en')
+    result=rig.service.handoff(RAPHAEL,args(target,done_when='office.html exists',requires_artifact=True),source_turn_id=source.id,language='en')
     await until(lambda:rig.task(result.data['task_id']).state in ('done','failed'))
     task=rig.task(result.data['task_id'])
     assert (task.state,task.reason)==('done',None)
@@ -676,7 +676,7 @@ async def test_required_artifact_and_modified_artifact_cannot_complete(make_rig,
     rig=make_rig()
     target,source=setup(rig)
     task_id,_=rig.service._store.accept_handoff(source=source,parent=None,assignee=target.id,model='fake/model',
-        request='Write the report',stage='artifact',mode='work',done_when='A verified HTML file',language='en')
+        request='Write the report',stage='artifact',mode='work',done_when='A verified HTML file',language='en',requires_artifact=True)
     store=rig.service._store
     store.record_evidence(task_id,'read',kind='tool_receipt',uri='read',digest='receipt',mime='text/plain')
     assert store.completion_reason(store.get(task_id))=='missing_artifact'

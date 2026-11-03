@@ -430,7 +430,7 @@ async def test_a_worker_that_is_slow_to_start_is_waited_for_as_long_as_its_hello
         (OpenRouterError(0, "network", "x"), "offline"),
         (OpenRouterError(400, "bad_request", "x"), "error"),
         (OpenRouterError(404, "bad_request", "x"), "worker_model"),
-        (RuntimeError("boom"), "error"),
+        (RuntimeError("boom"), "worker_model_error"),
     ],
 )
 async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(make_rig, error, line, monkeypatch):
@@ -439,7 +439,9 @@ async def test_a_model_that_fails_ends_the_task_with_the_reason_in_a_fixed_line(
     rig.client.replies = [error] * 4
     task_id = rig.submit()
     [done] = await rig.wait_for_reports()
-    assert (done["state"], done["prefix"], done["text"]) == ("failed", "Negative", phrase("en", line))
+    from raphael_core.failures import classify
+    expected = classify(error, record=False).sentence("Raphael", "en") if isinstance(error, OpenRouterError) and line != "worker_model" else phrase("en", line)
+    assert (done["state"], done["prefix"], done["text"]) == ("failed", "Negative", expected)
     assert rig.task(task_id).state == "failed"
 
 

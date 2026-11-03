@@ -300,7 +300,7 @@ _AT_THIS_COMPUTER = frozenset({*_QUICK_SOURCES, TYPED})
 VOICE_TURN_TIMEOUT_S = 180.0
 # The statuses of a turn that ended with a denial or a question that ran out: Raphael does not say
 # these aloud, as the owner knows (a "no", an Esc) or was not there.
-_UNSPOKEN = ("denied", "expired")
+_UNSPOKEN = ("denied", "expired", "cancelled")
 # Route classification retained for callers; all routes now share the full-history
 # and selected half-window context policy.
 _FULL_CONTEXT_ROUTES = ("discuss",)
@@ -343,7 +343,7 @@ def _plugin_outcome(result: PluginResult) -> str:
         return "ok"
     if result.kind == "timeout":
         return "timeout"
-    if result.kind in ("blocked", "changed", "gone"):
+    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store"):
         return "blocked"
     if result.kind == "cancelled":
         return "cancelled"
@@ -1273,7 +1273,7 @@ class AgentService:
                         self._inbox.settle(turn_id, outcome)
                     turn = self._history.get(turn_id)
                     if turn and turn.status == 'queued' and self._was_cancelled(ask.session_id):
-                        self._history.resolve(turn_id, prefix='', text='', detail=None, status='denied', cost_usd=0)
+                        self._history.resolve(turn_id, prefix='', text='', detail=None, status='cancelled', cost_usd=0)
                         self._turn_changed(turn_id, scope[0])
                     if first and not waiter.done():
                         waiter.set_result(result)
@@ -1373,7 +1373,7 @@ class AgentService:
         finally:
             if task.cancelled() and ask.turn_id:
                 self._finish(ask, "answer", "understood", phrase(ask.language, "denied"),
-                             ask.ledger or Ledger(self._spend), status="denied")
+                             ask.ledger or Ledger(self._spend), status="cancelled")
             if self._inflight.get(ask.session_id) is task:
                 del self._inflight[ask.session_id]
                 self._inflight_members.pop(ask.session_id, None)
@@ -1602,7 +1602,7 @@ class AgentService:
         try:
             self._gate.check(action or Action("memory_update", {}), approval)
         except (UnknownTool, NotApproved):
-            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", time.perf_counter(), "blocked"))
+            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", time.perf_counter(), "approval_required"))
             return Applied()
         began = time.perf_counter()
         untrusted = bool(ask.memory_untrusted or ask.attachments or any(r.untrusted or (r.name == "web_search" and r.ok) for r in seen))
@@ -1612,7 +1612,7 @@ class AgentService:
         for _ in (*applied.written, *applied.deleted):
             ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "ok", began, None, "external_content" if untrusted else None))
         for _ in applied.refused:
-            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", began, "blocked"))
+            ask.steps.append(self._step("tool", "memory_update", BUILTIN_SERVER, "blocked", began, "memory_refused"))
         logger.info(
             "Notes from a turn: written=%d deleted=%d refused=%d",
             len(applied.written),
@@ -2202,7 +2202,8 @@ class AgentService:
                     elif name in ("web_read", "show"):
                         url = args.get("url")
                         if not isinstance(url, str) or not urls.seen(url):
-                            return ToolOutcome(False, "url_not_seen")
+                            ask.steps.append(self._step("tool", name, BUILTIN_SERVER, "blocked", time.perf_counter(), "url_not_seen"))
+                            return ToolOutcome(False, "url_not_seen", instruction="This URL was not seen in the owner's request or a tool result. Use a URL already supplied or find it with web_search first.")
                         operation = self._tools.show(url) if name == "show" else self._tools.web_read(url)
                         result = await self._tool(ask, operation, name)
                         if name == "show" and result.ok:
@@ -3608,8 +3609,10 @@ class AgentService:
         for a failure of the world: "blocked" when the speaker may not, "bad_arguments" for
         arguments it cannot take, "not_found" for nobody of that name."""
         team = self._team
-        if team is None or name not in TEAM_TOOLS or (name not in (*SKILL_TOOLS, "handoff") and not speaker.may_ask):
-            return ToolResult(name, False, None, "blocked")
+        if team is None or name not in TEAM_TOOLS:
+            return ToolResult(name, False, None, "blocked", instruction="This team tool is unavailable here. Answer with the information already available or tell the owner what is missing.")
+        if name not in (*SKILL_TOOLS, "handoff") and not speaker.may_ask:
+            return ToolResult(name, False, None, "blocked", instruction="This consultation chain is at its depth limit. Answer with what you have and name what is missing; do not ask another colleague in this chain.")
         current = self._speaker(speaker.id)
         if name in (CREATE_MEMBER, "room_meeting") and (current is None or speaker.depth):
             return ToolResult(name, False, None, "blocked")
@@ -3679,7 +3682,10 @@ class AgentService:
         if target is None:
             return ToolResult(name, False, None, "not_found")
         if not speaker.can_ask(target):  # itself, someone already in the chain, or too deep
-            return ToolResult(name, False, None, "blocked")
+            cause = "You cannot consult yourself." if target.id == speaker.id else "That colleague is already in this consultation chain and is waiting for your result."
+            return ToolResult(name, False, None, "blocked", instruction=cause + (
+                " Answer with what you have and say what is missing; "
+                "use handoff for separate work by another available colleague."))
         # No clock on the colleague: it answers when it has, as long as that takes. The depth and the cycle
         # guard above bound the chain, the owner's stop ends it, and the colleague's own model calls bound themselves.
         ok, said = await self.answer_for(
@@ -4352,7 +4358,7 @@ class AgentService:
             return _Silent({"status": "done", "turn_id": ask.turn_id, "prefix": "", "text": ""})
         finally:
             if task.cancelled():
-                self._finish(ask, "answer", "understood", phrase(ask.language, "denied"), run.ledger, status="denied")
+                self._finish(ask, "answer", "understood", phrase(ask.language, "denied"), run.ledger, status="cancelled")
             if self._inflight.get(ask.session_id) is task:
                 del self._inflight[ask.session_id]
                 self._inflight_members.pop(ask.session_id, None)
@@ -4393,7 +4399,7 @@ class AgentService:
                 if isinstance(followup.loop, CliLoop):
                     followup.loop.cancel()
                 self._finish(followup.ask, "answer", "understood", phrase(pending.language, "denied"),
-                             (followup.loop or followup.ask).ledger or Ledger(self._spend), status="denied")
+                             (followup.loop or followup.ask).ledger or Ledger(self._spend), status="cancelled")
             elif expired and done.exception() is not None:
                 logger.warning("An expired CLI confirmation could not resume: %s", type(done.exception()).__name__)
                 self._failed(followup.ask, "answer", "error", followup.loop.ledger)
@@ -4418,6 +4424,12 @@ class AgentService:
         """End the turn of a question: what Raphael says now, and how it ended."""
         turn = self._history.get(pending.turn_id)
         prefix = _prefix(pending.language, which) if turn is None or turn.member_id == 0 else ""
+        reply_text = text
+        if status == 'cancelled':
+            saved = [message['text'] for message in self._history.messages([pending.turn_id]).get(pending.turn_id, [])
+                     if message['kind'] == 'reply']
+            if saved:
+                text = '\n\n'.join([*saved, text])
         self._write(
             lambda: self._history.resolve(
                 pending.turn_id,
@@ -4431,7 +4443,7 @@ class AgentService:
         )
         if turn is not None and (turn.source != VOICE or turn.member_id != 0) and text:
             self._write(lambda: self._history.add_message(
-                pending.turn_id, "reply", compose(prefix, text, None)
+                pending.turn_id, "reply", compose(prefix, reply_text, None)
             ))
         if turn is not None:
             # Raphael, not the brain, says how this turn ended, so a CLI brain's own thread still ends where the brain
@@ -4456,8 +4468,9 @@ class AgentService:
     def _deny(self, pendings: list[Pending]) -> None:
         for pending in pendings:
             self._card_state(pending.id, "cancelled")
+            # The permission audit keeps its unapproved-call outcome; the turn itself was cancelled.
             self._drop_followup(pending, "denied")
-            self._outcome(pending, "understood", phrase(pending.language, "denied"), "denied")
+            self._outcome(pending, "understood", phrase(pending.language, "denied"), "cancelled")
 
     def _computer_refusal(self, pending, kind):
         if pending.action.tool.startswith("mcp:computer-access-"):
@@ -5237,8 +5250,14 @@ class AgentService:
         which the exchange's line shows; the asker's model is handed the answer with its speaker."""
         member_id = ask.speaker.id
         question = ask.original_text if ask.original_text is not None else ask.text
+        if status == 'cancelled':
+            saved = [message['text'] for message in self._history.messages([ask.turn_id]).get(ask.turn_id, [])
+                     if message['kind'] == 'reply'] if ask.turn_id else []
+            said = '\n\n'.join(saved or ask.replies)
+            if said and said != text:
+                text = said + '\n\n' + text
         if ask.exchange_speakers is not None:
-            text = "\n".join(ask.replies) if ask.replies else text
+            text = "\n".join(ask.replies) if ask.replies and status != 'cancelled' else text
             ask.exchange_answer = relayed_answer(ask.exchange_speakers[1], text, ask.exchange_owner_sources)
         try:
             cost = max(ledger.total - ask.cost_base, 0.0)

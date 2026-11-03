@@ -93,7 +93,7 @@ class Crew:
             self.ids = {name: int(number) for name, number in re.findall(r'"created": "(\w+)", "id": (\d+)', results)}
             work = [("Builder", "build", "Build office.html in the workspace", "office.html exists in the workspace"),
                     ("Tester", "test", "Look at the screen and test the page", "Report what the test run showed")]
-            calls = [self.call("handoff", member_id=self.ids[name], stage_id=stage, request=request, done_when=done)
+            calls = [self.call("handoff", member_id=self.ids[name], stage_id=stage, request=request, done_when=done, requires_artifact=name == "Builder")
                      for name, stage, request, done in work]
             return self.turn("I hand the work over.", calls, kwargs)
         if me == 0:

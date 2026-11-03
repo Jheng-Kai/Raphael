@@ -4140,6 +4140,17 @@ export function checkRendered(name, context = {}) {
     }
     return { check: name, chips: chips.length };
   }
+  if (name === "task-ending-reasons") {
+    const turn = document.querySelector('.page-agent:not([hidden]) [data-status="cancelled"]');
+    const body = turn?.querySelector('.work-body:not([hidden])');
+    require(visible(body), "the cancelled turn can open its recorded work");
+    const words = body.textContent;
+    for (const reason of ["等待你在程式內核准", "這次記憶修改未符合記憶規則", "不允許讀取憑證儲存區", "這個網址尚未由你提供，也未出現在工具結果中"])
+      require(words.includes(reason), `the recorded refusal is explained: ${reason}`);
+    require(turn.textContent.includes("已核對兩個項目。") && turn.textContent.includes("7 次工具呼叫"), "the original answer and real count survive cancellation");
+    require(!turn.querySelector('.live-presence'), "cancelled history is terminal");
+    return { check: name, reasons: 4 };
+  }
   if (name === "work-steps-own-words") {
     // Old turns name actions in sentences, without reconstructing private arguments.
     const body = document.querySelector('.page-agent:not([hidden]) .work-body');

@@ -83,6 +83,14 @@ class Sessions:
             self.conn.execute("DELETE FROM agent_conversation_cli_sessions")
             self.conn.execute("DELETE FROM agent_cli_sessions")
 
+    def forget(self, member, brain, conversation_id=None):
+        if conversation_id is None:
+            conversation_id = self.conversations.main(member)
+        with self.conn:
+            self.conn.execute("DELETE FROM agent_conversation_cli_sessions WHERE conversation_id=? AND brain=? "
+                              "AND conversation_id IN (SELECT id FROM conversations WHERE member_id=?)",
+                              (conversation_id, brain, member))
+
     def clear_member(self, member_id):
         with self.conn:
             self.conn.execute(
@@ -396,12 +404,12 @@ class CliLoop:
                 native.append(item)
         return native
 
-    def _recovery_block(self):
+    def _recovery_block(self, limit=RECOVERY_BLOCK_CHARS):
         sources = [("steps", item) for item in self._receipts] + [("native_steps", item) for item in self._native_records()]
         records = {"steps": [], "native_steps": [], "omitted_steps": len(sources)}
 
         def render():
-            return wrap_untrusted("CLI recovery records", json.dumps(records, ensure_ascii=False), ok=True, limit=RECOVERY_BLOCK_CHARS)
+            return wrap_untrusted("CLI recovery records", json.dumps(records, ensure_ascii=False), ok=True, limit=limit)
 
         block = render()
         # Uncertain effects get space before completed work, newest first within either group.
@@ -419,7 +427,7 @@ class CliLoop:
             records[group].append(record)
             records["omitted_steps"] -= 1
             candidate = render()
-            if len(candidate) <= RECOVERY_BLOCK_CHARS:
+            if len(candidate) <= limit:
                 block = candidate
             else:
                 records[group].pop()
@@ -477,8 +485,21 @@ class CliLoop:
                     recovery_outage = None
                     told = False
                     recovering = False
+                    fresh_context = False
                     while True:
+                        resumed = self._session is not None
                         failure = await self._attempt(name, command, model, server, self._session, workspace, recovering=recovering)
+                        if failure == "context_overflow" and resumed and not fresh_context:
+                            # One bounded fresh attempt can escape an oversized native history without replaying effects.
+                            self.sessions.forget(self.member_id, self.model, self.conversation_id)
+                            self._session = None
+                            fresh_context = self._fresh_context = True
+                            recovering = True
+                            self.progress({
+                                'zh-TW': '續接的對話內容過長，正在以簡短工作紀錄啟動新的工作階段。',
+                                'ja': '再開する履歴が長すぎるため、短い作業記録で新しいセッションを開始します。',
+                            }.get(self.language, 'The resumed history is too long; starting a fresh session with a short work record.'))
+                            continue
                         if failure in ("tools_changed", "owner_input"):
                             self.catalog_changed = False
                             if failure == "tools_changed" and not self.user.startswith(self.reload_note):
@@ -533,7 +554,11 @@ class CliLoop:
                 self.tool_messages.extend(pending)
                 if pending:
                     self.user += "\n\n" + "\n\n".join(message["content"] for message in pending)
-                user = self._recovery_user() if recovering else self.user
+                if getattr(self, '_fresh_context', False):
+                    owner = '\n\n'.join(message['content'] for message in self.tool_messages if message['role'] == 'user')
+                    user = self._original_user[-4000:] + '\n\n' + owner[-4000:] + "\n\n" + RECOVER + "\n" + self._recovery_block(8000)
+                else:
+                    user = self._recovery_user() if recovering else self.user
             with StreamSteps(lambda: self.activity_turn) as steps:
                 self.catalog_changed = False
                 return await self._stream_attempt(name, command, model, server, session, workspace, steps, user=user)

@@ -1362,6 +1362,13 @@ PRAGMA user_version = 58;
 COMMIT;
 """
 
+_MIGRATIONS[59] = """
+BEGIN;
+ALTER TABLE worker_tasks ADD COLUMN requires_artifact INTEGER NOT NULL DEFAULT 0 CHECK (requires_artifact IN (0,1));
+PRAGMA user_version = 59;
+COMMIT;
+"""
+
 LATEST_VERSION = max(_MIGRATIONS)
 
 

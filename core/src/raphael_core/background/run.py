@@ -173,7 +173,7 @@ def _outcome_of(result: PluginResult) -> str:
         return "timeout"
     if result.kind == "cancelled":  # sent, and the connection ended: it may have been made
         return "cancelled"
-    if result.kind in ("blocked", "changed", "gone"):
+    if result.kind in ("blocked", "changed", "gone", "approval_required", "secret_store"):
         return "blocked"
     return "error"
 
@@ -580,8 +580,8 @@ class TaskRun:
             if error.kind == "timeout":
                 self._charge_estimate(request_chars)
             diagnostic = classify(error, record=False)
+            self.model_failure = diagnostic
             if diagnostic.missing is not None:
-                self.model_failure = diagnostic
                 missing = diagnostic.missing
                 reason = diagnostic.kind if diagnostic.kind.startswith("chatgpt_") else "provider_" + missing.state
                 self._step(kind="model", tool="provider", outcome="error", ms=_ms(began), reason=reason, detail=missing.resource)

@@ -34,6 +34,16 @@ import type { AgentStep, AgentTask, AgentTurn } from "./types";
 
 afterEach(() => setLocale("zh-TW"));
 
+test.each([
+  ["approval_required", "Waiting for your approval in the app"],
+  ["memory_refused", "This memory edit was refused by the memory rules"],
+  ["secret_store", "Reading credential stores is refused"],
+  ["url_not_seen", "This URL was not supplied or found in a tool result"],
+])("blocked steps explain %s", (reason, explanation) => {
+  setLocale("en");
+  expect(reasonText(step({ outcome: "blocked", reason }))).toBe(explanation);
+});
+
 test("queued owner bubbles show a muted mark and withdraw instead of edit or live presence", () => {
   setLocale("en");
   document.body.innerHTML = turnHTML(turn(91, { status: "queued", text: "", messages: [], model: null }), emptyTimelineState(), false, LOOK);

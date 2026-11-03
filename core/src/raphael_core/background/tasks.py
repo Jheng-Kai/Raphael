@@ -38,12 +38,12 @@ from dataclasses import dataclass
 
 from ..clock import wall_clock_ms
 from ..agent.conversations import Conversations
+from ..agent.steps import reason_of
 from ..worker.stall_guards import stalled
 
 QUEUED, RUNNING, WAITING = "queued", "running", "waiting"
 FINAL_STATES = ("done", "failed", "limit", "cancelled", "interrupted")
-# What a `done_when` says when the work is to leave a file, and the file names it gives.
-ARTIFACT_WORDS = re.compile(r'(?i)\b(html|xlsx|pdf|artifact|file)\b|檔案|產物')
+# File names narrow the scan only after the caller explicitly requires an artifact.
 FILE_NAMES = re.compile(r'(?i)(?<![\w/])([\w.-]+\.(?:html|xlsx|pdf|csv|txt|json))(?!\w)')
 # A design, a plan or a review is work done in the words themselves, on a brain that used no tool for it. So few words
 # are a promise or a line, not that.
@@ -103,6 +103,7 @@ class Task:
     schedule_provenance: str = "{}"
     continuation: str | None = None
     generation: int = 0
+    requires_artifact: bool = False
 
     @property
     def quiet(self) -> bool:
@@ -155,7 +156,7 @@ _TASK_COLUMNS = (
     " report_prefix, report_text, report_detail, reason, model_calls, tool_calls, cost_usd,"
     " announced, rerun_of, member_id, routine_id, scope, room_id, thread_id,"
     " parent_task_id, root_task_id, stage_id, from_member_id, source_turn_id, model_ref, mode,"
-    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation"
+    " done_when, idempotency_key, ready_at_ms, dispatch_policy, schedule_provenance, continuation, generation, requires_artifact"
 )
 _STEP_COLUMNS = "n, at_ms, kind, tool, server, tier, outcome, cost_usd, ms, reason, detail"
 
@@ -185,6 +186,11 @@ class TaskStore:
                 " rerun_of, member_id, routine_id) VALUES (?, 'queued', ?, ?, ?, ?, ?, ?)",
                 (self._now_ms(), session_id, language, text, rerun_of, member_id, routine_id),
             )
+            if rerun_of is not None:
+                self._conn.execute("UPDATE worker_tasks SET (mode,done_when,requires_artifact)="
+                    "(SELECT mode,done_when,requires_artifact FROM worker_tasks WHERE id=?) "
+                    "WHERE id=? AND EXISTS (SELECT 1 FROM worker_tasks WHERE id=?)",
+                    (rerun_of, cursor.lastrowid, rerun_of))
         assert cursor.lastrowid is not None
         return cursor.lastrowid
 
@@ -208,12 +214,12 @@ class TaskStore:
                 "SELECT id,(SELECT COALESCE(MAX(attempt),0)+1 FROM task_executions WHERE task_id=?),"
                 "'running',model_ref,? FROM worker_tasks WHERE id=?", (task_id,self._now_ms(),task_id))
 
-    def accept_handoff(self, *, source, parent, assignee, model, request, stage, mode, done_when, language):
+    def accept_handoff(self, *, source, parent, assignee, model, request, stage, mode, done_when, language, requires_artifact=False):
         """Commit the receipt, isolated work turn and queued event together; source dates never defer work."""
         key = hashlib.sha256(json.dumps([source.id, stage], ensure_ascii=False).encode()).hexdigest()
-        existing = self._conn.execute("SELECT id,member_id,text,mode,done_when FROM worker_tasks WHERE idempotency_key=?", (key,)).fetchone()
+        existing = self._conn.execute("SELECT id,member_id,text,mode,done_when,requires_artifact FROM worker_tasks WHERE idempotency_key=?", (key,)).fetchone()
         if existing:
-            if (existing['member_id'],existing['text'],existing['mode'],existing['done_when']) != (assignee,request,mode,done_when):
+            if (existing['member_id'],existing['text'],existing['mode'],existing['done_when'],existing['requires_artifact']) != (assignee,request,mode,done_when,requires_artifact):
                 raise Refused('stage_conflict')
             return existing['id'], True
         scope_key = f"root:{parent.root_task_id or parent.id}" if parent else f"turn:{source.id}"
@@ -229,11 +235,11 @@ class TaskStore:
         with self._conn:
             cursor = self._conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,member_id,"
                 "scope,room_id,thread_id,parent_task_id,root_task_id,stage_id,from_member_id,source_turn_id,model_ref,"
-                "mode,done_when,idempotency_key,ready_at_ms,schedule_provenance) VALUES (?,'queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "mode,done_when,idempotency_key,ready_at_ms,schedule_provenance,requires_artifact) VALUES (?,'queued',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (now,source.session_id,language,request,assignee,'room' if source.scope=='room' else 'exchange',
                  source.room_id,source.thread_id,parent.id if parent else None,(parent.root_task_id or parent.id) if parent else None,
                  stage,source.member_id,source.id,model,mode,done_when,key,now,
-                 json.dumps({'kind':'owner_or_discussion_work','source_turn_id':source.id,'authorization':'immediate_only'})))
+                 json.dumps({'kind':'owner_or_discussion_work','source_turn_id':source.id,'authorization':'immediate_only'}),requires_artifact))
             task_id = cursor.lastrowid
             if owner:
                 changed = self._conn.execute("UPDATE task_stage_owners SET owner_task_id=? WHERE scope_key=? AND stage_id=? AND owner_task_id=?",
@@ -326,16 +332,14 @@ class TaskStore:
         return digest
 
     def completion_reason(self, task, *, verifiable=True, said=""):
-        """Validate executor receipts and required artifacts; a promise never proves work. Work with
-        nowhere to look for a file (`verifiable` false: its member has no computer) is not asked for one,
-        and work that asks for none may be done in what it `said`, at length and with nothing left to do."""
+        """Validate receipts and explicit file requirements, even without a member workspace."""
         evidence = self.evidence(task.id)
         artifacts = [item for item in evidence if item['kind'] == 'artifact']
-        requires_artifact = verifiable and bool(ARTIFACT_WORDS.search(task.done_when))
-        if not evidence:
-            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
+        requires_artifact = task.requires_artifact
         if requires_artifact and not artifacts:
             return 'missing_artifact'
+        if not evidence:
+            return None if not requires_artifact and len(said.strip()) >= WRITTEN_WORK_CHARS and not stalled(said) else 'work_without_action'
         for item in artifacts:
             try:
                 root = Path(item['workspace']).resolve(strict=True)
@@ -344,8 +348,11 @@ class TaskStore:
                     return 'artifact_changed'
             except (OSError, TypeError, ValueError):
                 return 'missing_artifact'
-        expected = FILE_NAMES.findall(task.done_when) if verifiable else []
-        if any(not any(Path(item['uri']).name.lower() == name.lower() for item in artifacts) for name in expected):
+        expected = FILE_NAMES.findall(task.done_when) if requires_artifact else []
+        names = [Path(item['uri']).name.lower() for item in artifacts]
+        # A filename extracted from prose can be the last word of a named path containing spaces.
+        if any(not any(found == name.lower() or (found in task.done_when.lower() and found.endswith(' ' + name.lower()))
+                       for found in names) for name in expected):
             return 'missing_artifact'
         return None
 
@@ -439,7 +446,7 @@ class TaskStore:
                     outcome,
                     cost_usd,
                     ms,
-                    reason,
+                    reason or (reason_of(outcome, None) if outcome == 'blocked' else None),
                     detail,
                 ),
             )
@@ -462,7 +469,7 @@ class TaskStore:
             self._conn.execute(
                 "UPDATE worker_steps SET outcome = ?, tier = ?, ms = ?, reason = ?,"
                 " detail = COALESCE(?, detail), cost_usd = COALESCE(?, cost_usd) WHERE id = ?",
-                (outcome, tier, ms, reason, detail, cost_usd, step_id),
+                (outcome, tier, ms, reason or (reason_of(outcome, None) if outcome == 'blocked' else None), detail, cost_usd, step_id),
             )
 
     def settle_in_progress(self, task_id: int) -> None:

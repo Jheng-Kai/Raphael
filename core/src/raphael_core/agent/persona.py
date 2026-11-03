@@ -120,6 +120,7 @@ class Phrases:
     worker_busy: str  # the queue of background tasks is full
     worker_disabled: str  # the worker was switched off for crashing too often
     worker_model: str  # the answer model takes no tools, so the worker cannot work
+    worker_model_error: str  # the selected model failed without a more specific diagnosis
     worker_done: str  # the worker finished and its report said nothing
     worker_interrupted: str  # the worker stopped without a report: {steps}
     worker_cancelled: str  # the user stopped the task: {steps}
@@ -210,6 +211,7 @@ PHRASES: dict[str, Phrases] = {
         worker_busy="背景任務已滿。請稍後再試。",
         worker_disabled="背景處理因反覆中斷而停用。重新啟動後可再使用。",
         worker_model="目前模型無法呼叫工具，請開啟成員的「大腦」改選支援工具的模型後再執行。",
+        worker_model_error="目前模型發生錯誤，工作未完成。請檢查模型連線後再重試。",
         worker_done="任務完成。",
         worker_interrupted="任務中斷。已執行 {steps} 次工具呼叫。",
         worker_cancelled="任務已中止。已執行 {steps} 次工具呼叫。",
@@ -288,6 +290,7 @@ PHRASES: dict[str, Phrases] = {
             "It is available again after a restart."
         ),
         worker_model="This model cannot call tools. Open the member's Brain, select a tool-capable model and run the task again.",
+        worker_model_error="The selected model failed and the work is incomplete. Check its connection before trying again.",
         worker_done="The task is complete.",
         worker_interrupted="The task was interrupted. Tool calls made: {steps}.",
         worker_cancelled="The task was stopped. Tool calls made: {steps}.",
@@ -363,6 +366,7 @@ PHRASES: dict[str, Phrases] = {
         worker_busy="バックグラウンドの待ち行列が満杯です。後ほどお試しください。",
         worker_disabled="中断が続いたため、バックグラウンド処理を停止しました。再起動で復旧します。",
         worker_model="このモデルはツールを呼び出せません。メンバーのブレインでツール対応モデルを選んで再実行してください。",
+        worker_model_error="モデルでエラーが発生し、作業は未完了です。接続を確認して再試行してください。",
         worker_done="タスクが完了しました。",
         worker_interrupted="タスクが中断されました。ツール呼び出し {steps} 回。",
         worker_cancelled="タスクを中止しました。ツール呼び出し {steps} 回。",

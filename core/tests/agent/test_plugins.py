@@ -446,8 +446,11 @@ async def test_a_question_that_ran_out_is_written_down_once(rig, plugins, client
 
 async def test_esc_is_a_no(rig, plugins, client, calls):
     asked = await ask_for_note(rig, plugins, client)
+    before = rig.service._history.get(asked["turn_id"])
     assert await rig.call("agent.cancel", {"session_id": "s1"}) == {}
     assert plugins.audit() == [("Notes", "note", None, "none", "denied")]
+    stopped = rig.service._history.get(asked["turn_id"])
+    assert stopped.status == "cancelled" and stopped.cost_usd == before.cost_usd
     late = await rig.confirm(asked["confirm"]["id"], True)
     assert late["prefix"] == "否" and calls == []
     assert len(plugins.audit()) == 1

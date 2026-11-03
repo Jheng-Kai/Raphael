@@ -38,6 +38,13 @@ const memberWork = { id: 502, session_id: "look-member-work", member_id: 1, conv
   steps: [["session_search", "Raphael"], ["find_tools", "Raphael"], ["search", "Notion"], ["routine_update", "Raphael"], ["self_check", "Raphael"], ["ask_member", "Raphael"],
     ["fetch", "Notion"]].map(([tool, server], index) => ({ kind: "tool", tool, server, outcome: "ok", at_ms: 1792807155000 + index * 800, ms: 300 + index * 120, reason: null })) };
 const rosterRefresh = { action: "main-event", event: { type: "MembersChanged" } };
+const endingTurn = { ...memberWork, id: 503, status: "cancelled", question: "核對這份合成測試報告。",
+  text: "已核對兩個項目。\n\n工作已中止，已執行 7 次工具呼叫。",
+  messages: [{ seq: 1, kind: "reply", text: "已核對兩個項目。", at_ms: 1792807160000 },
+    { seq: 2, kind: "reply", text: "工作已中止，已執行 7 次工具呼叫。", at_ms: 1792807161000 }],
+  steps: ["approval_required", "memory_refused", "secret_store", "url_not_seen"].map((reason, index) => ({
+    kind: "tool", tool: ["local_exec", "memory_update", "local_exec", "show"][index], server: "Raphael",
+    outcome: "blocked", reason, ms: 20, at_ms: 1792807155000 + index * 800 })) };
 const stopSlot = [wait('.composer[data-task-state]:not([data-task-state="idle"]) .cmp-voice svg'), check("composer-stop-slot")];
 const pendingReply = [type('.cmp-input', "請整理這週的研究重點。"), key("Enter"), rosterRefresh, ...stopSlot, check("pending-work")];
 // The key starts in a formal conversation; only quick owns the processing placeholder.
@@ -264,7 +271,13 @@ export default [
   scene("member-edit", "Edit member dialog", [...details, click('[data-det="gear"]'),click('[data-det="edit"]'), wait(".mb-dialog")]),
   scene("work", "Expanded public work steps", [click('[data-act="thinking"]'), wait(".work-body:not([hidden])")]),
   scene("work-member-builtin", "A member's own tools in its work steps say what was done and never name Raphael; a connected service keeps its name",
-    [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), wait(".work-body:not([hidden]) .work-sentences li"), check("work-steps-own-words")], { turns: [memberWork] }),
+    [member(1), click('.page-agent:not([hidden]) [data-act="thinking"]'), hover('.page-agent:not([hidden]) .cmp-input'),
+      waitGone('.message-tooltip:not([hidden])'), wait(".work-body:not([hidden]) .work-sentences li"), check("work-steps-own-words")], { turns: [memberWork] }),
+  ...["chief", "member"].map(context => scene(`task-ending-${context}`, "A stopped turn preserves its answer and each blocked step explains why",
+    [...(context === "member" ? [member(1)] : []), click('.page-agent:not([hidden]) [data-act="thinking"]'),
+      hover('.page-agent:not([hidden]) .cmp-input'), waitGone('.message-tooltip:not([hidden])'),
+      wait('.work-body:not([hidden]) .work-sentences li'), check("task-ending-reasons")],
+    { turns: [{ ...endingTurn, member_id: context === "member" ? 1 : 0, conversation_id: context === "member" ? 11 : 1 }] })),
   scene("composer", "Composer attachment menu", composer),
   scene("mode", "Composer permission modes, each saying what it does", [...composer, wait("#app-popover [data-mode]"), check("permission-menu")]),
   scene("actions", "Answer actions", [hover(".ra .chat-message[data-reply]"), click('.ra .chat-message[data-reply] [data-act="more-message"]'), wait("#app-popover")]),

@@ -116,6 +116,7 @@ def _definition(name: str) -> dict[str, Any]:
                     "member_id":{"type":"integer"}, "request":{"type":"string","maxLength":2000},
                     "stage_id":{"type":"string","maxLength":100},
                     "mode":{"type":"string","enum":["work","consult"]},
+                    "requires_artifact":{"type":"boolean","default":False,"description":"True only when completion requires a file; false for read-only reviews and written answers."},
                     "done_when":{"type":"string","maxLength":2000}},
                     "required":["member_id","request","stage_id","done_when"], "additionalProperties":False}}
     if name == ROOM_MEETING:
