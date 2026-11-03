@@ -120,7 +120,8 @@ export function mountStageDrop(stage: HTMLElement, control: () => HTMLElement, a
   overlay.innerHTML = `${ico("file")}<span></span>`;
   stage.append(overlay);
   const measure = (): void => {
-    overlay.querySelector("span")!.textContent = t("agent.dropFiles");
+    const label = overlay.querySelector("span")!, words = t("agent.dropFiles");
+    if (label.textContent !== words) label.textContent = words;
     overlay.style.bottom = `${Math.max(12, stage.getBoundingClientRect().bottom - control().getBoundingClientRect().top + 12)}px`;
   };
   stage.addEventListener("dragenter", measure, true);

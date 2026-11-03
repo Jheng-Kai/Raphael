@@ -227,14 +227,28 @@ test("show reads an unread thread already loaded while hidden", async () => {
   agent.hide();
 });
 
-test("a restarted core receives the current viewing even with an unchanged roster", async () => {
+const openDetails = async (): Promise<void> => { if (document.querySelector<HTMLElement>(".mb-det")?.hidden) $(".conversation-trigger").click(); await flush(); };
+
+test("a closed details panel reads nothing while work runs, and opening it shows the current counts", async () => {
   const agent = mount(); await flush(); await pick(3);
+  expect(document.querySelector<HTMLElement>(".mb-det")!.hidden).toBe(true);
+  api.core.mockClear();
+  send({ type: "CoreReady" } as unknown as MainEvent); await flush();
+  const read = (): string[] => api.core.mock.calls.map(([method]) => method as string);
+  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).not.toContain(method);
+  await openDetails();
+  for (const method of ["memory.get", "members.skills.list", "members.commands.list"]) expect(read()).toContain(method);
+  agent.hide();
+});
+
+test("a restarted core receives the current viewing even with an unchanged roster", async () => {
+  const agent = mount(); await flush(); await pick(3); await openDetails();
   api.membersViewing.mockClear(); api.membersList.mockClear();
   api.core.mockClear();
   send({ type: "CoreReady" } as unknown as MainEvent); await flush();
   expect(api.membersList).toHaveBeenCalledTimes(1);
   expect(api.membersViewing).toHaveBeenCalledExactlyOnceWith(3);
-  expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true);
+  await vi.waitFor(() => expect(api.core.mock.calls.some(([method]) => method === "memory.get")).toBe(true));
   agent.hide();
 });
 
@@ -364,7 +378,7 @@ test("the sidebar's plus makes no conversation, and 新對話 in a member's deta
     conversations.push(made);
     return { conversation: made };
   });
-  const agent = mount(); await flush(); await pick(3);
+  const agent = mount(); await flush(); await pick(3); await openDetails();
   $('[data-col="add"]').click();
   expect(document.querySelector('#app-popover [data-pick="conversation"]')).toBeNull();
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -670,6 +684,7 @@ test("member notifications refresh names, groups, unread dots and the open heade
   mount();
   await flush();
   await pick(3);
+  await openDetails();
   const next = structuredClone(LIST);
   next.members[1] = { ...next.members[1], name: "Updated name", role: "Updated role", group_id: 5 };
   next.members[2] = { ...next.members[2], waiting: true, unread: true, preview: "New preview" };

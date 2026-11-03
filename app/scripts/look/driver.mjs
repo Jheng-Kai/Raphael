@@ -2,6 +2,7 @@ import { assertStableClick, stableSnapshot, stableControls } from "./stable-clic
 import { checkRendered } from "./checks.mjs";
 import { idleCost, paintedSlime, slimeBoard, slimeParts, slimePointer, slimeSharp } from "./slime-board.mjs";
 import { eventStorm } from "./event-storm.mjs";
+import { sendProbe } from "./send-probe.mjs";
 import { animationAudit, motionCost, motionDetails } from "./motion-cost.mjs";
 
 export function finiteMotionSettled() {
@@ -480,6 +481,7 @@ export async function perform(page, step, evidenceDirectory) {
       return result;
     }
     case "event-storm": return await eventStorm(page, step);
+    case "send-probe": return await sendProbe(page, step);
     case "advance-time":
       // Advance the shared fixed clock, then let production timers observe it.
       await page.evaluate(ms => { window.__look.now = Date.now() + ms; }, step.ms);

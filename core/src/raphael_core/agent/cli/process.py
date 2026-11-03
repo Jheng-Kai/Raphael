@@ -157,7 +157,8 @@ class Child:
     async def start(self):
         if sum(len(arg) + 3 for arg in self.command) > 30000:
             raise ValueError("command_too_long")
-        flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {"start_new_session": True}
+        # Everything the brain starts inherits this class, so its heaviest job gives way to the owner's window.
+        flags = {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS} if os.name == "nt" else {"start_new_session": True}
         self.process = await asyncio.create_subprocess_exec(
             *self.command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, env=self.environ, cwd=self.cwd, limit=4 * 1024 * 1024,

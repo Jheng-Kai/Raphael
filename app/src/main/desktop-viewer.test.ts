@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-const api = vi.hoisted(() => ({ desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
+const api = vi.hoisted(() => ({ desktopWallpaper:vi.fn(), desktopTeach:vi.fn(), desktopStatus:vi.fn(), desktopOpen:vi.fn(), desktopRenew:vi.fn(), desktopControl:vi.fn(), desktopClose:vi.fn(), desktopRevoke:vi.fn() }));
 vi.mock("./api", () => api);
 import { mountDesktopViewer, preparationHTML, type DesktopState } from "./desktop-viewer";
 import { setLocale, t } from "./i18n";
@@ -277,6 +277,35 @@ test('real build percent updates preserve the working character and unchanged re
  expect(panel().querySelector('progress')?.getAttribute('value')).toBe('74');
  const observer=new MutationObserver(()=>{}); observer.observe(host,{subtree:true,childList:true,attributes:true,characterData:true});
  await vi.advanceTimersByTimeAsync(2000); await flush(); expect(observer.takeRecords()).toHaveLength(0); observer.disconnect();
+});
+
+const OWN_PICTURE = 'data:image/jpeg;base64,/9j/sample';
+test.each(['data-card-desktop-screen','data-card-screen'])('the owner picture replaces the town on the panel and the %s card',async attribute=>{
+ panelOpen=true; api.desktopWallpaper.mockResolvedValue({image:OWN_PICTURE});
+ const inline=document.createElement('div'); inline.setAttribute(attribute,''); host.querySelector('ol')!.append(inline);
+ api.desktopStatus.mockResolvedValue({state:'starting',ready:false,control:'member'}); mounted.show(); await flush();
+ for (const picture of [panel().querySelector('.desktop-wallpaper'),inline.querySelector('.desktop-wallpaper')]) {
+  expect(picture?.getAttribute('src')).toBe(OWN_PICTURE);
+  expect(picture?.hasAttribute('data-own')).toBe(true);
+ }
+});
+
+test('the picture is read once and a failed read keeps the town without any owner marking',async()=>{
+ panelOpen=true; api.desktopWallpaper.mockRejectedValue(new Error('Synthetic read failure'));
+ mounted.show(); await flush(); mounted.hide(); await flush(); mounted.show(); await flush();
+ const picture=panel().querySelector('.desktop-wallpaper')!;
+ expect(picture.getAttribute('src')).toMatch(/^\/wallpapers\/(morning|noon|dusk|evening|night)\.svg$/);
+ expect(picture.hasAttribute('data-own')).toBe(false);
+ expect(api.desktopWallpaper).toHaveBeenCalledTimes(1);
+});
+
+test('the town never flashes before the picture read answers',async()=>{
+ panelOpen=true; let answer!:(value:{image?:string})=>void;
+ api.desktopWallpaper.mockReturnValue(new Promise(resolve=>{answer=resolve;}));
+ mounted.show(); await flush();
+ expect(panel().querySelector('.desktop-wallpaper')?.hasAttribute('src')).toBe(false);
+ answer({image:OWN_PICTURE}); await flush();
+ expect(panel().querySelector('.desktop-wallpaper')?.getAttribute('src')).toBe(OWN_PICTURE);
 });
 
 test.each(['data-card-desktop-screen','data-card-screen'])('the %s card shares the boot wallpaper and current stage',async attribute=>{

@@ -2,7 +2,15 @@
 export function checkRendered(name, context = {}) {
   const visible = element => element && element.checkVisibility() && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0;
   const require = (condition, message) => { if (!condition) throw new Error(`${name}: ${message}`); };
-  if (name.startsWith('desktop-boot') || name.startsWith('desktop-period-')) {
+  if (name === 'desktop-own-wallpaper') {
+    for (const image of [...document.querySelectorAll('.desktop-wallpaper[data-own]')].filter(visible)) {
+      require(image.complete && image.naturalWidth > 0, 'the picture decoded');
+      require(getComputedStyle(image).objectPosition === '50% 50%', 'the picture is centred as the guest zooms it');
+      const pill = image.parentElement.querySelector('.desktop-preparation').getBoundingClientRect(), box = image.parentElement.getBoundingClientRect();
+      require(pill.top >= box.top + box.height * 0.3 && pill.bottom <= box.bottom, 'the stage leaves the upper third of the picture clear');
+    }
+    return {check:name};
+  }  if (name.startsWith('desktop-boot') || name.startsWith('desktop-period-')) {
     const panel = document.querySelector('.desktop-panel');
     const screen = name === 'desktop-boot-inline' ? document.querySelector('[data-card-desktop-screen], [data-card-screen]') : panel.querySelector('.desktop-screen');
     const preparation = screen.querySelector('.desktop-preparation');

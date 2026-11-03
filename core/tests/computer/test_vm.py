@@ -137,6 +137,66 @@ async def test_start_installs_the_decorative_wallpaper_once_per_start_and_target
     assert len([args for args, _ in runtime.calls if args[0] == 'cp']) == 4
 
 
+def test_finding_docker_walks_path_once_however_often_it_is_asked(monkeypatch):
+    from raphael_core.computer import vm as module
+    walked = []
+    monkeypatch.setattr('raphael_core.computer.desktop_host.shutil.which', lambda name: walked.append(name) or 'docker.exe')
+    monkeypatch.setattr(module, '_docker_cli', None)
+    for _ in range(50):
+        assert module.Docker('').argv(['info'])[0] == 'docker.exe'
+    assert len(walked) == 1
+
+
+async def test_an_installed_check_does_not_walk_path_on_every_poll(tmp_path, monkeypatch):
+    from raphael_core.computer.desktop_host import DockerDesktop
+    walked = []
+    monkeypatch.setattr('raphael_core.computer.desktop_host.shutil.which', lambda name: walked.append(name) or 'docker.exe')
+    vm = LocalVm(tmp_path, runner=Runtime())
+    vm.desktop = DockerDesktop()
+    for _ in range(20):
+        assert await vm.installed()
+    assert len(walked) == 1
+
+
+def _watcher_script(runtime):
+    return next(args[-1] for args, _ in runtime.calls if args[0] == 'exec' and '-d' in args and 'sh' in args)
+
+
+async def test_the_owner_picture_goes_to_the_guest_and_the_watcher_keeps_it(desktop, tmp_path):
+    vm, target, runtime = desktop
+    (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
+    assert (await vm.start(target))['ready']
+    own = [args for args, _ in runtime.calls if args[0] == 'cp' and args[-1] == target.name + ':/opt/raphael-desktop/wallpapers/own.jpg']
+    assert [Path(args[1]).name for args in own] == ['computer-wallpaper.jpg']
+    assert '--watch --image /opt/raphael-desktop/wallpapers/own.jpg' in _watcher_script(runtime)
+
+
+@pytest.mark.parametrize('content', [None, b'<svg/>', b'\xff\xd8\xff' + b'0' * 8_000_000], ids=['absent', 'not-a-jpeg', 'too-large'])
+async def test_without_a_usable_picture_the_guest_keeps_the_town(desktop, tmp_path, content):
+    vm, target, runtime = desktop
+    if content is not None:
+        (tmp_path / 'computer-wallpaper.jpg').write_bytes(content)
+    assert vm.own_wallpaper() is None
+    assert (await vm.start(target))['ready']
+    assert not [args for args, _ in runtime.calls if args[0] == 'cp' and args[-1].endswith('own.jpg')]
+    assert '--image' not in _watcher_script(runtime)
+
+
+async def test_a_failed_picture_copy_still_starts_the_town(desktop, tmp_path):
+    vm, target, runtime = desktop
+    (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
+    original = vm.run
+
+    async def run(args, **kwargs):
+        if args[0] == 'cp' and args[-1].endswith('own.jpg'):
+            return Result(1, '', 'Synthetic copy failure')
+        return await original(args, **kwargs)
+
+    vm.run = run
+    assert (await vm.start(target))['ready']
+    assert '--image' not in _watcher_script(runtime)
+
+
 @pytest.mark.parametrize('failure', ['exit', 'exception'])
 async def test_wallpaper_copy_failure_leaves_the_start_result_and_once_mark_alone(desktop, failure):
     vm, target, runtime = desktop

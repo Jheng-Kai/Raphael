@@ -9,15 +9,19 @@ import { mountShimmers } from './shimmer';
 /** Preserve the visible reading anchor across asynchronous SVG/image size changes. */
 export function preserveRichScroll(root: HTMLElement, change: () => void): void {
   const height = root.scrollHeight;
-  const top = root.getBoundingClientRect().top, follow = root.scrollHeight - root.scrollTop - root.clientHeight < 80;
+  if (height - root.scrollTop - root.clientHeight < 80) {
+    change();
+    if (root.scrollHeight !== height) root.scrollTop = root.scrollHeight;
+    return;
+  }
+  const top = root.getBoundingClientRect().top;
   const anchor = [...root.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions")].find(node => node.getBoundingClientRect().bottom > top + 2);
   const before = anchor?.getBoundingClientRect().top;
   const turn = anchor?.closest<HTMLElement>(".tn");
   const turnId = turn?.dataset.id, roomId = turn?.dataset.roomMessage;
   const content = anchor?.dataset.source ?? anchor?.textContent;
   change();
-  if (follow) { if (root.scrollHeight !== height) root.scrollTop = root.scrollHeight; }
-  else if (anchor && before !== undefined) {
+  if (anchor && before !== undefined) {
     const replacementTurn = turnId ? root.querySelector<HTMLElement>(`.tn[data-id="${CSS.escape(turnId)}"]`)
       : roomId ? root.querySelector<HTMLElement>(`.tn[data-room-message="${CSS.escape(roomId)}"]`) : null;
     const replacement = anchor.isConnected ? anchor : [...replacementTurn?.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions") ?? []]

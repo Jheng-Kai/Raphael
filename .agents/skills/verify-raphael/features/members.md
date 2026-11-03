@@ -609,3 +609,10 @@ painted element, but no native journey is authorized for this unit. Home's
 four-second event storm is bounded to 27 total reads. After the 33-scene matrix,
 the local shimmer/limit corrections are rechecked in composer-stop-voice,
 composer-stop-pending, running and busy-team-home at both themes and all three sizes.
+## Sending a prompt (2026-11-03)
+
+R-PERF-02 times what the owner feels when they press Enter, in `app/scripts/look/send-probe.mjs`: the frame after the key, the longest task and the main-thread share over a whole turn, on a sixty-turn thread, at normal speed and at a quarter of it. Core reads for a computer nobody watches are remembered in `DesktopViewer.unwatched_status`, and a closed details panel neither reads nor draws.
+
+```powershell
+npm run look -- send-prompt send-prompt-slow --theme both --width 1120,720,1920x1080
+```

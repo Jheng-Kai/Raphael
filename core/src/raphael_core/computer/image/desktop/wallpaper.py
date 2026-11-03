@@ -166,6 +166,7 @@ def main():
     parser.add_argument("--generate", type=Path, nargs="+")
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--hour", type=int)
+    parser.add_argument("--image", type=Path)
     args = parser.parse_args()
     if args.generate:
         for directory in args.generate:
@@ -179,7 +180,7 @@ def main():
     applied = {}
     while True:
         # vm.refresh_timezone supplies TZ when creating/reconciling the guest.
-        selected = Path(__file__).parent / "wallpapers" / wallpaper_for_hour(datetime.now().hour)
+        selected = args.image or Path(__file__).parent / "wallpapers" / wallpaper_for_hour(datetime.now().hour)
         try:
             applied = apply_wallpaper(selected, applied)
         except subprocess.SubprocessError:

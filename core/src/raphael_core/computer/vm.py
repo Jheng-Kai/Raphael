@@ -33,7 +33,23 @@ MAX_OUTPUT = 50_000  # what a task may be shown of a result at most (`worker.gua
 # The longest a command may be waited for, and the longest a job started in the background may run.
 FOREGROUND_S = 1800
 BACKGROUND_S = 21_600
-WALLPAPER_SETUP_S = 3
+WALLPAPER_SETUP_S = 5
+# The owner's own JPEG stays in their data folder: this repository is public, and art they supply must never enter it.
+OWN_WALLPAPER = "computer-wallpaper.jpg"
+OWN_WALLPAPER_BYTES = 8_000_000
+GUEST_OWN_WALLPAPER = "/opt/raphael-desktop/wallpapers/own.jpg"
+# shutil.which walks PATH on the event loop, and one status poll asks many times.
+DOCKER_LOOKUP_S = 30.0
+_docker_cli = None
+
+
+def docker_cli():
+    global _docker_cli
+    now = time.monotonic()
+    if _docker_cli is None or now - _docker_cli[0] >= DOCKER_LOOKUP_S:
+        from .desktop_host import DockerDesktop
+        _docker_cli = (now, str(DockerDesktop().cli() or "docker"))
+    return _docker_cli[1]
 
 
 class VmError(Exception):
@@ -56,9 +72,7 @@ class Docker:
     def argv(self, args):
         if not isinstance(self.alias, str) or self.alias and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", self.alias):
             raise ValueError("Computer host must be a simple SSH config alias")
-        from .desktop_host import DockerDesktop
-        cli = str(DockerDesktop().cli() or "docker")
-        return [cli, *(["--host", f"ssh://{self.alias}"] if self.alias else []), *args]
+        return [docker_cli(), *(["--host", f"ssh://{self.alias}"] if self.alias else []), *args]
 
     async def __call__(self, args, *, timeout=15, limit=MAX_OUTPUT, progress=None):
         from .desktop_host import NO_WINDOW
@@ -219,6 +233,9 @@ class LocalVm:
         self.tunnels = {}
         self.preparation, self.preparing = {}, {}
         self.wallpaper_attempted = set()
+        # Raised whenever this core starts or stops a computer, so a remembered state is never trusted across it.
+        self.changes = 0
+        self._installed = None
         self.engine_lock, self.build_lock = asyncio.Lock(), asyncio.Lock()
         from .takeover import ComputerWork
         self.work = ComputerWork(self)
@@ -244,7 +261,14 @@ class LocalVm:
         return await self.run([*transport, *args], **kwargs)
 
     async def installed(self):
-        return self.enabled and (bool(self.remote) or (self.desktop.installed() if self.desktop else await self.available()))
+        if not self.enabled or self.remote:
+            return self.enabled
+        if not self.desktop:
+            return await self.available()
+        now = time.monotonic()
+        if self._installed is None or now - self._installed[0] >= DOCKER_LOOKUP_S:
+            self._installed = (now, self.desktop.installed())
+        return self._installed[1]
 
     def _progress(self, target, state, text=""):
         # Only fixed-image pull/build output is passed here, never exec output.
@@ -398,6 +422,7 @@ class LocalVm:
 
     async def _prepare_start(self, target):
         async with self.locks.setdefault(target.key, asyncio.Lock()):
+            self.changes += 1
             try:
                 await self.ensure_engine(target)
                 async with self.build_lock:
@@ -412,6 +437,7 @@ class LocalVm:
                 return await self._start(target)
             finally:
                 self.preparation.pop(target.key, None)
+                self.changes += 1
 
     async def _make_room(self, target):
         if target.remote or (await self.status(target, probe=False))["state"] == "running":
@@ -493,8 +519,7 @@ address=$(tr '\000' '\n' < "/proc/$pid/environ" | sed -n 's/^DBUS_SESSION_BUS_AD
 pgrep -f "$watcher" >/dev/null 2>&1
 [ "$?" = 1 ] || exit 0
 export DBUS_SESSION_BUS_ADDRESS="$address"
-exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch
-'''
+exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch'''
         try:
             # Decoration cannot delay a ready desktop or change a tool's result.
             async with asyncio.timeout(WALLPAPER_SETUP_S):
@@ -503,9 +528,24 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch
                     result = await self.run_for(target, ["cp", str(source), f"{target.name}:/opt/raphael-desktop/{destination}"], timeout=2)
                     if result.code:
                         return
+                own = self.own_wallpaper()
+                if own and (await self.run_for(target, ["cp", str(own), f"{target.name}:{GUEST_OWN_WALLPAPER}"], timeout=2)).code:
+                    own = None
+                script += f" --image {GUEST_OWN_WALLPAPER}\n" if own else "\n"
                 await self.run_for(target, exec_args(target, ["sh", "-c", script], detached=True), timeout=2)
         except Exception:
             pass
+
+    def own_wallpaper(self):
+        """The owner's picture when it is a JPEG of a size worth carrying, else None."""
+        path = self.root / OWN_WALLPAPER
+        try:
+            if path.stat().st_size > OWN_WALLPAPER_BYTES:
+                return None
+            with path.open("rb") as file:
+                return path if file.read(3) == b"\xff\xd8\xff" else None
+        except OSError:
+            return None
 
     async def _reconcile_timezone(self, target, state, zone, *, keep_stopped=False):
         if state["state"] in ("running", "stopped") and self.timezone():
@@ -565,7 +605,9 @@ exec /opt/venv/bin/python /opt/raphael-desktop/wallpaper.py --watch
                 raise VmError(state["state"])
             if self.active.get(target.key, 0) or target.key in self.held or self.busy(target.key):
                 raise VmError("busy")
+            self.changes += 1
             result = await self.run_for(target, ["stop", "--time", "10", target.name], timeout=30)
+            self.changes += 1
             if result.code:
                 raise VmError("stop_failed")
             self.wallpaper_attempted.discard((target.remote, target.name))

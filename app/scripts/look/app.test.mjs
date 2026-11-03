@@ -21,7 +21,7 @@ describe("real app entry with the shared look fixture", () => {
     expect(document.querySelector('#nav [data-go="home"]')).not.toBeNull();
     document.querySelector('.mb-chief').click();
     await vi.waitFor(() => expect(document.querySelector(".page-agent:not([hidden]) .conversation-trigger")).not.toBeNull());
-    expect(document.body.textContent).toContain("這週的研究與安排");
+    await vi.waitFor(() => expect(document.querySelector(".conversation-caption").textContent).toContain("這週的研究與安排"));
     // A reply wait must not select the earlier, collapsed work messages.
     await vi.waitFor(() => {
       const reply = document.querySelector(scenes.find(scene => scene.name === "chat").steps[0].selector);

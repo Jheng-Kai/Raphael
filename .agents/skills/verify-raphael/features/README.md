@@ -589,7 +589,7 @@ R-CARD-06 review coverage also includes neutral cancelled questions without redu
 ## Slime town and computer preparation (2026-11-03)
 
 See [Member computer](member-computer.md#slime-town-and-computer-preparation-2026-11-03)
-for R-UI-92/86/87, deterministic period fixtures, preparation in all three viewing
+for R-UI-92/93/94, deterministic period fixtures, preparation in all three viewing
 locations, retained motion and wallpaper-to-stream continuity. Protected map and
 rule additions are staged under `.fold/.agents/` for coordinator promotion.
 

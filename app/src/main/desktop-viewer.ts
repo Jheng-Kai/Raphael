@@ -80,6 +80,13 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   let state: DesktopState | undefined, session: DesktopSession | undefined;
   let connected = false, interactive = false, changing = false, loading = false, opening = false, takeOnConnect = false;
   let closePending: Promise<unknown> = Promise.resolve(), clickedAt = 0;
+  // Nothing is painted until the read answers, so the town never flashes under the owner's picture.
+  let ownWallpaper: string | undefined, wallpaperKnown = false, wallpaperRead: Promise<void> | undefined;
+  const readWallpaper = (): void => {
+    wallpaperRead ??= Promise.resolve().then(() => api.desktopWallpaper())
+      .then(result => { ownWallpaper = result?.image; }, () => {})
+      .then(() => { wallpaperKnown = true; draw(); });
+  };
   // Left for a moment, the stream stays: coming back then costs no reconnect at all.
   const LINGER_MS = 120_000;
   const lastFrames = new Map<number, string>();
@@ -97,10 +104,11 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
 
   function draw(): void {
     const inline = options.timeline.querySelector<HTMLElement>('[data-card-desktop-screen], [data-card-screen]');
-    const face = options.face?.() ?? "";
+    // A closed panel with no card on screen shows no face, and building one on every render is most of a draw.
+    const face = inline || options.panelVisible() || panel.hasAttribute('data-expanded') ? options.face?.() ?? "" : "";
     const hour = new Date().getHours();
     const period = hour >= 6 && hour < 11 ? 'morning' : hour >= 11 && hour < 16 ? 'noon' : hour >= 16 && hour < 19 ? 'dusk' : hour >= 19 && hour < 22 ? 'evening' : 'night';
-    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?/g, ""), getLocale(), session, lastFrames.get(member()), period]);
+    const signature = JSON.stringify([visible, options.panelVisible(), member(), state, connected, interactive, changing, opening, suspended, demonstration, skillName, teachingBusy, drafting, !!skillEditor, review.hidden, filesOpen, filesOnly, panel.hasAttribute('data-expanded'), options.name(), face.replace(/--slime-(?:delay|since):[^;"\s]+;?/g, ""), getLocale(), session, lastFrames.get(member()), period, wallpaperKnown, !!ownWallpaper]);
     if (signature === drawn && inline === drawnInline) return;
     drawn = signature; drawnInline = inline;
     paint(panel, "hidden", !visible || !state || state.state === 'missing' && state.granted === false);
@@ -147,9 +155,12 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     const asleep = state?.state === "stopped" || state?.state === "missing";
     paint(retry, "textContent", t(asleep ? "computer.open" : "desktop.retry")); paint(retry, "hidden", !!running || !!preparing || state?.state === "absent"); paint(retry, "disabled", opening);
     paint(revoke, "textContent", t("desktop.revoke")); paint(revoke, "hidden", !state?.granted || owner || !!preparing);
-    const wallpaper = panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!;
-    const source = `/wallpapers/${period}.svg`;
-    if (wallpaper.getAttribute('src') !== source) wallpaper.setAttribute('src', source);
+    const source = ownWallpaper ?? `/wallpapers/${period}.svg`;
+    const paintWallpaper = (image: HTMLImageElement): void => {
+      if (wallpaperKnown && image.getAttribute('src') !== source) image.setAttribute('src', source);
+      image.toggleAttribute('data-own', !!ownWallpaper);
+    };
+    paintWallpaper(panel.querySelector<HTMLImageElement>('.desktop-wallpaper')!);
     const placeholder = panel.querySelector<HTMLElement>('.desktop-placeholder')!;
     const picture = running && (!connected || inline && !expanded) ? lastFrames.get(member()) : undefined;
     paint(last, "hidden", !picture);
@@ -163,7 +174,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (inline) {
       let background = inline.querySelector<HTMLImageElement>(':scope > .desktop-wallpaper');
       if (!background) { background = document.createElement('img'); background.className = 'desktop-wallpaper'; background.alt = ''; inline.prepend(background); }
-      if (background.getAttribute('src') !== source) background.setAttribute('src', source);
+      paintWallpaper(background);
       let waiting = inline.querySelector<HTMLElement>(':scope > .desktop-placeholder');
       if (!waiting) { waiting = document.createElement('div'); waiting.className = 'desktop-placeholder'; inline.append(waiting); }
       paint(waiting, 'hidden', !!running && connected);
@@ -386,7 +397,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
   });
   onLocaleChange(draw);
   return {
-    show() { visible = true; suspended = false; clearTimeout(lingering); clearTimeout(timer); void poll(); },
+    show() { visible = true; suspended = false; clearTimeout(lingering); clearTimeout(timer); readWallpaper(); void poll(); },
     hide(close = false) { visible = false; if (close || panel.hasAttribute('data-expanded')) closeStream(); else leave(); timeline.clear(); draw(); },
     refresh() {
       // Back to the conversation whose stream is still open: nothing to reconnect.

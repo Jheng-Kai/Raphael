@@ -48,6 +48,18 @@ def test_original_slime_town_is_self_contained_and_sleeps_at_night(period):
     assert "random" not in module
 
 
+def test_an_owner_picture_replaces_the_hourly_choice(monkeypatch):
+    main = runpy.run_path(str(DESKTOP / "wallpaper.py"))["main"]
+    process = main.__globals__["subprocess"]
+    calls = []
+    picture = Path("/opt/raphael-desktop/wallpapers/own.jpg")
+    monkeypatch.setattr("sys.argv", ["wallpaper.py", "--image", str(picture)])
+    monkeypatch.setattr(process, "check_output", lambda *a, **kw: "/backdrop/screen0/monitor0/workspace0/last-image\n")
+    monkeypatch.setattr(process, "run", lambda argv, **kw: calls.append(argv))
+    main()
+    assert [argv[-1] for argv in calls if "/backdrop/screen0/monitor0/workspace0/last-image" in argv] == [str(picture)]
+
+
 def test_startup_sets_the_wallpaper_even_before_xfce_has_a_last_image(monkeypatch):
     apply = runpy.run_path(str(DESKTOP / "wallpaper.py"))["apply_wallpaper"]
     process = apply.__globals__["subprocess"]

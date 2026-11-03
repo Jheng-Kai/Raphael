@@ -15,8 +15,10 @@ const LIVE_TOOLTIP = /(class="live-presence"[^>]*?) data-tooltip="[^"]*"/g;
 const LIVE_LABEL = /(<span class="live-action">)[^<]*/g;
 
 /** A line without its live words. It runs on every draw of a working turn, so it reads the text and never parses it. */
+let lastSkeleton = ["", ""];
 function liveSkeleton(html: string): string {
-  return html.replace(LIVE_TOOLTIP, "$1").replace(LIVE_LABEL, "$1");
+  if (html !== lastSkeleton[0]) lastSkeleton = [html, html.replace(LIVE_TOOLTIP, "$1").replace(LIVE_LABEL, "$1")];
+  return lastSkeleton[1];
 }
 
 function liveWords(html: string): string[] {

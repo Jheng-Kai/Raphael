@@ -527,7 +527,8 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   const previews = createLinkPreviews(scroller, url => api.core<LinkPreview | null>("links.preview", { url }));
   const regenerating = new Set<number>();
-  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessages()) : null;
+  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread, { all: true })) : null;
+  void document.fonts?.ready.then(() => measureMessagePreviews(thread, { all: true }));
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   /** Questions typed here whose turns have not come yet. */
@@ -1146,15 +1147,17 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     clearTimeout(draftTimer); discardComposerDraft(composerKey);
     const mine: Outgoing = { key: `out:${++sent}`, requestId, member, conversationId: sentConversation, text, sentAt: Date.now(), files: sending.map(({ name, mime, data, size }) => ({ name, mime, size, preview: fileKind(mime) !== "file" ? `data:${mime};base64,${data}` : undefined })), quote: composerQuote };
     outgoing.push(mine);
-    input.value = "";
-    input.dispatchEvent(new Event("composer-draft-restored"));
     files = [];
     replacing = undefined;
     composerQuote = undefined;
+    // Drawn while the layout is still clean, so reading the thread's scroll position costs nothing.
+    render(true);
+    input.value = "";
+    input.dispatchEvent(new Event("composer-draft-restored"));
     drawQuote();
     drawFile();
     fit();
-    render(true);
+    drawDock();
     askingMember = member;
     try {
       await api.agentAskText(text, wireAttachments(sending), member, { requestId, ...destinationOf(member, sentConversation), ...(draft.replacing !== undefined ? { replaceTurnId: draft.replacing } : {}), ...(draft.quote ? { quote: draft.quote } : {}) });
@@ -1186,6 +1189,12 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   /** The field grows with its text, up to `COMPOSER_LINES` lines. */
   function fit(): void {
     sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
+    // Enter always leaves an empty field, and an empty field has nothing to measure.
+    if (!input.value) {
+      input.style.height = "auto";
+      input.classList.remove("is-tall");
+      return;
+    }
     // Restored articles already fill the composer; measuring their full layout blocks typing.
     if (input.value.length >= 2000) {
       input.style.height = `calc(${COMPOSER_LINES} * 1lh + 2px)`;

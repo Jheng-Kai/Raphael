@@ -83,7 +83,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   /** The member the panel was last drawn for: its fields are drawn afresh when it changes. */
   let drawnFor: number | null = null;
   let counts = { skills: 0, commands: 0, memory: 0 };
-  let countEpoch = 0;
+  let countEpoch = 0, countsStale = false;
   let resources: ReturnType<typeof mountMemberResources> | null = null;
   let resourceKey = "";
   const conversationHost = document.createElement("div");
@@ -108,6 +108,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     slot.hidden = conversationHost.hidden;
   }
   async function loadCounts(fromEvent = false): Promise<void> {
+    if (el.hidden) { countsStale = true; return; }
     const epoch = ++countEpoch, id = host.member().id;
     const result = await Promise.allSettled([
       fromEvent ? eventRead(`members.skills.list:${id}`,()=>api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),host.app) : api.core<{skills: unknown[]}>("members.skills.list", {member_id: id}),
@@ -216,6 +217,8 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   }
 
   function draw(): void {
+    if (el.hidden) return;
+    if (countsStale) { countsStale = false; void loadCounts(); }
     const member = host.member();
     const sameMember = drawnFor === member.id;
     const focused = document.activeElement as HTMLElement | null;
@@ -306,6 +309,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
   // ---------- routines ----------
 
   async function loadRoutines(): Promise<void> {
+    if (el.hidden) return;
     const mine = ++routineLoads;
     const id = host.member().id;
     try {
@@ -452,6 +456,7 @@ export function createDetails(host: DetailsHost): DetailsPanel {
     refreshRoutines() { void loadRoutines(); },
     refreshResources() { void loadCounts(true); void resources?.refresh(true); },
     refreshMemory(memberId, space) {
+      if (el.hidden) return;
       if (memberId === host.member().id) {
         const id=memberId;
         void eventRead(`memory.get:${id}`,()=>api.core<{entries:number}>('memory.get',{member_id:id,space:'own'}),host.app).then(result=>{if(id===host.member().id){counts.memory=result.entries;draw();}}).catch(()=>{});

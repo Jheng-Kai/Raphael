@@ -1,6 +1,7 @@
 """Subscription CLI tests never discover or launch the machine's real assistants."""
 
 import os
+import subprocess
 import sys
 import asyncio
 import json
@@ -734,3 +735,17 @@ def test_failed_login_does_not_reconnect_or_launch_an_uninstalled_cli(tmp_path, 
     with pytest.raises(ValueError, match="cli_missing"):
         brains.login("codex")
     assert brains.disconnected("codex")
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows priority classes")
+async def test_a_cli_brain_gives_way_to_the_owners_window(monkeypatch):
+    from raphael_core.agent.cli import process as cli_process
+    seen = {}
+
+    async def stop_here(*args, **kwargs):
+        seen.update(kwargs)
+        raise OSError("Synthetic spawn stop")
+
+    monkeypatch.setattr(cli_process.asyncio, "create_subprocess_exec", stop_here)
+    with pytest.raises(OSError):
+        await cli_process.Child(["sample"]).start()
+    assert seen["creationflags"] & subprocess.BELOW_NORMAL_PRIORITY_CLASS

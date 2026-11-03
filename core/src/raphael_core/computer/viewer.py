@@ -6,6 +6,7 @@ No new VM runtime, browser bundle, host-specific code or credential store.
 """
 
 import asyncio
+import base64
 import json
 import re
 import secrets
@@ -19,6 +20,8 @@ from .vm import SHARED, VmError
 from .rfb_input import RfbInputGate
 
 LEASE_SECONDS = 15
+# An open page polls every two seconds and each answer starts several Docker processes.
+UNWATCHED_STATUS_S = 10
 # What the owner's press may open; anything else, such as a program a member wrote, is only shown in its folder.
 READABLE = frozenset(".html .htm .pdf .png .jpg .jpeg .gif .webp .svg .txt .md .csv .json .mp3 .wav .m4a .mp4 .webm .docx .xlsx .pptx".split())
 BOOTSTRAP = b'''import RFB from './core/rfb.js';
@@ -131,6 +134,7 @@ class DesktopViewer:
     def __init__(self, vm, *, member_exists=lambda member: True):
         self.vm, self.member_exists = vm, member_exists
         self.sessions, self.owners = {}, {}
+        self.remembered = {}
         self.vm.viewer_owners = self.owners
         self.server = self.monitor = None
         self.origin = ""
@@ -146,6 +150,17 @@ class DesktopViewer:
             router.register(f"computer.viewer_{name}", handler)
         router.register("computer.revoke", self.revoke)
         router.register("computer.team_file", self.team_file)
+        router.register("computer.wallpaper", self.wallpaper)
+
+    async def wallpaper(self, _params):
+        own = self.vm.own_wallpaper()
+        if own is None:
+            return {}
+        try:
+            data = await asyncio.to_thread(own.read_bytes)
+        except OSError:
+            return {}
+        return {"image": "data:image/jpeg;base64," + base64.b64encode(data).decode("ascii")}
 
     async def team_file(self, params):
         """Where a file of the team folder is on this PC, for the owner's own press. A folder on another computer has no such place."""
@@ -174,7 +189,7 @@ class DesktopViewer:
         target = self.target(params)
         if not await self.vm.installed():
             return {"state": "absent", "control": "member", "ready": False, "error": "disabled" if not self.vm.enabled else "docker_missing"}
-        state = await self.status_for(target)
+        state = await self.unwatched_status(target)
         works = self.vm.work.views(params.get("member_id", 0), params.get("conversation_id"))
         return {**state, "granted": self.vm.grants.allowed(params.get("member_id", 0)), **({"works": works} if works else {}),
                 **(self.teaching.status(params.get("member_id", 0), params.get("conversation_id"), target) if self.teaching else {})}
@@ -225,6 +240,21 @@ class DesktopViewer:
                 "preview_allowed": state["control"] == "member", "granted": self.vm.grants.allowed(session.member_id),
                 **({"works": works} if works else {}),
                 **(self.teaching.status(session.member_id, session.conversation_id, session.target) if self.teaching else {})}
+
+    async def unwatched_status(self, target):
+        """Docker is only asked at every poll while someone watches this computer or it is being prepared."""
+        if (target.key in self.vm.preparation or target.key in self.vm.held
+                or any(session.target.key == target.key for session in self.sessions.values())):
+            self.remembered.pop(target.key, None)
+            return await self.status_for(target)
+        changes, now = self.vm.changes, self.vm.clock()
+        kept = self.remembered.get(target.key)
+        if kept and kept[0] == changes and 0 <= now - kept[1] < UNWATCHED_STATUS_S:
+            return kept[2]
+        state = await self.status_for(target)
+        if changes == self.vm.changes:
+            self.remembered[target.key] = (changes, now, state)
+        return state
 
     async def status_for(self, target):
         # Use the exact target captured at open, even if the mode changes meanwhile.

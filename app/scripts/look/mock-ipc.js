@@ -616,6 +616,7 @@ export function installMock(fixture, config = {}, target = window) {
         if (variant.pageGone) throw { kind: "not_found", message: "gone" };
         // Not a file of the dev server, which would write its own client into the page.
         return { url: `data:text/html;charset=utf-8,${encodeURIComponent(data.pageProductHtml)}`, title: "輕量後背包", rev: 1, height: 320, source: "html", server: null };
+      case "computer.wallpaper": return variant.ownWallpaper ? { image: variant.ownWallpaper } : {};
       case "computer.viewer_status": return data.desktop ?? { state: "absent", ready: false, control: "member" };
       case "computer.viewer_open": {
         if (variant.desktopStarts) data.desktop = { ...data.desktop, state: "running", ready: true };
@@ -1239,6 +1240,7 @@ export function installMock(fixture, config = {}, target = window) {
         }
         // The native call stays pending until the reply ends, including before the first agent.turn.
         if (variant.stopPending) return new Promise(resolve => pendingReplies.set(args.requestId, resolve));
+        if (variant.askUntilAnswered) return new Promise(resolve => { window.__look.answerAsk = () => resolve(null); });
         return null;
       }
       if (command === "core_call") return copy(await core(args.method, args.params));

@@ -2,7 +2,7 @@
 
 ## Slime town and computer preparation (2026-11-03)
 
-R-UI-92/86/87 replace the monochrome artwork and preparation stage-list assertions
+R-UI-92/93/94 replace the monochrome artwork and preparation stage-list assertions
 only. The existing hour boundaries, five filenames, XFCE watcher, start/repair
 controls, leases and single carried iframe remain authoritative. The approved
 original town drawing uses paths, groups, ellipses, circles, rounded rectangles
@@ -41,7 +41,7 @@ animation, and samples the actual CSS fade at 0/120/240ms under normal motion.
 Selected matrix, both themes at 1120,720,1920x1080:
 
 ```powershell
-npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
+npm run look -- desktop-starting desktop-building desktop-preparing desktop-wallpaper-morning desktop-wallpaper-noon desktop-wallpaper-dusk desktop-wallpaper-evening desktop-wallpaper-night desktop-boot-inline desktop-boot-card desktop-boot-connect desktop-boot-expanded desktop-boot-raphael desktop-own-wallpaper desktop-own-wallpaper-card desktop-stopped desktop-unavailable desktop-absent desktop-panel desktop-viewer --theme both --width 1120,720,1920x1080
 ```
 
 Compare the full-size preparation images with the owner's local 79.png, the town

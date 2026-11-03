@@ -1,6 +1,7 @@
 """Viewer privacy, routing, lifecycle and phase A lease contracts, without Docker."""
 import asyncio
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -25,6 +26,54 @@ async def viewer(tmp_path, conn):
         yield bridge, runtime, clock
     finally:
         await bridge.aclose()
+
+
+def _docker_calls(runtime):
+    return len([args for args, _ in runtime.calls if args[0] in ('info', 'image', 'container')])
+
+
+async def test_an_open_page_asks_docker_rarely_while_nothing_can_change(viewer):
+    bridge, runtime, clock = viewer
+    bridge.vm.desktop = SimpleNamespace(installed=lambda: True)
+    first = await bridge.status({"member_id": 1})
+    asked = _docker_calls(runtime)
+    assert asked > 0
+    for _ in range(4):
+        clock[0] += 2
+        assert await bridge.status({"member_id": 1}) == first
+    assert _docker_calls(runtime) == asked
+    clock[0] += 10
+    await bridge.status({"member_id": 1})
+    assert _docker_calls(runtime) > asked
+
+
+async def test_a_change_to_the_computer_is_seen_at_the_next_poll(viewer):
+    bridge, runtime, clock = viewer
+    target = bridge.vm.target()
+    assert (await bridge.status({}))["state"] == "running"
+    await bridge.vm.stop(target)
+    runtime.raw["State"]["Running"] = False
+    assert (await bridge.status({}))["state"] == "stopped"
+    assert (await bridge.vm.start(target))["ready"]
+    runtime.raw["State"]["Running"] = True
+    assert (await bridge.status({}))["state"] == "running"
+
+
+async def test_a_watched_computer_is_never_answered_from_memory(viewer):
+    bridge, runtime, clock = viewer
+    opened = await bridge.open({"member_id": 0, "preview": True})
+    await bridge.status({})
+    asked = _docker_calls(runtime)
+    await bridge.status({})
+    assert _docker_calls(runtime) > asked
+    await bridge.close({"session": opened["session"]})
+
+
+async def test_the_panel_reads_the_owner_picture_only_when_it_exists(viewer, tmp_path):
+    bridge, _, _ = viewer
+    assert await bridge.wallpaper({}) == {}
+    (tmp_path / 'computer-wallpaper.jpg').write_bytes(b'\xff\xd8\xff sample')
+    assert (await bridge.wallpaper({}))['image'].startswith('data:image/jpeg;base64,/9j/')
 
 
 async def test_status_and_session_urls_never_publish_vnc_credentials(viewer):
