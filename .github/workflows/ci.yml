@@ -87,6 +87,24 @@ jobs:
       - name: Type-check and build frontend
         run: npm run build
 
+      # The member computer scenes render their page through the core, so look needs its Python.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.11"
+          working-directory: core
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+            .python-version
+
+      - name: Install pinned Python and locked core dependencies
+        working-directory: core
+        run: |
+          uv python install
+          uv sync --locked --dev
+
       - name: Capture real UI in both themes and all three sizes
         env:
           LOOK_BROWSER: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
@@ -105,18 +123,6 @@ jobs:
             Write-Output '::notice::Design judge SKIP: a signed-in subscription CLI is unavailable. This is not a design PASS.'
             'Design judge: SKIP (no subscription CLI); no visual-model acceptance claimed.' >> $env:GITHUB_STEP_SUMMARY
           }
-
-      - name: Set up uv for design judge
-        if: steps.judge.outputs.enabled == 'true'
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          version: "0.12.11"
-          working-directory: core
-
-      - name: Install judge dependencies
-        if: steps.judge.outputs.enabled == 'true'
-        working-directory: core
-        run: uv sync --locked --dev
 
       - name: Restore image-hash design cache
         if: steps.judge.outputs.enabled == 'true'
