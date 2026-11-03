@@ -1,5 +1,9 @@
 import { Window } from "happy-dom";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { mountDesktopTimeline } from "../../src/main/desktop-timeline";
+import { memberAccent } from "../../src/main/owner-bubble";
+import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/main/slime";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
@@ -458,6 +462,40 @@ describe("rendered look checks", () => {
     window.document.querySelector('.dim').style.color = 'rgb(245,245,245)';
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
+  it.each(["light", "dark"])("keeps the computer takeover preview icon readable on hover for every member colour in %s (R-UI-52)", theme => {
+    const window = new Window();
+    // happy-dom leaves colours and background-image: initial authored; the browser resolves RGB and none.
+    const resolvedRGB = css => css.replace(/#[0-9a-f]{6}\b/gi, hex => `rgb(${[1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)).join(",")})`).replace(/\btransparent\b/g, "rgba(0,0,0,0)");
+    const css = ["styles", "agent", "card", "desktop-viewer"].map(name => readFileSync(new URL(`../../src/main/${name}.css`, import.meta.url), "utf8").replace(/^@import .+$/gm, "")).join("\n");
+    window.document.documentElement.dataset.theme = theme;
+    window.document.head.innerHTML = `<style>${resolvedRGB(css)}</style>`;
+    const picker = window.document.createElement("div");
+    picker.innerHTML = slimeCharactersHTML(null, value => value) + slimeColorsHTML(null, value => value);
+    const colours = [...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: button.dataset.slimeCharacter ? `slime:${button.dataset.slimeCharacter}` : `slime:color:${button.dataset.slimeColor}` }));
+    expect(colours.length).toBeGreaterThan(20);
+    vi.stubGlobal("document", window.document);
+    vi.stubGlobal("Element", window.Element);
+    try {
+      for (const colour of colours) {
+        const chat = window.document.createElement("div");
+        chat.className = "page-agent mb-chat";
+        chat.dataset.memberBubble = theme;
+        chat.style.setProperty("--member-accent", memberAccent(colour));
+        chat.innerHTML = '<div data-desktop-slot="2"></div>';
+        window.document.body.append(chat);
+        mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
+        chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
+        chat.firstElementChild.style.backgroundImage = "none";
+        const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
+        expect(button.className).toBe("btn");
+        expect(button.textContent).toBe("");
+        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
+      }
+      for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
+      const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
+      expect(failures).toEqual([]);
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
     const { window, audit } = productAudit('<div><button disabled title="Needs an API key">Add</button></div>');
