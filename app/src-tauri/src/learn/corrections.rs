@@ -840,7 +840,13 @@ mod tests {
     #[test]
     fn core_owns_the_common_vocabulary_decision_for_extracted_candidates() {
         let pasted = "今天討論以經完成的資料內容，下午再去清理新訊息並確認沒有紀錄。";
-        assert_eq!(with_han_word(pasted, "以經", "已經"), vec![Correction { word: "已經".into(), misheard: "以經".into() }]);
+        assert_eq!(
+            with_han_word(pasted, "以經", "已經"),
+            vec![Correction {
+                word: "已經".into(),
+                misheard: "以經".into()
+            }]
+        );
     }
 
     #[test]

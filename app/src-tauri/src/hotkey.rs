@@ -53,7 +53,11 @@ pub enum HotkeyEvent {
     /// is reported again after it (see the hook's patch notes).
     AgentDown,
     /// A composer fixes both the recipient and the conversation before recording starts.
-    ConversationDown { member: u64, conversation: u64, quick: bool },
+    ConversationDown {
+        member: u64,
+        conversation: u64,
+        quick: bool,
+    },
     /// An agent key came up. Releasing the modifier of the combination first reports it too, and
     /// it may come before or after the `DictationUp` of the same modifier.
     AgentUp,
@@ -308,8 +312,18 @@ impl HotkeyService {
     }
 
     /// A composer's voice press uses the same worker and pause gate as the global keys.
-    pub fn conversation_voice(&self, member: u64, conversation: u64, quick: bool) -> Result<(), String> {
-        self.commands.send(Command::ConversationVoice { member, conversation, quick })
+    pub fn conversation_voice(
+        &self,
+        member: u64,
+        conversation: u64,
+        quick: bool,
+    ) -> Result<(), String> {
+        self.commands
+            .send(Command::ConversationVoice {
+                member,
+                conversation,
+                quick,
+            })
             .map_err(|_| NOT_RUNNING.to_string())
     }
 
@@ -347,7 +361,11 @@ impl Drop for HotkeyService {
 
 enum Command {
     WindowHotkey(WindowHotkey),
-    ConversationVoice { member: u64, conversation: u64, quick: bool },
+    ConversationVoice {
+        member: u64,
+        conversation: u64,
+        quick: bool,
+    },
     Update {
         wanted: Wanted,
         reply: Sender<Result<(), String>>,
@@ -437,8 +455,12 @@ trait Backend {
     fn register(&self, hotkey: Hotkey) -> Result<Self::Id, String>;
     fn unregister(&self, id: Self::Id) -> Result<(), String>;
     fn try_recv(&self) -> Option<(Self::Id, HotkeyState)>;
-    fn uses_cancel_input_stream(&self) -> bool { false }
-    fn take_cancel_input(&self) -> Option<bool> { None }
+    fn uses_cancel_input_stream(&self) -> bool {
+        false
+    }
+    fn take_cancel_input(&self) -> Option<bool> {
+        None
+    }
 }
 
 /// Native journeys keep the real worker, duplicate gate and focused-window event channel;
@@ -454,14 +476,22 @@ impl Backend for WindowOnlyBackend {
         self.0.set(self.0.get() + 1);
         Ok(self.0.get())
     }
-    fn unregister(&self, _id: u64) -> Result<(), String> { Ok(()) }
-    fn try_recv(&self) -> Option<(u64, HotkeyState)> { None }
+    fn unregister(&self, _id: u64) -> Result<(), String> {
+        Ok(())
+    }
+    fn try_recv(&self) -> Option<(u64, HotkeyState)> {
+        None
+    }
 }
 
 impl Backend for HotkeyManager {
     type Id = HotkeyId;
-    fn uses_cancel_input_stream(&self) -> bool { true }
-    fn take_cancel_input(&self) -> Option<bool> { handy_keys::take_cancel_input() }
+    fn uses_cancel_input_stream(&self) -> bool {
+        true
+    }
+    fn take_cancel_input(&self) -> Option<bool> {
+        handy_keys::take_cancel_input()
+    }
 
     fn register(&self, hotkey: Hotkey) -> Result<HotkeyId, String> {
         HotkeyManager::register(self, hotkey).map_err(|err| err.to_string())
@@ -528,9 +558,20 @@ impl<B: Backend> Worker<B> {
         // happened with. Otherwise a pause could swallow the release of a key that was held.
         self.pump();
         match command {
-            Command::ConversationVoice { member, conversation, quick } => {
+            Command::ConversationVoice {
+                member,
+                conversation,
+                quick,
+            } => {
                 if !self.paused {
-                    self.forward(HotkeyEvent::ConversationDown { member, conversation, quick }, EventSource::Window);
+                    self.forward(
+                        HotkeyEvent::ConversationDown {
+                            member,
+                            conversation,
+                            quick,
+                        },
+                        EventSource::Window,
+                    );
                 }
             }
             Command::WindowHotkey(kind) => {
@@ -569,7 +610,11 @@ impl<B: Backend> Worker<B> {
     fn pump(&mut self) {
         while let Some(reset) = self.backend.take_cancel_input() {
             if self.cancel_enabled && !self.paused {
-                let _ = self.events.send(if reset { HotkeyEvent::CancelReset } else { HotkeyEvent::CancelKey });
+                let _ = self.events.send(if reset {
+                    HotkeyEvent::CancelReset
+                } else {
+                    HotkeyEvent::CancelKey
+                });
             }
         }
         while let Some((id, state)) = self.backend.try_recv() {
@@ -578,8 +623,17 @@ impl<B: Backend> Worker<B> {
                 continue;
             };
             if let Some(event) = translate(role, state) {
-                if event == HotkeyEvent::Cancel && self.backend.uses_cancel_input_stream() { continue; }
-                self.forward(if event == HotkeyEvent::Cancel { HotkeyEvent::CancelKey } else { event }, EventSource::Hook);
+                if event == HotkeyEvent::Cancel && self.backend.uses_cancel_input_stream() {
+                    continue;
+                }
+                self.forward(
+                    if event == HotkeyEvent::Cancel {
+                        HotkeyEvent::CancelKey
+                    } else {
+                        event
+                    },
+                    EventSource::Hook,
+                );
             }
         }
     }
@@ -677,8 +731,11 @@ mod tests {
     fn native_composer_keeps_the_real_worker_without_registering_a_keyboard_hook() {
         let (events, mut received) = tokio::sync::mpsc::unbounded_channel();
         let service = HotkeyService::start_with(
-            WindowOnlyBackend::default(), Wanted::from_bindings(&Bindings::default()).unwrap(), events,
-        ).unwrap();
+            WindowOnlyBackend::default(),
+            Wanted::from_bindings(&Bindings::default()).unwrap(),
+            events,
+        )
+        .unwrap();
         service.window_hotkey(WindowHotkey::AgentDown).unwrap();
         service.window_hotkey(WindowHotkey::AgentUp).unwrap();
         assert_eq!(received.blocking_recv(), Some(HotkeyEvent::AgentDown));
@@ -1077,8 +1134,12 @@ mod tests {
 
     impl Backend for FakeBackend {
         type Id = u32;
-        fn uses_cancel_input_stream(&self) -> bool { self.0.lock().unwrap().input_stream }
-        fn take_cancel_input(&self) -> Option<bool> { self.0.lock().unwrap().cancel_inputs.pop_front() }
+        fn uses_cancel_input_stream(&self) -> bool {
+            self.0.lock().unwrap().input_stream
+        }
+        fn take_cancel_input(&self) -> Option<bool> {
+            self.0.lock().unwrap().cancel_inputs.pop_front()
+        }
 
         fn register(&self, hotkey: Hotkey) -> Result<u32, String> {
             let mut state = self.0.lock().unwrap();
@@ -1190,7 +1251,11 @@ mod tests {
         let (mut w, mut rx) = worker(&fake, &Bindings::default());
         w.sync().unwrap();
         w.handle(Command::WindowHotkey(WindowHotkey::Cancel));
-        assert_eq!(drain(&mut rx), vec![HotkeyEvent::Cancel], "an explicit Stop is independent of the global registration");
+        assert_eq!(
+            drain(&mut rx),
+            vec![HotkeyEvent::Cancel],
+            "an explicit Stop is independent of the global registration"
+        );
         w.handle(Command::SetCancel(true));
         pause(&mut w, true);
         for kind in [
@@ -1203,14 +1268,29 @@ mod tests {
         ] {
             w.handle(Command::WindowHotkey(kind));
         }
-        w.handle(Command::ConversationVoice { member: 3, conversation: 42, quick: false });
+        w.handle(Command::ConversationVoice {
+            member: 3,
+            conversation: 42,
+            quick: false,
+        });
         assert!(
             drain(&mut rx).is_empty(),
             "the recorder must receive every key"
         );
         pause(&mut w, false);
-        w.handle(Command::ConversationVoice { member: 3, conversation: 42, quick: false });
-        assert_eq!(drain(&mut rx), vec![HotkeyEvent::ConversationDown { member: 3, conversation: 42, quick: false }]);
+        w.handle(Command::ConversationVoice {
+            member: 3,
+            conversation: 42,
+            quick: false,
+        });
+        assert_eq!(
+            drain(&mut rx),
+            vec![HotkeyEvent::ConversationDown {
+                member: 3,
+                conversation: 42,
+                quick: false
+            }]
+        );
         w.handle(Command::WindowHotkey(WindowHotkey::DictationDown));
         assert_eq!(drain(&mut rx), vec![HotkeyEvent::DictationDown]);
         w.handle(Command::WindowHotkey(WindowHotkey::Cancel));
@@ -1222,15 +1302,33 @@ mod tests {
         let fake = FakeBackend::default();
         let (mut worker, mut rx) = worker(&fake, &Bindings::default());
         worker.handle(Command::SetCancel(true));
-        { let mut state = fake.0.lock().unwrap(); state.input_stream=true; state.cancel_inputs.extend([false,true,false]); }
+        {
+            let mut state = fake.0.lock().unwrap();
+            state.input_stream = true;
+            state.cancel_inputs.extend([false, true, false]);
+        }
         worker.pump();
-        assert_eq!(drain(&mut rx), vec![HotkeyEvent::CancelKey,HotkeyEvent::CancelReset,HotkeyEvent::CancelKey]);
+        assert_eq!(
+            drain(&mut rx),
+            vec![
+                HotkeyEvent::CancelKey,
+                HotkeyEvent::CancelReset,
+                HotkeyEvent::CancelKey
+            ]
+        );
         worker.handle(Command::SetCancel(false));
         fake.0.lock().unwrap().cancel_inputs.push_back(false);
         worker.pump();
-        assert!(drain(&mut rx).is_empty(),"background Escape belongs to the other app");
+        assert!(
+            drain(&mut rx).is_empty(),
+            "background Escape belongs to the other app"
+        );
         worker.handle(Command::WindowHotkey(WindowHotkey::Cancel));
-        assert_eq!(drain(&mut rx),vec![HotkeyEvent::Cancel],"an explicit Stop remains available");
+        assert_eq!(
+            drain(&mut rx),
+            vec![HotkeyEvent::Cancel],
+            "an explicit Stop remains available"
+        );
     }
 
     #[test]

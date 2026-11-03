@@ -265,7 +265,11 @@ mod tests {
             assert_eq!(notice_for_fallback(Some(reason)), Some(OFFLINE), "{reason}");
         }
         for reason in ["timeout", "error:other", ""] {
-            assert_eq!(notice_for_fallback(Some(reason)), Some(NOT_CLEANED), "{reason}");
+            assert_eq!(
+                notice_for_fallback(Some(reason)),
+                Some(NOT_CLEANED),
+                "{reason}"
+            );
         }
     }
 

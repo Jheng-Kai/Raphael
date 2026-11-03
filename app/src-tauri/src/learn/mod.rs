@@ -425,7 +425,12 @@ impl<C: CoreApi, O: OverlayApi, P: FieldProbe> Learner<C, O, P> {
                 log::info!("learn: a new dictation is under way; no notice");
                 return;
             }
-            overlay.learned_batch(&notices::learned(&words, &language.get()), &words, undo.as_deref(), &language.get());
+            overlay.learned_batch(
+                &notices::learned(&words, &language.get()),
+                &words,
+                undo.as_deref(),
+                &language.get(),
+            );
         }))
     }
 }
@@ -467,17 +472,20 @@ async fn learn<C: CoreApi>(core: &C, corrections: &[Correction]) -> (Vec<String>
             .collect::<Vec<_>>(),
     });
     match core.call("dictionary.learn", params).await {
-        Ok(reply) => (reply
-            .get("learned")
-            .and_then(Value::as_array)
-            .map(|words| {
-                words
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default(), reply.get("undo").and_then(Value::as_str).map(str::to_owned)),
+        Ok(reply) => (
+            reply
+                .get("learned")
+                .and_then(Value::as_array)
+                .map(|words| {
+                    words
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            reply.get("undo").and_then(Value::as_str).map(str::to_owned),
+        ),
         Err(err) => {
             log::warn!("learn: dictionary.learn failed: {err}");
             (Vec::new(), None)

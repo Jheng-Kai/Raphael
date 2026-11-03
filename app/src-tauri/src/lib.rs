@@ -87,9 +87,12 @@ pub fn run() {
     #[cfg(windows)]
     let _native_job = if native_journey() {
         let job = core_process::job::Job::new().expect("native journey Job Object");
-        job.add_current().expect("native journey process containment");
+        job.add_current()
+            .expect("native journey process containment");
         Some(job)
-    } else { None };
+    } else {
+        None
+    };
     let identity = identity::current();
     // Read before `use_own_data` sets it for a development build: only a folder the caller chose
     // keeps the local files (Raphael's picture) away from this build's own local folder.
@@ -100,14 +103,19 @@ pub fn run() {
     let mut context = tauri::generate_context!();
     identity.apply(context.config_mut());
     if native_journey() {
-        let directory = PathBuf::from(std::env::var_os("RAPHAEL_DATA_DIR")
-            .expect("native journeys require RAPHAEL_DATA_DIR"));
-        assert!(directory.is_absolute(), "native journey data must be absolute");
+        let directory = PathBuf::from(
+            std::env::var_os("RAPHAEL_DATA_DIR").expect("native journeys require RAPHAEL_DATA_DIR"),
+        );
+        assert!(
+            directory.is_absolute(),
+            "native journey data must be absolute"
+        );
         context.config_mut().app.app_directories_override = Some(
             serde_json::from_value(serde_json::json!({
                 "config": directory, "data": directory, "localData": directory,
                 "cache": directory.join("cache"), "log": directory.join("logs")
-            })).expect("native journey directories"),
+            }))
+            .expect("native journey directories"),
         );
     }
 
@@ -323,7 +331,9 @@ pub fn run() {
             // UI Automation, the 「操作中」 overlay, the watch on the owner's own input. It takes
             // the core and the overlay from the app state; without the core there is no run.
             #[cfg(windows)]
-            if !native_journey() { computer::spawn(app.handle()); }
+            if !native_journey() {
+                computer::spawn(app.handle());
+            }
 
             // ---- Device settings ----
             // `device.json`: loads it, puts it in force (hotkeys, overlay size and subtitles,
@@ -337,8 +347,11 @@ pub fn run() {
             // ---- First run ----
             // Until the first-run guide has been gone through, the main window opens by itself.
             // It reads the device settings, so it comes after them.
-            if native_journey() { show_main_window(app.handle()); }
-            else { first_run::start(app.handle()); }
+            if native_journey() {
+                show_main_window(app.handle());
+            } else {
+                first_run::start(app.handle());
+            }
 
             Ok(())
         })
@@ -370,9 +383,13 @@ fn startup_plugins<R: Runtime>(
     migrate: impl FnOnce() -> data_layout::Outcome + Send + 'static,
 ) -> tauri::Builder<R> {
     #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
-    let builder = if native_journey() { builder } else { builder.plugin(tauri_plugin_single_instance::init(
-        move |app, args, _cwd| on_second_launch(app, args),
-    )) };
+    let builder = if native_journey() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(
+            move |app, args, _cwd| on_second_launch(app, args),
+        ))
+    };
     #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = on_second_launch;
     builder.plugin(
@@ -561,7 +578,10 @@ mod window_state_tests {
         // A maximized last session reopened full screen; the owner expects the designed small window.
         let flags = main_window_state_flags();
         assert!(!flags.intersects(
-            StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN
+            StateFlags::SIZE
+                | StateFlags::POSITION
+                | StateFlags::MAXIMIZED
+                | StateFlags::FULLSCREEN
         ));
         assert!(!flags.intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS));
     }

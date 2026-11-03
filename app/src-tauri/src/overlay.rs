@@ -564,7 +564,10 @@ impl Overlay {
         .always_on_top(true)
         .skip_taskbar(true)
         .focusable(false)
-        .theme(app.get_webview_window(crate::MAIN_WINDOW).and_then(|main| main.theme().ok()))
+        .theme(
+            app.get_webview_window(crate::MAIN_WINDOW)
+                .and_then(|main| main.theme().ok()),
+        )
         .focused(false)
         .resizable(false)
         .no_redirection_bitmap(true)
@@ -624,13 +627,19 @@ impl Overlay {
     fn publish(&self, event: OverlayEvent) {
         let question = match &event {
             OverlayEvent::Ask(_) => Some(true),
-            OverlayEvent::Show { .. } | OverlayEvent::Mode { .. } | OverlayEvent::Say { .. }
-            | OverlayEvent::Notice { .. } | OverlayEvent::Operate { .. } | OverlayEvent::Hide
-            | OverlayEvent::Complete | OverlayEvent::Release => Some(false),
+            OverlayEvent::Show { .. }
+            | OverlayEvent::Mode { .. }
+            | OverlayEvent::Say { .. }
+            | OverlayEvent::Notice { .. }
+            | OverlayEvent::Operate { .. }
+            | OverlayEvent::Hide
+            | OverlayEvent::Complete
+            | OverlayEvent::Release => Some(false),
             _ => None,
         };
         if let Some(question) = question
-            && self.question_open.swap(question, Ordering::Relaxed) != question {
+            && self.question_open.swap(question, Ordering::Relaxed) != question
+        {
             self.place_window();
         }
         let mut bus = lock(&self.bus);
@@ -888,7 +897,8 @@ pub struct ConfirmSender(pub UnboundedSender<Confirmation>);
 #[tauri::command]
 pub fn overlay_cancel(app: AppHandle, webview: Webview) -> Result<(), String> {
     crate::commands::ensure_caller(webview.label(), crate::OVERLAY_WINDOW)?;
-    let hotkeys = app.try_state::<Arc<crate::hotkey::HotkeyService>>()
+    let hotkeys = app
+        .try_state::<Arc<crate::hotkey::HotkeyService>>()
         .ok_or("the hotkey service is not running")?;
     hotkeys.window_hotkey(crate::hotkey::WindowHotkey::Cancel)
 }
@@ -1077,7 +1087,12 @@ mod tests {
         // The commands cannot be called here without a running app, so read their source.
         let source = include_str!("overlay.rs").replace("\r\n", "\n");
         let production = source.split("#[cfg(test)]").next().unwrap();
-        for name in ["overlay_subscribe", "overlay_log", "overlay_confirm", "overlay_cancel"] {
+        for name in [
+            "overlay_subscribe",
+            "overlay_log",
+            "overlay_confirm",
+            "overlay_cancel",
+        ] {
             let command = production
                 .split("#[tauri::command]")
                 .find(|command| command.contains(&format!("pub fn {name}(")))
@@ -1119,7 +1134,12 @@ mod tests {
         commands.sort_unstable();
         assert_eq!(
             commands,
-            ["overlay_cancel", "overlay_confirm", "overlay_log", "overlay_subscribe"]
+            [
+                "overlay_cancel",
+                "overlay_confirm",
+                "overlay_log",
+                "overlay_subscribe"
+            ]
         );
     }
 
@@ -1168,12 +1188,26 @@ mod tests {
     fn a_confirmation_expands_reading_room_without_moving_the_emblem() {
         for scale in [1.0, 1.25, 1.5, 2.0] {
             for emblem in [120, 150, 194] {
-                let base = placement(Rect {x:0,y:0,w:1920,h:1032},emblem,scale);
-                let card = confirmation_placement(base,scale);
-                assert_eq!(card.window.y+card.window.h,base.window.y+base.window.h);
-                assert_eq!(card.window.x,base.window.x);
-                assert_eq!(card.canvas,base.canvas);
-                assert!(card.window.h >= ((f64::from(emblem)*CANVAS_RATIO+CONFIRMATION_ROOM)*scale).floor() as i32-1);
+                let base = placement(
+                    Rect {
+                        x: 0,
+                        y: 0,
+                        w: 1920,
+                        h: 1032,
+                    },
+                    emblem,
+                    scale,
+                );
+                let card = confirmation_placement(base, scale);
+                assert_eq!(card.window.y + card.window.h, base.window.y + base.window.h);
+                assert_eq!(card.window.x, base.window.x);
+                assert_eq!(card.canvas, base.canvas);
+                assert!(
+                    card.window.h
+                        >= ((f64::from(emblem) * CANVAS_RATIO + CONFIRMATION_ROOM) * scale).floor()
+                            as i32
+                            - 1
+                );
             }
         }
     }
@@ -1432,10 +1466,27 @@ mod tests {
     fn scene_events_never_enable_the_mouse_before_controls_are_measured() {
         let ask = OverlayEvent::Ask(prompt(Tier::T2));
         assert_eq!(takes_clicks(&ask), Some(false));
-        assert_eq!(takes_clicks(&OverlayEvent::Show {mode:Mode::Listening,line:None}),Some(false));
-        assert_eq!(takes_clicks(&OverlayEvent::Mode {mode:Mode::Thinking,quiet:false,lines:Vec::new()}),Some(false));
+        assert_eq!(
+            takes_clicks(&OverlayEvent::Show {
+                mode: Mode::Listening,
+                line: None
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            takes_clicks(&OverlayEvent::Mode {
+                mode: Mode::Thinking,
+                quiet: false,
+                lines: Vec::new()
+            }),
+            Some(false)
+        );
         for ends in [
-            OverlayEvent::Say { hold: true, prefix: String::new(), text: String::new() },
+            OverlayEvent::Say {
+                hold: true,
+                prefix: String::new(),
+                text: String::new(),
+            },
             OverlayEvent::Say {
                 hold: false,
                 prefix: "答".into(),
@@ -1450,7 +1501,7 @@ mod tests {
         }
         // and what is not about the stage changes nothing
         for neutral in [
-            OverlayEvent::CancelKey { reset:true },
+            OverlayEvent::CancelKey { reset: true },
             OverlayEvent::Level { value: 0.5 },
             OverlayEvent::Progress(Progress::DONE),
             OverlayEvent::Learned {

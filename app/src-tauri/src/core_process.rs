@@ -327,8 +327,13 @@ pub(crate) mod job {
         /// Contains an isolated debug app and all children it will create, including WebView2.
         pub fn add_current(&self) -> Result<(), String> {
             // SAFETY: the job is owned and GetCurrentProcess returns a valid pseudo-handle.
-            unsafe { AssignProcessToJobObject(self.0, windows::Win32::System::Threading::GetCurrentProcess()) }
-                .map_err(|err| err.to_string())
+            unsafe {
+                AssignProcessToJobObject(
+                    self.0,
+                    windows::Win32::System::Threading::GetCurrentProcess(),
+                )
+            }
+            .map_err(|err| err.to_string())
         }
 
         #[cfg(test)]
@@ -877,8 +882,14 @@ mod tests {
         assert_eq!(timeout_for("dictation.stop"), Duration::from_secs(150));
         assert_eq!(timeout_for("models.ensure"), Duration::from_secs(3600));
         assert_eq!(timeout_for("models.local_use"), Duration::from_secs(3600));
-        assert_eq!(timeout_for("agent.ask"), Duration::from_secs(TURN_TIMEOUT_S));
-        assert_eq!(timeout_for("agent.confirm"), Duration::from_secs(TURN_TIMEOUT_S));
+        assert_eq!(
+            timeout_for("agent.ask"),
+            Duration::from_secs(TURN_TIMEOUT_S)
+        );
+        assert_eq!(
+            timeout_for("agent.confirm"),
+            Duration::from_secs(TURN_TIMEOUT_S)
+        );
         assert_eq!(timeout_for("integrations.refresh"), Duration::from_secs(40));
         assert_eq!(
             timeout_for("integrations.connect"),

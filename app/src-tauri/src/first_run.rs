@@ -35,7 +35,10 @@ mod tests {
 
     #[test]
     fn initial_and_second_autostart_launches_stay_hidden() {
-        assert!(!opens_at_start(&["Raphael.exe".into(), "--autostart".into()]));
+        assert!(!opens_at_start(&[
+            "Raphael.exe".into(),
+            "--autostart".into()
+        ]));
         assert!(!opens_at_start(&["--autostart".into()]));
     }
 

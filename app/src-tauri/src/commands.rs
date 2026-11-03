@@ -392,8 +392,10 @@ pub fn floating_controls(
     if !floating_controls_allowed(webview.label()) {
         return Err("this window cannot report floating controls".into());
     }
-    let mouse = app.state::<crate::overlay::mouse::Windows>()
-        .get(webview.label()).ok_or("floating window is missing")?;
+    let mouse = app
+        .state::<crate::overlay::mouse::Windows>()
+        .get(webview.label())
+        .ok_or("floating window is missing")?;
     mouse.report(revision, rects, held)
 }
 
@@ -760,7 +762,9 @@ pub async fn core_call(
     let method = if method == "dictionary.correct" {
         params = crate::learned::composer_params(params)?;
         "dictionary.learn".to_owned()
-    } else { method };
+    } else {
+        method
+    };
     let monitor = (method == "audio.monitor")
         .then(|| params.get("on").and_then(Value::as_bool))
         .flatten();
@@ -769,9 +773,27 @@ pub async fn core_call(
         .await
         .map_err(|err| err.to_string())?;
     if method == "dictionary.learn" {
-        let words = result.get("learned").and_then(Value::as_array).map(|words| words.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
-        let language = app.try_state::<LanguageCell>().map(|cell| cell.get()).unwrap_or_else(|| "zh-TW".to_owned());
-        crate::learned::publish(&app, &words, result.get("undo").and_then(Value::as_str), &language);
+        let words = result
+            .get("learned")
+            .and_then(Value::as_array)
+            .map(|words| {
+                words
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let language = app
+            .try_state::<LanguageCell>()
+            .map(|cell| cell.get())
+            .unwrap_or_else(|| "zh-TW".to_owned());
+        crate::learned::publish(
+            &app,
+            &words,
+            result.get("undo").and_then(Value::as_str),
+            &language,
+        );
     }
     if let Some(on) = monitor {
         MONITORING.store(on, Ordering::Relaxed);
@@ -1067,14 +1089,26 @@ pub fn main_event_from(notification: &Notification, monitoring: bool) -> Option<
             let state = params.get("state")?.as_str()?;
             if !matches!(
                 state,
-                "thinking" | "working" | "searching" | "computer" | "waiting" | "blocked" | "done" | "error" | "idle"
+                "thinking"
+                    | "working"
+                    | "searching"
+                    | "computer"
+                    | "waiting"
+                    | "blocked"
+                    | "done"
+                    | "error"
+                    | "idle"
             ) {
                 return None;
             }
             Some(MainEvent::MemberActivity {
                 member_id: params.get("member_id")?.as_u64()?,
                 state: state.to_owned(),
-                label: params.get("label").and_then(Value::as_str).unwrap_or("").to_owned(),
+                label: params
+                    .get("label")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned(),
             })
         }
         "agent.turn" => Some(MainEvent::AgentTurn {
@@ -1449,7 +1483,9 @@ impl Effects for AppEffects {
     }
 
     fn autostart(&self, on: bool) -> Result<(), String> {
-        if crate::native_journey() { return Ok(()); }
+        if crate::native_journey() {
+            return Ok(());
+        }
         let launcher = self.app.autolaunch();
         let result = if on {
             // Always: it writes the path of the exe that is running, which may have moved.
@@ -1487,7 +1523,8 @@ impl Effects for AppEffects {
             log::warn!("could not set the theme of the main window: {err}");
         }
         if let Some(overlay) = self.app.get_webview_window(crate::OVERLAY_WINDOW)
-            && let Err(err) = overlay.set_theme(theme) {
+            && let Err(err) = overlay.set_theme(theme)
+        {
             log::warn!("could not set the theme of the overlay window: {err}");
         }
     }
@@ -1558,7 +1595,11 @@ pub fn window_hotkey(
 ) -> Result<(), String> {
     require_main(&webview)?;
     if let (WindowHotkey::AgentDown, Some(conversation)) = (kind, conversation_id) {
-        return hotkeys.conversation_voice(member_id.unwrap_or(0), conversation, typed_quick(destination.as_deref())?);
+        return hotkeys.conversation_voice(
+            member_id.unwrap_or(0),
+            conversation,
+            typed_quick(destination.as_deref())?,
+        );
     }
     if matches!(kind, WindowHotkey::AgentDown) && member_id.is_some() {
         return Err("the composer must name its conversation before recording".into());
@@ -2037,11 +2078,18 @@ mod tests {
                 .and_then(|rest| rest.split('(').next())
                 .unwrap();
             if name == "floating_controls" {
-                let first = body.split("-> Result<(), String> {").nth(1).unwrap().trim_start();
+                let first = body
+                    .split("-> Result<(), String> {")
+                    .nth(1)
+                    .unwrap()
+                    .trim_start();
                 assert!(first.starts_with("if !floating_controls_allowed(webview.label())"));
                 assert!(body.contains("get(webview.label())"));
             } else {
-                assert!(body.contains("require_main("), "`{name}` does not check its caller");
+                assert!(
+                    body.contains("require_main("),
+                    "`{name}` does not check its caller"
+                );
             }
             checked.push(name.to_owned());
         }
@@ -2356,7 +2404,15 @@ mod tests {
     fn desktop_viewer_exposes_only_named_main_window_operations() {
         assert!(is_allowed_method("computer.teach"));
         assert!(!is_allowed_method("computer.teach_input"));
-        for method in ["computer.viewer_status", "computer.viewer_open", "computer.viewer_renew", "computer.viewer_control", "computer.viewer_close", "computer.revoke", "computer.wallpaper"] {
+        for method in [
+            "computer.viewer_status",
+            "computer.viewer_open",
+            "computer.viewer_renew",
+            "computer.viewer_control",
+            "computer.viewer_close",
+            "computer.revoke",
+            "computer.wallpaper",
+        ] {
             assert!(is_allowed_method(method));
         }
         assert!(!is_allowed_method("computer.viewer_credentials"));
@@ -2411,7 +2467,12 @@ mod tests {
 
     #[test]
     fn the_main_window_reaches_the_memory_by_its_four_methods_only() {
-        for method in ["memory.get", "memory.update", "memory.clear", "memory.summary_clear"] {
+        for method in [
+            "memory.get",
+            "memory.update",
+            "memory.clear",
+            "memory.summary_clear",
+        ] {
             assert!(is_allowed_method(method), "{method}");
         }
         for method in [
@@ -2508,7 +2569,15 @@ mod tests {
     #[test]
     fn work_channels_and_checkpoints_have_only_named_main_window_methods() {
         for kind in ["slack", "discord"] {
-            for action in ["status", "connect", "set_enabled", "approve", "reject", "remove_user", "disconnect"] {
+            for action in [
+                "status",
+                "connect",
+                "set_enabled",
+                "approve",
+                "reject",
+                "remove_user",
+                "disconnect",
+            ] {
                 assert!(is_allowed_method(&format!("messaging.{kind}.{action}")));
             }
             for action in ["send", "token", "approve_all", "statusx"] {
@@ -2524,7 +2593,9 @@ mod tests {
     fn only_the_fixed_links_may_be_opened() {
         assert!(is_openable_link("https://t.me/BotFather"));
         assert!(is_openable_link("https://api.slack.com/apps"));
-        assert!(is_openable_link("https://discord.com/developers/applications"));
+        assert!(is_openable_link(
+            "https://discord.com/developers/applications"
+        ));
         assert!(is_openable_link("https://github.com/login/device"));
         assert!(is_openable_link("https://github.com/settings/applications"));
         assert!(is_openable_link("ms-settings:privacy-microphone"));
@@ -2996,13 +3067,40 @@ mod tests {
             let params = json!({"resource": "fish", "requirement": requirement,
                 "state": "broken", "repair": "https://untrusted.invalid", "token": "never-forward"});
             let event = main_event_from(&notification("setup.missing", params), false);
-            assert_eq!(event, Some(MainEvent::SetupMissing { missing: json!({
-                "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
-            }) }));
-            assert!(!serde_json::to_string(&event).unwrap().contains("never-forward"));
+            assert_eq!(
+                event,
+                Some(MainEvent::SetupMissing {
+                    missing: json!({
+                        "resource": "fish", "requirement": requirement, "state": "missing", "repair": "voice"
+                    })
+                })
+            );
+            assert!(
+                !serde_json::to_string(&event)
+                    .unwrap()
+                    .contains("never-forward")
+            );
         }
-        assert_eq!(main_event_from(&notification("setup.missing", json!({"resource": "other", "requirement": "setup"})), true), None);
-        assert_eq!(main_event_from(&notification("setup.missing", json!({"resource": "fish", "requirement": "raw-error"})), true), None);
+        assert_eq!(
+            main_event_from(
+                &notification(
+                    "setup.missing",
+                    json!({"resource": "other", "requirement": "setup"})
+                ),
+                true
+            ),
+            None
+        );
+        assert_eq!(
+            main_event_from(
+                &notification(
+                    "setup.missing",
+                    json!({"resource": "fish", "requirement": "raw-error"})
+                ),
+                true
+            ),
+            None
+        );
     }
 
     #[test]
@@ -3040,11 +3138,22 @@ mod tests {
     #[test]
     fn member_activity_forwards_only_valid_states_and_member_ids() {
         for state in [
-            "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "idle",
+            "thinking",
+            "working",
+            "searching",
+            "computer",
+            "waiting",
+            "blocked",
+            "done",
+            "error",
+            "idle",
         ] {
             for member_id in [0, 7] {
                 let event = main_event_from(
-                    &notification("member.activity", json!({"member_id": member_id, "state": state, "label": "Sample public action"})),
+                    &notification(
+                        "member.activity",
+                        json!({"member_id": member_id, "state": state, "label": "Sample public action"}),
+                    ),
                     false,
                 );
                 assert_eq!(
@@ -3072,7 +3181,10 @@ mod tests {
             json!({"member_id": 1, "state": null}),
             json!({"member_id": 1, "state": "unknown"}),
         ] {
-            assert_eq!(main_event_from(&notification("member.activity", payload), true), None);
+            assert_eq!(
+                main_event_from(&notification("member.activity", payload), true),
+                None
+            );
         }
     }
 

@@ -4,19 +4,29 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-static CANCEL_INPUTS: std::sync::Mutex<std::collections::VecDeque<bool>> = std::sync::Mutex::new(std::collections::VecDeque::new());
+static CANCEL_INPUTS: std::sync::Mutex<std::collections::VecDeque<bool>> =
+    std::sync::Mutex::new(std::collections::VecDeque::new());
 static ESCAPE_DOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Only ordered Escape/reset markers, never key identities, text or pointer positions.
-pub fn take_cancel_input() -> Option<bool> { CANCEL_INPUTS.lock().ok()?.pop_front() }
+pub fn take_cancel_input() -> Option<bool> {
+    CANCEL_INPUTS.lock().ok()?.pop_front()
+}
 fn cancel_input(reset: bool) {
     if let Ok(mut inputs) = CANCEL_INPUTS.lock() {
-        if inputs.len() >= 128 { inputs.clear(); inputs.push_back(true); }
+        if inputs.len() >= 128 {
+            inputs.clear();
+            inputs.push_back(true);
+        }
         inputs.push_back(reset);
     }
 }
-pub(crate) fn note_cancel_interruption() { cancel_input(true); }
+pub(crate) fn note_cancel_interruption() {
+    cancel_input(true);
+}
 pub(crate) fn note_escape(down: bool) {
-    if !ESCAPE_DOWN.swap(down, Ordering::Relaxed) && down { cancel_input(false); }
+    if !ESCAPE_DOWN.swap(down, Ordering::Relaxed) && down {
+        cancel_input(false);
+    }
 }
 
 /// An edit in a field explicitly approved by the caller.

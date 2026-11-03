@@ -799,8 +799,11 @@ unsafe extern "system" fn mouse_hook_proc(code: i32, wparam: WPARAM, lparam: LPA
     let mut needs_mask = false;
 
     super::observation::mouse(&*(lparam.0 as *const MSLLHOOKSTRUCT));
-    if matches!(wparam.0 as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN)
-        && (*(lparam.0 as *const MSLLHOOKSTRUCT)).flags & 1 == 0 {
+    if matches!(
+        wparam.0 as u32,
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+    ) && (*(lparam.0 as *const MSLLHOOKSTRUCT)).flags & 1 == 0
+    {
         crate::observation::note_cancel_interruption();
     }
 
