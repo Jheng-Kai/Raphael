@@ -45,6 +45,10 @@ REASONS = KINDS | SERVICE_REASONS | frozenset(
         "network",
         "not_found",
         "blocked",
+        "approval_required",
+        "memory_refused",
+        "secret_store",
+        "url_not_seen",
         "gone",
         "tool_error",
         "protocol",
@@ -73,8 +77,6 @@ _ALIASES = {
     "own_window": "blocked",
     "keys_not_allowed": "blocked",
     "failed": "error",
-    # The services' kinds (raphael_core.services.common.ServiceError).
-    "url_not_seen": "blocked",
 }
 
 # The reason of a step that failed with no kind, by how it ended.

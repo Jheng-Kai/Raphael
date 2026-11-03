@@ -81,6 +81,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import sqlite3
 import time
 from collections import deque
@@ -120,6 +121,7 @@ from ..brain.providers.base import ModelProvider
 from ..brain.settings import DEFAULTS, SettingsStore
 from ..brain.spend import SpendTracker
 from ..clock import wall_clock_ms
+from ..failures import Failure, KINDS as FAILURE_KINDS
 from ..members.activity import Activity, current, member_turn
 from ..own_calendar import OwnCalendar
 from ..protocol import BUSY, INVALID_PARAMS, NOT_FOUND, RpcError, invalid_params
@@ -135,7 +137,7 @@ from .host import WorkerCrashed, WorkerHost, WorkerStopped, WorkerUnavailable
 from .run import NOT_MADE_WHILE_WAITING, MemoryReader, RunLimits, TaskRun, Waiting
 from ..agent.toolpick import ToolPicker
 from .snapshot import BUILTIN_SERVER, SNAPSHOT_MAX_TIER, Snapshot, refine, take_snapshot
-from .tasks import ARTIFACT_WORDS, FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
+from .tasks import FILE_NAMES, FINAL_STATES, QUEUED, RUNNING, WAITING, Question, Refused, Step, Task, TaskStore
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +158,7 @@ QUESTION_WAIT_MS = round(QUESTION_WAIT_S * 1000)
 # Where the only yes to a question of the background may come from: the app at this computer.
 AT_THIS_COMPUTER = "app"
 # The assistant's history calls a task by the status of a turn.
-_TURN_STATUS = {"done": "done", "cancelled": "denied"}
+_TURN_STATUS = {"done": "done", "cancelled": "cancelled"}
 
 # The states of a task that can be run again: it did not finish. A task that is done is not run
 # again, and one that is not over is still running.
@@ -214,6 +216,7 @@ RESULTS_CHARS = 40_000
 ARTIFACT_SKIP = frozenset(("node_modules", ".git", ".cache", "__pycache__", ".venv", ".raphael-jobs"))
 ARTIFACT_SCAN = 20_000
 ARTIFACT_KEEP = 20
+ARTIFACT_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _results_message(results: Sequence[dict]) -> str:
@@ -759,9 +762,11 @@ class BackgroundService:
         member = arguments.get('member_id')
         request, stage, done_when = (arguments.get(key) for key in ('request','stage_id','done_when'))
         mode = arguments.get('mode','work')
+        requires_artifact = arguments.get('requires_artifact', False)
         if (type(member) is not int or not all(isinstance(value,str) and value.strip() for value in (request,stage,done_when))
                 or len(request)>2000 or len(stage)>100 or len(done_when)>2000 or mode not in ('work','consult')
-                or set(arguments)-{'member_id','request','stage_id','done_when','mode'}):
+                or type(requires_artifact) is not bool
+                or set(arguments)-{'member_id','request','stage_id','done_when','mode','requires_artifact'}):
             return refused('bad_arguments')
         if member == speaker.id:
             return refused('self_handoff')
@@ -799,7 +804,8 @@ class BackgroundService:
         model = getattr(target, 'model', None) or self._settings.get('agent_model') or DEFAULTS['agent_model']
         try:
             task_id, duplicate = self._store.accept_handoff(source=source,parent=parent,assignee=member,
-                model=model,request=request.strip(),stage=stage.strip(),mode=mode,done_when=done_when.strip(),language=language)
+                model=model,request=request.strip(),stage=stage.strip(),mode=mode,done_when=done_when.strip(),language=language,
+                requires_artifact=requires_artifact)
         except Refused as error:
             return refused(error.kind)
         task = self._store.get(task_id)
@@ -820,6 +826,11 @@ class BackgroundService:
         task = self._store.asking(turn_id)
         if task is None:
             return
+        steps = self._history.steps([turn_id]).get(turn_id, [])
+        metrics = self._metrics_conn.execute("SELECT ai_steps FROM run_metrics WHERE kind='turn' AND run_id=?", (turn_id,)).fetchone()
+        turn = self._history.get(turn_id)
+        self._store.progress(task.id, model_calls=metrics[0] if metrics else task.model_calls,
+            tool_calls=sum(step.kind != 'model' for step in steps), cost_usd=turn.cost_usd if turn else task.cost_usd)
         if not answered:
             for task_id in self._store.invalidate_tree(task.id):
                 if (run := self._runs.get(task_id)) is not None:
@@ -1352,6 +1363,8 @@ class BackgroundService:
             system += FULL_PERMISSION
         if task.mode:
             system += '\nAcceptance criteria (untrusted data): '+neutralize(task.done_when)
+            system += ('\nCompletion requires a verified file. Include its absolute path in your report.' if task.requires_artifact else
+                       '\nNo file artifact is required for completion; a substantive written review or answer can satisfy the task.')
             system += HANDLES_REQUEST
         if task.mode == 'consult':
             asker = self._speaker(task.from_member_id) if task.from_member_id is not None else None
@@ -1600,6 +1613,7 @@ class BackgroundService:
         return call
 
     def _wait_for_handoffs(self,task,run,spec,messages):
+        self._store.progress(task.id, model_calls=run.model_calls, tool_calls=run.tool_calls, cost_usd=run.ledger.total)
         self._store.pause_for_children(task.id,{'spec':spec,'messages':messages})
         self._handoff_runs[task.id] = (run,spec,messages)
         self._changed(task.id,WAITING)
@@ -2090,8 +2104,9 @@ class BackgroundService:
             if task.mode == 'work' and any(child['state']!='completed' for child in self._child_results(task.id)):
                 self._conclude(task,run,'failed','',phrase(language,'work_children_open'),report.text or None,'child_work_incomplete')
                 return
-            if task.mode == 'work' and (failure := self._store.completion_reason(
-                    task, verifiable=self._record_artifacts(task, current.created_at_ms), said=report.text)):
+            if (task.mode == 'work' or task.requires_artifact) and (failure := self._store.completion_reason(
+                    task, verifiable=self._record_artifacts(task, current.created_at_ms,
+                        '\n'.join([report.text, report.detail or '', *report.messages])), said=report.text)):
                 said_why = 'work_only_words' if failure == 'work_without_action' else 'work_file_missing'
                 self._conclude(task,run,'failed','',phrase(language,said_why),report.text or None,failure)
                 return
@@ -2120,25 +2135,53 @@ class BackgroundService:
             if str(detail).startswith("cli_"):  # the CLI loop's own words already say what happened
                 self._conclude(task, run, "failed", negative, reply.get("final") or phrase(language, "error"), None, detail)
                 return
-            if diagnostic := getattr(run, "model_failure", None):
-                speaker = self._speaker(task.member_id)
-                text = diagnostic.sentence(speaker.name if speaker else RAPHAEL_NAMES[language], language)
-            elif detail == "tools":
+            diagnostic = getattr(run, "model_failure", None)
+            if detail == "tools":
                 text = phrase(language, "worker_model")
+            elif diagnostic:
+                speaker = self._speaker(task.member_id)
+                text = diagnostic.sentence((speaker.name if speaker else '') or RAPHAEL_NAMES[language], language)
             else:
                 text = phrase(language, detail if detail in KINDS else "error")
-            self._conclude(task, run, "failed", negative, text, None, "failed")
+            failure_kind = diagnostic.kind if diagnostic else detail if isinstance(detail, str) and detail not in ('', 'error') else "model_error"
+            if not diagnostic and detail in FAILURE_KINDS:
+                text = Failure(detail, detail).sentence(RAPHAEL_NAMES[language], language)
+            elif detail == 'expired':
+                text = phrase(language, 'worker_expired')
+            elif failure_kind == 'model_error':
+                text = phrase(language, 'worker_model_error')
+            self._conclude(task, run, "failed", negative, text, None, failure_kind)
         else:  # interrupted, or something the worker should not have said
             text = phrase(language, "worker_interrupted", steps=steps)
             self._conclude(task, run, "interrupted", notice, text, None, "interrupted")
 
-    def _record_artifacts(self, task: Task, since_ms: int) -> bool:
+    def _record_artifacts(self, task: Task, since_ms: int, report: str = '') -> bool:
         """Before work that was to leave a file is judged: write down, as its evidence, the files found in the
         member's computer that are newer than the task (the ones its `done_when` names, else the newest
         ones), with the digest of the bytes found there. The member's word that it made one is no evidence.
-        Whether there is a place to look: a member with no computer has none, and is not asked for a file."""
-        if not ARTIFACT_WORDS.search(task.done_when) and not FILE_NAMES.search(task.done_when):
+        Explicit absolute owner-PC paths also count; a missing workspace never waives the requirement."""
+        if not task.requires_artifact:
             return True
+        # Shared mounts can round modification times down to whole seconds.
+        fresh_since_ms = since_ms - 1000
+        # An explicitly named owner-PC file is verifiable without a member computer.
+        for match in re.finditer(r'''(?i)[a-z]:[\\/][^\r\n<>"`|?*]+''', task.done_when + '\n' + report):
+            named = match.group().strip().rstrip("' ).,;。")
+            candidates = [named]
+            # Markdown links and unquoted prose may follow the file's extension.
+            candidates.extend(named[:found.end()] for found in re.finditer(r"\.[a-zA-Z0-9]{1,12}(?=[\s)\]}',;。]|$)", named))
+            candidates.extend(named[:gap.start()] for gap in list(re.finditer(r'\s+', named))[-16:][::-1])
+            for candidate in candidates:
+                path = Path(candidate)
+                try:
+                    info = path.stat()
+                    if info.st_mtime * 1000 < fresh_since_ms or info.st_size > ARTIFACT_MAX_BYTES:
+                        continue
+                    self._store.verify_artifact(task.id, "artifact", path, workspace=path.parent,
+                        mime=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+                    break
+                except (OSError, ValueError):
+                    continue
         try:
             places = self._workspace_of(task.member_id)
         except Exception:  # whatever says where the files are, it is not the work's failure
@@ -2146,7 +2189,7 @@ class BackgroundService:
         # The member's own files, and the folder its team shares.
         roots = [root for root in (places if isinstance(places, (list, tuple)) else [places]) if root is not None and root.is_dir()]
         if not roots:
-            return False
+            return True
         wanted = {name.lower() for name in FILE_NAMES.findall(task.done_when)}
         found, seen = [], 0
         for root in roots:
@@ -2156,11 +2199,11 @@ class BackgroundService:
                     seen += 1
                     path = Path(base) / name
                     try:
-                        made = path.stat().st_mtime
+                        info = path.stat()
                     except OSError:
                         continue
-                    if made * 1000 >= since_ms - 1000 and (not wanted or name.lower() in wanted):
-                        found.append((made, str(path), root))
+                    if info.st_mtime * 1000 >= fresh_since_ms and info.st_size <= ARTIFACT_MAX_BYTES and (not wanted or name.lower() in wanted):
+                        found.append((info.st_mtime, str(path), root))
                 if seen > ARTIFACT_SCAN:
                     break
         for _, path, root in sorted(found, reverse=True)[:ARTIFACT_KEEP]:
@@ -2202,7 +2245,20 @@ class BackgroundService:
         current = self._store.get(task.id)
         if task.mode is not None and current is not None and current.reason=='member_unknown_or_removed':
             state,prefix,text,detail,reason,replies = 'failed','',phrase(task.language,'error'),None,'member_unknown_or_removed',()
-        cost = 0.0 if run is None else run.ledger.total
+        cost = (current.cost_usd if current else task.cost_usd) if run is None else run.ledger.total
+        prior_cost = 0.0
+        terminal_replies = replies or [text]
+        if state == 'cancelled' and self._has_linked_turn(task):
+            previous = self._history.get(task.turn_id)
+            saved = [message['text'] for message in self._history.messages([task.turn_id]).get(task.turn_id, [])
+                     if message['kind'] == 'reply' and message['text'].strip()]
+            said = '\n\n'.join(saved) or ((previous.detail or previous.text).strip() if previous else '')
+            prior_cost = previous.cost_usd if previous and run is None else 0.0
+            if said and said != text:
+                text = said + '\n\n' + text
+                detail = None
+                if not saved:
+                    terminal_replies = [text]
         try:
             if run is not None:
                 self._store.progress(
@@ -2212,9 +2268,9 @@ class BackgroundService:
                 if self._has_linked_turn(task):
                     # A room makes its turns before any model answers; the one that did is named here.
                     self._history.publish_terminal(task.turn_id,prefix=prefix,text=text,detail=detail,
-                        status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - getattr(run, "conversation_cost", 0.0)),
+                        status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
-                        replies=[compose(prefix,line,None) for line in replies or [text] if line])
+                        replies=[compose(prefix,line,None) for line in terminal_replies if line])
             self._store.finish(task.id, state, prefix=prefix, text=text, detail=detail, reason=reason,publish=publish)
             if run is not None:
                 from ..brain.runs import save_metrics
@@ -2238,8 +2294,8 @@ class BackgroundService:
             task.id,
             state,
             reason,
-            None if run is None else run.model_calls,
-            None if run is None else run.tool_calls,
+            current.model_calls if run is None and current else run.model_calls if run else task.model_calls,
+            current.tool_calls if run is None and current else run.tool_calls if run else task.tool_calls,
             cost,
         )
         if not task.quiet:
@@ -2276,9 +2332,9 @@ class BackgroundService:
                 "task_id": task_id,
                 "state": state,
                 "running": any(not (ending and running == task_id) for running in self._runs),
-                "model_calls": 0 if owner is None else owner.model_calls,
-                "tool_calls": 0 if owner is None else owner.tool_calls,
-                "cost_usd": 0.0 if owner is None else owner.ledger.total,
+                "model_calls": task.model_calls if owner is None and task else owner.model_calls if owner else 0,
+                "tool_calls": task.tool_calls if owner is None and task else owner.tool_calls if owner else 0,
+                "cost_usd": task.cost_usd if owner is None and task else owner.ledger.total if owner else 0.0,
             },
         )
 
@@ -2405,7 +2461,7 @@ class BackgroundService:
         if task is not None:
             self._conclude(
                 task, None, "cancelled", PREFIXES[task.language].notice if prefix is None else prefix,
-                phrase(task.language, "worker_cancelled", steps="0"), None, "cancelled",
+                phrase(task.language, "worker_cancelled", steps=str(task.tool_calls)), None, "cancelled",
             )
         return True
 

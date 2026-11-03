@@ -97,7 +97,7 @@ async def test_cancel_ends_a_running_turn_and_clearing_cannot_resurrect_it(make_
     assert turn["status"] == "running"
     await rig.call("agent.cancel", {"session_id": "live"})
     await task
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     await rig.call("agent.history.clear", {})
     assert await rig.turns() == []
 
@@ -119,7 +119,7 @@ async def test_a_resumed_turn_can_be_cancelled(make_rig, plugins, client):
     await rig.call("agent.cancel", {"session_id": "live"})
     await task
     [turn] = await rig.turns()
-    assert turn["status"] == "denied"
+    assert turn["status"] == "cancelled"
     assert turn["messages"][-1]["kind"] == "reply"
     assert turn["text"] and turn["cost_usd"] >= 0.3
 

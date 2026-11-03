@@ -25,6 +25,9 @@ class RoomCliSessions:
     def put(self, member, brain, session, conversation_id=None):
         self._sessions[(member, brain, conversation_id)] = session
 
+    def forget(self, member, brain, conversation_id=None):
+        self._sessions.pop((member, brain, conversation_id), None)
+
 
 def member_loop(brains, quota, task, run, spec, *, wait_s, progress):
     refused = [0]

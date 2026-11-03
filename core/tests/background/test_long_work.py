@@ -5,6 +5,8 @@ import asyncio
 import hashlib
 import os
 
+import pytest
+
 from raphael_core.agent.speaker import RAPHAEL, Speaker
 from raphael_core.background import service as service_module
 from raphael_core.background.run import RunLimits
@@ -243,10 +245,10 @@ def workspace_writing(rig, monkeypatch, directory, *, writes=True):
     monkeypatch.setattr(rig.plugins.hub._connector, "call_tool", work)
 
 
-async def make_office(rig, source, target, done_when="office.html exists in the workspace and opens"):
+async def make_office(rig, source, target, done_when="office.html exists in the workspace and opens", *, requires_artifact=True):
     await rig.plugins.connect(look="T1")
     rig.client.replies.extend([turn(calls=[call("Notes__look", {"topic": "office"})]), report("office.html is written")])
-    receipt = rig.service.handoff(RAPHAEL, args(target, request="Build office.html", done_when=done_when),
+    receipt = rig.service.handoff(RAPHAEL, args(target, request="Build office.html", done_when=done_when, requires_artifact=requires_artifact),
                                   source_turn_id=source.id, language="en")
     task_id = receipt.data["task_id"]
     await until(lambda: rig.task(task_id).state in ("done", "failed"), timeout=10)
@@ -272,24 +274,30 @@ async def test_a_claim_without_the_file_still_fails_honestly(make_rig, tmp_path,
     assert rig.task(task_id).state == "failed" and rig.task(task_id).reason == "missing_artifact"
 
 
-async def test_a_file_from_before_the_task_is_not_its_evidence(make_rig, tmp_path, monkeypatch):
+@pytest.mark.parametrize("offset_ms", [-1001, -1000, -789])
+async def test_workspace_artifacts_allow_whole_second_timestamp_rounding(make_rig, tmp_path, monkeypatch, offset_ms):
     rig = make_rig()
+    rig.wall.now += 789
     target, source = setup(rig)
     old = tmp_path / "office.html"
     old.write_text("<p>old</p>", encoding="utf8")
-    os.utime(old, (1_500_000_000, 1_500_000_000))
+    modified = (rig.wall() + offset_ms) / 1000
+    os.utime(old, (modified, modified))
     workspace_writing(rig, monkeypatch, tmp_path, writes=False)
     task_id = await make_office(rig, source, target)
-    assert rig.task(task_id).reason == "missing_artifact"
+    assert rig.task(task_id).state == ("failed" if offset_ms < -1000 else "done")
+    assert rig.task(task_id).reason == ("missing_artifact" if offset_ms < -1000 else None)
 
 
-async def test_a_member_with_no_workspace_is_not_asked_for_a_file_nobody_can_check(make_rig, tmp_path, monkeypatch):
+@pytest.mark.parametrize("requires_artifact", [False, True])
+async def test_workspace_absence_does_not_override_the_explicit_artifact_requirement(make_rig, tmp_path, monkeypatch, requires_artifact):
     rig = make_rig()
     target, source = setup(rig)
     workspace_writing(rig, monkeypatch, tmp_path, writes=False)
     rig.service.use_workspaces(lambda member: None)
-    task_id = await make_office(rig, source, target, done_when="A file with the report")
-    assert rig.task(task_id).state == "done"
+    task_id = await make_office(rig, source, target, done_when="A file with the report", requires_artifact=requires_artifact)
+    assert rig.task(task_id).state == ("failed" if requires_artifact else "done")
+    assert rig.task(task_id).reason == ("missing_artifact" if requires_artifact else None)
 
 
 # --- what comes back to the parent -------------------------------------------------------------------

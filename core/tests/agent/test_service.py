@@ -1257,7 +1257,7 @@ async def test_cancelling_the_session_denies_its_question_and_a_late_yes_does_no
     rig.seed("q", "a")
     asked = await ask_to_copy(rig, client)
     assert await rig.call("agent.cancel", {"session_id": "s1"}) == {}
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     late = await rig.confirm(asked["confirm"]["id"], True)
     assert late["prefix"] == "否" and actions.calls == []
 
@@ -1277,7 +1277,7 @@ async def test_a_new_request_replaces_a_question_that_waits(rig, client, actions
     await rig.ask("你好", session="s2")
     late = await rig.confirm(asked["confirm"]["id"], True)
     assert late["prefix"] == "否" and actions.calls == []
-    assert any(t["status"] == "denied" for t in await rig.turns())
+    assert any(t["status"] == "cancelled" for t in await rig.turns())
 
 
 async def test_a_question_that_ran_out_before_a_new_request_is_expired_not_denied(
@@ -1721,7 +1721,7 @@ async def test_stopping_a_session_ends_its_request_and_denies_its_question_only(
     asked = await ask_to_copy(rig, client)
     assert rig.service.stop_session("telegram:42") is False
     assert rig.service.stop_session("s1") is True
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
     assert (await rig.confirm(asked["confirm"]["id"], True))["prefix"] == "否"
     # unlike Esc, it leaves no memory that would cancel the session's next request
     client.decisions.append(decision("chat"))

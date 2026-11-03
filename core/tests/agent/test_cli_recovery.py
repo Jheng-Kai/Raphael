@@ -77,6 +77,30 @@ async def test_after_a_tool_the_same_brain_continues_from_its_receipt(monkeypatc
     assert not rig.events and rig.loop.failure is None
 
 
+@pytest.mark.parametrize("fails_again", [False, True])
+async def test_oversized_resumed_history_gets_one_fresh_bounded_attempt(monkeypatch, tmp_path, fails_again):
+    async def play(loop, attempt):
+        if attempt == 1:
+            await loop._tool("save", "save_draft", {"path": "draft.txt"})
+        if attempt == 1 or fails_again:
+            yield Event("error", "Input exceeds the maximum length of 1048576 characters")
+        else:
+            yield Event("final", "Checked the saved draft.")
+
+    rig = recovery_rig(monkeypatch, tmp_path, play)
+    rig.loop.sessions.put(5, rig.loop.model, "oversized-session", 7)
+    rig.loop.user = rig.loop._original_user = "Earlier context. " * 100000 + " Check the saved draft."
+    result = await rig.loop.run()
+    assert len(rig.calls) == 2 and len(rig.effects) == 1
+    assert rig.calls[0]["session"] == "oversized-session" and rig.calls[1]["session"] is None
+    assert rig.loop.sessions.get(5, rig.loop.model, 7) is None
+    assert len(rig.calls[1]["user"]) < 18000
+    assert all(word in rig.calls[1]["user"] for word in ("Check the saved draft.", "Saved receipt 17", "Do not repeat"))
+    assert (rig.loop.failure == "context_overflow") == fails_again
+    if not fails_again:
+        assert result.final == "Checked the saved draft."
+
+
 async def test_recovery_lists_current_connections_without_replaying_a_completed_call(monkeypatch, tmp_path):
     import httpx
 

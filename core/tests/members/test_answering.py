@@ -519,6 +519,14 @@ async def test_a_chain_is_at_most_two_deep_and_never_comes_back(setup):
             speaker, "ask_member", {"member": whom, "request": "x"},
             language="zh-TW", ledger=None, session_id="s",
         )  # fmt: skip
+        if result.error == 'blocked':
+            assert result.instruction and 'Answer with what you have' in result.instruction
+            if speaker.depth >= 2:
+                assert 'depth limit' in result.instruction
+            elif team.members.find(whom).id == speaker.id:
+                assert 'yourself' in result.instruction
+            else:
+                assert 'already in this consultation chain' in result.instruction
         return result.error
 
     b_asked = b.asked_by(a)  # A asked B: B may ask one more

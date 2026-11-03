@@ -110,7 +110,9 @@ async def test_show_refuses_an_unseen_url_before_any_fetch(make_rig, client, mon
     client.chats = [chat("Showing a reference.", ("show", {"url": "https://unseen.example/"})),
                     chat('{"text":"Which reference did you mean?","detail":""}'), chat('{"text":"Please provide the reference."}')]
     await typed(rig, "Show it")
-    assert any("url_not_seen" in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
+    [turn] = await rig.turns()
+    assert any(step["outcome"] == "blocked" and step["reason"] == "url_not_seen" for step in turn["steps"])
+    assert any("Use a URL already supplied" in message.get("content", "") for message in client.chat_calls[-1]["messages"] if message["role"] == "tool")
 
 
 async def test_only_explicit_public_fields_are_published_from_structured_narration(make_rig, client):

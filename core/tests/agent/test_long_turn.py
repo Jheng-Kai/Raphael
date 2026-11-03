@@ -151,7 +151,7 @@ async def test_the_owner_can_stop_a_turn_waiting_to_try_again(make_rig, client, 
     await asyncio.sleep(0.01)
     await rig.call("agent.cancel", {"session_id": "live"})
     await asyncio.wait_for(task, 5)
-    assert (await rig.turns())[0]["status"] == "denied"
+    assert (await rig.turns())[0]["status"] == "cancelled"
 
 
 def test_a_call_given_up_on_costs_nothing_on_the_owners_plan():

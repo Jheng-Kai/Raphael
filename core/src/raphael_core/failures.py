@@ -306,6 +306,8 @@ _ALIASES = {"auth": "auth_expired", "login": "auth_expired", "not_configured": "
             "refusal": "refused", "bad_request": "refused", "tool_error": "tool_broken", "no_key": "auth_expired",
             "bad_arguments": "tool_broken", "bad_response": "tool_broken", "vault": "tool_broken",
             "resume_failed": "tool_broken", "forbidden": "refused", "presence_required": "refused",
+            "approval_required": "permission_denied", "secret_store": "permission_denied",
+            "url_not_seen": "refused", "memory_refused": "refused",
             "context_length_exceeded": "context_overflow", "request_too_large": "payload_too_large",
             "content_filter": "content_policy", "content_policy_violation": "content_policy",
             "safety_violation": "content_policy"}
@@ -318,6 +320,7 @@ _QUOTA_WALL = _QUOTA + r"|limit exceeded|resource has been exhausted|(?:weekly|m
 _THROTTLE = r"rate.?limit|too many requests|requests? per|tokens? per|per[- ]minute|throttl"
 _PAYLOAD = r"request entity too large|payload too large|request_too_large|request exceeds the maximum size"
 _OVERFLOW = (r"context[_ ](?:length|window|size)|maximum context|(?:prompt|input) is too long|too many tokens|token limit"
+             r"|input exceeds the maximum length(?: of \d+ characters)?"
              r"|maximum (?:allowed )?input length|maximum number of (?:input )?tokens|max_model_len|maximum model length"
              r"|reduce the length|more than max tokens|上下文長度|上下文长度|超過最大長度|超过最大长度")
 _CONTENT_POLICY = (r"content[_ ]filter|content[_ ]polic|usage polic|flagged (?:by|for)|safety (?:system|filter|polic)"

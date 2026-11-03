@@ -58,7 +58,7 @@ async def test_claim_then_cancel_never_reaches_the_model_or_start_side_effects(m
     turn = rig.service._history.for_session('live')[0]
     assert rig.service._inbox.get(turn.id)['outcome'] == 'cancelled'
     assert rig.service._inbox.find(0, turn.conversation_id, 'live') is None
-    assert rig.service._history.for_session('live')[0].status == 'denied'
+    assert rig.service._history.for_session('live')[0].status == 'cancelled'
 
 
 async def test_attachment_and_text_behind_it_keep_fifo_order(make_rig, monkeypatch, tmp_path):

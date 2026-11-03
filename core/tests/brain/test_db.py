@@ -361,7 +361,26 @@ SCHEMA_V27 = {
         "stop_requested INTEGER NOT NULL DEFAULT 0", "wrapup_sent INTEGER NOT NULL DEFAULT 0", "reason TEXT NOT NULL DEFAULT ''",
     ],
 }
-LATEST = 58
+LATEST = 59
+
+
+def test_v59_existing_tasks_default_to_no_artifact_and_keep_their_reports(monkeypatch, tmp_path):
+    from raphael_core.background.tasks import TaskStore
+    path = tmp_path / "before-artifact-flag.db"
+    with monkeypatch.context() as old:
+        old.setattr(db, "LATEST_VERSION", 58)
+        conn = db.connect(path)
+    task_id = conn.execute("INSERT INTO worker_tasks(created_at_ms,state,session_id,language,text,done_when,report_text) "
+                          "VALUES (1,'done','sample','en','Review','Read the file','Existing review')").lastrowid
+    conn.commit()
+    conn.close()
+    upgraded = db.connect(path)
+    task = TaskStore(upgraded).get(task_id)
+    assert not task.requires_artifact and task.report_text == "Existing review" and task.state == "done"
+    upgraded.close()
+    reopened = db.connect(path)
+    assert not TaskStore(reopened).get(task_id).requires_artifact
+    reopened.close()
 
 
 def test_v41_room_membership_guard_follows_the_unique_chief(conn):
@@ -556,6 +575,7 @@ SCHEMA_V58 = {**SCHEMA_V57, "agent_inbox": [
     "seq INTEGER NOT NULL", "state TEXT NOT NULL",
     "outcome TEXT", "payload_json TEXT NOT NULL", "boot_id TEXT", "created_at_ms INTEGER NOT NULL",
     "claimed_at_ms INTEGER", "settled_at_ms INTEGER"]}
+SCHEMA_V59 = {**SCHEMA_V58, "worker_tasks": [*SCHEMA_V58["worker_tasks"], "requires_artifact INTEGER NOT NULL DEFAULT 0"]}
 
 
 def test_v48_adds_the_calendar_without_changing_existing_members_and_keeps_events_on_reopen(tmp_path):
@@ -712,7 +732,7 @@ def describe_columns(conn, table):
 
 
 def test_connect_creates_the_latest_schema(conn):
-    assert schema_names(conn, "table") == set(SCHEMA_V58) | FTS_SHADOWS | SEQUENCE
+    assert schema_names(conn, "table") == set(SCHEMA_V59) | FTS_SHADOWS | SEQUENCE
     assert {
         "history_created",
         "agent_turns_created",
@@ -732,7 +752,7 @@ def test_connect_creates_the_latest_schema(conn):
         "agent_inbox_started",
     } <= schema_names(conn, "index")
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
-    for table, columns in SCHEMA_V58.items():
+    for table, columns in SCHEMA_V59.items():
         if table != "agent_turns_fts":
             assert describe_columns(conn, table) == columns
     assert [c["name"] for c in conn.execute("PRAGMA table_info(agent_turns_fts)")] == [

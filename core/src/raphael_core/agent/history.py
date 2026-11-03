@@ -50,7 +50,7 @@ from dataclasses import dataclass, field
 from ..clock import wall_clock_ms
 from ..protocol import RpcError
 from ..memory.terms import QueryWord, fts_quote, index_terms, query_words
-from .steps import Step, work_summary
+from .steps import Step, reason_of, work_summary
 from .quotes import quote_from_wire
 from .conversations import Conversations
 from .public_events import event_text
@@ -61,7 +61,7 @@ VOICE = "voice"
 # The statuses of a turn that ended without the answer asked for: it failed, the owner said no or
 # stopped it, or nobody answered it. It is part of the conversation all the same: the owner said it. A turn
 # still "running" or waiting for a yes ("confirm") is not over, and says nothing yet.
-UNFINISHED = ("error", "denied", "expired")
+UNFINISHED = ("error", "denied", "expired", "cancelled")
 
 
 @dataclass
@@ -340,7 +340,7 @@ class AgentHistory:
                     step.server,
                     step.outcome,
                     max(int(step.ms), 0),
-                    step.reason,
+                    step.reason or (reason_of(step.outcome, None) if step.outcome == 'blocked' else None),
                     step.detail,
                 ),
             )

@@ -605,6 +605,38 @@ compact identity at 720x900. It reuses the shared rendered assertions and retain
 per-check failures and actual viewport sizes. No page module or DOM geometry is
 substituted; fake brain remains enabled and no provider request is needed.
 
+## Task endings (2026-11-04)
+
+R-BATCH-07/08 use an explicit handoff requires_artifact boolean, default false.
+Read-only reviews and file references do not create a file requirement. A required
+artifact is verified from bytes in the member/shared workspace or an absolute
+owner-PC path named in done_when or the report. Migration 59 defaults existing
+tasks to false and preserves their reports; reruns retain the explicit contract.
+
+R-WORK-03/04/05 persist a reason on every blocked step, explain bounded consultation
+refusals, preserve completed replies and measured counters on Stop, and store
+cancelled independently of denied permission. Conversation history still reads
+cancelled owner requests as unfinished work. The existing work list translates
+approval, memory-rule, secret-store and unseen-URL refusals for each speaker.
+
+R-CLI-05/06 classify the Codex maximum-character input error as context_overflow,
+keep background failure kinds and give an oversized resumed CLI history one fresh
+attempt on the same model. The bounded continuation contains the current task,
+accepted owner input and execution records; effects are never replayed by the
+harness. Another overflow is terminal. New sessions with oversized input do not
+enter this retry path.
+
+Selected UI matrix: task-ending-chief, task-ending-member and work-member-builtin,
+both themes at 1120,720,1920x1080. Inspect the expanded reasons and preserved
+answer/count in both conversation consumers; compare their work lists at equal
+theme/width. Run npm run verify and the affected offline pytest suites. Native
+history/Stop, real CLI continuation and live tool selection remain separate from
+fixture evidence; network and judge calls require the task's authorization.
+
+```powershell
+npm run look -- task-ending-chief task-ending-member work-member-builtin --theme both --width 1120,720,1920x1080
+```
+
 ## Failure diagnosis and continuation (2026-10-29)
 
 API and subscription CLI brains share the failure taxonomy in `failures.py`, which also

@@ -382,7 +382,7 @@ async def test_stop_ends_a_quick_question_in_its_place_and_its_late_answer_write
     reply = await asyncio.wait_for(asked, 5)
     await asyncio.sleep(0)
     [stopped] = rig.history.list(conversation_id=rig.service.conversations.quick())
-    assert reply["turn_id"] == 0 and stopped.status == "denied"
+    assert reply["turn_id"] == 0 and stopped.status == "cancelled"
     assert "LATE_ANSWER" not in json.dumps([stopped.text, stopped.detail, rig.history.messages([stopped.id])])
     assert [turn.question for turn in rig.history.list(conversation_id=formal)] == ["FORMAL_SENTINEL"]
 

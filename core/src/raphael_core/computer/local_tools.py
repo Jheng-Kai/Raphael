@@ -128,7 +128,7 @@ class LocalTools:
     async def call(self, key, arguments, *, approver, task_id=None, pool=None):
         if not is_local(key):
             return await self.delegate.call(key, arguments, approver=approver, task_id=task_id, **({"pool": pool} if pool is not None else {}))
-        result = PluginResult(False, "blocked")
+        result = PluginResult(False, "approval_required", "This local command needs the owner's approval in the app. Wait for that approval before trying it again.")
         outcome = "blocked"
         background = False
         try:
