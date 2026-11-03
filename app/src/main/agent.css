@@ -299,6 +299,8 @@
 .permission-card > .cc-actions { grid-column: 2 / -1; gap: var(--sp-2); flex-wrap: wrap; }
 .permission-card .cc-ask > span:last-child { text-wrap: pretty; }
 .permission-card .cc-was > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* A question is what the owner must read to answer, so it wraps whole instead of ending in an ellipsis. */
+.owner-question .card-title.cc-name { white-space: normal; overflow: visible; }
 .permission-card[data-kind^="local_"] .cc-name { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .btn.team-file { display: inline-flex; align-items: center; gap: var(--sp-1); height: auto; min-height: 0; margin: 0 2px; padding: 1px var(--sp-2); vertical-align: bottom; max-width: 26ch; border: 1px solid var(--edge); border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; font-weight: 500; }
 .btn.team-file:hover { background: var(--hover); }
@@ -440,8 +442,8 @@
 .page-agent .btn.cmp-attach:is(:active, [aria-expanded="true"]):not(:disabled) { color: var(--accent-icon); }
 .page-agent .btn.cmp-attach:active:not(:disabled) { color: color-mix(in srgb, var(--text) 85%, transparent); }
 .btn.cmp-attach .i { width: 20px; height: 20px; }
-.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: calc(160px + 40 * var(--pa-u)); resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: hidden; }
-.cmp-input.is-tall { overflow-y: auto; }
+/* The field grows with its text by itself, up to six lines: measured from script, every keystroke laid out the whole thread. */
+.cmp-input { flex: 1; min-width: 0; min-height: var(--pa-cmp-btn); max-height: min(calc(160px + 40 * var(--pa-u)), calc(6lh + 2px)); field-sizing: content; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); font: var(--pa-cmp-fs)/var(--pa-cmp-lh) var(--voice); padding: var(--pa-cmp-py) 4px; overflow-y: auto; }
 .cmp-input::placeholder { color: var(--text-3); }
 .cmp-input:focus-visible { outline: 0; }
 /* The words live in the textarea. While they address someone, its text is not painted and the same words are drawn over it

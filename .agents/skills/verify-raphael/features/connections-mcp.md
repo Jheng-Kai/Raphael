@@ -421,8 +421,15 @@ and focused, then returns to Productivity. Rendered checks reject wrapped chips,
 visible scrollbars and differing Store/pager totals. Toolbar hit tests cover the
 search and fully visible chips while results scroll independently.
 
+The mouse wheel scrolls the chip row sideways and hands the page back at either
+end. An arrow button and a fade stand only at an end with more chips behind it
+(`chip-scroll.ts`, shared by any `[data-chip-row]`). `plugins-store-wheel` turns
+a real wheel over the chips, checks the left arrow can be pressed and the page
+did not scroll, then presses it and checks the row is back at its start with
+only the right arrow.
+
 ```powershell
-npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion --theme both --width 1120,720,1920x1080
+npm run look -- plugins-store plugins-store-all plugins-store-category plugins-store-search plugins-store-empty plugins-store-key plugins-store-motion plugins-store-wheel --theme both --width 1120,720,1920x1080
 ```
 
 Fixture/browser results do not establish native,

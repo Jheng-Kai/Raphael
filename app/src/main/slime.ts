@@ -304,9 +304,21 @@ function startFrom(part: SVGElement, pose: DOMMatrix): void {
   settling.set(part, finished);
 }
 
+/** The slime takes `state` and the strips drawn for it. */
+function enter(svg: SVGElement, state: SlimeState): void {
+  svg.dataset.state = svg.dataset.moved = state;
+  svg.parentElement!.dataset.state = state;
+  const surface = svg.parentElement!;
+  for (const strip of surface.querySelectorAll(':scope > .slime-idle, :scope > .slime-loop')) strip.remove();
+  const drawing = drawings.get(surface.dataset.slimeDrawing!);
+  if (drawing) { const [bodyStrip, eyeStrip] = strips(state, drawing); svg.insertAdjacentHTML('beforebegin', bodyStrip); svg.insertAdjacentHTML('afterend', eyeStrip); }
+}
+
 /** A new state takes over from where the slime stands, however far through the old one it was, so nothing jumps. */
 export function handOver(svg: SVGElement, state: SlimeState): void {
   if (svg.dataset.state === state) return;
+  // Out of sight nothing can be seen to jump, so the pose is not read: reading it styled every far slime of a long thread.
+  if (svg.closest("[data-offscreen]")) { enter(svg, state); delete svg.dataset.transitioning; return; }
   const one = (selector: string): SVGElement => svg.querySelector<SVGElement>(selector)!;
   const settle = one(".slime-settle"), motion = one(".slime-motion"), look = one(".slime-look"), gaze = one(".slime-gaze");
   const own = [...svg.querySelectorAll<SVGElement>(".slime-body, .slime-mark")];
@@ -323,12 +335,7 @@ export function handOver(svg: SVGElement, state: SlimeState): void {
   // Cancel its old timeline before starting this finite bridge.
   svg.style.animationName='none';
   void getComputedStyle(svg).animationName;
-  svg.dataset.state = svg.dataset.moved = state;
-  svg.parentElement!.dataset.state = state;
-  const surface=svg.parentElement!;
-  for(const strip of surface.querySelectorAll(':scope > .slime-idle, :scope > .slime-loop'))strip.remove();
-  const drawing=drawings.get(surface.dataset.slimeDrawing!);
-  if(drawing){const [bodyStrip,eyeStrip]=strips(state,drawing);svg.insertAdjacentHTML('beforebegin',bodyStrip);svg.insertAdjacentHTML('afterend',eyeStrip);}
+  enter(svg, state);
   if(state==='idle'||loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
   svg.style.setProperty("--slime-since", "0ms");
   svg.style.removeProperty('animation-name');

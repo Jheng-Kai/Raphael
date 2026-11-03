@@ -6,6 +6,18 @@ import { copyButton, esc, toaster } from "./ui";
 import "./message-rich.css";
 import { mountShimmers } from './shimmer';
 
+/** The first of `nodes`, in reading order, whose bottom is below `y`. Lines stack down the thread, so a
+ * halving search reads a few positions where reading them all took a long thread most of a frame. */
+export function firstBelow<T extends Element>(nodes: readonly T[], y: number): T | undefined {
+  let low = 0, high = nodes.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (nodes[middle]!.getBoundingClientRect().bottom > y) high = middle;
+    else low = middle + 1;
+  }
+  return nodes[low];
+}
+
 /** Preserve the visible reading anchor across asynchronous SVG/image size changes. */
 export function preserveRichScroll(root: HTMLElement, change: () => void): void {
   const height = root.scrollHeight;
@@ -15,7 +27,7 @@ export function preserveRichScroll(root: HTMLElement, change: () => void): void 
     return;
   }
   const top = root.getBoundingClientRect().top;
-  const anchor = [...root.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions")].find(node => node.getBoundingClientRect().bottom > top + 2);
+  const anchor = firstBelow([...root.querySelectorAll<HTMLElement>(".rich-block, .message-text, .message-actions")], top + 2);
   const before = anchor?.getBoundingClientRect().top;
   const turn = anchor?.closest<HTMLElement>(".tn");
   const turnId = turn?.dataset.id, roomId = turn?.dataset.roomMessage;

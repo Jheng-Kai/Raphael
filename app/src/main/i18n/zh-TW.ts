@@ -1117,6 +1117,8 @@ export const zhTW = {
   "plugins.privateGoogle": "Google（私人連接）",
   "plugins.googleDescription": "Gmail 與 Google 日曆",
   "plugins.category": "分類",
+  "chips.before": "向左捲動",
+  "chips.after": "向右捲動",
   "plugins.moreApps": "還沒有 Composio 金鑰：要加入 Gmail、Notion 等更多應用程式，請先加入它",
   "plugins.configure": "加入 Composio 金鑰",
   "plugins.keyPrompt": "Composio API key",

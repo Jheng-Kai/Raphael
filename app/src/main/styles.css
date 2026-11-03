@@ -262,6 +262,16 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .lm-confirm-actions { flex: 1 1 100%; }
 .keys { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-3); font-size: var(--fs-xs); }
 code, pre, samp { font-family: var(--mono); }
+/* A sideways row of chips: an arrow and a fade stand only at an end with more chips behind it (chip-scroll.ts). */
+[data-chip-row] { --chip-fade: 56px; position: relative; min-width: 0; }
+[data-chip-scroll] { --cut-l: 0px; --fade-l: 0px; --cut-r: 0px; --fade-r: 0px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; mask-image: linear-gradient(to right, transparent var(--cut-l), var(--text) var(--fade-l), var(--text) calc(100% - var(--fade-r)), transparent calc(100% - var(--cut-r))); }
+[data-chip-scroll]::-webkit-scrollbar { display: none; }
+[data-chip-row][data-more-before] > [data-chip-scroll] { --cut-l: 24px; --fade-l: var(--chip-fade); }
+[data-chip-row][data-more-after] > [data-chip-scroll] { --cut-r: 24px; --fade-r: var(--chip-fade); }
+[data-chip-row] > .btn.icon.chip-step { position: absolute; top: 50%; translate: 0 -50%; display: none; width: 28px; height: 28px; min-height: 28px; padding: 0; color: var(--text-2); }
+[data-chip-row] > .chip-step[data-chip-step="-1"] { left: 0; }
+[data-chip-row] > .chip-step[data-chip-step="1"] { right: 0; }
+[data-chip-row][data-more-before] > .chip-step[data-chip-step="-1"], [data-chip-row][data-more-after] > .chip-step[data-chip-step="1"] { display: inline-flex; align-items: center; justify-content: center; }
 kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 24px; padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--key); border: 1px solid var(--key-edge); border-bottom-width: 2px; font: 600 var(--fs-xs)/1 var(--ui); color: var(--text); }
 .rec-hint { color: var(--accent-text); font-size: var(--fs-xs); }
 .st { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: var(--fs-sm); color: var(--text); white-space: nowrap; }

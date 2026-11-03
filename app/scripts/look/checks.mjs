@@ -1008,6 +1008,8 @@ export function checkRendered(name, context = {}) {
     const waiting = ["owner-question-asked", "owner-question-typed", "owner-question-background", "owner-question-room"].includes(name);
     require(card.dataset.cardState === (waiting ? "asked" : name === "owner-question-cancelled" ? "cancelled" : "answered"), "the persisted state is shown");
     if (name === "owner-question-cancelled") require(card.querySelector('.card-status.is-ready') && !card.querySelector('[data-card-disclosure]'), 'a cancelled question has a neutral decision and no redundant disclosure');
+    const asked = card.querySelector(".card-title");
+    require(getComputedStyle(asked).whiteSpace !== "nowrap" && asked.scrollWidth <= asked.clientWidth + 1, "the whole question shows, wrapped, never cut to one line");
     require(card.querySelectorAll("[data-owner-option]").length === (waiting ? 4 : 0), "choices are real buttons only while waiting");
     require(!card.querySelector("select"), "a short list needs no dropdown");
     const box = card.getBoundingClientRect(), column = card.parentElement.getBoundingClientRect();
@@ -3937,7 +3939,9 @@ export function checkRendered(name, context = {}) {
     const groups = document.querySelector('.cs-store-groups');
     const style = getComputedStyle(groups), chips = [...groups.querySelectorAll('button')];
     require(style.flexWrap === 'nowrap' && style.overflowX === 'auto' && style.scrollbarWidth === 'none', "category chips scroll on one row without a visible scrollbar");
-    require(style.maskImage.includes('linear-gradient') && parseFloat(style.paddingRight) >= 16, "category overflow fades at the edge and leaves the final chip clear");
+    const chipRow = groups.closest('[data-chip-row]'), end = groups.scrollWidth - groups.clientWidth;
+    require(style.maskImage.includes('linear-gradient') && chipRow.hasAttribute('data-more-before') === groups.scrollLeft > 1 && chipRow.hasAttribute('data-more-after') === groups.scrollLeft < end - 1, "category overflow fades only at an end with more chips behind it");
+    require([['-1', 'data-more-before'], ['1', 'data-more-after']].every(([dir, more]) => !!visible(chipRow.querySelector(`[data-chip-step="${dir}"]`)) === chipRow.hasAttribute(more)), "an arrow stands only at an end with more categories behind it");
     require(chips.every(chip => Math.abs(chip.getBoundingClientRect().top - chips[0].getBoundingClientRect().top) <= 1), "every category chip shares one row");
     const rows = [...document.querySelectorAll('.cs-card')];
     const ids = rows.map(row => row.querySelector('[data-conn="open-store"]').dataset.id);
@@ -3952,7 +3956,17 @@ export function checkRendered(name, context = {}) {
     if (name === "plugins-store-category") require(document.querySelector('[data-conn="store-group"][data-id="productivity"]').getAttribute('aria-pressed') === 'true', "the chosen broad group stays pressed");
     return { check: name, rows: rows.length, ids };
   }
-  if (name === "store-group-focus") {
+  if (name === "store-groups-wheel" || name === "store-groups-start") {
+    const groups = document.querySelector('.cs-store-groups'), chipRow = groups.closest('[data-chip-row]'), body = document.querySelector('.modal-body');
+    const before = chipRow.querySelector('[data-chip-step="-1"]'), after = chipRow.querySelector('[data-chip-step="1"]');
+    const reachable = button => { const box = button.getBoundingClientRect(); return visible(button) && button.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)); };
+    require(groups.scrollWidth > groups.clientWidth + 1, "the categories are wider than their row at this size");
+    if (name === "store-groups-wheel") {
+      require(groups.scrollLeft > 0 && chipRow.hasAttribute('data-more-before') && reachable(before), "the mouse wheel moved the categories sideways and the left arrow can be pressed");
+      require(!body || body.scrollTop === 0, "the wheel over the categories did not scroll the page under them");
+    } else require(groups.scrollLeft <= 1 && !visible(before) && reachable(after), "the left arrow brought the categories back to the start, where only the right arrow stands");
+    return { check: name, scrollLeft: groups.scrollLeft };
+  }  if (name === "store-group-focus") {
     const groups = document.querySelector('.cs-store-groups'), chip = document.activeElement;
     require(groups?.contains(chip) && chip.matches('[data-conn="store-group"]'), "keyboard focus reaches a category chip");
     const frame = groups.getBoundingClientRect(), box = chip.getBoundingClientRect();

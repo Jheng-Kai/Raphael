@@ -21,6 +21,7 @@ import { getLocale, t } from "./i18n";
 import { STORE_GROUPS, STORE_PAGE_SIZE, popularApp, storeGroup, storeMatches } from "./store-finder";
 import type { MessageKey } from "./i18n/zh-TW";
 import { serviceIconOf } from "./service-icons";
+import { chipSteps, revealChip } from "./chip-scroll";
 import { entryIcon } from "./service-mark";
 export { entryIcon, iconHTML } from "./service-mark";
 import type { AuditEntry, ConnectionGroup, ConnectionTool, MainEvent, NewConnection, StoreService, Words } from "./types";
@@ -614,8 +615,8 @@ function storeHTML(v: ConnectionsView, entries: StoreEntries = storeEntries(v), 
   const shown = entries.available.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
   const popular = browsing ? shown.filter(popularApp) : [];
   const rest = shown.filter(s => !popular.includes(s));
-  const chips = `<div class="cs-store-groups" role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
-    btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>`;
+  const chips = `<div class="cs-store-groups-row" data-chip-row><div class="cs-store-groups" data-chip-scroll role="group" aria-label="${esc(t("plugins.category"))}">${["", ...STORE_GROUPS].map(group =>
+    btn(esc(group ? tr(STORE_GROUP_LABELS[group]) : t("conn.all")), "sm", ` data-conn="store-group" data-id="${group}" aria-pressed="${v.category === group}"`)).join("")}</div>${chipSteps()}</div>`;
   let html = (v.catalog === "loading" ? loading : v.catalog === "failed" ? retry("retry-builtin-store") : "") +
     section("connected", t("conn.tab.installed"), connected) + section("hot", t("store.popular"), popular) +
     section("all", t("conn.all"), rest);
@@ -784,8 +785,6 @@ export interface Connections {
   load(): Promise<void>;
   /** A click on one of this tab's buttons or switches; false for anything else. */
   click(target: Element): boolean;
-  /** Keep a focused category fully visible, including before it is selected. */
-  focus(target: Element): void;
   /** Something typed in one of this tab's fields; false for any other input. */
   input(input: HTMLInputElement): boolean;
   /** Enter in one of the form's fields, or Esc with a service's dialog open; false for any other key. */
@@ -895,22 +894,12 @@ export function createConnections(host: ConnectionsHost): Connections {
         const revealed = [...groups.querySelectorAll<HTMLButtonElement>("button")].find(button => button.dataset.id === (focusedGroup ?? current.category));
         if (revealed) {
           if (focusedGroup !== undefined) revealed.focus({ preventScroll: true });
-          focus(revealed);
+          revealChip(revealed);
         }
       }
     } else redraw();
     const count = typeof document !== "undefined" ? (host.root ?? document).querySelector('[data-k="conn-tab:store"] .n') : null;
     if (count) count.textContent = String(entries.count);
-  }
-
-  function focus(target: Element): void {
-    const chip = target.closest<HTMLElement>('[data-conn="store-group"]');
-    const groups = chip?.closest<HTMLElement>('.cs-store-groups');
-    if (!chip || !groups) return;
-    const frame = groups.getBoundingClientRect(), box = chip.getBoundingClientRect();
-    const fade = parseFloat(groups.ownerDocument.defaultView?.getComputedStyle(groups).paddingRight ?? "0") || 0;
-    if (box.right > frame.right - fade) groups.scrollLeft += box.right - frame.right + fade;
-    else if (box.left < frame.left) groups.scrollLeft += box.left - frame.left;
   }
 
   const groupById = (id: string): ConnectionGroup | undefined => (Array.isArray(groups) ? groups.find((g) => g.id === id) : undefined);
@@ -1568,7 +1557,7 @@ export function createConnections(host: ConnectionsHost): Connections {
       case "retry-connections": void load(); break;
       case "retry-builtin-store": void load(false); break;
       case "store-group":
-        if (id === category && storePage === 0) { focus(button); break; }
+        if (id === category && storePage === 0) { revealChip(button); break; }
         category = id; storePage = 0; repaintBody(); break;
       case "store-page": storePage = Math.max(0, Number(id) || 0); repaintBody(); break;
       case "retry-store": void (configured ? loadCatalog() : load()); break;
@@ -1693,5 +1682,5 @@ export function createConnections(host: ConnectionsHost): Connections {
     loads++;
   }
 
-  return { view, load, click, focus, input, key, menuFor, followEvent, reset };
+  return { view, load, click, input, key, menuFor, followEvent, reset };
 }

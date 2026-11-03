@@ -71,6 +71,10 @@ export default [
     ...Array.from({ length: 9 }, () => key("Tab")), key("Enter"), check("store-group-end"),
     click('[data-conn="store-group"][data-id="productivity"]'), check("plugins-store-category"), check("plugins-store-rows"),
   ], { pluginsMany: true }),
+  scene("plugins-store-wheel", "The mouse wheel and the arrows move the category chips sideways", [
+    ...store, check("plugins-store-groups"), { action: "wheel", selector: ".cs-store-groups", deltaY: 300 }, check("store-groups-wheel"), check("plugins-store-groups"),
+    click('[data-chip-step="-1"]'), wait('[data-chip-row]:not([data-more-before])'), check("store-groups-start"), check("plugins-store-groups"),
+  ], { pluginsMany: true }),
   scene("plugins-store-search", "Search reaches a late catalog result by keyboard", [
     ...store, { ...type('#conn-search', '360'), measure: { name: "store-search-paint", budgetMs: 250, maxLongTaskMs: 50, readySelector: '[data-conn="open-store"][data-id$="-359"]' } },
     wait('[data-conn="open-store"][data-id$="-359"]'), check("plugins-store-search"), check("plugins-store-rows"),

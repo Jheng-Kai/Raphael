@@ -126,8 +126,6 @@ const TOP_SLACK_PX = 160;
 const REFRESH_DELAY_MS = 150;
 /** The most a typed question may hold (the app's own limit is the same). */
 export const TYPED_MAX_CHARS = 100_000;
-/** The composer grows with its text up to this many lines, then scrolls. */
-const COMPOSER_LINES = 6;
 /** A question said aloud whose turn never comes (the core went away) stops waiting after this long. */
 const HEARING_MAX_MS = 120_000;
 /** The voice button sent the key, and the app did not start listening within this long: the picture comes back down. */
@@ -1230,27 +1228,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     render();
   }
 
-  /** The field grows with its text, up to `COMPOSER_LINES` lines. */
+  /** Send takes words or files; the field sizes itself to its text (`.cmp-input` in agent.css). */
   function fit(): void {
     sendButton.disabled = missingFiles.length > 0 || typedQuestion(input.value, files.length > 0) === null;
-    // Enter always leaves an empty field, and an empty field has nothing to measure.
-    if (!input.value) {
-      input.style.height = "auto";
-      input.classList.remove("is-tall");
-      return;
-    }
-    // Restored articles already fill the composer; measuring their full layout blocks typing.
-    if (input.value.length >= 2000) {
-      input.style.height = `calc(${COMPOSER_LINES} * 1lh + 2px)`;
-      input.classList.add("is-tall");
-      return;
-    }
-    const line = parseFloat(getComputedStyle(input).lineHeight) || 22;
-    const maximum = line * COMPOSER_LINES + 2;
-    input.style.height = "auto";
-    const height = input.scrollHeight;
-    input.style.height = `${Math.min(height, maximum)}px`;
-    input.classList.toggle("is-tall", height > maximum);
   }
 
   /**

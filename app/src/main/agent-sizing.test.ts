@@ -96,3 +96,10 @@ describe("the page's responsive sizes", () => {
     }
   });
 });
+
+test("the composer field sizes itself to its text, so a keystroke never lays out the thread from script", () => {
+  expect(read("agent.css")).toMatch(/\.cmp-input \{[^}]*max-height: min\([^}]*6lh[^}]*field-sizing: content;/);
+  for (const source of [read("pages/agent.ts"), read("chat-composer.ts")]) {
+    expect(source).not.toMatch(/input\.style\.height|input\.scrollHeight/);
+  }
+});

@@ -1059,26 +1059,6 @@ describe("what the tab does", () => {
     }
   });
 
-  test("focusing any category reveals its whole button clear of the fade before selection", async () => {
-    const browser = new Window();
-    browser.document.body.innerHTML = '<div class="cs-store-groups" style="padding-right:24px"><button data-conn="store-group" data-id="">All</button><button data-conn="store-group" data-id="other">Other</button></div>';
-    const groups = browser.document.querySelector('.cs-store-groups')! as unknown as HTMLElement;
-    const geometry = vi.spyOn(browser.HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      if (this.classList.contains('cs-store-groups')) return new browser.DOMRect(0, 0, 100, 28);
-      return new browser.DOMRect((this.dataset.id ? 90 : 0) - groups.scrollLeft, 0, 40, 28);
-    });
-    const c = createConnections(host);
-    host.redraw.mockClear();
-    try {
-      c.focus(groups.querySelector('[data-id="other"]')!);
-      expect(groups.scrollLeft).toBe(54);
-      expect(c.view().category).toBe('');
-      c.focus(groups.querySelector('[data-id=""]')!);
-      expect(groups.scrollLeft).toBe(0);
-      expect(host.redraw).not.toHaveBeenCalled();
-    } finally { geometry.mockRestore(); await browser.happyDOM.abort(); }
-  });
-
   test("switching store tabs preserves the settings shell and avoids a full settings redraw", async () => {
     const c = createConnections(host);
     await c.load();

@@ -1118,6 +1118,8 @@ export const en = {
   "plugins.privateGoogle": "Google (private)",
   "plugins.googleDescription": "Gmail and Google Calendar",
   "plugins.category": "Category",
+  "chips.before": "Scroll left",
+  "chips.after": "Scroll right",
   "plugins.moreApps": "No Composio key yet. Add one to bring in more apps such as Gmail and Notion.",
   "plugins.configure": "Add Composio key",
   "plugins.keyPrompt": "Composio API key",

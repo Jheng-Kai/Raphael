@@ -468,7 +468,7 @@
   ],
   "ownerQuestionCard": {
     "id": "owner-choice", "task_id": 940, "turn_id": 940, "member_id": 1,
-    "kind": "ask_owner", "card_id": "", "question": "整理完成了。你希望哪一天寄出這份報告？",
+    "kind": "ask_owner", "card_id": "", "question": "整理完成了。報告草稿已存到桌面的「研究摘要」資料夾，內容包含本週的訪談重點和下週的安排。你希望哪一天寄出這份報告？如果想改成其他日期，也可以直接輸入。",
     "options": ["星期一", "星期二", "星期三", "星期四"], "free_text": true,
     "state": "asked", "result": null
   },

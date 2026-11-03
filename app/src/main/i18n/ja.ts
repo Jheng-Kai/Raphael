@@ -1118,6 +1118,8 @@ export const ja = {
   "plugins.privateGoogle": "Google（プライベート）",
   "plugins.googleDescription": "Gmail と Google カレンダー",
   "plugins.category": "カテゴリ",
+  "chips.before": "左へスクロール",
+  "chips.after": "右へスクロール",
   "plugins.moreApps": "Composio キーがまだありません。Gmail や Notion などのアプリを追加するには、先にキーを追加してください",
   "plugins.configure": "Composio キーを追加",
   "plugins.keyPrompt": "Composio API key",

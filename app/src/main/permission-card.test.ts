@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "vitest";
 import { setLocale } from "./i18n";
 import { connectionMarkHTML } from "./secret-card";
@@ -204,4 +205,10 @@ describe("a permission card", () => {
     expect(permissionFor(turns, "old")).toBeUndefined();
     expect(permissionFor(turns, "other")).toBeUndefined();
   });
+});
+
+test("a long question to the owner wraps whole in its card title instead of ending in an ellipsis", () => {
+  const css = readFileSync("src/main/agent.css", "utf8");
+  expect(css).toMatch(/\.cc-name \{[^}]*white-space: nowrap;/);
+  expect(css).toContain(".owner-question .card-title.cc-name { white-space: normal; overflow: visible; }");
 });

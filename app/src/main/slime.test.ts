@@ -342,3 +342,18 @@ test("liquid fades repaint SVG alpha instead of promoting the whole moving slime
     expect(body).toContain('--slime-liquid-alpha:');
   }
 });
+
+test("a slime far out of sight takes its new state without reading its pose", () => {
+  document.body.innerHTML = `<div class="slime-surface" data-offscreen>${slimeFaceHTML({ id: 21 }, 40)}</div><div>${slimeFaceHTML({ id: 21 }, 40)}</div>`;
+  const [far, near] = document.querySelectorAll<SVGElement>('svg.slime[data-slime-member="21"]');
+  const styled = vi.spyOn(window, "getComputedStyle");
+  try {
+    setSlimeState(21, "thinking");
+    const readFar = styled.mock.calls.filter(([element]) => far!.contains(element as Node) || element === far).length;
+    const readNear = styled.mock.calls.filter(([element]) => near!.contains(element as Node) || element === near).length;
+    expect([far!.dataset.state, near!.dataset.state]).toEqual(["thinking", "thinking"]);
+    expect(readFar).toBe(0);
+    expect(readNear).toBeGreaterThan(0);
+    expect(far!.dataset.transitioning).toBeUndefined();
+  } finally { styled.mockRestore(); setSlimeState(21, "idle"); }
+});

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, test, vi } from "vitest";
 import { replyContentHTML } from "./message-content";
-import { mountRichContent, preserveRichScroll } from "./message-rich";
+import { firstBelow, mountRichContent, preserveRichScroll } from "./message-rich";
 import { copyButton } from "./ui";
 vi.mock("./member-dialogs", () => ({ openDialog: vi.fn() }));
 vi.mock("./ui", async importOriginal => ({ ...await importOriginal<typeof import("./ui")>(), copyButton: vi.fn(async () => {}) }));
@@ -66,4 +66,16 @@ test("answer forms use the same source copy action as existing code cards", () =
   mountRichContent(root);
   root.querySelector<HTMLButtonElement>('[data-rich-act="copy-source"]')!.click();
   expect(copyButton).toHaveBeenLastCalledWith(expect.any(HTMLElement), source);
+});
+
+test("the reading anchor is found by halving, reading a few positions of a long thread instead of all", () => {
+  const lines = Array.from({ length: 1000 }, (_, index) => {
+    const line = document.createElement("p");
+    line.getBoundingClientRect = vi.fn(() => new DOMRect(0, index * 40 - 20_000, 100, 40));
+    return line;
+  });
+  expect(firstBelow(lines, 62)).toBe(lines[501]);
+  expect(lines.reduce((reads, line) => reads + vi.mocked(line.getBoundingClientRect).mock.calls.length, 0)).toBeLessThanOrEqual(11);
+  expect(firstBelow(lines, 1e9)).toBeUndefined();
+  expect(firstBelow([], 0)).toBeUndefined();
 });
