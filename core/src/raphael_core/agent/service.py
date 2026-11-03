@@ -2115,7 +2115,8 @@ class AgentService:
                         if screening.verdict == DENY:
                             loop.response = self._finish(ask, "answer", "negative", forbidden(ask.language, screening), ledger)
                             raise Stop("finished")
-                    if not self._gate.full_permission and any(needs_yes((self._tier_now(planned) or Tier.T0) >= Tier.T2, screening,
+                    if not self._gate.full_permission and any(needs_yes((self._tier_now(planned) or Tier.T0) >= Tier.T2
+                                                                         or self._gate.mode_asks(planned.tool.key, planned.arguments), screening,
                                      firm=(self._tier_now(planned) or Tier.T0) >= Tier.T3)
                            for (_, planned), screening in zip(batch, judged)):
                         loop.response = self.ask_in_background(ask, ledger)
@@ -2676,7 +2677,10 @@ class AgentService:
                 ask.admin_pending.append(call)
                 ask.admin_screenings.append(screening)
                 continue
-            if tier is not None and not self._gate.full_permission and needs_yes(tier >= Tier.T2, screening, firm=tier >= Tier.T3):
+            # The 手動 switch asks for what the door asks for, whatever the screening said: a plugin's tool that only
+            # reads passes the screening, and the door would refuse it with no question ever opened (`mode_asks`).
+            if tier is not None and not self._gate.full_permission and needs_yes(
+                    tier >= Tier.T2 or self._gate.mode_asks(call.tool.key, call.arguments), screening, firm=tier >= Tier.T3):
                 asking.append((call, screening))
             else:
                 automatic.append(call)
@@ -4153,7 +4157,9 @@ class AgentService:
         words, the rule that had it asked and the digest, with 允許一次, 拒絕 and, where it can take
         effect, 一律允許; the answer is still `agent.confirm`."""
         language = ask.language
-        tier = max(Tier.T2, self._gate.tier(action.tool))
+        # The tier the yes is for is that of this very call: `_confirm_plugin` compares it with the tier the call
+        # has after the yes (`_tier_now`, with the arguments), so the two are told the same way.
+        tier = max(Tier.T2, self._gate.tier(action.tool, action.args))
         local = is_local(action.tool)
         prefix = PREFIXES[language].question
         turn_id = self._record(ask, route, prefix, "" if local else text, "confirm", None, ledger)

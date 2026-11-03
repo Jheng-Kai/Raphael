@@ -134,9 +134,10 @@ class ToolGate:
 
     # --- the registry ---------------------------------------------------------------------------
 
-    def tier(self, name: str) -> Tier:
-        """The tier of a tool or command now. UnknownTool if it has none."""
-        return self._registry.tier(name)
+    def tier(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier:
+        """The tier of a tool or command now, for the call with `arguments` when they are given (a
+        plugin may tier a call by what it is given). UnknownTool if it has none."""
+        return self._registry.tier(name, arguments)
 
     def tier_now(self, name: str, arguments: Mapping[str, Any] | None = None) -> Tier | None:
         """The tier a tool has now, or None if it has none (a plugin's tool that was blocked, whose
@@ -146,8 +147,23 @@ class ToolGate:
         except UnknownTool:
             return None
 
-    def needs_confirmation(self, name: str) -> bool:
-        return self._registry.needs_confirmation(name)
+    def needs_confirmation(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
+        return self._registry.needs_confirmation(name, arguments)
+
+    def mode_asks(self, name: str, arguments: Mapping[str, Any] | None = None) -> bool:
+        """Whether the owner's 先詢問/計畫 switch has this call asked about although no tier and no rule does:
+        the door asks for every call above T0 while the switch is on (`ask_first`), but a plugin's tool that
+        only reads passes the screening (`reads_only`), so a question that waited for the screening to ask
+        would never be opened and the door would refuse the call with nobody asked. The question and the door
+        must say the same: this is the door's own word, less the owner's Always for this very tool (`waived`)."""
+        if not self.ask_first:
+            return False
+        try:
+            if not self._registry.needs_confirmation(name, arguments):
+                return False
+        except UnknownTool:
+            return False
+        return not self.waived(Action(name, dict(arguments or {})))
 
     def check(self, action: Action, approval: Approval | None, *, worker: bool = False) -> None:
         """Let `action` through: UnknownTool if it has no tier, NotApproved if it is at T2 or above
