@@ -22,6 +22,23 @@ test("cross-conversation results escape markup, mark matches and navigate with t
   expect(host.textContent).toBe("Members again");
 });
 
+test("an unchanged member column parses nothing, and leaving a search draws it again", async () => {
+  vi.mocked(api.core).mockResolvedValue({ turns: [] });
+  const host = document.createElement("div");
+  const search = createMessageSearch(host, { face: () => "", name: () => "Sample", open: vi.fn() });
+  const face = (delay: number): string => `<span style="--slime-delay:${delay}ms;">Sample row</span>`;
+  search.draw("", face(10));
+  const parsed = vi.spyOn(document, "createElement");
+  search.draw("", face(-250));
+  expect(parsed).not.toHaveBeenCalledWith("template");
+  search.draw("", `<span style="--slime-delay:10ms;">Changed row</span>`);
+  expect(host.textContent).toBe("Changed row");
+  search.draw("sample", face(10));
+  search.draw("", face(10));
+  expect(host.textContent).toBe("Sample row");
+  parsed.mockRestore();
+});
+
 test.each(["routine", "calendar", "meeting", "skill_learned"])("%s search snippets use the event's words", async type => {
   const raw = JSON.stringify({type, action: "created", id: 987654321, name: "Sample orchard", text: "已建立 · Sample orchard"});
   vi.mocked(api.core).mockResolvedValue({turns: [{id: 1, member_id: 0, conversation_id: 1, conversation_title: "Samples", question: "", text: "", created_at_ms: 1000, messages: [{kind: "event", text: raw}]}]});

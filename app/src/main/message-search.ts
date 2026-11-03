@@ -20,10 +20,16 @@ function snippet(hit: Hit, query: string): string {
 }
 
 export function createMessageSearch(host: HTMLElement, options: { face(member: number): string; name(member: number): string; open(member: number, conversation: number, turn: number): void }): { draw(query: string, membersHTML: string): void } {
-  let query = "", members = "", hits: Hit[] = [], error = "", epoch = 0;
+  let query = "", members = "", hits: Hit[] = [], error = "", epoch = 0, drawnRows = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   function render(): void {
-    if (!query) { patchHTML(host, members); return; }
+    if (!query) {
+      // Every event and page entry lands here, and most change nothing in the column.
+      const rows = members.replace(/--slime-(?:delay|since):-?[\d.]+ms;?/g, "");
+      if (rows !== drawnRows) { drawnRows = rows; patchHTML(host, members); }
+      return;
+    }
+    drawnRows = "";
     host.innerHTML = `<div class="search-group-label">${esc(t("chat.members"))}</div>${members}` +
       `<div class="search-group-label">${esc(t("chat.messages"))}</div>` +
       (error ? `<p class="mb-none">${esc(error)}</p>` : hits.length ? hits.map(hit =>
