@@ -187,9 +187,35 @@ async def test_waiting_tree_cancel_keeps_reply_counts_and_cancelled_status(make_
     assert (task.model_calls, task.tool_calls, task.cost_usd) == (3, 7, 0.25)
     assert saved.status == "cancelled"
     assert saved.cost_usd == 0.25
-    assert "Findings already delivered." in saved.text and "7" in saved.text
+    stop_note = "The task was stopped. Tool calls made: 7."
+    assert task.report_text == stop_note
+    assert saved.text == "Findings already delivered.\n\n" + stop_note
     messages = history.messages([turn_id])[turn_id]
     assert sum(message['text'].count("Findings already delivered.") for message in messages) == 1
+    reports = [data for method, data in rig.notifications if method == "worker.report"]
+    assert reports[-1]["text"] == stop_note
+
+
+@pytest.mark.parametrize("has_reply", [False, True])
+async def test_cancelled_delegate_keeps_real_replies_without_the_handoff_acknowledgement(make_rig, has_reply):
+    rig = make_rig()
+    task_id = rig.service._store.create(session_id="synthetic", language="en", text="Review")
+    history = AgentHistory(rig.conn)
+    turn_id = history.add(session_id="synthetic", question="Review", route="delegate", prefix="",
+                          text="Handed to the background.", status="running")
+    if has_reply:
+        history.add_message(turn_id, "reply", "Findings already delivered.")
+    rig.service._store.attach_turn(task_id, turn_id)
+    rig.service._store.start(task_id)
+    rig.service._store.pause_for_children(task_id, {"owner_wait": True})
+    assert (await rig.service._cancel({"task_id": task_id}))["cancelled"]
+    stop_note = "The task was stopped. Tool calls made: 0."
+    assert rig.task(task_id).report_text == stop_note
+    saved = history.get(turn_id)
+    assert saved.status == "cancelled"
+    assert saved.text == ("Findings already delivered.\n\n" if has_reply else "") + stop_note
+    messages = history.messages([turn_id])[turn_id]
+    assert [message["text"] for message in messages] == (["Findings already delivered."] if has_reply else []) + [stop_note]
 
 
 async def test_conversation_handoff_persists_source_counters_before_tree_stop(make_rig):
