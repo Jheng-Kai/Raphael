@@ -1,3 +1,4 @@
+import { visibilityGate, windowVisible } from "../window-visibility";
 import { readDraftWords, writeDraftWords } from "../composer-drafts";
 import { cardDisclosureHTML, cardFailure, cardHTML, cardPromptText } from "../card";
 import { mountTaskResults } from "../task-result";
@@ -56,7 +57,7 @@ import { messagePlainText } from "../message-content";
 import { mountRichContent, preserveRichScroll } from "../message-rich";
 import { mountConversationScroll } from "../conversation-scroll";
 import { openUnread, unreadLine } from "../unread-divider";
-import { measureMessagePreviews } from "../message-preview";
+import { measureMessagePreviews, messagePreviewMeasure } from "../message-preview";
 import { messageTooltip } from "../message-tooltip";
 import { quoteHTML, selectionQuote } from "../message-quote";
 import { ReplyPacing } from "../reply-pacing";
@@ -546,8 +547,9 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   const attachmentMedia = createAttachmentMedia(el, id => api.core("attachments.get", { id }));
   const previews = createLinkPreviews(scroller, url => api.core<LinkPreview | null>("links.preview", { url }));
   const regenerating = new Set<number>();
-  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread, { all: true })) : null;
-  void document.fonts?.ready.then(() => measureMessagePreviews(thread, { all: true }));
+  const measureAllMessages = messagePreviewMeasure(thread);
+  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
+  void document.fonts?.ready.then(measureAllMessages);
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let ticker: ReturnType<typeof setInterval> | null = null;
   /** Questions typed here whose turns have not come yet. */
@@ -887,7 +889,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
       const key = (node as HTMLElement).dataset.key ?? "";
       return (key.startsWith("out:") || key === "hearing") && !wanted.some(line => line.key === key);
     });
-    patchThread(thread, wanted, drawnHTML, {
+    const changed = patchThread(thread, wanted, drawnHTML, {
       arrives: line => drewOnce && (line.turnId === undefined ? !line.key.startsWith("day:") : line.turnId > newestDrawn && !droppedPending),
       carry(node, made) {
         const restore = carryTyped(node, made), restoreMail = carryMail(node, made), restorePages = pagesHost.carry(node, made), restoreSetup = carryInlineSetup(node, made);
@@ -896,6 +898,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     });
     newestDrawn = Math.max(newestDrawn, ...wanted.map((line) => line.turnId ?? 0));
     drewOnce = true;
+    if (!changed) return;
     if (visible) attachmentMedia.sync();
     if (visible) previews.sync();
     else previews.pause();
@@ -911,8 +914,32 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     measureMessagePreviews(thread);
   }
 
+  const historyRevisions = new WeakMap<AgentTurn, number>();
+  const historyVersions = new Map<number, { turn: AgentTurn; revision: number }>();
+  let historyRevision = 0;
+  function sameValue(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+    const left = a as Record<string, unknown>, right = b as Record<string, unknown>;
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length && keys.every(key => Object.prototype.hasOwnProperty.call(right, key) && sameValue(left[key], right[key]));
+  }
+  function historyStamp(items: AgentTurn[]): string {
+    const ids = new Set(items.map(turn => turn.id));
+    for (const id of historyVersions.keys()) if (!ids.has(id)) historyVersions.delete(id);
+    return items.map(turn => {
+      let revision = historyRevisions.get(turn);
+      if (revision === undefined) {
+        const previous = historyVersions.get(turn.id);
+        revision = previous && sameValue(previous.turn, turn) ? previous.revision : ++historyRevision;
+        historyRevisions.set(turn, revision);
+        historyVersions.set(turn.id, { turn, revision });
+      }
+      return `${turn.id}:${revision}:${turn.messages?.length ?? 0}`;
+    }).join(",");
+  }
   let renderedPage = "";
-  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), unreadFrom, pending, turns, outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
+  const pageStamp = (): string => JSON.stringify([new Date(Date.now()).toDateString(), memberId(), conversationId(), unreadFrom, pending, historyStamp(turns), outgoing, hearing, question, failure !== null, canLoadEarlier, loadingEarlier,
     [...state.stopping], [...state.rerunning], answering, searching]);
   function render(follow = false): void {
     renderedPage = pageStamp();
@@ -961,13 +988,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
   }
 
   /** The time since a task began, each second, in the lines that show it. */
+  const clockGate = visibilityGate(tick, () => visible && !roomPane.active, () => { tick(); scheduleRefresh(); });
   function tick(): void {
+    if (!windowVisible()) return;
     const now = Date.now();
     state.nowMs = now;
     updateLiveTimes(thread, now);
   }
   function startTicker(): void {
-    if (ticker === null && visible) ticker = setInterval(tick, 1000);
+    if (ticker === null && visible) ticker = setInterval(clockGate.run, 1000);
   }
   function stopTicker(): void {
     if (ticker !== null) clearInterval(ticker);
@@ -1152,15 +1181,15 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
 
   let refreshDue = 0;
   function scheduleRefresh(delay = REFRESH_DELAY_MS): void {
-    if (!visible || roomPane.active) return;
-    const due = Date.now() + delay;
+    if (!visible || roomPane.active || !windowVisible()) return;
+    const wait = Math.max(REFRESH_DELAY_MS, delay), due = Date.now() + wait;
     if (refreshTimer !== null && refreshDue <= due) return;
     if (refreshTimer !== null) clearTimeout(refreshTimer);
     refreshDue = due;
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      void load(false,true);
-    }, delay);
+      if (windowVisible()) void load(false,true);
+    }, wait);
   }
 
   // ---------- asking ----------
@@ -2205,7 +2234,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
         if (!loaded && visible && !roomPane.active && renderedPage!==pageStamp()) render();
         scheduleRefresh(loaded ? 0 : 1000+REFRESH_DELAY_MS);
       }
-      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh(0);
+      else if (event.type === "AgentTurn" && (event.member_id ?? RAPHAEL_ID) === memberId()) scheduleRefresh();
       // Loaded running work changes history; activity and turn events own the roster's state and preview.
       if (event.type !== "WorkerChanged" || event.state !== "running" || !hasWorkerTask(turns, event.task_id)) members.changed(event.type === "WorkerChanged" ? 1000 : undefined);
     }

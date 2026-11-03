@@ -1,3 +1,4 @@
+import { visibilityGate, windowVisible } from "../window-visibility";
 // The app's own calendar, modelled on Google Calendar: the month, what it shows and 建立 in a rail on the left; a day, week
 // or month on the right. Own events are made and changed here by click and drag; routines and Google events are read
 // here and say where they come from. Home opens it.
@@ -292,8 +293,9 @@ export function createAutomationsPage(app: AppContext): Page {
     fitHours(grid ? grid.scrollTop / hourHeight() : null);
   }) : null;
   resize?.observe(el);
+  const poll = visibilityGate(tick, () => visible);
   function tick(): void {
-    if (!visible) return;
+    if (!visible || !windowVisible()) return;
     const now = new Date(), line = el.querySelector<HTMLElement>(".au-now"), { start, end } = range();
     if (line?.closest<HTMLElement>(".au-day-col")?.dataset.day === dateKey(now)) line.style.top = `calc(${now.getHours() + now.getMinutes() / 60} * var(--au-hour))`;
     else if ((line || (now >= start && now < end)) && !panelOpen()) draw();
@@ -582,7 +584,7 @@ export function createAutomationsPage(app: AppContext): Page {
       visible = true;
       draw(); void load();
       void api.keepAwakeGet().then(v => { awake = v; if (visible && !panelOpen()) draw(); }).catch(() => {});
-      clearInterval(timer); timer = setInterval(tick, 60000);
+      clearInterval(timer); timer = setInterval(poll.run, 60000);
     },
     hide() { visible = false; loads++; clearInterval(timer); closePanel(); if (tools?.isConnected) closeMenu(); },
   };

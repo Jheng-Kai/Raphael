@@ -73,7 +73,7 @@ test("thinking, blocked and working keep their own-colour slime and liquid props
   for (const state of ["thinking", "blocked", "working"] as const) {
     const root = dom(slimeSVG({ color: "teal" }, { state }));
     expect(root.querySelector(".slime-body")).not.toBeNull();
-    expect(root.querySelector(".slime-thought, .slime-sweat, .slime-left")).not.toBeNull();
+    expect(root.querySelector(".slime-drop")).toBeNull();
     expect(root.querySelector(".slime-dots, .slime-blocked, .slime-ribbons")).toBeNull();
     expect(root.querySelector(".slime")?.getAttribute("style")).toContain("--slime-color:#15897E");
   }
@@ -177,4 +177,18 @@ test("a public progress hover takes precedence over the generic avatar action", 
   const root = dom(turnHTML(turn({status: "running", text: "", messages: [{seq: 1, kind: "progress", text: "Checking the sample sources", at_ms: time}]}), emptyTimelineState(), false, {...look, liveFace: () => '<span data-presence-member="1" data-tooltip="Working">Face</span>'}));
   expect(root.querySelector(".live-presence [data-tooltip]")).toBeNull();
   expect(root.querySelector(".live-presence")?.getAttribute("data-tooltip")).toBe("Checking the sample sources");
+});
+
+
+test("the thread diff reports no change for identical lines and a change for insert, text, order and removal", () => {
+  const thread = document.createElement("ol"), drawn = new WeakMap<Element, string>();
+  const first = {key: "a", html: "<li>First</li>"}, second = {key: "b", html: "<li>Second</li>"};
+  expect(patchThread(thread, [first, second], drawn)).toBe(true);
+  const node = thread.firstElementChild;
+  expect(patchThread(thread, [first, second], drawn)).toBe(false);
+  expect(thread.firstElementChild).toBe(node);
+  expect(patchThread(thread, [second, first], drawn)).toBe(true);
+  expect(patchThread(thread, [{...second, html: "<li>Edited</li>"}, first], drawn)).toBe(true);
+  expect(patchThread(thread, [first], drawn)).toBe(true);
+  expect(patchThread(thread, [first], drawn)).toBe(false);
 });

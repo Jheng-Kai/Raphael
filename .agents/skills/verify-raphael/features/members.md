@@ -1,5 +1,15 @@
 # Members and sidebar
 
+## Quiet resting poses (2026-11-04)
+
+[Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
+Idle uses the still original vector at every size; pointer entry may play one finite
+delight before it rests again. All five
+droplet paths, their keyframes and cel data are removed; the sleeping circle stays.
+Working retains its 900ms body loop with twelve cels; other body timing is unchanged.
+Hidden documents pause animations in phase; offscreen surfaces and descendants
+retain `animation: none !important` to avoid long-thread freezes.
+
 Owner decision 2026-10-30: MembersShell's column is global, with a same-sized chief
 conversation row, folders and group chats. No face strip or separate Team page.
 Folders support add/rename/delete, persistent collapse, member drag/drop and folder

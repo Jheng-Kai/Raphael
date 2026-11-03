@@ -1269,16 +1269,16 @@ export function checkRendered(name, context = {}) {
     return {check:name,positions};
   }
   if (name === "slime-marks-at-rest") {
-    const surfaces = [...document.querySelectorAll('.slime-surface[data-state="idle"]')].filter(visible);
+    const surfaces = [...document.querySelectorAll('.look-slime-board .slime-surface[data-state="idle"]')].filter(visible);
     require(surfaces.length >= 24, `every character is on the board: ${surfaces.length}`);
     let marked = 0;
     for (const surface of surfaces) {
-      const strip = surface.querySelector('.slime-idle-body'), drawing = surface.querySelector('svg.slime .slime-marks');
+      const drawing = surface.querySelector('svg.slime .slime-marks');
       if (!drawing || !drawing.children.length) continue;
       marked++;
-      require(getComputedStyle(strip).display === 'block', "at rest the strip paints the body");
-      require(strip.querySelector('[data-idle-pose]').children.length > 1, "the strip carries what the character wears");
-      for (const part of drawing.querySelectorAll('path,circle,ellipse')) require(getComputedStyle(part).visibility === 'hidden', "the drawing's copy waits, so nothing shows twice");
+      require(!surface.querySelector('.slime-idle, .slime-loop, .slime-drop'), "idle uses one resting vector without droplets");
+      require(!surface.getAnimations({subtree:true}).some(animation => animation.playState === 'running'), "idle has no running animation");
+      for (const part of drawing.querySelectorAll('path,circle,ellipse')) require(getComputedStyle(part).visibility === 'visible', "the resting vector wears its costume");
     }
     require(marked >= 20, `the characters with marks were all seen: ${marked}`);
     return {check:name,surfaces:surfaces.length,marked};
@@ -1684,7 +1684,7 @@ export function checkRendered(name, context = {}) {
     require(visible(latest) === (name === "conversation-up"), "latest is visible only away from the bottom");
     if (visible(latest)) {
       const box = latest.getBoundingClientRect(), style = getComputedStyle(latest);
-      require(Math.abs(box.width - box.height) <= 1 && parseFloat(style.borderRadius) >= box.width / 2, "latest is a round button");
+      require(Math.abs(box.width - box.height) <= 1 && parseFloat(style.borderRadius) > 0 && parseFloat(style.borderRadius) < box.width / 2, "latest is a rounded square button (R-UI-98)");
       require(style.backgroundColor !== 'rgba(0, 0, 0, 0)' && parseFloat(style.borderWidth) >= 1, "latest has its own opaque surface above message content");
     }
     return { check: name, top: scroll.scrollTop, height: scroll.scrollHeight };
@@ -3578,7 +3578,7 @@ export function checkRendered(name, context = {}) {
       require(svg?.dataset.state === state, `member ${id} shows ${state}, not ${svg?.dataset.state}`);
       const small = svg.getBoundingClientRect().width <= 72;
       const moving = small ? svg.closest('.slime-surface').querySelector('.slime-loop-body .slime-cels') : svg;
-      const name=small ? state==='working'?'slime-loop-working-x':'slime-loop-x' : animation;
+      const name=small ? 'slime-loop-x' : animation;
       require(moving?.getAnimations({ subtree: true }).some(running => running.animationName === name && running.playState === "running"), `member ${id} is really moving as ${state}`);
       const eye = getComputedStyle(svg.querySelector(".slime-eyes"));
       require(eye.stroke === "rgb(255, 255, 255)" && eye.d.startsWith("path("), "its eyes are the white bent path");
@@ -3599,7 +3599,8 @@ export function checkRendered(name, context = {}) {
       require(svg.closest('.slime-surface').getAnimations({ subtree: true }).length === 0, `${state} has no reduced-motion animation`);
       require(getComputedStyle(svg.querySelector('.slime-press')).visibility === 'visible', `${state} retains its body`);
       const props = [...svg.querySelectorAll('.slime-drop, .slime-bubble')].filter(part => getComputedStyle(part).display !== 'none');
-      const expected = { working: 2, thinking: 1, blocked: 1, error: 1, sleeping: 1, done: 2 };
+      const expected = { sleeping: 1 };
+      require(!svg.querySelector(".slime-drop"), "no state draws a droplet");
       require(props.length === (expected[state] ?? 0), `${state} retains its liquid props`);
       for (const prop of props) require(Number(getComputedStyle(prop).opacity) > .5 && prop.getBoundingClientRect().width >= svg.getBoundingClientRect().width * .08, `${state} prop is visible even at 22px`);
       poses.set(state, `${body.translate}/${body.rotate}/${body.scale}/${getComputedStyle(svg.querySelector('.slime-eyes')).d}`);

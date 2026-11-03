@@ -132,32 +132,15 @@ const EYES = "M 42.5 44.5 Q 43 48 43.5 51.5 M 55.5 44.5 Q 56 48 56.5 51.5";
 // The eyes carry the character at 40 px, so they are drawn larger than the sheets, about their own middle; a hat clears them.
 const FACE_SCALE = "translate(49.5 48) scale(1.25) translate(-49.5 -48)";
 
-const IDLE_BODY = [[1, 1, 0], [0.995, 1.01, 0], [0.99, 1.02, 0], [0.985, 1.028, 0], [1, 1, 0.04], [1, 1, -0.025], [1, 1, 0.01]] as const;
-const IDLE_EYES = [[3, -3, 1], [0, 0, 0.55], [0, 0, 0.3], [-3, 0, 1], [3, -1, 1], [0, -3, 1], [0, 0, 1.06]] as const;
-
-// Three whole boxes leave room for every pose and keep the raster bounds on physical pixels, including odd avatar sizes.
-const IDLE_FRAME = 276;
-const idleStrip = (kind: string, cells: string): string => `<span class="slime-idle slime-idle-${kind}"><span class="slime-cels"><svg width="1932" height="276" viewBox="-88 -81 1932 276">${cells}</svg></span></span>`;
-/** The strip paints over the drawing, so what is worn on the body has to be in every pose of it. */
-const idleBodyStrip = (back = "", worn = ""): string => idleStrip("body", IDLE_BODY.map(([sx, sy, lean], index) => {
-  const pose = `matrix(${sx},0,${lean},${sy},0,0)`;
-  return `<g transform="translate(${index * IDLE_FRAME} 0)">${back}<g data-idle-pose="${pose}" transform="translate(50 86) ${pose} translate(-50 -86)"><path class="slime-cel-body" d="${BODY}" fill="var(--slime-color)"/>${worn}</g></g>`;
-}).join(""));
-const IDLE_EYE_STRIP = idleStrip("eyes", IDLE_EYES.map(([x, y, sy], index) => {
-  const pose = `translate(${x}px,${y}px) scale(1,${sy})`;
-  return `<g transform="translate(${index * IDLE_FRAME} 0)"><g class="slime-face" transform="${FACE_SCALE}"><g data-idle-pose="${pose}" transform="translate(${x} ${y}) translate(50 50) scale(1 ${sy}) translate(-50 -50)"><path class="slime-cel-eye" d="${EYES}" fill="none" stroke="#fff" stroke-linecap="round"/></g></g></g>`;
-}).join(""));
 const HAT_LIFT = -4;
-const drawings = new Map<string, { back: string; worn: string; idle: string }>();
+const drawings = new Map<string, { back: string; worn: string }>();
 const drawingIds = new Map<string, string>();
 
-function strips(state: SlimeState, drawing: {back: string; worn: string; idle: string}): [string,string] {
-  if (state === 'idle') return [drawing.idle, IDLE_EYE_STRIP];
-  return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,DROP,drawing.back,drawing.worn) : ['',''];
+function strips(state: SlimeState, drawing: {back: string; worn: string}): [string,string] {
+  return loopState(state) ? motionStrips(state,BODY,EYES,FACE_SCALE,drawing.back,drawing.worn) : ['',''];
 }
 
-const DROP = "M 0 -7 C -3 -3 -5 -1 -5 2 C -5 9 5 9 5 2 C 5 -1 3 -3 0 -7 Z";
-const DROPLETS = `<g fill="var(--slime-color)">${["thought", "left", "right", "sweat", "drip"].map(kind => `<path class="slime-drop slime-${kind}" d="${DROP}"/>`).join("")}</g><circle class="slime-bubble" cx="0" cy="0" r="5.5" fill="var(--slime-color)"/>`;
+const BUBBLE = `<circle class="slime-bubble" cx="0" cy="0" r="5.5" fill="var(--slime-color)"/>`;
 
 export interface SlimeDrawing { now?: Date; state?: SlimeState; delay?: number; tempo?: number; since?: number; member?: number }
 
@@ -169,13 +152,13 @@ export function slimeSVG(slime: Slime, { now = new Date(), state = "idle", delay
   const worn = (look.marks ?? "") + (hat ? loose(`<g transform="translate(0 ${HAT_LIFT})">${HATS[hat]}</g>`, 50, 30, 0.6) : "");
   const key = `${look.back ?? ''}|${worn}`;
   let drawingId = drawingIds.get(key);
-  if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn,idle:idleBodyStrip(look.back,worn)}); }
+  if (!drawingId) { drawingId=String(drawings.size);drawingIds.set(key,drawingId);drawings.set(drawingId,{back:look.back ?? '',worn}); }
   const [bodyStrip,eyeStrip] = strips(state,drawings.get(drawingId)!);
   return `<span class="slime-surface" data-slime-drawing="${drawingId}" data-slime-reuse="${drawingId}:${look.color}:${tempo}:${member ?? ''}" data-state="${state}" aria-hidden="true" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}">${bodyStrip}<svg class="slime" viewBox="4 11 92 92" data-state="${state}"${member === undefined ? "" : ` data-slime-member="${member}"`} aria-hidden="true" focusable="false" style="--slime-color:${look.color};--slime-delay:${delay}ms;--slime-tempo:${tempo}${since === undefined ? "" : `;--slime-since:${since}ms`}">` +
     `<g class="slime-press"><g class="slime-settle"><g class="slime-counterturn"><g class="slime-motion">` +
     (look.back ? `<g class="slime-back">${look.back}</g>` : "") + correction(`<path d="${BODY}" fill="var(--slime-color)" class="slime-body"/>`) + `<g class="slime-marks">${worn}</g>` +
     `<g class="slime-face" transform="${FACE_SCALE}"><g class="slime-look"><g class="slime-counterturn"><g class="slime-gaze" fill="none" stroke="#fff" stroke-linecap="round"><path class="slime-eyes" d="${EYES}"/></g></g></g></g>` +
-    `</g></g></g></g>${DROPLETS}</svg>${eyeStrip}</span>`;
+    `</g></g></g></g>${BUBBLE}</svg>${eyeStrip}</span>`;
 }
 
 // ---------- under the pointer ----------
@@ -190,7 +173,7 @@ function hearThePointer(): void {
     const target = event.target as Element;
     const host = target.closest?.(".mb-row, .mb-avbtn, .mb-preset") ?? target.closest?.(".mb-av-slime");
     if (!host || host.contains(event.relatedTarget as Node | null)) return;
-    for (const svg of host.querySelectorAll("svg.slime")) svg.classList.add("is-delighted");
+    for (const svg of host.querySelectorAll('svg.slime')) svg.classList.add("is-delighted");
   });
   document.addEventListener("animationend", event => {
     if (event.animationName === "slime-delight") (event.target as Element).closest(".slime-surface")?.querySelector("svg.slime")?.classList.remove("is-delighted");
@@ -240,16 +223,6 @@ function poseOf(part: Element, properties: readonly PoseProperty[] = WHOLE_POSE)
     const value = style[name];
     return !value || value === "none" ? "" : name === "transform" ? value : `${name}(${value.split(" ").join(",")}) `;
   }).join(""));
-}
-
-function idlePose(svg: SVGElement, kind: string): DOMMatrix {
-  const surface = svg.parentElement!;
-  const strip = surface.querySelector(`.slime-idle-${kind} .slime-cels`);
-  if (!strip) return new DOMMatrix();
-  if (getComputedStyle(strip.parentElement!).display === "none") return new DOMMatrix();
-  const frame = Math.round(-poseOf(strip).e / (surface.clientWidth * 3));
-  const cell = strip.querySelectorAll<SVGElement>("[data-idle-pose]")[frame];
-  return new DOMMatrix(cell?.dataset.idlePose);
 }
 
 function loopPose(svg: SVGElement, kind: 'body'|'eyes'): DOMMatrix {
@@ -309,7 +282,7 @@ function enter(svg: SVGElement, state: SlimeState): void {
   svg.dataset.state = svg.dataset.moved = state;
   svg.parentElement!.dataset.state = state;
   const surface = svg.parentElement!;
-  for (const strip of surface.querySelectorAll(':scope > .slime-idle, :scope > .slime-loop')) strip.remove();
+  for (const strip of surface.querySelectorAll(':scope > .slime-loop')) strip.remove();
   const drawing = drawings.get(surface.dataset.slimeDrawing!);
   if (drawing) { const [bodyStrip, eyeStrip] = strips(state, drawing); svg.insertAdjacentHTML('beforebegin', bodyStrip); svg.insertAdjacentHTML('afterend', eyeStrip); }
 }
@@ -325,21 +298,20 @@ export function handOver(svg: SVGElement, state: SlimeState): void {
   const bridge = (part: SVGElement): SVGElement => part.closest<SVGElement>(".slime-correction")!;
   const bridged = (part: SVGElement): DOMMatrix => poseOf(part).multiply(poseOf(part.firstElementChild!));
   const loop: readonly PoseProperty[] = ["translate", "rotate", "scale"];
-  const wasIdle = svg.dataset.state === "idle";
   const cel = svg.parentElement!.querySelector('.slime-loop-body');
   const paintedLoop = cel && getComputedStyle(cel).display !== 'none' && getComputedStyle(cel).visibility !== 'hidden';
   const body = paintedLoop ? loopPose(svg,'body') : bridged(settle).multiply(poseOf(motion));
-  const eyes = paintedLoop ? loopPose(svg,'eyes') : bridged(look).multiply(poseOf(gaze, loop)).multiply(wasIdle ? idlePose(svg, "eyes") : new DOMMatrix());
-  const each = own.map(part => bridged(bridge(part)).multiply(poseOf(part)).multiply(wasIdle && part.classList.contains("slime-body") ? idlePose(svg, "body") : new DOMMatrix()));
+  const eyes = paintedLoop ? loopPose(svg,'eyes') : bridged(look).multiply(poseOf(gaze, loop));
+  const each = own.map(part => bridged(bridge(part)).multiply(poseOf(part)));
   // Error's first deflate uses the same hide animation name as a handover.
   // Cancel its old timeline before starting this finite bridge.
   svg.style.animationName='none';
   void getComputedStyle(svg).animationName;
   enter(svg, state);
-  if(state==='idle'||loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
+  if(loopState(state))svg.dataset.transitioning='true';else delete svg.dataset.transitioning;
   svg.style.setProperty("--slime-since", "0ms");
   svg.style.removeProperty('animation-name');
-  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark,.slime-drop,.slime-bubble')){
+  for(const part of svg.querySelectorAll<SVGElement>('.slime-motion,.slime-gaze,.slime-mark,.slime-bubble')){
     const style=getComputedStyle(part), durations=style.animationDuration.split(',').map(parseFloat);
     part.style.animationDelay=style.animationDelay.split(',').map((delay,index)=>`${parseFloat(delay)%(durations[index]??durations[0]??1)}s`).join(',');
   }

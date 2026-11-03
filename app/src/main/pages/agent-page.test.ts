@@ -316,7 +316,8 @@ describe("a continuous typed turn", () => {
     expect(document.querySelector('.tn[data-id="1"] .work-latest, .tn[data-id="1"] .think')).toBeNull();
     live = { ...live, status: "done", text: "今天星期五。", messages: [...live.messages!, { seq: 2, kind: "reply", text: "《答。今天星期五。》", at_ms: 2 }] };
     send({ type: "AgentTurn", turn_id: 1 });
-    await vi.advanceTimersByTimeAsync(200);
+    // The trailing refresh also respects the shared event reader's 300ms window.
+    await vi.advanceTimersByTimeAsync(300);
     expect(document.querySelectorAll('.tn[data-id="1"] .ans')).toHaveLength(1);
     expect(document.querySelector('.tn[data-id="1"] .work-body')?.hasAttribute('hidden')).toBe(true);
     expect(document.querySelector('.tn[data-id="1"] .think')).toBeNull();

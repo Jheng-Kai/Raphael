@@ -24,16 +24,30 @@ test("scrolling up exposes latest, incoming messages preserve position, and late
   expect(scroller.tabIndex).toBe(0);
   scroller.scrollTop = 200;
   scroller.dispatchEvent(new Event("scroll"));
-  expect(latest.hidden).toBe(false);
+  await vi.waitFor(() => expect(latest.hidden).toBe(false));
   height = 1100;
   scroller.querySelector("ol")!.append(document.createElement("li"));
   await vi.waitFor(() => expect(latest.hidden).toBe(false));
   expect(scroller.scrollTop).toBe(200);
   latest.click();
   expect(scrollTo).toHaveBeenCalledWith({ top: 1100, behavior: "smooth" });
-  expect(latest.hidden).toBe(true);
+  await vi.waitFor(() => expect(latest.hidden).toBe(true));
   for (const [locale, label] of [["en", "Jump to latest"], ["ja", "最新のメッセージへ"], ["zh-TW", "跳至最新訊息"]] as const) {
     setLocale(locale);
     expect(latest.getAttribute("aria-label")).toBe(label);
   }
+});
+
+
+test("a burst of scroll events measures the latest affordance once per frame", () => {
+  document.body.innerHTML = '<div><div class="ra-scroll"><ol></ol></div></div>';
+  const scroller = document.querySelector<HTMLElement>(".ra-scroll")!;
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  mountConversationScroll(scroller);
+  const measure = vi.spyOn(scroller, "getBoundingClientRect");
+  for (let i = 0; i < 20; i++) scroller.dispatchEvent(new Event("scroll"));
+  expect(frames).toHaveLength(1); expect(measure).not.toHaveBeenCalled();
+  frames.shift()!(0); expect(measure).toHaveBeenCalledTimes(1);
 });

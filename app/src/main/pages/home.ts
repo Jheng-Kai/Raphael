@@ -1,3 +1,4 @@
+import { visibilityGate } from "../window-visibility";
 // Home keeps four equal summaries and a month calendar in the same places for every data state.
 import * as api from "../api";
 import { eventRead } from '../event-read';
@@ -143,6 +144,8 @@ export function createHome(app: AppContext): Page {
   let data: HomeOverview | null = null;
   let month: Date | undefined, selected: string | undefined;
   let live: Promise<HomeOverview> | undefined;
+  let liveAt = -Infinity;
+  const poll = visibilityGate(() => void load(), () => visible);
   let timer: ReturnType<typeof setInterval> | undefined;
   let slide: { direction: number; started: number } | undefined;
   // Drawn again on every refresh, but the emblem stays the node it is while its picture is the same: a new <img> would start its turn over.
@@ -161,7 +164,7 @@ export function createHome(app: AppContext): Page {
     }
   };
   const sameData = (next: HomeOverview): boolean => data !== null && JSON.stringify(data) === JSON.stringify(next);
-  async function load(fromEvent = false): Promise<void> {
+  async function load(fromEvent = false, calendarChanged = false): Promise<void> {
     const mine = ++generation;
     if (!data) el.innerHTML = loadingHTML();
     try {
@@ -170,9 +173,10 @@ export function createHome(app: AppContext): Page {
       const next = await (fromEvent ? eventRead(`home.overview:${requestedMonth ?? ''}`,read,app) : read());
       if (!visible || mine !== generation) return;
       if (!sameData(next)) { data = next; paint(); }
-      if (fromEvent) return;
+      if (fromEvent || !calendarChanged && Date.now() - liveAt < 300_000) return;
       // Local records paint first. One live read fills the same page without emitting changes.
       if (!live) {
+        liveAt = Date.now();
         const pending = api.homeOverview(true, requestedMonth);
         live = pending;
         const clear = (): void => { if (live === pending) live = undefined; };
@@ -197,7 +201,7 @@ export function createHome(app: AppContext): Page {
     slide = { direction, started: performance.now() };
     paint();
     if (focused) el.querySelector<HTMLElement>(`[data-home-month="${focused}"]`)?.focus();
-    void load();
+    void load(false, true);
   }
   /** The block resumes the calendar; selecting a date or event remains an explicit jump. */
   const openCalendar = (): void => app.go("automations");
@@ -279,6 +283,6 @@ export function createHome(app: AppContext): Page {
   });
   app.cleared.on("dictation", () => { if (visible) void load(); });
   app.cleared.on("conversation", () => { if (visible) void load(); });
-  return { id: "home", el, show() { visible = true; void load(); clearInterval(timer); timer = setInterval(() => { if (!document.hidden) void load(); }, 30_000); },
+  return { id: "home", el, show() { visible = true; void load(); clearInterval(timer); timer = setInterval(() => { poll.run(); }, 30_000); },
     hide() { visible = false; generation++; clearInterval(timer); } };
 }

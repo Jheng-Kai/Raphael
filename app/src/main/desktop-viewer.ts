@@ -1,3 +1,4 @@
+import { visibilityGate, windowVisible } from "./window-visibility";
 /** One persistent noVNC stream shared by the card, preview and takeover. */
 import { noticeHTML } from "./missing";
 import * as api from "./api";
@@ -255,8 +256,9 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
     if (active() && next.state === 'running') void openStream();
     draw();
   }
+  const pollGate = visibilityGate(() => { clearTimeout(timer); void poll(); }, () => host.isConnected && (visible || !!session));
   async function poll(): Promise<void> {
-    if ((!visible && !session) || loading) return;
+    if ((!visible && !session) || loading || !windowVisible()) return;
     loading = true;
     const current = generation, id = member();
     try {
@@ -264,7 +266,7 @@ export function mountDesktopViewer(host: HTMLElement, member: () => number,
       if ((visible || session) && current === generation && id === member()) update(next);
     } catch {
       if (current === generation) { closeStream(); state = { state:'unavailable', ready:false, control:'member' }; draw(); }
-    } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(() => void poll(), 2000); } }
+    } finally { loading = false; if (visible || session) { clearTimeout(timer); timer = setTimeout(pollGate.run, 2000); } }
   }
   async function control(held: boolean, pointer?: { x:number; y:number }): Promise<void> {
     if (!session || changing || held && !connected) return;

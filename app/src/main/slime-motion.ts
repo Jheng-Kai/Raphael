@@ -12,9 +12,8 @@ for (const match of source.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]|\{[^{}]
       const [name, text] = declaration.split(':').map(value => value.trim());
       const property = name === '--slime-liquid-alpha' ? 'alpha' : name;
       if (!['translate','rotate','scale','alpha'].includes(property ?? '')) continue;
-      // Character give and droplet sign are applied by the caller.
-      const value = text!.replace(/calc\(var\(--mark-give\) \* ([-\d.]+)deg\)/g, '$1')
-        .replace(/calc\(50px - ([\d.]+)px \* var\(--drop-sign\)\)/g, (_, x) => `${50-Number(x)}px`);
+      // Character give is applied by the caller.
+      const value = text!.replace(/calc\(var\(--mark-give\) \* ([-\d.]+)deg\)/g, '$1');
       if (value.includes('calc')) continue;
       const numbers = value.match(/-?[\d.]+/g)?.map(Number);
       if (numbers) values[property as keyof Pose] = numbers;

@@ -1,5 +1,10 @@
 # Raphael feature map
 
+## Quiet idle and visibility (2026-11-04)
+
+See [Performance](performance.md) for R-UI-99/100 and R-PERF-03 through R-PERF-08,
+the affected scene selection, hidden-window polling and native visibility boundaries.
+
 ## Three computer levels (2026-11-02)
 
 See [Member computer](member-computer.md#three-computer-levels-2026-11-02) for
@@ -62,7 +67,7 @@ and the existing local-permission-card consumer. Run both themes at
 Members are slimes drawn in code (`app/src/main/slime.ts`), not pictures: one body plus colour, costume and a
 seasonal hat by date (Halloween and Christmas weeks). A member's `avatar` is `slime:<id>`; a member without a
 picture gets a colour from its id; the owner's own pictures and presets still win. Raphael keeps his emblem.
-Every slime is always moving, and how it moves says what it is doing (`slime.css`, see [Members](members.md#how-a-slime-moves-and-why-it-stays-sharp));
+Idle slimes stand still; motion in other states says what they are doing (`slime.css`, see [Members](members.md#how-a-slime-moves-and-why-it-stays-sharp));
 all of it stops under reduced motion. The picture menu shows them bareheaded so a costume stays visible.
 The composer is the words above a bar: plus attaches a file at once, a named control sets the action policy, and
 the open conversation's model sits beside send (`composer-brain.ts`). Groups have no model control.

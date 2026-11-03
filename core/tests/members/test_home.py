@@ -263,3 +263,55 @@ async def test_worker_question_keeps_its_conversation_and_connector_failure_is_i
     assert value["today"][0]["turn_id"] == turn
     assert value["today"][0]["conversation_id"] is not None
     assert value["calendar"] == []
+
+
+async def test_home_refresh_inside_five_minute_ttl_starts_no_cli_process(home, rig, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from raphael_core.agent.cli import allowances
+
+    children = []
+    def child(*args, **kwargs):
+        process = SimpleNamespace(stdout=SimpleNamespace(readline=AsyncMock(side_effect=[
+            b'{"id":1,"result":{}}\n', b'{"id":2,"result":{"rateLimits":{}}}\n',
+        ])))
+        value = SimpleNamespace(start=AsyncMock(), send=AsyncMock(), kill=AsyncMock(), process=process)
+        children.append(value)
+        return value
+    monkeypatch.setattr(allowances, "Child", child)
+    brains = SimpleNamespace(command=lambda name: ["codex"] if name == "codex" else None,
+                             logged_in=lambda name: True, environ={})
+    quotas = SimpleNamespace(allowances=lambda name: [], list=lambda: [])
+    async def read(params):
+        if not params.get("refresh", True):
+            return allowances.cached_allowances(brains, quotas)
+        return await allowances.read_allowances(brains)
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", read)
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 1
+    children[0].start.assert_awaited_once()
+    rig.wall.now += 299_999
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 1
+    rig.wall.now += 1
+    await rig.call("home.overview", {"refresh": True})
+    assert len(children) == 2
+    children[1].start.assert_awaited_once()
+
+
+async def test_concurrent_home_allowance_refreshes_share_the_pending_read(home, rig, monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    async def read(params):
+        calls.append(params)
+        started.set()
+        await release.wait()
+        return {"brains": []}
+    monkeypatch.setitem(rig.rpc._handlers, "usage.allowances", read)
+    first = asyncio.create_task(home._allowances(True))
+    await started.wait()
+    second = asyncio.create_task(home._allowances(True))
+    await asyncio.sleep(0)
+    release.set()
+    assert await first == await second == {"brains": []}
+    assert calls == [{}]
