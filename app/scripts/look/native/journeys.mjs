@@ -1326,7 +1326,7 @@ await page.waitForFunction(role => document.querySelector('#mb-det-role')?.value
     result.deviceNames = deviceNames;
     for (const locale of ["en", "ja", "zh-TW"]) {
       await click(page, '#nav [data-go="settings"]');
-      await click(page, '.modal-scrim [data-pane="general"]');
+      await click(page, '.modal-scrim [data-pane="appearance"]');
       await click(page, '[data-k="ui-language"]');
       await click(page, `#app-popover [data-value="${locale}"]`);
       await page.waitForFunction(locale => document.documentElement.lang === locale, {}, locale);
