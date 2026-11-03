@@ -9,7 +9,7 @@
   Drive the real app entry, inspect every generated contact sheet and relevant full-size
   image, and report the selected scope, failures and evidence.
 - Reserve `look -- --all` and the complete Guardian matrix for integration/release
-  acceptance, CI, explicit requests, or changes whose impact genuinely spans the app
+  acceptance, explicit requests, or changes whose impact genuinely spans the app
   (for example global tokens, navigation or the shared layout). Do not expand a local
   change to the whole project solely because it is a UI change.
 - A passing build or test suite alone never proves user-facing behavior.
@@ -30,6 +30,6 @@ selected look run. Explain omissions and tool blockers. Documentation-only chang
 need diff/link review rather than application suites. Full integration acceptance uses
 `npm run verify -- --core --rust` and `npm run look -- --all --theme both --width 1120,720,1920x1080`.
 Brain/tool changes also require `npm run verify -- --live` in an authorized live environment.
-CI enforces repository contracts and rendered checks on every PR; missing secrets are an
-explicit SKIP, never live/design acceptance. Use the [PR contract](.github/pull_request_template.md)
+CI enforces repository contracts and the offline suites on every PR; the rendered matrix,
+judge and live checks run locally and never in CI. Use the [PR contract](.github/pull_request_template.md)
 for commands, exits, rule IDs, evidence and anything unverified. Details stay in the skill.

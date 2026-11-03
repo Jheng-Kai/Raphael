@@ -151,9 +151,8 @@ are required. Missing prerequisites are blocked/SKIP, never design PASS.
 Testing never spends OpenRouter. Do not run its judge without an explicit owner
 request. The retained API implementation is accessible only through explicit
 `--brain openrouter`, with its existing dollar/request admission checks. The CLI
-paths never construct the OpenRouter client. Reference images stay outside git;
-CI downloads pinned public reference images and explicitly skips when no subscription
-CLI is installed. Enabled reviews fail closed on missing login or references.
+paths never construct the OpenRouter client. Reference images stay outside git.
+Enabled reviews fail closed on missing login or references.
 
 For brain/tool-path hand-off, the maintainer runs `npm run verify -- --live` with
 installed/logged-in subscriptions and the OS key. RAPHAEL_LIVE_CONFIG can select a

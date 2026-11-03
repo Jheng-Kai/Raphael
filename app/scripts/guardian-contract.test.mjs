@@ -10,22 +10,16 @@ const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHA
 const located = path => staged && existsSync(resolve(staged, path)) ? resolve(staged, path) : resolve(root, path);
 const read = path => readFileSync(located(path), "utf8");
 
-it("CI enforces the same offline layers and real three-size UI for every PR", () => {
+it("CI enforces the offline layers on every PR, and the rendered matrix stays local", () => {
   const ci = read(".github/workflows/ci.yml");
-  for (const command of ["npm run verify", "npm run look -- --all --theme both --width 1120,720,1920x1080", "pytest -q", "cargo test --locked", "npm run judge", "actions/upload-artifact", "actions/cache/restore", "actions/cache/save", "merge_group:", "Guardian required gates"])
+  for (const command of ["npm run verify", "pytest -q", "cargo test --locked", "actions/upload-artifact", "merge_group:", "Guardian required gates"])
     expect(ci).toContain(command);
   expect(ci).not.toContain("paths-ignore:");
   expect(ci).toContain("out true true true");
-  expect(ci).toContain("Design judge SKIP");
-  expect(ci).not.toContain("--max-cost-usd");
-  const requestLimit = Number(ci.match(/--max-requests (\d+)/)?.[1]);
-  const batchSize = Number(ci.match(/--batch-size (\d+)/)?.[1]);
-  expect(batchSize).toBeGreaterThanOrEqual(1);
-  expect(batchSize).toBeLessThanOrEqual(4);
-  expect(requestLimit).toBeGreaterThanOrEqual(Math.ceil(scenes.length * 6 / batchSize));
-  expect(requestLimit).toBeLessThanOrEqual(2000);
+  // A full look run took two hours on the runner; it is local acceptance (AGENTS.md).
+  expect(ci).not.toContain("npm run look");
+  expect(ci).not.toContain("npm run judge");
   expect(ci).not.toContain("secrets.OPENROUTER_API_KEY");
-  expect(ci).toContain("CI judge requires a subscription CLI.");
   expect(ci).toContain("needs: [changes, frontend, python, windows-shell]");
   const nightly = read(".github/workflows/guardian-live.yml");
   expect(nightly).toContain("--api-only");
