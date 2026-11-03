@@ -1297,7 +1297,7 @@ export function createSettings(app: AppContext): SettingsPage {
         if (data && !data.busy) { data = {...data,busy:true}; render(); void loadData(true); }
         break;
       case "help":
-        void api.openExternalUrl("https://github.com/Jack-hehe/Raphael/issues").catch(error => toaster.info(describeError(error)));
+        void api.openExternalUrl("https://github.com/Jheng-Kai/Raphael/issues").catch(error => toaster.info(describeError(error)));
         break;
       case "license":
         e.preventDefault();

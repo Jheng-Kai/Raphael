@@ -28,7 +28,7 @@ Core (Python)          core            audio, speech recognition, cleanup, assis
 Requirements: Windows 10 or 11 (x64), [Node.js](https://nodejs.org) 22.12+, [Rust](https://rustup.rs) 1.98, [uv](https://docs.astral.sh/uv/) and the MSVC C++ build tools. Cleanup, cloud recognition and the assistant need an [OpenRouter](https://openrouter.ai) API key.
 
 ```powershell
-git clone https://github.com/Jack-hehe/Raphael.git
+git clone https://github.com/Jheng-Kai/Raphael.git
 cd Raphael\core
 uv sync --locked --dev
 cd ..\app
