@@ -72,7 +72,6 @@ The original generated monochrome wallpapers are shared by the guest, off previe
 and fixture RFB transport. wallpaper.py proves each hour's selection and generated
 asset bytes; prepare-desktop runs its 30-second timer under the existing guest TZ.
 Unchanged workspaces get no writes; late monitors are initialized on the next tick.
-No image build or real guest acceptance is performed in this unit.
 
 desktop-return-stopped leaves through Home and returns through the real member
 entry: the unchanged off screen and Start action must remain visible. Failed opens

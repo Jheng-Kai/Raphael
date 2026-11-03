@@ -598,7 +598,6 @@ calendar, model sources, event receipts, conversation cards and desktop preview.
 that delegate painting to their parent are measured with that parent too.
 
 Run npm.cmd run verify and the targeted attachment core tests.
-Read local reference images outside the repository; never copy owner art or words.
 
 Long draft profiling also covers idempotent drawer close: closing a closed
 drawer never steals the destination focus. Unchanged member controls keep focus
