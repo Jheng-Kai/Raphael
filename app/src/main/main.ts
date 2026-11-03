@@ -1,3 +1,4 @@
+import { watchWindowVisibility } from "./window-visibility";
 import { onLocaleChange, setLocale, t } from "./i18n";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -168,6 +169,7 @@ async function start(): Promise<void> {
   const main = document.getElementById("main")!;
   const guide = document.getElementById("ob")!;
   createSidebar(nav, agent.sidebar, ctx);
+  watchWindowVisibility();
   stopOffscreenSlimes(document.body);
 watchChipRows(document.body);
   void loadAvatar(api.avatarGet);
@@ -318,12 +320,15 @@ watchChipRows(document.body);
 
   // Back from the tray: what a page shows may be old. (The settings keep what is being typed.)
   const comeBack = (): void => {
-    if (!current || settingsOpen || performance.now() - shownAt < RESHOW_MS) return;
+    if (!current || document.hidden || settingsOpen || performance.now() - shownAt < RESHOW_MS) return;
+    // Polling pages already refresh through their visibility gate. Re-showing them would read twice.
+    if (current !== "dictation" || dictation.tab() === "overview") return;
     shownAt = performance.now();
-    void pages[current].show();
+    void (dictation.tab() === "history" ? history : dictionary).show();
   };
   window.addEventListener("focus", comeBack);
   document.addEventListener("visibilitychange", () => {
+    console.info(`main page: document ${document.visibilityState}`);
     if (!document.hidden) comeBack();
   });
 

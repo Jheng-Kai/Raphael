@@ -20,12 +20,6 @@ export function paintedSlime(svg) {
     const eyeCell=blink.firstElementChild.children[(gazeIndex*12+eyeIndex)*count+blinkIndex];
     return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')],props:[...bodyCell.querySelectorAll('.slime-cel-prop')]};
   }
-  const idle=surface.querySelector('.slime-idle-body .slime-cels');
-  if(idle && getComputedStyle(idle.parentElement).display!=='none' && getComputedStyle(idle.parentElement).visibility!=='hidden'){
-    const at=strip=>Math.round(-new DOMMatrix(getComputedStyle(strip).transform).e/(surface.clientWidth*3));
-    const body=idle.firstElementChild.children[at(idle)], eyes=surface.querySelector('.slime-idle-eyes .slime-cels');
-    return {body:body.querySelector('.slime-cel-body'),eyes:eyes.firstElementChild.children[at(eyes)].querySelector('.slime-cel-eye'),marks:[...body.querySelectorAll('.slime-mark')],props:[]};
-  }
   return fallback();
 }
 

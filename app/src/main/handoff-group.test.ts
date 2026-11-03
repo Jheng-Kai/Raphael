@@ -58,7 +58,7 @@ test("one receipt is unchanged", () => {
 test("shared diff preserves every receipt's disclosure and the same group node as new work arrives", () => {
   const thread = document.createElement("ol"), drawn = new WeakMap<Element, string>(); document.body.append(thread);
   const tasks = [task(1), task(2)];
-  const update = (): void => patchThread(thread, [{ key: "turn:1", html: draw(tasks) }], drawn);
+  const update = (): boolean => patchThread(thread, [{ key: "turn:1", html: draw(tasks) }], drawn);
   update();
   const group = thread.querySelector<HTMLDetailsElement>("[data-handoff-group]")!;
   expect(group).not.toBeNull();

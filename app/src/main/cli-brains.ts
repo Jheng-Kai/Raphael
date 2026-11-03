@@ -1,3 +1,4 @@
+import { visibilityGate } from "./window-visibility";
 // Subscription metadata only; authentication is handled by each CLI's own terminal.
 import { knownClis, rememberClis } from "./brain-lists";
 import * as api from "./api";
@@ -85,6 +86,7 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
   let value = emptyCliBrainsView();
   let generation = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
+  const poll = visibilityGate(() => void load(), () => timer !== null && host.visible());
   async function load(): Promise<void> {
     const mine = ++generation;
     try {
@@ -152,7 +154,7 @@ export function createCliBrains(host: { visible(): boolean; redraw(): void }) {
     start() {
       if (timer) clearInterval(timer);
       void load();
-      timer = setInterval(() => { if (host.visible()) void load(); }, 120_000);
+      timer = setInterval(() => { poll.run(); }, 120_000);
     },
     stop() { if (timer) clearInterval(timer); timer = null; generation++; },
     followEvent(event: MainEvent) { if (event.type === "BrainsChanged" && host.visible()) void load(); },

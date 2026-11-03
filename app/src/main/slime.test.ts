@@ -24,12 +24,12 @@ test.each(['thinking','working','searching','computer','waiting','blocked','slee
   host.innerHTML = slimeSVG({ character: 'shion' }, { ...plain, state });
   expect(host.querySelector('.slime-idle')).toBeNull();
   const bodies = host.querySelectorAll('.slime-loop-body .slime-cel-body');
-  expect(bodies).toHaveLength(state==='working'?24:['thinking','searching'].includes(state)?12*12:12);
+  expect(bodies).toHaveLength(['thinking','searching'].includes(state)?12*12:12);
   for (const body of bodies) expect(body.parentElement!.innerHTML).toContain('#363140');
   expect(host.querySelector('.slime-loop-eyes .slime-cel-eye')).not.toBeNull();
 });
 
-test('working reuses its commensurate body and droplet cycle without a Cartesian DOM expansion', () => {
+test('working uses only its twelve body poses without a Cartesian DOM expansion', () => {
   const host=document.createElement('div');
   host.innerHTML=slimeSVG({character:'shion'},{...plain,state:'working'});
   expect(host.querySelectorAll('*').length).toBeLessThan(800);
@@ -71,8 +71,8 @@ test("Shion is lavender and a horn, and no hair", () => {
   expect(shion).toContain("--slime-color:#9270CB");
   expect(shion).toContain("#363140");
   const bare = slimeSVG({ character: "rimuru" }, plain);
-  // The horn is in the drawing and in each of the idle strip's seven poses.
-  expect(shion.match(/<path /g)!.length).toBe(bare.match(/<path /g)!.length + 8);
+  // The resting vector carries the horn once.
+  expect(shion.match(/<path /g)!.length).toBe(bare.match(/<path /g)!.length + 1);
 });
 
 test("what earlier builds stored still draws", () => {
@@ -187,35 +187,20 @@ test("a long list does not move in step, and a redraw keeps its place in the mot
   vi.restoreAllMocks();
 });
 
-test("what a character wears on its body stays on it at rest: the idle strip that paints over the drawing carries it too", () => {
+test("an idle slime retains its costume in one resting vector with no animation tracks", () => {
   const host = document.createElement("div");
   host.innerHTML = slimeSVG({ character: "diablo" });
-  const cells = host.querySelectorAll(".slime-idle-body [data-idle-pose]");
-  expect(cells.length).toBe(7);
-  for (const cell of cells) expect(cell.querySelector('path[fill="#FFF6E9"]'), "the collar in every pose").not.toBeNull();
-  expect(host.querySelector("svg.slime .slime-marks path[fill=\"#FFF6E9\"]"), "and in the drawing for every other state").not.toBeNull();
-  const css = readFileSync(resolve(import.meta.dirname, "slime.css"), "utf8");
-  expect(css).toMatch(/\[data-state="idle"\] :is\([^)]*\.slime-marks[^)]*\) \{ visibility: hidden; \}/);
+  expect(host.querySelector('.slime-marks path[fill="#FFF6E9"]')).not.toBeNull();
+  expect(host.querySelector(".slime-idle, .slime-loop")).toBeNull();
   host.innerHTML = slimeSVG({ character: "rigurd" });
-  for (const cell of host.querySelectorAll(".slime-idle-body [data-idle-pose]")) expect(cell.querySelector('circle[fill="#D6A14A"]'), "the bow's knot").not.toBeNull();
-  host.innerHTML = slimeSVG({ color: "sky" }, { now: new Date(2000, 5, 1) });
-  expect(host.querySelector(".slime-idle-body [data-idle-pose]")!.children.length, "a plain slime is only its body").toBe(1);
-});
-
-test("only whole-frame idle strips use composited transforms, deforming poses are repainted (R-UI-63)", () => {
-  const idle = keyframes.filter(({name}) => ['slime-idle-body','slime-idle-eyes'].includes(name));
-  expect(idle).toHaveLength(2);
-  for (const {body} of idle) for (const [,value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
-    const frame=Number(value)*7/100;
-    expect(Math.abs(frame-Math.round(frame))).toBeLessThan(.00001);
-  }
-  expect(css).not.toMatch(/\.slime-in-between[^{]*\{[^}]*\btransform:/);
+  expect(host.querySelector('.slime-marks circle[fill="#D6A14A"]')).not.toBeNull();
+  expect(css).not.toMatch(/slime-idle-(?:body|eyes|large)/);
 });
 
 test("only whole-frame cel strips use composited transforms (R-UI-63, R-PERF-01)", () => {
   expect(keyframes.length).toBeGreaterThan(20);
   const composited = keyframes.filter(({ body }) => /(^|[{;\s])transform:/.test(body));
-  expect(composited.map(({ name }) => name).sort()).toEqual(["slime-idle-body", "slime-idle-eyes", "slime-loop-blink", "slime-loop-x", "slime-loop-working-x", "slime-loop-y"].sort());
+  expect(composited.map(({ name }) => name).sort()).toEqual(["slime-loop-blink", "slime-loop-x", "slime-loop-y"].sort());
   for (const { body } of composited) for (const [, value] of body.matchAll(/transform: translateX\((-?[\d.]+)%\)/g)) {
     const frame = Number(value) * (body.includes('translateX(-4.16666667%)') ? 24 : body.includes('translateX(-8.33333333%)') ? 12 : 7) / 100;
     expect(Math.abs(frame - Math.round(frame))).toBeLessThan(0.00001);
@@ -228,14 +213,11 @@ test("a slime's box is a whole number of pixels, whatever the window works out",
   expect(css).toMatch(/\.av\.mb-av\.mb-av-slime \{[^}]*width: round\(var\(--av\), 1px\);[^}]*height: round\(var\(--av\), 1px\);/);
 });
 
-test("every state has its own performance, and the two idle tracks share no beat", () => {
-  const states: SlimeState[] = ["thinking", "working", "searching", "computer", "waiting", "done", "error", "sleeping", "arriving"];
-  for (const state of states) expect(css, state).toMatch(new RegExp(`\\.slime\\[data-state="${state}"\\] \\.slime-motion \\{ animation: slime-${state}-`));
-  const idle = [...css.matchAll(/\.slime-surface\[data-state="idle"\][^{]*\.slime-cels \{([^}]*)\}/g)].flatMap(([, rule]) => [...rule!.matchAll(/calc\(([\d.]+)s \* var\(--slime-tempo\)\)/g)].map(([, seconds]) => Number(seconds) * 10));
-  const distinct = [...new Set(idle)];
-  expect(distinct.length).toBe(2);
-  const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
-  for (const a of distinct) for (const b of distinct) if (a !== b) expect(gcd(Math.round(a), Math.round(b)), `${a} ${b}`).toBeLessThan(3);
+test("each moving state retains its body performance while idle has no loop", () => {
+  for (const state of ["thinking", "working", "searching", "computer", "waiting", "done", "error", "sleeping", "arriving"]) {
+    expect(css, state).toContain(`.slime[data-state="${state}"] .slime-motion { animation: slime-${state}-`);
+  }
+  expect(css).not.toMatch(/(?:\.slime|\.slime-surface)\[data-state="idle"\][^{]*\{[^}]*animation:/);
 });
 
 test("under reduced motion nothing moves and each liquid state retains its pose and prop", () => {
@@ -300,10 +282,42 @@ test("a list keeps different paces, and each member keeps its own", () => {
   expect(tempo(5)).toBe(tempo(5));
 });
 
-test("the pointer wakes a slime once on the way in, and the wiggle ends itself", () => {
+test("hover plays one finite delight on the static idle vector and then leaves it still", () => {
+  document.body.innerHTML = `<button class="mb-row">${slimeFaceHTML({ id: 62 }, 40)}</button>`;
+  const row = document.querySelector(".mb-row")!, svg = row.querySelector<SVGElement>("svg.slime")!, surface = svg.parentElement!;
+  expect(svg.dataset.state).toBe("idle");
+  expect(svg.classList.contains("is-delighted")).toBe(false);
+  expect(surface.querySelector(".slime-loop, .slime-idle")).toBeNull();
+  const body = svg.querySelector(".slime-body");
+  expect(body).not.toBeNull();
+  row.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+  expect(svg.classList.contains("is-delighted")).toBe(true);
+  expect(svg.querySelector(".slime-body")).toBe(body);
+  const css = readFileSync(resolve(__dirname, "slime.css"), "utf8");
+  expect(css).toContain(".slime-surface:has(.slime.is-delighted) { animation: slime-delight 620ms linear both; }");
+  expect(css).toContain(".slime.is-delighted .slime-look > .slime-counterturn { animation: slime-delight-eyes 620ms cubic-bezier(0.3, 0, 0.3, 1) both; }");
+  surface.dispatchEvent(new AnimationEvent("animationend", { bubbles: true, animationName: "slime-delight" }));
+  expect(svg.classList.contains("is-delighted")).toBe(false);
+  expect(svg.dataset.state).toBe("idle");
+  expect(svg.querySelector(".slime-body")).toBe(body);
+  expect(surface.querySelector(".slime-loop, .slime-idle")).toBeNull();
+});
+
+test("idle press uses a finite squash and release on its resting vector", () => {
+  const host = document.createElement("div");
+  host.innerHTML = slimeSVG({ character: "shion" }, plain);
+  expect(host.querySelector("svg.slime")?.getAttribute("data-state")).toBe("idle");
+  expect(host.querySelector(".slime-loop, .slime-idle")).toBeNull();
+  expect(css).toContain(':is(.mb-row, .mb-avbtn, .mb-preset, .mb-av-slime):active .slime-surface { --slime-squish: scale(1.12, 0.84); transition: --slime-squish 90ms cubic-bezier(0.2, 0.8, 0.3, 1); }');
+  expect(css).toContain('@property --slime-squish { syntax: "<transform-list>"; inherits: false; initial-value: scale(1); }');
+  expect(css).toContain("transition: --slime-squish 480ms");
+});
+
+test("the pointer wakes a working slime once on the way in", () => {
   document.body.innerHTML = `<button class="mb-row" id="row"><i id="inner"></i>${slimeFaceHTML({ id: 61 }, 40)}</button><div id="away"></div>`;
   const svg = document.querySelector<SVGElement>("svg.slime")!, row = document.getElementById("row")!, inner = document.getElementById("inner")!, away = document.getElementById("away")!;
   const over = (target: Element, from: Element | null): void => { target.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, relatedTarget: from })); };
+  setSlimeState(61, "thinking");
   over(row, away);
   expect(svg.classList.contains("is-delighted")).toBe(true);
   svg.classList.remove("is-delighted");
@@ -323,21 +337,22 @@ test("every liquid state keeps the body, eyes and costume instead of substitutin
     drawing.innerHTML = slimeSVG({ character: "shion" }, { ...plain, state });
     expect(drawing.querySelector(".slime-body")).not.toBeNull();
     expect(drawing.querySelector(".slime-mark")).not.toBeNull();
-    expect(drawing.querySelector(".slime-drop, .slime-bubble")).not.toBeNull();
+    expect(drawing.querySelector(".slime-drop")).toBeNull();
+    expect(drawing.querySelector(".slime-bubble")).not.toBeNull();
     expect(drawing.querySelector(".slime-dots, .slime-blocked, .slime-ribbons, .slime-z")).toBeNull();
   }
   expect(css).not.toMatch(/slime-dot-pulse|slime-attention|slime-ribbon-orbit|slime-z|visibility: hidden;[^}]*slime-press/);
 });
 
 test("liquid effects animate only transforms and opacity, never geometry or layout", () => {
-  for (const { body } of keyframes.filter(({ name }) => /droplet|sweat|bubble|drip/.test(name))) {
+  for (const { body } of keyframes.filter(({ name }) => /bubble/.test(name))) {
     expect(body).not.toMatch(/(?:^|[;{\s])(?:d|width|height|top|left|cx|cy|r):/);
   }
 });
 
 test("liquid fades repaint SVG alpha instead of promoting the whole moving slime (R-UI-63)", () => {
   expect(css).toContain('@property --slime-liquid-alpha');
-  for (const { body } of keyframes.filter(({ name }) => /droplet|sweat|bubble|drip/.test(name))) {
+  for (const { body } of keyframes.filter(({ name }) => /bubble/.test(name))) {
     expect(body).not.toMatch(/(^|[{;\s])opacity:/);
     expect(body).toContain('--slime-liquid-alpha:');
   }

@@ -16,7 +16,7 @@ import { createChatComposer } from "./chat-composer";
 import { messageHTML, messagePlainText, replyContentHTML } from "./message-content";
 import { mountRichContent, preserveRichScroll } from "./message-rich";
 import { mountConversationScroll } from "./conversation-scroll";
-import { messageExpandHTML, measureMessagePreviews } from "./message-preview";
+import { messageExpandHTML, measureMessagePreviews, messagePreviewMeasure } from "./message-preview";
 import { plainReplies, replyBody, replyMessages } from "../shared/anime";
 import { bindComposerMentions, mentionTargets } from "./team-mentions";
 import { createAttachmentMedia } from "./attachment-media";
@@ -260,7 +260,8 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
   const pagesHost = mountPages(thread, { send: text => {
     if (roomId) void api.roomSend(roomId, text, crypto.randomUUID(), getLocale()).then(() => refresh());
   }, answer: (id, text) => answerOwnerPage(thread, id, text, () => { void refresh(); }) });
-  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(() => measureMessagePreviews(thread, { all: true })) : null;
+  const measureAllMessages = messagePreviewMeasure(thread);
+  const messageResize = typeof ResizeObserver === "function" ? new ResizeObserver(measureAllMessages) : null;
   messageResize?.observe(thread);
   const finder = mountConversationFind({button:el.querySelector('[data-room-search]')!,bar:el.querySelector('.ra-find')!,thread,scroll,load:async current=>{
     const id=roomId;if(!id)return;
@@ -443,7 +444,7 @@ export function createRoomPane(_app: AppContext, onClose: () => void, onRender: 
       target.closest('.chat-message')?.classList.toggle('is-expanded', expanded);
       target.setAttribute('aria-expanded', String(expanded));
       target.textContent = t(expanded ? "chat.showLess" : "chat.showAll");
-      measureMessagePreviews(thread, { all: true });
+      measureAllMessages();
     }
     else if(act==="stop"&&room&&!stopping){stopping=true;const id=room.id;draw();void api.roomStop(id).then(()=>refresh()).catch(error=>toaster.info(describeError(error))).finally(()=>{stopping=false;if(opened)draw();});}
     else if(act==="reply"){replyTo=messages.find(m=>m.id===Number(target.dataset.message));draw();composer.input.focus();}

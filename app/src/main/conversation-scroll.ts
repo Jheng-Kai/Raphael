@@ -12,16 +12,17 @@ export function mountConversationScroll(scroller: HTMLElement): void {
     button.style.bottom = `${Math.max(12, stage.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 12)}px`;
   };
   button.addEventListener("click", () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }));
-  scroller.addEventListener("scroll", sync, { passive: true });
   // A draw waits for the next frame: reading the heights right after it would force its layout into the same task.
   let queued = false;
-  new MutationObserver(() => {
+  const schedule = (): void => {
     if (queued) return;
     queued = true;
     requestAnimationFrame(() => { queued = false; sync(); });
-  }).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  };
+  scroller.addEventListener("scroll", schedule, { passive: true });
+  new MutationObserver(schedule).observe(scroller, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
   if (typeof ResizeObserver === "function") {
-    const resize = new ResizeObserver(sync);
+    const resize = new ResizeObserver(schedule);
     resize.observe(scroller);
     if (scroller.firstElementChild) resize.observe(scroller.firstElementChild);
   }

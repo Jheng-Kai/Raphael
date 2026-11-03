@@ -1,7 +1,7 @@
 @property --slime-liquid-alpha { syntax: "<number>"; inherits: false; initial-value: 1; }
 @property --slime-touch { syntax: "<transform-list>"; inherits: false; initial-value: translate(0px); }
 @property --slime-squish { syntax: "<transform-list>"; inherits: false; initial-value: scale(1); }
-/* A slime carries its state in its liquid body, eyes and droplets. */
+/* A slime carries its state in its liquid body and eyes. */
 /* Heavier than the round crop of a picture (`.av.mb-av`), whichever sheet loads last: horns, wings and hats reach past the box.
    The paint reserve keeps wide landings out of scrollable layout; whole-pixel sizes keep small faces stable. */
 .av.mb-av.mb-av-slime { display: inline-flex; flex: none; width: round(var(--av), 1px); height: round(var(--av), 1px); contain: paint; overflow: clip; overflow-clip-margin: 120px; border-radius: 0; background: transparent; user-select: none; container-type: size; }
@@ -58,63 +58,20 @@
 
 /* Far outside the view the compositor cannot take a loop, and the main thread would advance it every frame (slime-offscreen.ts). */
 .slime-surface[data-offscreen], .slime-surface[data-offscreen] * { animation: none !important; }
+/* A hidden window resumes its visible animations in phase when it returns. */
+html[data-window-hidden] *, html[data-window-hidden] *::before, html[data-window-hidden] *::after { animation-play-state: paused !important; }
 
-/* Idle uses a few vector cels. The compositor only slides whole pixels, so it neither resamples a pose nor repaints twelve SVG trees each frame. */
-.slime-idle { display: none; position: absolute; left: -100%; top: -100%; width: 300%; height: 300%; overflow: hidden; pointer-events: none; }
-.slime-surface[data-state="idle"] :is(.slime-body, .slime-eyes, .slime-back, .slime-marks) { visibility: hidden; }
-.slime-surface[data-state="idle"] .slime-idle { display: block; }
+/* Whole-frame cels move only in active states; idle uses the resting vector. */
+
 .slime-cels { display: block; width: 700%; height: 100%; transform-origin: 0 0; }
 .slime-cels > svg { display: block; width: 100%; height: 100%; }
 /* Group grids can reserve a 20x19 cell. Both strip SVGs and the normal SVG need the same square scale. */
 .slime-surface { position: relative; display: block; flex: none; width: min(100cqw, 100cqh); height: min(100cqw, 100cqh); --eye-w: 6; contain: layout paint; overflow: clip; overflow-clip-margin: 100cqw; }
 .slime-cel-eye { stroke-width: var(--eye-w); }
-.slime-surface[data-state="idle"] .slime-idle-body .slime-cels { animation: slime-idle-body calc(23.3s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
-.slime-surface[data-state="idle"] .slime-idle-eyes .slime-cels { animation: slime-idle-eyes calc(9.7s * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
-@keyframes slime-idle-body {
-  0%, 16%, 32%, 48%, 64%, 80%, 100% { transform: translateX(0.0%); }
-  2%, 14%, 18%, 30%, 34%, 46%, 50%, 82%, 98% { transform: translateX(-14.285714285714285%); }
-  4%, 12%, 20%, 28%, 36%, 44%, 52%, 84%, 94% { transform: translateX(-28.57142857142857%); }
-  6%, 10%, 22%, 26%, 38%, 42%, 54%, 86%, 90% { transform: translateX(-42.857142857142854%); }
-  58% { transform: translateX(-57.14285714285714%); }
-  60% { transform: translateX(-71.42857142857143%); }
-  62% { transform: translateX(-85.71428571428571%); }
-}
-@keyframes slime-idle-eyes {
-  0%, 7%, 14%, 34.2%, 52%, 61.4%, 69.5%, 73%, 100% { transform: translateX(0.0%); }
-  4.3%, 5.8%, 67.3%, 68.8%, 69.9%, 71.3% { transform: translateX(-14.285714285714285%); }
-  4.7%, 5.3%, 67.7%, 68.3%, 70.2%, 70.8% { transform: translateX(-28.57142857142857%); }
-  15.2%, 24% { transform: translateX(-42.857142857142854%); }
-  25.2%, 33% { transform: translateX(-57.14285714285714%); }
-  53.2%, 60% { transform: translateX(-71.42857142857143%); }
-  6.5%, 72.3% { transform: translateX(-85.71428571428571%); }
-}
 
 @keyframes slime-idle-hide { from { visibility: visible; } to { visibility: hidden; } }
 @keyframes slime-idle-show { from { visibility: hidden; } to { visibility: visible; } }
-.slime-surface:has(.slime[data-moved="idle"]) :is(.slime-body, .slime-eyes, .slime-back, .slime-marks) { animation: slime-idle-hide 320ms steps(1, end) both; }
-.slime-surface:has(.slime[data-moved="idle"]) .slime-idle { animation: slime-idle-show 320ms steps(1, end) both; }
 
-@container (width > 72px) {
-  .slime-surface[data-state="idle"] .slime-idle { display: none; }
-  .slime-surface[data-state="idle"] .slime-cels { animation: none; }
-  .slime[data-state="idle"] :is(.slime-body, .slime-eyes, .slime-back, .slime-marks) { visibility: visible; }
-  .slime[data-state="idle"] .slime-body { animation: slime-idle-large-breath calc(3.7s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
-  .slime[data-state="idle"] .slime-gaze { animation: slime-idle-large-eyes calc(9.7s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
-}
-@keyframes slime-idle-large-eyes {
-  0%, 4%, 7%, 14%, 34.2%, 52%, 61.4%, 67%, 69.5%, 73%, 100% { translate: 3px -3px; scale: 1 1; }
-  4.7%, 5.3%, 67.7%, 68.3%, 70.2%, 70.8% { translate: 3px -3px; scale: 1 0.3; }
-  15.2%, 24% { translate: -3px 0; scale: 1 1; }
-  25.2%, 33% { translate: 3px -1px; scale: 1 1; }
-  53.2%, 60% { translate: 0 -3px; scale: 1 1; }
-}
-
-/* In and out are not the same: a slow breath in, a little rest at the top, a longer breath out. */
-@keyframes slime-breath {
-  0%, 100% { scale: 1 1; animation-timing-function: steps(4); }
-  40% { scale: 0.985 1.028; animation-timing-function: linear; }
-  50% { scale: 0.985 1.028; animation-timing-function: steps(5); }
-}
 /* Eyes dart and rest; they never drift like a sine wave. */
 /* The lid falls fast, rests, and lifts slower with a small overshoot; every second one comes in a pair. */
 @keyframes slime-blink {
@@ -128,7 +85,6 @@
   73.6% { scale: 0.98 1.06; animation-timing-function: cubic-bezier(0.4, 0, 0.5, 1); }
   75.2%, 100% { scale: 1 1; }
 }
-
 
 /* thinking: eyes up and aside, resting between darts, while the body leans slowly from one side to the other. */
 @container (width > 72px) {
@@ -324,7 +280,7 @@
 .slime[data-state="error"] .slime-motion { animation: slime-error-body 1.6s ease-out var(--slime-since, 0s) both; }
 @keyframes slime-error-body { from { scale: 1 1; } to { scale: 1.08 .62; } }
 
-/* Sleeping breathes more slowly than idle, with closed eyes and a crown bubble. */
+/* Sleeping breathes slowly, with closed eyes and a crown bubble. */
 @container (width > 72px) {
   .slime[data-state="sleeping"] .slime-motion { animation: slime-sleeping-body calc(5.6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
 }
@@ -335,63 +291,8 @@
 
 /* Props are the slime's own liquid; coordinates reserve their complete arcs inside the view box. */
 /* Paint alpha on the vector instead of promoting a fading SVG to a resampled texture. */
-.slime-drop, .slime-bubble { display: none; transform-box: view-box; transform-origin: 0 0; fill-opacity: var(--slime-liquid-alpha); }
-.slime[data-state="thinking"] .slime-thought { display: block; }
-@container (width > 72px) {
-  .slime[data-state="thinking"] .slime-thought { display: block; animation: slime-thought-droplet calc(2.8s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
-}
-@container (width <= 72px) {
-  .slime[data-transitioning][data-state="thinking"] .slime-thought { display: block; animation: slime-thought-droplet calc(2.8s * var(--slime-tempo)) ease-in-out var(--slime-delay) both; }
-}
-@keyframes slime-thought-droplet {
-  0%, 100% { translate: 50px 35px; scale: .8; --slime-liquid-alpha: 0; }
-  25% { translate: 50px 26px; scale: 1; --slime-liquid-alpha: 1; }
-  45%, 65% { translate: 50px 20px; scale: 1; --slime-liquid-alpha: 1; }
-  85% { translate: 50px 29px; scale: .9; --slime-liquid-alpha: 1; }
-}
-.slime[data-state="working"] :is(.slime-left, .slime-right) { display: block; }
-@container (width > 72px) {
-  .slime[data-state="working"] :is(.slime-left, .slime-right) { display: block; animation: slime-working-droplet calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) infinite both; }
-}
-@container (width <= 72px) {
-  .slime[data-transitioning][data-state="working"] :is(.slime-left, .slime-right) { display: block; animation: slime-working-droplet calc(1.8s * var(--slime-tempo)) linear var(--slime-delay) both; }
-}
-.slime[data-state="working"] .slime-right { animation-delay: calc(var(--slime-delay) - .9s * var(--slime-tempo)); }
-.slime-left { --drop-sign: 1; }
-.slime-right { --drop-sign: -1; }
-@keyframes slime-working-droplet {
-  0%, 39% { translate: calc(50px - 28px * var(--drop-sign)) 67px; --slime-liquid-alpha: 0; }
-  40% { translate: calc(50px - 28px * var(--drop-sign)) 67px; --slime-liquid-alpha: 1; }
-  49% { translate: calc(50px - 34px * var(--drop-sign)) 49px; --slime-liquid-alpha: 1; }
-  58% { translate: calc(50px - 38px * var(--drop-sign)) 58px; --slime-liquid-alpha: .8; }
-  68%, 100% { translate: calc(50px - 39px * var(--drop-sign)) 81px; --slime-liquid-alpha: 0; }
-}
-.slime[data-state="blocked"] .slime-sweat { display: block; }
-@container (width > 72px) {
-  .slime[data-state="blocked"] .slime-sweat { display: block; fill: color-mix(in srgb, var(--slime-color) 68%, white); animation: slime-sweat calc(1.8s * var(--slime-tempo)) ease-in var(--slime-delay) infinite both; }
-}
-@container (width <= 72px) {
-  .slime[data-transitioning][data-state="blocked"] .slime-sweat { display: block; fill: color-mix(in srgb, var(--slime-color) 68%, white); animation: slime-sweat calc(1.8s * var(--slime-tempo)) ease-in var(--slime-delay) both; }
-}
-@keyframes slime-sweat {
-  0%, 100% { translate: 80px 48px; scale: .8; --slime-liquid-alpha: .3; }
-  25% { translate: 82px 51px; scale: 1; --slime-liquid-alpha: 1; }
-  80% { translate: 86px 72px; scale: 1; --slime-liquid-alpha: 1; }
-  95% { translate: 86px 78px; scale: .8; --slime-liquid-alpha: 0; }
-}
-.slime[data-state="error"] .slime-drip { display: block; }
-@container (width > 72px) {
-  .slime[data-state="error"] .slime-drip { display: block; animation: slime-drip calc(6s * var(--slime-tempo)) ease-in var(--slime-delay) infinite both; }
-}
-@container (width <= 72px) {
-  .slime[data-transitioning][data-state="error"] .slime-drip { display: block; animation: slime-drip calc(6s * var(--slime-tempo)) ease-in var(--slime-delay) both; }
-}
-@keyframes slime-drip {
-  0%, 35%, 100% { translate: 78px 77px; scale: .8; --slime-liquid-alpha: 0; }
-  50% { translate: 80px 82px; scale: 1; --slime-liquid-alpha: 1; }
-  85% { translate: 82px 94px; scale: 1; --slime-liquid-alpha: .8; }
-  95% { translate: 82px 96px; scale: .8; --slime-liquid-alpha: 0; }
-}
+.slime-bubble { display: none; transform-box: view-box; transform-origin: 0 0; fill-opacity: var(--slime-liquid-alpha); }
+
 .slime[data-state="sleeping"] .slime-bubble { display: block; }
 @container (width > 72px) {
   .slime[data-state="sleeping"] .slime-bubble { display: block; animation: slime-bubble calc(5.6s * var(--slime-tempo)) ease-in-out var(--slime-delay) infinite both; }
@@ -404,14 +305,6 @@
   50% { translate: 50px 25px; scale: 1; --slime-liquid-alpha: 1; }
   75% { translate: 50px 19px; scale: 1; --slime-liquid-alpha: 1; }
   80% { translate: 50px 19px; scale: 1.2; --slime-liquid-alpha: 0; }
-}
-.slime[data-state="done"] :is(.slime-left, .slime-right) { display: block; animation: slime-done-droplet 1.9s ease-out var(--slime-since, 0s) both; }
-@keyframes slime-done-droplet {
-  0%, 12% { translate: 50px 38px; --slime-liquid-alpha: 0; }
-  18% { translate: calc(50px - 16px * var(--drop-sign)) 32px; --slime-liquid-alpha: 1; }
-  31% { translate: calc(50px - 24px * var(--drop-sign)) 20px; --slime-liquid-alpha: 1; }
-  46% { translate: calc(50px - 30px * var(--drop-sign)) 40px; --slime-liquid-alpha: .8; }
-  60%, 100% { translate: calc(50px - 33px * var(--drop-sign)) 68px; --slime-liquid-alpha: 0; }
 }
 
 /* arriving: it drops in stretched, plops flat with its eyes shut, wobbles up, opens its eyes and looks up at the owner. */
@@ -467,10 +360,7 @@
   .slime-press { scale: none !important; }
   .slime[data-state="thinking"] .slime-motion { rotate: -6deg; }
   .slime[data-state="thinking"] .slime-gaze { translate: -3px -5px; }
-  .slime[data-state="thinking"] .slime-thought { translate: 50px 20px; }
   .slime[data-state="working"] .slime-motion { scale: 0.92 1.10; }
-  .slime[data-state="working"] .slime-left { translate: 10px 45px; }
-  .slime[data-state="working"] .slime-right { translate: 90px 45px; }
   .slime[data-state="searching"] .slime-motion { translate: -3px 0; rotate: -4deg; }
   .slime[data-state="searching"] .slime-gaze { translate: -6px 0; }
   .slime[data-state="computer"] .slime-motion { scale: 1.02 .96; }
@@ -478,14 +368,10 @@
   .slime[data-state="waiting"] .slime-motion { scale: 1.05 .88; rotate: 3deg; }
   .slime[data-state="waiting"] .slime-gaze { translate: 4px 0; }
   .slime[data-state="blocked"] .slime-motion { scale: 1.08 .76; }
-  .slime[data-state="blocked"] .slime-sweat { translate: 84px 59px; }
   .slime[data-state="error"] .slime-motion { scale: 1.08 0.62; }
-  .slime[data-state="error"] .slime-drip { translate: 82px 90px; }
   .slime[data-state="sleeping"] .slime-motion { scale: 1.04 .91; }
   .slime[data-state="sleeping"] .slime-bubble { translate: 50px 20px; }
   .slime[data-state="done"] .slime-motion { translate: 0 -5px; scale: .96 1.04; }
-  .slime[data-state="done"] .slime-left { translate: 26px 24px; }
-  .slime[data-state="done"] .slime-right { translate: 74px 24px; }
   .slime[data-state="arriving"] .slime-motion { scale: 1.12 .82; }
 }
 
@@ -498,18 +384,9 @@
 .menu.mb-avpop .mb-slime-color:hover { background: var(--slime-color); box-shadow: 0 0 0 2px var(--hover-edge); }
 .menu.mb-avpop .mb-slime-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text-3); }
 
-@keyframes slime-idle-large-breath {
-  0%, 100% { scale: 1 1; }
-  40%, 50% { scale: .985 1.028; }
-  86% { scale: 1.02 .99; }
-  91% { scale: .99 1.01; }
-}
-
-
 /* Sampled SVG poses stay sharp; only whole-frame HTML translations loop at small sizes. */
 .slime-loop { display: none; position: absolute; left: -100%; top: -100%; width: 300%; height: 300%; overflow: hidden; pointer-events: none; }
 .slime-loop .slime-cels { width: 1200%; animation: slime-loop-x calc(var(--loop-body) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
-.slime-loop-body[data-state="working"] .slime-cels { width: 2400%; animation-name: slime-loop-working-x; }
 .slime-eye-cels { display: block; width: 100%; height: calc(100% * var(--loop-rows)); animation: slime-loop-y calc(var(--loop-eyes) * var(--slime-tempo)) steps(1, end) var(--slime-delay) infinite both; }
 .slime-loop-eyes:is([data-state="working"], [data-state="blocked"], [data-state="sleeping"], [data-state="error"]) .slime-eye-cels { animation: none; }
 .slime-prop-cels { display: block; width: 100%; height: 1200%; animation: slime-loop-y calc(var(--loop-props) * var(--slime-tempo)) steps(1, end) calc(var(--slime-delay) + var(--loop-prop-delay)) infinite both; }
@@ -531,7 +408,6 @@
   .slime[data-transitioning]:is([data-state="thinking"], [data-state="working"], [data-state="searching"], [data-state="computer"], [data-state="waiting"], [data-state="blocked"], [data-state="sleeping"]) { animation: slime-idle-hide 320ms steps(1, end) both; }
   .slime-surface[data-state="error"] > .slime-loop { animation: slime-idle-show 1.6s steps(1, end) both; }
   .slime[data-state="error"] { animation: slime-idle-hide 1.6s steps(1, end) both; }
-  .slime[data-state="error"] .slime-drip { animation: slime-drip calc(6s * var(--slime-tempo)) ease-in var(--slime-delay) both; }
 }
 @container (width <= 48px) {
   .slime-loop-eyes[data-state="working"] { --eye-w: 6; }
@@ -540,7 +416,7 @@
   .slime-loop-body .slime-mark { transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .slime-loop, .slime-idle { display: none !important; }
+  .slime-loop { display: none !important; }
   .slime-surface > .slime, .slime .slime-body, .slime .slime-eyes, .slime .slime-back, .slime .slime-marks { visibility: visible !important; }
 }
 @keyframes slime-loop-x {
@@ -572,33 +448,4 @@
   83.33333333% { transform: translateY(-83.33333333%); }
   91.66666667% { transform: translateY(-91.66666667%); }
   100% { transform: translateY(0%); }
-}
-
-/* Two kneads share the 1.8s droplet cycle: 24 frames replace the 12 by 12 product. */
-@keyframes slime-loop-working-x {
-  0.00000000% { transform: translateX(0.00000000%); }
-  4.16666667% { transform: translateX(-4.16666667%); }
-  8.33333333% { transform: translateX(-8.33333333%); }
-  12.50000000% { transform: translateX(-12.50000000%); }
-  16.66666667% { transform: translateX(-16.66666667%); }
-  20.83333333% { transform: translateX(-20.83333333%); }
-  25.00000000% { transform: translateX(-25.00000000%); }
-  29.16666667% { transform: translateX(-29.16666667%); }
-  33.33333333% { transform: translateX(-33.33333333%); }
-  37.50000000% { transform: translateX(-37.50000000%); }
-  41.66666667% { transform: translateX(-41.66666667%); }
-  45.83333333% { transform: translateX(-45.83333333%); }
-  50.00000000% { transform: translateX(-50.00000000%); }
-  54.16666667% { transform: translateX(-54.16666667%); }
-  58.33333333% { transform: translateX(-58.33333333%); }
-  62.50000000% { transform: translateX(-62.50000000%); }
-  66.66666667% { transform: translateX(-66.66666667%); }
-  70.83333333% { transform: translateX(-70.83333333%); }
-  75.00000000% { transform: translateX(-75.00000000%); }
-  79.16666667% { transform: translateX(-79.16666667%); }
-  83.33333333% { transform: translateX(-83.33333333%); }
-  87.50000000% { transform: translateX(-87.50000000%); }
-  91.66666667% { transform: translateX(-91.66666667%); }
-  95.83333333% { transform: translateX(-95.83333333%); }
-  100% { transform: translateX(0%); }
 }

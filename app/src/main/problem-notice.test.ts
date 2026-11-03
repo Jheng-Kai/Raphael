@@ -39,3 +39,17 @@ test("connection failures can retry and a late result cannot resurrect a hidden 
   notice.show(); notice.hide(); resolve({ ...healthy, openrouter: { state: "no_key" } }); await flush();
   expect(notice.el.hidden).toBe(true);
 });
+
+
+test("an unchanged status preserves the notice controls and does not notify layout", async () => {
+  vi.useFakeTimers();
+  const changed = vi.fn();
+  const notice = createProblemNotice({ go() {}, onEvent: () => () => {} } as unknown as AppContext, changed);
+  api.statusGet.mockResolvedValue({ ...healthy, openrouter: { state: "no_key" } });
+  notice.show(); await flush();
+  const button = notice.el.querySelector("button"); changed.mockClear();
+  await vi.advanceTimersByTimeAsync(30_000); await flush();
+  expect(notice.el.querySelector("button")).toBe(button);
+  expect(changed).not.toHaveBeenCalled();
+  notice.hide(); vi.useRealTimers();
+});

@@ -1,4 +1,4 @@
-import { scene, click, check, member, wait } from "./steps.mjs";
+import { scene, click, check, hover, member, wait } from "./steps.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const fixture = JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixture.json"), "utf8"));
@@ -42,7 +42,7 @@ export default [
   scene("slime-picker", "A member's slime is a character or a colour, tried in a menu that stays open", [member(1), { action: "open-details" }, wait(".mb-det:not([hidden])"), click('[data-det="gear"]'), click(".mb-avbtn"), wait(".mb-avpop"), click('.mb-avpop [data-slime-color="coral"]'), click('.mb-avpop [data-slime-character="shion"]'), check("slime-picker")]),
   scene("slime-sizes", "A slime at every size the app draws it, at rest, as sharp as the icon beside it", [board([sizes("素色", SKY), sizes("角", SHION), sizes("帽", SKY, true)])]),
   { ...scene("slime-gallery", "Every state at the sidebar's size and the large one", [board(gallery(SHION), 2)]), motion: true },
-  { ...scene("slime-characters-at-rest", "Every character keeps what it wears while it rests, at the sizes the sidebar and groups draw it", [board([40, 28, 20].map(size => ({ label: `${size}`, cells: CHARACTERS.map(character => ({ size, slime: { character }, state: "idle", at: 3000 })) })), 1), check("slime-marks-at-rest")]), motion: true },
+  { ...scene("slime-characters-at-rest", "Every character keeps what it wears while it rests, at the sizes the sidebar and groups draw it", [board([40, 28, 20].map(size => ({ label: `${size}`, cells: CHARACTERS.map(character => ({ size, slime: { character }, state: "idle", at: 3000 })) })), 1), hover(".look-slime-board > div > span:first-child"), { action: "settle-motion" }, check("slime-marks-at-rest")]), motion: true },
   scene("sidebar-characters-at-rest", "The sidebar's real rows show each character's marks at rest", [{ action: "member-column", collapsed: false }, check("sidebar-shell")], { members: fixture.members.map(item => ({ ...item, avatar: { 1: "slime:diablo", 2: "slime:rigurd", 3: "slime:souei" }[item.id] ?? item.avatar })) }),
   { ...scene("slime-motion-idle", "Alive and curious: a breath, a blink, a look around and an occasional wobble", [board([
     ...strip("呼吸", "idle", [0, 500, 1000, 1500, 1900, 2400, 3000, 3600]),
