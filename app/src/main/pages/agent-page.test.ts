@@ -22,6 +22,7 @@ vi.mock("../api", () => api);
 
 import { Cleared } from "../cleared";
 import { createAgent } from "./agent";
+import { getLocale, setLocale } from "../i18n";
 import * as ui from "../ui";
 
 function turn(id: number, more: Partial<AgentTurn> = {}): AgentTurn {
@@ -79,6 +80,25 @@ beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
   api.agentQuestionOpen.mockResolvedValue(null);
   api.agentVoice.mockResolvedValue(undefined);
+});
+
+test("the header computer button updates its accessible label and title when the locale changes", async () => {
+  const previous = getLocale();
+  setLocale("zh-TW");
+  api.agentHistoryList.mockResolvedValue({ turns: [] });
+  const agent = mount();
+  try {
+    await flush();
+    const button = agent.el.querySelector<HTMLButtonElement>('.mb-head [data-act="computer"]')!;
+    for (const [locale, label] of [["zh-TW", "電腦"], ["en", "Computer"], ["ja", "コンピューター"], ["zh-TW", "電腦"]] as const) {
+      setLocale(locale);
+      expect(button.getAttribute("aria-label"), locale).toBe(label);
+      expect(button.title, locale).toBe(label);
+    }
+  } finally {
+    agent.hide();
+    setLocale(previous);
+  }
 });
 
 test("message links and preview cards use the safe opener with the full target; only replies get previews", async () => {
