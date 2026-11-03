@@ -33,7 +33,7 @@ async def test_restart_drains_queued_with_attachments_but_never_replays_started(
     assert restarted.service._inbox.get(started['turn_id'])['outcome'] == 'lost'
     client.chats = [chat('Recovered queued request')]
     restarted.service.start()
-    await until(lambda: restarted.service.turn(queued['turn_id']).status == 'done')
+    await until(lambda: restarted.service.turn(queued['turn_id']).status == 'done' and not restarted.service._drains)
     assert len(client.chat_calls) == 1
     assert 'Read the stored example' in str(client.chat_calls[0]['messages'])
     assert restarted.service._inbox.get(queued['turn_id'])['outcome'] == 'completed'
