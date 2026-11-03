@@ -1,3 +1,4 @@
+import { visibilityGate } from "../window-visibility";
 // Dictation overview: four usage numbers, activity grid and shortcuts.
 
 import { onLocaleChange, t } from "../i18n";
@@ -90,6 +91,7 @@ export function createDictationOverview(app: AppContext): Page {
   const ver = el.querySelector<HTMLElement>(".ver")!;
 
   let visible = false;
+  const poll = visibilityGate(() => void load(), () => visible);
   let timer: ReturnType<typeof setInterval> | undefined;
   /** Counts the loads, so that an answer that comes after a newer load started is dropped. */
   let loads = 0;
@@ -266,7 +268,7 @@ export function createDictationOverview(app: AppContext): Page {
       void load();
       clearInterval(timer);
       timer = setInterval(() => {
-        if (!document.hidden) void load();
+        poll.run();
       }, REFRESH_MS);
     },
     hide() {

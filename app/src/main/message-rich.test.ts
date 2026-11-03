@@ -79,3 +79,23 @@ test("the reading anchor is found by halving, reading a few positions of a long 
   expect(firstBelow(lines, 1e9)).toBeUndefined();
   expect(firstBelow([], 0)).toBeUndefined();
 });
+
+
+test("scrolling reuses the observer's code list and only measures nearby blocks", () => {
+  const root = document.createElement("div"); document.body.append(root);
+  const frames: FrameRequestCallback[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => { frames.push(callback); return frames.length; });
+  vi.spyOn(root, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 600, 400));
+  const blocks = Array.from({length: 1000}, (_, index) => {
+    const block = document.createElement("div"); block.className = "message-code";
+    vi.spyOn(block, "getBoundingClientRect").mockReturnValue(new DOMRect(0, index * 50 - 25_000, 600, 40));
+    root.append(block); return block;
+  });
+  mountRichContent(root);
+  blocks.forEach(block => vi.mocked(block.getBoundingClientRect).mockClear());
+  const query = vi.spyOn(root, "querySelectorAll");
+  for (let i = 0; i < 20; i++) root.dispatchEvent(new Event("scroll"));
+  expect(frames).toHaveLength(1); frames.shift()!(0);
+  expect(query.mock.calls.some(([selector]) => selector === ".message-code")).toBe(false);
+  expect(blocks.reduce((count, block) => count + vi.mocked(block.getBoundingClientRect).mock.calls.length, 0)).toBeLessThan(40);
+});

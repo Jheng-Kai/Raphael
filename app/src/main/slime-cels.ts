@@ -21,15 +21,15 @@ function staticMarks(markup: string): string {
 }
 
 /** Independent strip axes retain the body's and the eyes' original periods without scaling a raster. */
-export function motionStrips(state: LoopState, body: string, eyes: string, face: string, drop: string, back = '', worn = ''): [string, string] {
+export function motionStrips(state: LoopState, body: string, eyes: string, face: string, back = '', worn = ''): [string, string] {
   const key = `${state}|${back}|${worn}`;
   const cached = cache.get(key); if (cached) return cached;
   back=staticMarks(back);worn=staticMarks(worn);
   const timing = LOOPS[state], blink = state === 'thinking' || state === 'searching';
   const gazeRows = ['thinking','searching','computer','waiting'].includes(state) ? CEL_COUNT : 1;
   const independent = state === 'thinking' || state === 'searching';
-  const bodyColumns = state === 'working' ? CEL_COUNT*2 : CEL_COUNT;
-  const propPeriod = state === 'thinking' ? 3.6 : state === 'working' ? 1.8 : timing.body;
+  const bodyColumns = CEL_COUNT;
+  const propPeriod = state === 'thinking' ? 3.6 : timing.body;
   const propDelay = state === 'thinking' ? 140 : state === 'searching' ? 120 : 0;
   const poses = Array.from({length:CEL_COUNT}, (_, index) => bodyPose(state,index/CEL_COUNT));
   const wornAt = (phase: number): string => {
@@ -38,18 +38,12 @@ export function motionStrips(state: LoopState, body: string, eyes: string, face:
       (_, x, y, give) => `class="slime-mark" style="--mark-x:${x}px;--mark-y:${y}px;--mark-give:${give}" transform="rotate(${angle*Number(give)})"`);
   };
   const props = (phase: number): string => {
-    const names: Partial<Record<LoopState,string>> = {thinking:'slime-thought-droplet', working:'slime-working-droplet', blocked:'slime-sweat', error:'slime-drip', sleeping:'slime-bubble'};
-    const name = names[state];
-    if (!name) return '';
-    const draw = (sign: number): string => {
-      const pose = sample(name, phase + (sign < 0 ? .5 : 0), state === 'working' ? 'linear' : state === 'blocked' || state === 'error' ? 'ease-in' : 'ease-in-out');
-      if (sign < 0) pose.translate[0] = 100 - pose.translate[0]!;
-      return `<g class="slime-cel-prop" transform="${poseTransform(pose)}" opacity="${pose.alpha[0]}" fill="${state === 'blocked' ? 'color-mix(in srgb, var(--slime-color) 68%, white)' : 'var(--slime-color)'}">${state === 'sleeping' ? '<circle r="5.5"/>' : `<path d="${drop}"/>`}</g>`;
-    };
-    return draw(1)+(state === 'working' ? draw(-1) : '');
+    if (state !== 'sleeping') return '';
+    const pose = sample('slime-bubble', phase, 'ease-in-out');
+    return `<g class="slime-cel-prop" transform="${poseTransform(pose)}" opacity="${pose.alpha[0]}" fill="var(--slime-color)"><circle r="5.5"/></g>`;
   };
-  const strip = (kind: string, cells: string, height = FRAME): string => `<span class="slime-loop slime-loop-${kind}${blink ? ' has-blink' : ''}" data-state="${state}" style='--loop-body:${timing.body*(kind==='body' && state==='working'?2:1)}s;--loop-eyes:${timing.eyes}s;--loop-props:${propPeriod}s;--loop-prop-delay:${propDelay}ms;--loop-rows:${gazeRows*(blink?4:1)};${eyeStyle(state)}'><span class="slime-cels">${kind === 'eyes' ? '<span class="slime-eye-cels"><span class="slime-blink-cels">' : independent ? '<span class="slime-prop-cels">' : ''}<svg width="${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)}" height="${height}" viewBox="-88 -81 ${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)} ${height}">${cells}</svg>${kind === 'eyes' ? '</span></span>' : independent ? '</span>' : ''}</span></span>`;
-  const bodyCells = Array.from({length:independent?CEL_COUNT:1},(_,row) => Array.from({length:bodyColumns},(_,index) => { const pose=poses[index%CEL_COUNT]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g data-loop-pose='${JSON.stringify(pose)}' transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/CEL_COUNT:index/CEL_COUNT)}</g>${props(state === 'working'?Math.floor(index/2)/CEL_COUNT:index/CEL_COUNT)}</g>`; }).join('')).join('');
+  const strip = (kind: string, cells: string, height = FRAME): string => `<span class="slime-loop slime-loop-${kind}${blink ? ' has-blink' : ''}" data-state="${state}" style='--loop-body:${timing.body}s;--loop-eyes:${timing.eyes}s;--loop-props:${propPeriod}s;--loop-prop-delay:${propDelay}ms;--loop-rows:${gazeRows*(blink?4:1)};${eyeStyle(state)}'><span class="slime-cels">${kind === 'eyes' ? '<span class="slime-eye-cels"><span class="slime-blink-cels">' : independent ? '<span class="slime-prop-cels">' : ''}<svg width="${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)}" height="${height}" viewBox="-88 -81 ${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)} ${height}">${cells}</svg>${kind === 'eyes' ? '</span></span>' : independent ? '</span>' : ''}</span></span>`;
+  const bodyCells = Array.from({length:independent?CEL_COUNT:1},(_,row) => Array.from({length:bodyColumns},(_,index) => { const pose=poses[index%CEL_COUNT]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g data-loop-pose='${JSON.stringify(pose)}' transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/CEL_COUNT:index/CEL_COUNT)}</g>${props(index/CEL_COUNT)}</g>`; }).join('')).join('');
   const eyeCells = Array.from({length:gazeRows}, (_, gazeIndex) => {
     const gaze = sample(`slime-${state}-gaze`,gazeIndex/CEL_COUNT,timing.gaze);
     if (state === 'blocked') gaze.translate = [0,-6];

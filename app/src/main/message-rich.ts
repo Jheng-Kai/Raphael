@@ -66,13 +66,18 @@ export function mountRichContent(root: HTMLElement): void {
   const states = new WeakMap<HTMLElement, string>();
   const images = new Map<string, HTMLImageElement>();
   const sourceViews = new Map<string, boolean>();
+  const codeBlocks = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(".message-code")].filter(block => !block.closest("details:not([open])"));
+  let blocks = codeBlocks();
   const refresh = (): void => {
-    if (!root.isConnected || !root.getBoundingClientRect().width) return;
-    mountShimmers(root);
+    if (!root.isConnected) return;
     const viewport = root.getBoundingClientRect();
-    for (const block of root.querySelectorAll<HTMLElement>(".message-code")) {
+    if (!viewport.width) return;
+    const first = firstBelow(blocks, viewport.top - 300);
+    for (let index = first ? blocks.indexOf(first) : blocks.length; index < blocks.length; index++) {
+      const block = blocks[index]!;
       const rect = block.getBoundingClientRect();
-      if (!rect.width || rect.bottom < viewport.top - 300 || rect.top > viewport.bottom + 300) continue;
+      if (rect.top > viewport.bottom + 300) break;
+      if (!rect.width || rect.bottom < viewport.top - 300) continue;
       const source = block.dataset.source ?? "", language = block.dataset.language ?? "";
       if (block.classList.contains("message-diagram")) {
         if (block.dataset.complete !== "true") continue;
@@ -156,7 +161,7 @@ export function mountRichContent(root: HTMLElement): void {
       case "expand": showLarge(t("chat.diagram"), `<div class="diagram-view">${uniqueSVG(block.querySelector(".diagram-view")!.innerHTML)}</div>`); break;
     }
   }, true);
-  const observer = new MutationObserver(refresh); observer.observe(root, { childList: true, subtree: true });
+  const observer = new MutationObserver(() => { blocks = codeBlocks(); mountShimmers(root); refresh(); }); observer.observe(root, { childList: true, subtree: true });
   // A scroll sends many events a frame; the blocks need looking at once per frame.
   let framed = false;
   root.addEventListener("scroll", () => {
@@ -164,9 +169,10 @@ export function mountRichContent(root: HTMLElement): void {
     framed = true;
     requestAnimationFrame(() => { framed = false; refresh(); });
   }, { passive: true });
-  root.addEventListener("toggle", refresh, true);
+  root.addEventListener("toggle", () => { blocks = codeBlocks(); refresh(); }, true);
   new MutationObserver(refresh).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-skin", "style"] });
   if (typeof ResizeObserver === "function") new ResizeObserver(refresh).observe(root);
+  mountShimmers(root);
   refresh();
 }
 

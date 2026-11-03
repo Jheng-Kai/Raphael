@@ -32,3 +32,13 @@ export function measureMessagePreviews(root: HTMLElement, { all = false } = {}):
     toggle.hidden = !expanded && !clipped;
   }
 }
+
+/** Width and font notifications in one frame share a single full measurement. */
+export function messagePreviewMeasure(root: HTMLElement): () => void {
+  let queued = false;
+  return () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; if (root.isConnected) measureMessagePreviews(root, { all: true }); });
+  };
+}

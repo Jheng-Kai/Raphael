@@ -9,7 +9,7 @@ const skill = resolve(root, ".agents/skills/verify-raphael");
 // RAPHAEL_STAGED_DOCS names a folder that mirrors the tree with edited documents not applied yet.
 const staged = process.env.RAPHAEL_STAGED_DOCS ? resolve(root, process.env.RAPHAEL_STAGED_DOCS, ".agents/skills/verify-raphael") : null;
 const readMap = file => readFileSync(staged && existsSync(resolve(staged, file)) ? resolve(staged, file) : resolve(skill, file), "utf8");
-const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery"];
+const names = ["home", "conversation", "members", "automations", "team-and-rooms", "dictation", "settings-appearance", "connections-mcp", "usage", "onboarding", "owner-polish", "composer-discovery", "performance"];
 
 describe("maintained verification feature map", () => {
   it("uses explicit modifier fields instead of unsupported Puppeteer key chords", () => {
@@ -20,7 +20,8 @@ describe("maintained verification feature map", () => {
     for (const name of names) {
       expect(index).toContain(`](${name}.md)`);
       const content = readMap(`features/${name}.md`);
-      for (const heading of ["Sub-features", "How to get to it (user POV)", "Driving it with look", "Gotchas"])
+      const headings = name === "performance" ? ["Behavior", "Selected rendered verification", "Native and performance boundaries"] : ["Sub-features", "How to get to it (user POV)", "Driving it with look", "Gotchas"];
+      for (const heading of headings)
         expect(content, name).toContain(`## ${heading}`);
       const commands = [...content.matchAll(/^npm run look -- (.+)$/gm)];
       expect(commands.length, name).toBeGreaterThan(0);

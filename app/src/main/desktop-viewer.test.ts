@@ -470,3 +470,21 @@ test('Back hides an unsaved teaching draft and the menu resumes the same editor'
  expect(host.querySelector('.desktop-review')!.hasAttribute('hidden')).toBe(false);
  expect(editor.value).toBe('My unsaved draft'); expect(api.desktopTeach).toHaveBeenCalledTimes(2);
 });
+
+
+test("desktop renewal skips hidden ticks and resumes once without requiring focus", async () => {
+  let hidden = false;
+  const visibility = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+  panelOpen = true; mounted.show(); await flush();
+  hidden = true; document.dispatchEvent(new Event("visibilitychange"));
+  const before = api.desktopRenew.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(api.desktopRenew.mock.calls.length).toBe(before);
+  hidden = false; document.dispatchEvent(new Event("visibilitychange")); await flush();
+  expect(api.desktopRenew.mock.calls.length).toBe(before + 1);
+  window.dispatchEvent(new Event("blur"));
+  // An unchanged lease backs off up to ten seconds; losing focus must not stop it.
+  await vi.advanceTimersByTimeAsync(10_000); await flush();
+  expect(api.desktopRenew.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
+  visibility.mockRestore();
+});

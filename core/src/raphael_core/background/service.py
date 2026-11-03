@@ -2247,18 +2247,21 @@ class BackgroundService:
             state,prefix,text,detail,reason,replies = 'failed','',phrase(task.language,'error'),None,'member_unknown_or_removed',()
         cost = (current.cost_usd if current else task.cost_usd) if run is None else run.ledger.total
         prior_cost = 0.0
+        turn_text, turn_detail = text, detail
         terminal_replies = replies or [text]
         if state == 'cancelled' and self._has_linked_turn(task):
             previous = self._history.get(task.turn_id)
             saved = [message['text'] for message in self._history.messages([task.turn_id]).get(task.turn_id, [])
                      if message['kind'] == 'reply' and message['text'].strip()]
-            said = '\n\n'.join(saved) or ((previous.detail or previous.text).strip() if previous else '')
+            # A delegate's turn text acknowledges the hand-off; authored replies live in messages.
+            said = '\n\n'.join(saved) or ((previous.detail or previous.text).strip()
+                                        if previous and previous.route != 'delegate' else '')
             prior_cost = previous.cost_usd if previous and run is None else 0.0
             if said and said != text:
-                text = said + '\n\n' + text
-                detail = None
+                turn_text = said + '\n\n' + text
+                turn_detail = None
                 if not saved:
-                    terminal_replies = [text]
+                    terminal_replies = [turn_text]
         try:
             if run is not None:
                 self._store.progress(
@@ -2267,7 +2270,7 @@ class BackgroundService:
             def publish():
                 if self._has_linked_turn(task):
                     # A room makes its turns before any model answers; the one that did is named here.
-                    self._history.publish_terminal(task.turn_id,prefix=prefix,text=text,detail=detail,
+                    self._history.publish_terminal(task.turn_id,prefix=prefix,text=turn_text,detail=turn_detail,
                         status=_TURN_STATUS.get(state,'error'),cost_usd=max(0.0, cost - prior_cost - getattr(run, "conversation_cost", 0.0)),
                         model=run.ledger.model if run is not None else None,
                         replies=[compose(prefix,line,None) for line in terminal_replies if line])

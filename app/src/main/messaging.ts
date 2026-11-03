@@ -1,3 +1,4 @@
+import { visibilityGate, windowVisible } from "./window-visibility";
 // Telegram, in the 訊息平台 tab of Settings: Raphael can be reached from a phone. It is drawn with the
 // rows of every other tab, name on the left and controls on the right. Connected, it is one row (the
 // mark, the bot, a dot for its state, a switch) that opens on a row for each pairing code and each
@@ -205,11 +206,13 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   };
   const view = (): MessagingView => ({ status, token, connecting, tokenError, confirmingDisconnect: confirming, busy, expanded });
 
+  const poll = visibilityGate(() => void refresh(), () => poller !== undefined && host.visible());
+
   function schedule(): void {
     clearInterval(poller);
     poller = undefined;
     // Only a connected bot has anything to wait for; a field being typed in is never redrawn.
-    if (typeof status === "object" && status.connected && status.enabled) poller = setInterval(() => void refresh(), POLL_MS);
+    if (typeof status === "object" && status.connected && status.enabled) poller = setInterval(poll.run, POLL_MS);
   }
 
   /** Takes a new status; the page is drawn again only if something changed. */
@@ -222,7 +225,7 @@ function createChannelMessaging(host: MessagingHost, kind: MessagingKind): Messa
   }
 
   async function refresh(): Promise<void> {
-    if (!host.visible()) return;
+    if (!host.visible() || !windowVisible()) return;
     const mine = ++loads;
     try {
       const next = await (kind === "telegram" ? api.telegramStatus() : call<TelegramStatus>("status"));

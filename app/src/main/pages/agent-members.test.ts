@@ -1374,3 +1374,36 @@ test("an approval retry never answers a replacement question", async () => {
  expect(api.agentQuestionAnswer).toHaveBeenCalledTimes(1);
  expect(document.querySelector('.ask-card-host [data-card-retry]')).toBeNull();
 });
+
+
+test("a burst of turn events while typing makes one history request and preserves the draft and nodes", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const input = agent.el.querySelector<HTMLTextAreaElement>(".composer textarea")!;
+  input.value = "Keep typing this draft"; input.dispatchEvent(new Event("input"));
+  const node = $('.tn[data-id="31"]');
+  api.agentHistoryList.mockClear();
+  for (let i = 0; i < 5; i++) {
+    send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+    await vi.advanceTimersByTimeAsync(20);
+  }
+  expect(api.agentHistoryList).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect(api.agentHistoryList).toHaveBeenCalledTimes(1);
+  expect(input.value).toBe("Keep typing this draft");
+  expect($('.tn[data-id="31"]')).toBe(node);
+  agent.hide();
+});
+
+test("a same-length reply edit still refreshes without serializing the full history", async () => {
+  vi.useFakeTimers();
+  const agent = mount(); await flush(); await pick(3);
+  const changed = structuredClone(THREADS[3]!);
+  const edited = "X".repeat(changed[0]!.text.length);
+  changed[0]!.text = edited;
+  api.agentHistoryList.mockResolvedValueOnce({ turns: changed });
+  send({ type: "AgentTurn", turn_id: 31, member_id: 3 });
+  await vi.advanceTimersByTimeAsync(500); await flush();
+  expect($('.tn[data-id="31"]').textContent).toContain(edited);
+  agent.hide();
+});

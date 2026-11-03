@@ -256,6 +256,7 @@ class HomeOverview:
         self.timezone_name = getattr(tz, "key", None)
         self.timezone_changed = None
         self._allowance_task = None
+        self._allowance_read_at = None
         self._calendar_task = None
         self._calendar_key = None
         self._calendar = []
@@ -274,10 +275,11 @@ class HomeOverview:
             logger.warning("Desktop time zone sync failed: %s", type(exc).__name__)
 
     async def _allowances(self, refresh):
-        if not refresh:
+        if not refresh or ((self._allowance_task is None or self._allowance_task.done()) and self._allowance_read_at is not None and self.now_ms() - self._allowance_read_at < 300_000):
             return await self.router.call("usage.allowances", {"refresh": False})
         # Concurrent refreshes share one CLI read, without persisting a second allowance store.
         if self._allowance_task is None or self._allowance_task.done():
+            self._allowance_read_at = self.now_ms()
             self._allowance_task = asyncio.create_task(self.router.call("usage.allowances"))
         try:
             return await asyncio.wait_for(asyncio.shield(self._allowance_task), timeout=12)

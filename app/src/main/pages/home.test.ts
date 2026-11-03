@@ -253,3 +253,26 @@ describe("the hero", () => {
     page.hide();
   });
 });
+
+
+test("Home ticks use cached allowances for five minutes and resume once after being hidden", async () => {
+  vi.useFakeTimers();
+  let hidden = false;
+  vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+  const { page } = await mount();
+  const { homeOverview } = await import("../api");
+  const liveCalls = (): number => vi.mocked(homeOverview).mock.calls.filter(([refresh]) => refresh).length;
+  const start = liveCalls();
+  await vi.advanceTimersByTimeAsync(270_000); await flush();
+  expect(liveCalls()).toBe(start);
+  await vi.advanceTimersByTimeAsync(30_000); await flush();
+  expect(liveCalls()).toBe(start + 1);
+  hidden = true; document.dispatchEvent(new Event("visibilitychange"));
+  const reads = vi.mocked(homeOverview).mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60_000); await flush();
+  expect(vi.mocked(homeOverview).mock.calls.length).toBe(reads);
+  hidden = false; document.dispatchEvent(new Event("visibilitychange")); await flush();
+  expect(vi.mocked(homeOverview).mock.calls.length).toBe(reads + 1);
+  expect(liveCalls()).toBe(start + 1);
+  page.hide(); page.el.remove(); vi.useRealTimers();
+});

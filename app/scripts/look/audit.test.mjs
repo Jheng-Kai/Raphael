@@ -1,11 +1,70 @@
 import { Window } from "happy-dom";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { mountDesktopTimeline } from "../../src/main/desktop-timeline";
+import { memberAccent } from "../../src/main/owner-bubble";
+import { slimeCharactersHTML, slimeColorOf, slimeColorsHTML } from "../../src/main/slime";
 import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
 
 describe("rendered look checks", () => {
+  it("moves the pointer to a board label and settles finite delight before checking idle costumes", () => {
+    const steps = scenes.find(scene => scene.name === "slime-characters-at-rest").steps;
+    const board = steps.findIndex(step => step.action === "slime-board");
+    expect(steps.slice(board + 1, board + 4)).toEqual([
+      { action: "hover", selector: ".look-slime-board > div > span:first-child" },
+      { action: "settle-motion" },
+      { action: "check", name: "slime-marks-at-rest" },
+    ]);
+  });
+  it("checks resting costumes on the board without inspecting the hidden compact sidebar", () => {
+    const browser = new Window();
+    const face = '<span class="slime-surface" data-state="idle"><svg class="slime"><g class="slime-marks"><path d="M0 0L1 1"/></g></svg></span>';
+    browser.document.body.innerHTML = `<aside style="visibility:hidden">${face}</aside><div class="look-slime-board">${face.repeat(24)}</div>`;
+    for (const element of browser.document.querySelectorAll("*")) {
+      element.getBoundingClientRect = () => ({ width: 40, height: 40 });
+      element.checkVisibility = () => true;
+      element.getAnimations = () => [];
+    }
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", element => ({ visibility: element.style.visibility || (element.closest("aside") ? "hidden" : "visible") }));
+    try {
+      expect(checkRendered("slime-marks-at-rest")).toEqual({ check: "slime-marks-at-rest", surfaces: 24, marked: 24 });
+      browser.document.querySelector("aside .slime-surface").getAnimations = () => [{ playState: "running" }];
+      expect(() => checkRendered("slime-marks-at-rest")).not.toThrow();
+      const mark = browser.document.querySelector(".look-slime-board path");
+      mark.style.visibility = "hidden";
+      expect(() => checkRendered("slime-marks-at-rest")).toThrow("the resting vector wears its costume");
+      mark.style.visibility = "visible";
+      browser.document.querySelector(".look-slime-board .slime-surface").getAnimations = () => [{ playState: "running" }];
+      expect(() => checkRendered("slime-marks-at-rest")).toThrow("idle has no running animation");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
+  it("requires a rounded square latest button with its own opaque surface (R-UI-98)", () => {
+    const browser = new Window();
+    browser.document.body.innerHTML = '<div><div class="ra-scroll" style="scrollbar-width:none"></div><button class="conversation-latest" style="border:1px solid gray;border-radius:8px;background:white"></button></div>';
+    const scroll = browser.document.querySelector(".ra-scroll"), latest = browser.document.querySelector("button");
+    let width = 32;
+    for (const element of [scroll, latest]) {
+      element.checkVisibility = () => true;
+      element.getBoundingClientRect = () => ({ width, height: 32 });
+    }
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", element => browser.getComputedStyle(element));
+    try {
+      expect(() => checkRendered("conversation-up")).not.toThrow();
+      for (const radius of ["16px", "0px"]) {
+        latest.style.borderRadius = radius;
+        expect(() => checkRendered("conversation-up")).toThrow("rounded square button (R-UI-98)");
+      }
+      latest.style.borderRadius = "8px"; width = 40;
+      expect(() => checkRendered("conversation-up")).toThrow("rounded square button (R-UI-98)");
+      width = 32; latest.style.backgroundColor = "rgba(0, 0, 0, 0)";
+      expect(() => checkRendered("conversation-up")).toThrow("latest has its own opaque surface");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("rejects an event check button stretched to the labelled scope height", () => {
     const browser=new Window();
     browser.document.body.innerHTML='<section class="au-routine-dialog"><button data-dlg="trigger">Event</button><label><input id="au-event-value"></label><button data-dlg="event-check">Check event</button></section>';
@@ -403,6 +462,40 @@ describe("rendered look checks", () => {
     window.document.querySelector('.dim').style.color = 'rgb(245,245,245)';
     window.document.querySelector('style').textContent = '.vanish:hover{background-color:rgba(245,245,245,.14)}';
     expect(audit().productRules.filter(item => item.rule === 'R-UI-52')).toEqual([]);
+  });
+  it.each(["light", "dark"])("keeps the computer takeover preview icon readable on hover for every member colour in %s (R-UI-52)", theme => {
+    const window = new Window();
+    // happy-dom leaves colours and background-image: initial authored; the browser resolves RGB and none.
+    const resolvedRGB = css => css.replace(/#[0-9a-f]{6}\b/gi, hex => `rgb(${[1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)).join(",")})`).replace(/\btransparent\b/g, "rgba(0,0,0,0)");
+    const css = ["styles", "agent", "card", "desktop-viewer"].map(name => readFileSync(new URL(`../../src/main/${name}.css`, import.meta.url), "utf8").replace(/^@import .+$/gm, "")).join("\n");
+    window.document.documentElement.dataset.theme = theme;
+    window.document.head.innerHTML = `<style>${resolvedRGB(css)}</style>`;
+    const picker = window.document.createElement("div");
+    picker.innerHTML = slimeCharactersHTML(null, value => value) + slimeColorsHTML(null, value => value);
+    const colours = [...picker.querySelectorAll("button")].map(button => slimeColorOf({ id: 1, avatar: button.dataset.slimeCharacter ? `slime:${button.dataset.slimeCharacter}` : `slime:color:${button.dataset.slimeColor}` }));
+    expect(colours.length).toBeGreaterThan(20);
+    vi.stubGlobal("document", window.document);
+    vi.stubGlobal("Element", window.Element);
+    try {
+      for (const colour of colours) {
+        const chat = window.document.createElement("div");
+        chat.className = "page-agent mb-chat";
+        chat.dataset.memberBubble = theme;
+        chat.style.setProperty("--member-accent", memberAccent(colour));
+        chat.innerHTML = '<div data-desktop-slot="2"></div>';
+        window.document.body.append(chat);
+        mountDesktopTimeline(chat, () => "Member").update({ state: "running", ready: true, control: "member", works: [{ id: "private-computer-task", turn_id: 2, state: "waiting_control", tool: "get_desktop_state", reason: "sign_in" }] });
+        chat.replaceChildren(chat.querySelector("[data-card-desktop-screen]"));
+        chat.firstElementChild.style.backgroundImage = "none";
+        const button = chat.querySelector('[data-card-desktop-screen] > button[data-card-desktop="take"]');
+        expect(button.className).toBe("btn");
+        expect(button.textContent).toBe("");
+        expect(window.getComputedStyle(button.querySelector("svg.i")).color, colour).toBe("rgb(240, 240, 240)");
+      }
+      for (const element of window.document.querySelectorAll("*")) element.getBoundingClientRect = () => ({ left: 10, top: 10, right: 110, bottom: 40, width: 100, height: 30 });
+      const failures = auditDocument(window.document, { width: 1120, height: 900 }, []).productRules.filter(item => item.rule === "R-UI-52" && item.class === "btn");
+      expect(failures).toEqual([]);
+    } finally { vi.unstubAllGlobals(); window.happyDOM.abort(); }
   });
   it("rejects a disabled control whose reason exists only in a title (R-UI-69)", () => {
     const { window, audit } = productAudit('<div><button disabled title="Needs an API key">Add</button></div>');
