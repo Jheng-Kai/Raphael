@@ -316,8 +316,9 @@ centering, inner margins, labels, keyboard focus and close contrast without clos
 Its `hoverOnly` option preserves an open settings modal for the resulting screenshot.
 
 Verify always runs TypeScript and Vitest; its default also runs contrast. `--quick`
-excludes contrast; `--core` adds offline pytest and `--rust` adds offline locked cargo
-tests. Optional checks use the existing environment/cache and fail if unavailable.
+excludes contrast; `--core` adds offline pytest and `--rust` adds what CI's Windows shell
+job checks: `cargo fmt --check`, offline locked cargo tests for the app and the vendored
+listener, and Clippy with warnings denied. Optional checks use the existing environment/cache and fail if unavailable.
 Use `--out dir` to select a writable evidence directory for look or verify.
 Logs, exit codes and a JSON summary live in `.look/verify-*/` by default; independent checks
 continue after a failure. These tools do not build, install, launch or deploy the native app.
