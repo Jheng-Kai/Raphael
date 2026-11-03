@@ -251,6 +251,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     `</section>`;
   const heading = el.querySelector<HTMLElement>("h1")!;
   const searchButton = el.querySelector<HTMLElement>('[data-act="search"]')!;
+  const computerButton = el.querySelector<HTMLElement>('[data-act="computer"]')!;
   const settingsButton = el.querySelector<HTMLElement>('[data-act="settings"]')!;
   const find = el.querySelector<HTMLElement>(".ra-find")!;
 
@@ -713,6 +714,7 @@ export function createAgent(app: AppContext): Page & { sidebar: HTMLElement; loa
     // The voice slot's tooltip is the custom one drawTaskSlot keeps (voice or Stop); a native title would double it.
     voiceButton.setAttribute("aria-label", t("agent.voice"));
     for (const [button, label] of [
+      [computerButton, t("card.pcTitle")],
       [settingsButton, t("agent.settings")],
       [searchButton, t("agent.search")],
       [attachButton, t("agent.attach")],
