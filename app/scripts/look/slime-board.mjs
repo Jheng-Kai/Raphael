@@ -5,7 +5,7 @@ import { transpileModule } from "typescript";
 /** The actually painted cel, rather than its hidden vector fallback or another cell in the sheet. */
 export function paintedSlime(svg) {
   const surface=svg.closest('.slime-surface');
-  const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')],props:[...svg.querySelectorAll('.slime-drop,.slime-bubble')]});
+  const fallback=()=>({body:svg.querySelector('.slime-body'),eyes:svg.querySelector('.slime-eyes'),marks:[...svg.querySelectorAll('.slime-mark')]});
   const bodyStrip=surface.querySelector('.slime-loop-body .slime-cels');
   if(bodyStrip && getComputedStyle(bodyStrip.parentElement).display!=='none' && getComputedStyle(bodyStrip.parentElement).visibility!=='hidden'){
     const frame=surface.clientWidth*3, index=Math.round(-new DOMMatrix(getComputedStyle(bodyStrip).transform).e/frame);
@@ -18,7 +18,7 @@ export function paintedSlime(svg) {
     const gazeIndex=Math.round(-new DOMMatrix(getComputedStyle(eye).transform).f/(frame*count));
     const blinkIndex=Math.round(-new DOMMatrix(getComputedStyle(blink).transform).f/frame);
     const eyeCell=blink.firstElementChild.children[(gazeIndex*12+eyeIndex)*count+blinkIndex];
-    return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')],props:[...bodyCell.querySelectorAll('.slime-cel-prop')]};
+    return {body:bodyCell.querySelector('.slime-cel-body'),eyes:eyeCell.matches('.slime-cel-eye')?eyeCell:eyeCell.querySelector('.slime-cel-eye'),marks:[...bodyCell.querySelectorAll('.slime-mark')]};
   }
   return fallback();
 }
@@ -94,6 +94,9 @@ export function slimeParts() {
   for (const svg of document.querySelectorAll('.look-slime-board svg.slime')) {
     const surface = svg.closest('.slime-surface'), host = surface.parentElement;
     const animations = surface.getAnimations({subtree: true});
+    const state = svg.dataset.state, size = host.getBoundingClientRect().width;
+    if (surface.querySelector('.slime-drop, .slime-bubble, .slime-cel-prop')) failures.push({state, size, part: 'detached droplet or bubble'});
+    if (['idle', 'sleeping'].includes(state) && animations.length) failures.push({state, size, part: 'resting animation'});
     const saved = animations.map(animation => [animation, animation.currentTime]);
     animations.forEach(animation => animation.pause());
     const times = new Set([0]);
@@ -102,30 +105,18 @@ export function slimeParts() {
       for (let frame = 0; frame <= 128; frame++) times.add(Math.max(0, delay + duration * frame / 128));
       for (const frame of animation.effect.getKeyframes()) for (const delta of [-1, 0, 1]) times.add(Math.max(0, delay + duration * frame.computedOffset + delta));
     }
-    const cel = selector => {
-      const center = host.getBoundingClientRect();
-      return [...surface.querySelectorAll(selector)].sort((a, b) => Math.abs(a.getBoundingClientRect().x + a.getBoundingClientRect().width / 2 - center.x - center.width / 2) - Math.abs(b.getBoundingClientRect().x + b.getBoundingClientRect().width / 2 - center.x - center.width / 2))[0];
-    };
     for (const at of times) {
       animations.forEach(animation => { animation.currentTime = at; });
-      const idle = svg.dataset.state === 'idle';
       const drawn=globalThis.__lookPaintedSlime?.(svg);
-      const body = drawn?.body ?? (idle ? cel('.slime-cel-body') : svg.querySelector('.slime-body'));
-      const eyes = drawn?.eyes ?? (idle ? cel('.slime-cel-eye') : svg.querySelector('.slime-eyes'));
+      const body = drawn?.body ?? svg.querySelector('.slime-body');
+      const eyes = drawn?.eyes ?? svg.querySelector('.slime-eyes');
       const b = body.getBoundingClientRect(), e = eyes.getBoundingClientRect();
-      const state = svg.dataset.state, size = host.getBoundingClientRect().width;
       const fail = (part, box) => failures.push({state, size, at, part, body: b.toJSON(), box: box.toJSON()});
       if (getComputedStyle(body).visibility === 'hidden') fail('missing body', b);
       if (getComputedStyle(eyes).visibility !== 'hidden' && (e.left < b.left - b.width * .08 || e.right > b.right + b.width * .08 || e.top < b.top - b.height * .08 || e.bottom > b.bottom + b.height * .08)) fail('eyes', e);
       for (const mark of drawn?.marks ?? svg.querySelectorAll('.slime-mark')) {
         const h = mark.getBoundingClientRect();
         if (getComputedStyle(mark).visibility !== 'hidden' && (h.left < b.left - b.width * .18 || h.right > b.right + b.width * .18 || h.top < b.top - b.height * .8 || h.bottom < b.top - b.height * .1 || h.bottom > b.top + b.height * .55)) fail('hat', h);
-      }
-      const frame = svg.getBoundingClientRect();
-      for (const drop of drawn?.props ?? svg.querySelectorAll('.slime-drop, .slime-bubble')) {
-        if (getComputedStyle(drop).display === 'none') continue;
-        const d = drop.getBoundingClientRect();
-        if (d.left < frame.left - .1 || d.right > frame.right + .1 || d.top < frame.top - .1 || d.bottom > frame.bottom + .1) fail('droplet', d);
       }
       samples++;
       if (failures.length >= 8) break;

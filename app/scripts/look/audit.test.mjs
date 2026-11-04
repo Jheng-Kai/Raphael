@@ -8,8 +8,29 @@ import { auditDocument, failedChecks } from "./audit.mjs";
 import { checkRendered } from "./checks.mjs";
 import { scenes } from "./scenes/index.mjs";
 import { LATIN_NAMES, needsDesktopFixture } from "./runner.mjs";
+import { slimeParts } from "./slime-board.mjs";
 
 describe("rendered look checks", () => {
+  it.each(["idle", "sleeping"])("rejects detached props and animations on a resting %s slime", state => {
+    const browser = new Window();
+    browser.document.body.innerHTML = `<div class="look-slime-board"><span><span class="slime-surface"><svg class="slime" data-state="${state}"><path class="slime-body"/><path class="slime-eyes"/></svg></span></span></div>`;
+    const box = { x: 0, y: 0, left: 0, top: 0, right: 40, bottom: 40, width: 40, height: 40, toJSON() { return {}; } };
+    for (const element of browser.document.querySelectorAll("*")) element.getBoundingClientRect = () => box;
+    const surface = browser.document.querySelector(".slime-surface");
+    surface.getAnimations = () => [];
+    vi.stubGlobal("document", browser.document);
+    vi.stubGlobal("getComputedStyle", () => ({ visibility: "visible" }));
+    try {
+      expect(slimeParts()).toEqual({ check: "slime-parts", samples: 1 });
+      const bubble = browser.document.createElement("circle");
+      bubble.className = "slime-bubble";
+      surface.append(bubble);
+      expect(() => slimeParts()).toThrow("detached droplet or bubble");
+      bubble.remove();
+      surface.getAnimations = () => [{ currentTime: 0, pause() {}, effect: { getTiming: () => ({ duration: 5600, delay: 0 }), getKeyframes: () => [] } }];
+      expect(() => slimeParts()).toThrow("resting animation");
+    } finally { vi.unstubAllGlobals(); browser.happyDOM.abort(); }
+  });
   it("moves the pointer to a board label and settles finite delight before checking idle costumes", () => {
     const steps = scenes.find(scene => scene.name === "slime-characters-at-rest").steps;
     const board = steps.findIndex(step => step.action === "slime-board");

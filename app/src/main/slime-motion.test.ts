@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { LOOPS, sample } from './slime-motion';
+import { LOOPS, eyeStyle, loopState, sample } from './slime-motion';
 import raw from './slime-motion-data';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -9,13 +9,17 @@ test('generated pose data matches the vector source of truth', () => {
   expect(raw).toBe(motionSource(readFileSync(resolve(__dirname,'slime.css'),'utf8')));
 });
 
-test('samples the original kneading boundaries and sleeping bubble', () => {
+test('samples the original kneading boundaries without droplets or bubbles', () => {
   expect(raw).toContain('@keyframes slime-working-body');
   expect(sample('slime-working-body',0).scale).toEqual([1.14,.82]);
   expect(sample('slime-working-body',.18).scale[1]).toBeCloseTo(1.1,4);
-  expect(raw).not.toMatch(/droplet|slime-sweat|slime-drip/);
-  expect(sample('slime-bubble',.75).translate).toEqual([50,19]);
-  expect(sample('slime-sleeping-body',.44,'ease-in-out').scale).toEqual([1,1.02]);
+  expect(raw).not.toMatch(/droplet|slime-sweat|slime-drip|slime-bubble|slime-sleeping-body/);
+});
+
+test('sleeping retains closed eyes without a sampled loop', () => {
+  expect(loopState('sleeping')).toBe(false);
+  expect(LOOPS).not.toHaveProperty('sleeping');
+  expect(eyeStyle('sleeping')).toContain('M 38.51 50.31 Q 43 50 47.49 49.69');
 });
 
 test('samples the segment easing instead of linearly flattening the approved poses', () => {

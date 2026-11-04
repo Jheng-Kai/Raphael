@@ -3,8 +3,8 @@
 ## Behavior (2026-11-04)
 
 R-UI-99/100 and R-PERF-03 through R-PERF-08 cover this cross-feature change.
-Idle slimes retain their resting vector and costume with no animation strips.
-Pointer entry starts one finite delight on the static vector, then it rests again. Droplets do not exist; the circular sleeping bubble stays.
+Idle and sleeping slimes retain their resting vector and costume with no animation strips or breathing loop. Sleeping keeps closed eyes.
+Pointer entry starts one finite delight on the static vector, then it rests again. No state draws a droplet or a bubble; no detached elements, keyframes or sampled cel data remain.
 Active body motion and finite handover remain. Working needs only twelve cels.
 
 `window-visibility.ts` gates interval work independently of focus and refreshes

@@ -3,9 +3,10 @@
 ## Quiet resting poses (2026-11-04)
 
 [Performance](performance.md) supersedes the idle-strip and droplet descriptions below.
-Idle uses the still original vector at every size; pointer entry may play one finite
-delight before it rests again. All five
-droplet paths, their keyframes and cel data are removed; the sleeping circle stays.
+Idle and sleeping use one still original vector at every size, without animation
+strips or a breathing loop. Sleeping keeps its closed eyes and resting pose. Pointer
+entry may play one finite delight before resting again. No state draws a detached
+droplet or bubble; their elements, keyframes and sampled data are removed.
 Working retains its 900ms body loop with twelve cels; other body timing is unchanged.
 Hidden documents pause animations in phase; offscreen surfaces and descendants
 retain `animation: none !important` to avoid long-thread freezes.

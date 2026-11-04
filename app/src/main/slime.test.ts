@@ -19,7 +19,7 @@ const stateIn = (el: Element): string | undefined => el.querySelector<SVGElement
 const plain = { now: new Date(2026, 5, 1) }, witch = { now: new Date(2026, 9, 31) };
 const same = (text: string): string => text;
 
-test.each(['thinking','working','searching','computer','waiting','blocked','sleeping','error'] as const)('R-PERF-01: %s carries only its current cels and keeps character marks in every body cel', state => {
+test.each(['thinking','working','searching','computer','waiting','blocked','error'] as const)('R-PERF-01: %s carries only its current cels and keeps character marks in every body cel', state => {
   const host = document.createElement('div');
   host.innerHTML = slimeSVG({ character: 'shion' }, { ...plain, state });
   expect(host.querySelector('.slime-idle')).toBeNull();
@@ -213,14 +213,25 @@ test("a slime's box is a whole number of pixels, whatever the window works out",
   expect(css).toMatch(/\.av\.mb-av\.mb-av-slime \{[^}]*width: round\(var\(--av\), 1px\);[^}]*height: round\(var\(--av\), 1px\);/);
 });
 
-test("each moving state retains its body performance while idle has no loop", () => {
-  for (const state of ["thinking", "working", "searching", "computer", "waiting", "done", "error", "sleeping", "arriving"]) {
+test("each moving state retains its body performance while idle and sleeping have no loop", () => {
+  for (const state of ["thinking", "working", "searching", "computer", "waiting", "done", "error", "arriving"]) {
     expect(css, state).toContain(`.slime[data-state="${state}"] .slime-motion { animation: slime-${state}-`);
   }
-  expect(css).not.toMatch(/(?:\.slime|\.slime-surface)\[data-state="idle"\][^{]*\{[^}]*animation:/);
+  expect(css).not.toMatch(/(?:\.slime|\.slime-surface)\[data-state="(?:idle|sleeping)"\][^{]*\{[^}]*animation:/);
 });
 
-test("under reduced motion nothing moves and each liquid state retains its pose and prop", () => {
+test.each([18, 22, 28, 40, 72, 96, 120])("sleeping at %ipx retains one still vector with closed eyes and no bubble", size => {
+  const host = document.createElement("div");
+  host.innerHTML = slimeFaceHTML({ id: 71, avatar: "slime:shion", last_at: Date.now() - 3 * 24 * 60 * 60 * 1000 }, size);
+  expect(stateIn(host)).toBe("sleeping");
+  expect(host.querySelectorAll(".slime-body")).toHaveLength(1);
+  expect(host.querySelector(".slime-marks .slime-mark")).not.toBeNull();
+  expect(host.querySelector(".slime-loop, .slime-idle, .slime-bubble, .slime-drop")).toBeNull();
+  expect(css).toContain('.slime[data-state="sleeping"] { --eye-y: 50px; --eye-w: 3.5; --eyes: path("M 38.51 50.31');
+  expect(css).not.toContain("slime-sleeping-body");
+});
+
+test("under reduced motion nothing moves and each liquid state retains its pose", () => {
   const calm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)![1]!;
   expect(calm).toMatch(/\.slime-surface \* \{[^}]*animation: none !important;[^}]*transition: none !important;/);
   for (const state of ["working", "thinking", "blocked", "error", "sleeping"]) {
@@ -338,23 +349,19 @@ test("every liquid state keeps the body, eyes and costume instead of substitutin
     expect(drawing.querySelector(".slime-body")).not.toBeNull();
     expect(drawing.querySelector(".slime-mark")).not.toBeNull();
     expect(drawing.querySelector(".slime-drop")).toBeNull();
-    expect(drawing.querySelector(".slime-bubble")).not.toBeNull();
+    expect(drawing.querySelector(".slime-bubble, .slime-cel-prop")).toBeNull();
     expect(drawing.querySelector(".slime-dots, .slime-blocked, .slime-ribbons, .slime-z")).toBeNull();
   }
   expect(css).not.toMatch(/slime-dot-pulse|slime-attention|slime-ribbon-orbit|slime-z|visibility: hidden;[^}]*slime-press/);
 });
 
-test("liquid effects animate only transforms and opacity, never geometry or layout", () => {
-  for (const { body } of keyframes.filter(({ name }) => /bubble/.test(name))) {
-    expect(body).not.toMatch(/(?:^|[;{\s])(?:d|width|height|top|left|cx|cy|r):/);
-  }
-});
-
-test("liquid fades repaint SVG alpha instead of promoting the whole moving slime (R-UI-63)", () => {
-  expect(css).toContain('@property --slime-liquid-alpha');
-  for (const { body } of keyframes.filter(({ name }) => /bubble/.test(name))) {
-    expect(body).not.toMatch(/(^|[{;\s])opacity:/);
-    expect(body).toContain('--slime-liquid-alpha:');
+test("no state has detached droplet or bubble styles, keyframes or cel props", () => {
+  expect(css).not.toMatch(/slime-(?:drop|bubble|sweat|drip)\b|--slime-liquid-alpha/);
+  expect(keyframes.map(({ name }) => name)).not.toContain("slime-sleeping-body");
+  for (const state of ["idle", "thinking", "working", "searching", "computer", "waiting", "blocked", "done", "error", "sleeping", "arriving"] as SlimeState[]) {
+    const host = document.createElement("div");
+    host.innerHTML = slimeSVG({ character: "shion" }, { ...plain, state });
+    expect(host.querySelector(".slime-drop, .slime-bubble, .slime-cel-prop"), state).toBeNull();
   }
 });
 

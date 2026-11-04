@@ -3585,8 +3585,11 @@ export function checkRendered(name, context = {}) {
     }
     require(getComputedStyle(face(2).querySelector(".slime-eyes")).d.includes("48.53"), "working keeps its focused slit eyes");
     const rows = [...document.querySelectorAll(".mb-row svg.slime")];
-    require(rows.length >= 3 && rows.every(svg => svg.closest(".slime-surface").getAnimations({ subtree: true }).length > 0), "every slime in the list is alive");
+    require(rows.length >= 3, "the list shows at least three slimes");
     for (const svg of rows) {
+      const surface = svg.closest(".slime-surface"), resting = ["idle", "sleeping"].includes(svg.dataset.state);
+      require(!surface.querySelector(".slime-drop, .slime-bubble, .slime-cel-prop"), "no state draws a droplet or a bubble");
+      require(resting ? surface.getAnimations({ subtree: true }).length === 0 : surface.getAnimations({ subtree: true }).length > 0, `${svg.dataset.state} has ${resting ? "no" : "its working"} animation`);
       const box = svg.getBoundingClientRect(), row = svg.closest(".mb-row").getBoundingClientRect();
       require(box.top >= row.top - 1 && box.bottom <= row.bottom + 1, "a slime stays inside its row");
     }
@@ -3598,11 +3601,7 @@ export function checkRendered(name, context = {}) {
       const state = svg.dataset.state, body = getComputedStyle(svg.querySelector('.slime-motion'));
       require(svg.closest('.slime-surface').getAnimations({ subtree: true }).length === 0, `${state} has no reduced-motion animation`);
       require(getComputedStyle(svg.querySelector('.slime-press')).visibility === 'visible', `${state} retains its body`);
-      const props = [...svg.querySelectorAll('.slime-drop, .slime-bubble')].filter(part => getComputedStyle(part).display !== 'none');
-      const expected = { sleeping: 1 };
-      require(!svg.querySelector(".slime-drop"), "no state draws a droplet");
-      require(props.length === (expected[state] ?? 0), `${state} retains its liquid props`);
-      for (const prop of props) require(Number(getComputedStyle(prop).opacity) > .5 && prop.getBoundingClientRect().width >= svg.getBoundingClientRect().width * .08, `${state} prop is visible even at 22px`);
+      require(!svg.closest('.slime-surface').querySelector('.slime-drop, .slime-bubble, .slime-cel-prop'), "no state draws a droplet or a bubble");
       poses.set(state, `${body.translate}/${body.rotate}/${body.scale}/${getComputedStyle(svg.querySelector('.slime-eyes')).d}`);
     }
     require(poses.size === 11 && new Set(poses.values()).size === 11, 'all eleven still poses differ');

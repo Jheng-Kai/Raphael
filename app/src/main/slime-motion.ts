@@ -62,7 +62,6 @@ export const LOOPS = {
   computer: {body:1.7, eyes:3.4, ease:'cubic-bezier(.3,0,.3,1)', gaze:'cubic-bezier(.25,.9,.3,1)'},
   waiting: {body:6, eyes:6, ease:'ease-in-out', gaze:'ease-in-out'},
   blocked: {body:1.8, eyes:1.8, ease:'linear', gaze:'linear'},
-  sleeping: {body:5.6, eyes:5.6, ease:'ease-in-out', gaze:'linear'},
   error: {body:6, eyes:6, ease:'ease-in', gaze:'linear'},
 } as const;
 export type LoopState = keyof typeof LOOPS;

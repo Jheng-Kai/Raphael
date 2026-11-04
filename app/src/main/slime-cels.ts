@@ -37,18 +37,13 @@ export function motionStrips(state: LoopState, body: string, eyes: string, face:
     return worn.replace(/class="slime-mark" style="--mark-x:([\d.]+)px;--mark-y:([\d.]+)px;--mark-give:([\d.]+)"/g,
       (_, x, y, give) => `class="slime-mark" style="--mark-x:${x}px;--mark-y:${y}px;--mark-give:${give}" transform="rotate(${angle*Number(give)})"`);
   };
-  const props = (phase: number): string => {
-    if (state !== 'sleeping') return '';
-    const pose = sample('slime-bubble', phase, 'ease-in-out');
-    return `<g class="slime-cel-prop" transform="${poseTransform(pose)}" opacity="${pose.alpha[0]}" fill="var(--slime-color)"><circle r="5.5"/></g>`;
-  };
   const strip = (kind: string, cells: string, height = FRAME): string => `<span class="slime-loop slime-loop-${kind}${blink ? ' has-blink' : ''}" data-state="${state}" style='--loop-body:${timing.body}s;--loop-eyes:${timing.eyes}s;--loop-props:${propPeriod}s;--loop-prop-delay:${propDelay}ms;--loop-rows:${gazeRows*(blink?4:1)};${eyeStyle(state)}'><span class="slime-cels">${kind === 'eyes' ? '<span class="slime-eye-cels"><span class="slime-blink-cels">' : independent ? '<span class="slime-prop-cels">' : ''}<svg width="${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)}" height="${height}" viewBox="-88 -81 ${FRAME*(kind==='body'?bodyColumns:CEL_COUNT)} ${height}">${cells}</svg>${kind === 'eyes' ? '</span></span>' : independent ? '</span>' : ''}</span></span>`;
-  const bodyCells = Array.from({length:independent?CEL_COUNT:1},(_,row) => Array.from({length:bodyColumns},(_,index) => { const pose=poses[index%CEL_COUNT]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g data-loop-pose='${JSON.stringify(pose)}' transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/CEL_COUNT:index/CEL_COUNT)}</g>${props(index/CEL_COUNT)}</g>`; }).join('')).join('');
+  const bodyCells = Array.from({length:independent?CEL_COUNT:1},(_,row) => Array.from({length:bodyColumns},(_,index) => { const pose=poses[index%CEL_COUNT]!; return `<g transform="translate(${index*FRAME} ${row*FRAME})"><g data-loop-pose='${JSON.stringify(pose)}' transform="${aboutBase(pose)}">${back}<path class="slime-cel-body" d="${body}" fill="var(--slime-color)"/>${wornAt(independent?row/CEL_COUNT:index/CEL_COUNT)}</g></g>`; }).join('')).join('');
   const eyeCells = Array.from({length:gazeRows}, (_, gazeIndex) => {
     const gaze = sample(`slime-${state}-gaze`,gazeIndex/CEL_COUNT,timing.gaze);
     if (state === 'blocked') gaze.translate = [0,-6];
     return poses.flatMap((pose,bodyIndex) => (blink ? blinkPoses : [[1,1]]).map(([sx,sy],blinkIndex) => {
-      const origin = state === 'sleeping' ? 52 : 50;
+      const origin = 50;
       // These transforms are static poses; a single path avoids collecting two transient groups per cel.
       const transform=`${cssTransform(`translate(${bodyIndex*FRAME} ${(gazeIndex*(blink?4:1)+blinkIndex)*FRAME}) ${aboutBase(pose)}`)} var(--slime-face-fit,${cssTransform(face)}) ${cssTransform(poseTransform(gaze))} translate(50px,${origin}px) scale(${sx},${sy}) translate(-50px,-${origin}px)`;
       return `<path class="slime-face slime-cel-eye" d="${eyes}" fill="none" stroke="#fff" stroke-linecap="round" style="transform:${transform}"/>`;
