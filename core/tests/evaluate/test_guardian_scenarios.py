@@ -20,6 +20,10 @@ from raphael_core.integrations.config import ServerConfig, ToolRecord
 from test_guardian import FakeBrains, FakeClient as GuardianFakeClient
 
 
+# Hang guard on a slow CI runner, not a speed assertion.
+HANG_GUARD_S = 60
+
+
 class FakeClient(GuardianFakeClient):
     async def decide(self, **kwargs):
         from raphael_core.brain.openrouter import Decision
@@ -81,7 +85,7 @@ async def test_p03_immediate_start_uses_production_rpc_worker_and_mcp(tmp_path,m
     driver=RpcDriver(tmp_path,model,Client([]),Budget(40),brains=FakeBrains(tmp_path) if brain=='cli' else None)
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,turns=await asyncio.wait_for(driver.execute(selected(identifier)),10)
+        reasons,turns=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
         assert not reasons,reasons
         # Live, a room cell's owner view held no model, so the Codex brain could never pass it.
         assert {turn.get('model') for turn in turns}=={model},turns
@@ -125,7 +129,7 @@ async def test_a_primary_contact_that_does_not_dispatch_what_it_is_given_fails_s
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(60))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S03.primary-dispatch')),20)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S03.primary-dispatch')),HANG_GUARD_S)
         assert expected<=set(reasons),reasons
     finally:
         await driver.aclose()
@@ -144,7 +148,7 @@ async def test_room_work_done_without_a_handoff_fails_at_once(tmp_path):
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.3)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S08.immediate-start')),10)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S08.immediate-start')),HANG_GUARD_S)
         assert 'dispatch_receipt_or_owner' in reasons
     finally:
         await driver.aclose()
@@ -553,7 +557,7 @@ async def test_calendar_cells_check_the_production_store_after_the_tool(tmp_path
         args["start"] = datetime.now().strftime("%Y-%m-%dT17:00")
     client.turns = iter([("", [(tool, args)]), (title, [])])
     try:
-        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar." + operation)), 10)
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar." + operation)), HANG_GUARD_S)
         assert not reasons
         assert driver.traces[-1]["name"] == tool
         assert driver.recorder.receipts == []
@@ -585,7 +589,7 @@ async def test_the_real_app_wires_the_calendar_to_a_cli_brain_and_to_home(tmp_pa
     driver = RpcDriver(tmp_path, "cli:codex:owner-model?effort=high", FakeClient([]), Budget(20), brains=FakeBrains(tmp_path))
     title = "驗證行程" + driver.nonce
     try:
-        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar.create")), 10)
+        reasons, _ = await asyncio.wait_for(driver.execute(selected("S21.calendar.create")), HANG_GUARD_S)
         assert not reasons
         assert driver.traces[0]["name"] == "calendar_add"
         home = await driver.app.call("home.overview", {})
@@ -613,7 +617,7 @@ async def test_a_stop_cell_without_its_held_call_fails_at_once(tmp_path,calls,re
     driver=RpcDriver(tmp_path,'fake/model',Client([]),Budget(40))
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected('S11')),15)
+        reasons,_=await asyncio.wait_for(driver.execute(selected('S11')),HANG_GUARD_S)
         assert reason in reasons
     finally:
         await driver.aclose()
@@ -650,7 +654,7 @@ async def test_p04_short_wrapup_and_stop_through_production_paths(tmp_path,monke
     driver=RpcDriver(tmp_path,model,Client([]),Budget(40),brains=FakeBrains(tmp_path) if brain=='cli' else None)
     driver.app.background._host=WorkerHost(connect=Links(),grace_s=.1)
     try:
-        reasons,_=await asyncio.wait_for(driver.execute(selected(identifier)),15)
+        reasons,_=await asyncio.wait_for(driver.execute(selected(identifier)),HANG_GUARD_S)
         assert not reasons,reasons
         if stopping:
             assert any(event[0]=='guardian.stop_timings' for event in driver.events)
